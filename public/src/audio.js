@@ -152,6 +152,9 @@ const BANGS = [
 
 /* ---------- event sounds ---------- */
 
+const STEP_GAP = 20;
+let lastSteps = -STEP_GAP;
+
 // Keyed by simulation event type. Each gets the event, for the few that need it.
 export const SFX = {
   // e.x is true when the door just shut.
@@ -161,7 +164,13 @@ export const SFX = {
     BANGS[Math.random() * BANGS.length | 0]();
   },
   // It moved, somewhere else in the building.
-  step() { sample(pick('steps1', 'steps2'), { gain: .6, rate: .8, lowpass: 650, wet: .4 }) || tone(48, .3, 'sine', .35, 30); },
+  // Mascots move every few seconds; you only hear some of it. At most one set
+  // of footsteps per STEP_GAP seconds, and then only about half the time.
+  step() {
+    if (!ac || ac.currentTime - lastSteps < STEP_GAP || Math.random() < .5) return;
+    lastSteps = ac.currentTime;
+    sample(pick('steps1', 'steps2'), { gain: .6, rate: .8, lowpass: 650, wet: .4 }) || tone(48, .3, 'sine', .35, 30);
+  },
   // It is outside one of your doors.
   arrive() { sample(pick('creak1', 'creak2'), { gain: .7, rate: .8, wet: .3 }); tone(70, .6, 'sawtooth', .05, 50); },
   scare() {
@@ -181,7 +190,9 @@ export const click = (f = 600) => tone(f, .05, 'square', .05);
 
 /* ---------- ambience ---------- */
 
-let bed = null, windOn = false, nextBeat = 0, nextOdd = 0;
+// Quiet is the default. The hum is barely there, the wind comes in gusts with
+// long gaps, and a background sound happens about once a minute.
+let bed = null, windGain = null, nextBeat = 0, nextOdd = 0;
 
 // A low two-note hum and some filtered hiss that run for the whole night.
 function startBed() {
@@ -200,9 +211,9 @@ function startBed() {
 // Wind through the building, looped under the hum once its recording has loaded.
 function startWind() {
   const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain();
-  src.buffer = buffers.wind; src.loop = true; lp.type = 'lowpass'; lp.frequency.value = 1400; g.gain.value = .5;
+  src.buffer = buffers.wind; src.loop = true; lp.type = 'lowpass'; lp.frequency.value = 1400; g.gain.value = 0;
   src.connect(lp).connect(g).connect(bed); src.start();
-  windOn = true;
+  windGain = g;
 }
 
 const farGrowl = () => sample(pick('far_growl1', 'far_growl2', 'far_growl3', 'far_growl4'), { gain: .14, rate: .5 + Math.random() * .2, lowpass: 380, wet: .6 });
@@ -211,7 +222,6 @@ const farGrowl = () => sample(pick('far_growl1', 'far_growl2', 'far_growl3', 'fa
 const ODD = [
   () => { sample('knock2', { gain: .25, rate: .7, lowpass: 500, wet: .6 }) || noise(.12, .12); sample('knock1', { gain: .18, rate: .7, lowpass: 500, at: .28, wet: .6 }); },   // two knocks
   () => sample(pick('creak1', 'creak2'), { gain: .3, rate: .7, lowpass: 900, wet: .6 }),                              // a door, far off
-  () => sample(pick('steps1', 'steps2'), { gain: .3, rate: .7, lowpass: 420, wet: .6 }),                              // someone walking
   () => tone(70, 2.2, 'sawtooth', .035, 52),                                                                // something dragged
   () => [660, 587, 660].forEach((f, i) => setTimeout(() => tone(f, .5, 'sine', .018, f * .985), i * 520)),   // someone humming
   // It, somewhere below you. Muffled this far, it is closer to a whisper than a growl.
@@ -224,13 +234,15 @@ const ODD = [
 export function ambience(threat, dread = 0) {
   if (!ac || ac.state !== 'running') return;
   if (!bed) startBed();
-  if (!windOn && buffers.wind) startWind();
+  if (!windGain && buffers.wind) startWind();
   const now = ac.currentTime;
-  bed.gain.setTargetAtTime(threat < 0 ? 0 : .15 + dread * .85, now, .4);
+  bed.gain.setTargetAtTime(threat < 0 ? 0 : .06 + dread * .4, now, .4);
+  // Two slow waves multiplied: the wind is near silent most of the time and swells now and then.
+  if (windGain) windGain.gain.setTargetAtTime(Math.max(0, Math.sin(now * .045) * Math.sin(now * .017 + 1)) ** 2 * .9, now, 1.5);
   if (threat < 0) return;
   if (threat > 0 && now > nextBeat) {                                                      // heartbeat, faster as it leans in
     nextBeat = now + 1 - threat * .55;
     tone(58, .14, 'sine', .22 + threat * .2, 38); setTimeout(() => tone(52, .16, 'sine', .16 + threat * .15, 34), 150);
   }
-  if (now > nextOdd) { if (nextOdd && dread > .25) ODD[Math.random() * ODD.length | 0](); nextOdd = now + 22 - dread * 14 + Math.random() * 10; }
+  if (now > nextOdd) { if (nextOdd && dread > .25) ODD[Math.random() * ODD.length | 0](); nextOdd = now + 45 - dread * 15 + Math.random() * 60; }
 }
