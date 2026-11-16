@@ -49,6 +49,10 @@ src/
 
 The host runs `sim.js` ten times a second and sends the full state `S` to every guest. Guests never change `S`. They send actions (`door`, `view`, `name`) to the host through `net.send`. Rendering reads `S` plus `client` and nothing else, so any scene can be reproduced by setting those two objects.
 
+## Winning
+
+A run is five nights (`FINAL_NIGHT` in `config.js`). Surviving a night sets `S.phase` to `'win'` and offers the next one; surviving the last sets it to `'won'`, which shows the morning scene and the run's tallies (`S.slams`, `S.deaths`). Dying retries the same night, so the tallies carry across attempts.
+
 ## Rot and dread
 
 Mascots start each night as the costumes they were and come apart as it goes on. `rotOf(S, m)` in `rules.js` returns a stage: 0 is the cute costume, 1 is off (dull fur, too many teeth), 2 is the tall shaggy thing with extra limbs. Time moves every mascot along, and each door slammed on a mascot (`m.bangs`) moves that one faster. Later nights start further along.
@@ -57,9 +61,11 @@ Mascots start each night as the costumes they were and come apart as it goes on.
 
 ## Sanity and the lights
 
-Each guard has a sanity level, kept by the host in their player record (`updateSanity` in `sim.js`, rates in `SANITY`). It falls in the dark, while watching a camera with an off or rotten mascot on it, and while something stands at an open door. It recovers in the booth with the lights on and nothing at the doors.
+Each guard has a sanity level, kept by the host in their player record (`updateSanity` in `sim.js`, rates in `SANITY`). It falls in the dark and while something stands at an open door. Watching an off or rotten mascot on camera also costs a little, very slowly. It recovers in the booth with the lights on and nothing at the doors.
 
-It gets worse each night (`wear` and `sanityCap` in `sim.js`): by night 6 sanity drains 2.5 times faster, recovers 2.5 times slower, and tops out at 60%.
+It gets worse each night and each hour (`wear` and `sanityCap` in `sim.js`): the ceiling starts lower every night and sinks as the night goes on, down to 29% at 6 AM on night 5. Power follows the same idea (`powerWear`): everything draws 70% of its rate on night 1 and 105% by night 5. The crank returns less power the lower the cranking guard's sanity, down to a quarter of its rate.
+
+The tuning target is night 5: a guard who makes a couple of mistakes should end it with under 10% power and sanity just into the red.
 
 Low sanity does three things:
 
@@ -67,7 +73,7 @@ Low sanity does three things:
 - Below 60% the game plays real event sounds when nothing happened (`FALSE_ALARMS` in `audio.js`).
 - Below 50% an empty camera room sometimes shows a silhouette that is not in the game state (`phantom` in `cams.js`).
 
-The booth lights are a shared switch (`S.lights`, the Lights button or L). Off saves a little under half of the idle power drain, shows doorways as silhouettes, and drains everyone's sanity.
+The booth lights are a shared switch (`S.lights`, the Lights button or L). Off saves about two thirds of the idle power drain (`DRAIN` in `sim.js`), shows doorways as silhouettes, and drains everyone's sanity.
 
 Attacks are paced by lulls. After a mascot is turned away, `S.calmUntil` keeps every mascot from arriving at a door for a random stretch (see `lull` in `sim.js`): usually 20 to 45 seconds, sometimes twice that, and on later nights occasionally almost none. A mascot that wants to arrive during a lull waits one room away. No night has more than seven attacks (`MAX_ATTACKS`), and whatever is left of that budget is spread over the time remaining so the last hours are never safe. Later nights get shorter door timers, some attacks that are two mascots at once from night 4, and a weaker guard (see Sanity).
 

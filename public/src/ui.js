@@ -1,9 +1,9 @@
 // HTML chrome: the overlay screens and the control bar under the canvas.
 // Everything here is derived from game/client state once per frame.
-import { MASC, ROOMS, CAM_ROOMS, DOORS } from './config.js';
+import { MASC, ROOMS, CAM_ROOMS, DOORS, FINAL_NIGHT } from './config.js';
 import { game, client } from './state.js';
 import { clock } from './rules.js';
-import { startNight } from './sim.js';
+import { startNight, restart } from './sim.js';
 import { host, join } from './net.js';
 import { unlockAudio } from './audio.js';
 
@@ -25,7 +25,7 @@ function titleScreen() {
     html: card(`
       <h1 class="ts-logo">Thick Shift</h1>
       <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
-      <p class="cn-meta cn-m-0">The retired theme-park mascots are enormous, and at night they wander. Shut a door when one is outside it, watch the cameras, and keep the power on until 6 AM. Works on a phone. Share a room code to play together.</p>
+      <p class="cn-meta cn-m-0">The retired theme-park mascots are enormous, and at night they wander. Shut a door when one is outside it, watch the cameras, and keep the power on until 6 AM. Last five nights and you can go home. Works on a phone. Share a room code to play together.</p>
       <div class="field"><label for="nm">Your name</label><input id="nm" maxlength="12" placeholder="Guard" value="${esc(savedName)}"></div>
       <div class="field"><label for="rc">Room code</label><input id="rc" maxlength="4" placeholder="ABCD" autocapitalize="characters" value="${esc((q.get('room') || '').slice(0, 4))}"><small>Only needed to join a friend's night.</small></div>`,
       '<button class="btn btn-primary" id="hb">Host a night</button><button class="btn btn-secondary" id="jb">Join room</button>'),
@@ -53,7 +53,8 @@ function messageScreen(key, title, detail, back) {
 function nightScreen(S) {
   const names = S.players.map(p => p.name), who = names.map(esc).join(', ') || esc(game.myName);
   const key = [S.phase, S.night, names.join(','), game.netNote, client.scareT > 0].join('|');
-  const wire = () => { const go = $('go'); if (go) go.onclick = () => { unlockAudio(); startNight(S.phase === 'win' ? S.night + 1 : S.night); }; };
+  const next = () => S.phase === 'won' ? restart() : startNight(S.phase === 'win' ? S.night + 1 : S.night);
+  const wire = () => { const go = $('go'); if (go) go.onclick = () => { unlockAudio(); next(); }; };
   if (S.phase === 'lobby') {
     const link = `${location.origin}${location.pathname}?room=${S.code}`;
     return {
@@ -65,8 +66,19 @@ function nightScreen(S) {
     };
   }
   if (S.phase === 'win') return {
-    key, wire, html: card(`<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} survived</p><p class="cn-meta cn-m-0">Everyone is un-squished. Guards: ${who}</p>`, hostAction('Start night ' + (S.night + 1))),
+    key, wire, html: card(`<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">Everyone is un-squished. Guards: ${who}</p>`, hostAction('Start night ' + (S.night + 1))),
   };
+  if (S.phase === 'won') {
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    return {
+      key, wire, html: card(`
+        <h1 class="ts-logo">Shift over</h1>
+        <p class="lede cn-m-0">You survived all ${FINAL_NIGHT} nights at the Mascot Depot.</p>
+        <p class="cn-meta cn-m-0">The sun is up and the mascots are back on their stage, exactly as they were. Nobody will believe you. Guards: ${who}</p>
+        <dl class="kv"><dt>Doors slammed on them</dt><dd class="cn-tabular">${S.slams || 0}</dd><dt>Times flattened</dt><dd class="cn-tabular">${S.deaths || 0}</dd></dl>
+        <p class="cn-meta cn-m-0">${S.deaths ? `It took ${plural(S.deaths, 'retry').replace('retrys', 'retries')}.` : 'Not flattened once.'}</p>`, hostAction('Start over from night 1')),
+    };
+  }
   if (S.phase === 'dead' && client.scareT <= 0) {
     const d = MASC[S.killer];
     return {

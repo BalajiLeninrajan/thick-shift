@@ -4,6 +4,7 @@ export const W = 800;          // canvas logical width
 export const H = 450;          // canvas logical height
 export const WORLD = 1600;     // width of the pannable office
 export const HOUR = 45;        // seconds per in-game hour
+export const FINAL_NIGHT = 5;  // survive this one and the game is won
 export const PREFIX = 'thick-shift-v1-';   // PeerJS id namespace
 
 export const ROOMS = ['Storage Stage', 'Main Hall', 'West Hall', 'East Hall', 'Snack Bar', 'LEFT DOOR', 'RIGHT DOOR', 'VENT'];

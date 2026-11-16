@@ -57,7 +57,7 @@ function drawSanity(S) {
   text('Sanity', W - 248, 59, { size: 10, weight: 600, col: P.subtext0 });
   rrect(W - 164, 52, 141, 6, 3, P.surface0);
   if (sanity > 0) rrect(W - 164, 52, Math.max(6, 141 * sanity), 6, 3, col);
-  const cap = sanityCap(S.night);                                       // the part of the bar you no longer get back
+  const cap = sanityCap(S.night, S.t);                                       // the part of the bar you no longer get back
   if (cap < 1) rect(W - 164 + 141 * cap, 50, 1.5, 10, P.overlay1);
   if (client.fumbleT > 0) {
     rrect(W / 2 - 150, H - 64, 300, 30, 8, rgba(P.ink, .85));
@@ -114,6 +114,18 @@ export function drawScare(killer, framesLeft, t) {
 }
 
 /* ---------- idle backdrop (title, lobby, between nights) ---------- */
+
+// Morning, after the last night. Everything is lit and everyone is cute again.
+export function drawDawn(t) {
+  rect(0, 0, W, H, vgrad(0, H, [[0, mix(P.peach, P.base, .45)], [.6, mix(P.yellow, P.base, .6)], [1, P.mantle]]));
+  glow(W * .78, 60, 420, P.yellow, .35);
+  c.save(); c.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 4; i++) poly([[W * .78, 40], [W * .78 + 40, 40], [140 + i * 190, H], [20 + i * 190, H]], vgrad(0, H, [[0, rgba(P.yellow, .08)], [1, rgba(P.yellow, .01)]]));   // light through the window
+  c.restore();
+  rect(0, 372, W, 78, vgrad(372, H, [[0, mix(P.peach, P.crust, .6)], [1, mix(P.peach, P.crust, .85)]]));
+  MASC.forEach((d, i) => drawMascot(i, 110 + i * 193, 300, .5, { t, rot: 0 }));
+  vignette(.35);
+}
 
 export function drawBackdrop(t) {
   rect(0, 0, W, H, vgrad(0, H, [[0, P.ink], [.8, P.crust], [1, P.ink]]));

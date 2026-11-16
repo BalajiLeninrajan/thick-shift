@@ -3,7 +3,7 @@
 //
 // Cheats that change the simulation live in S.dev, so sim.js and rules.js can
 // read them and guests see their effects. Only the host can set them.
-import { MASC, ROOMS, HOUR } from './config.js';
+import { MASC, ROOMS, HOUR, FINAL_NIGHT } from './config.js';
 import { game, client } from './state.js';
 import { rotOf, dreadOf, threatOf, roomOf, hourOf, doorWait, isActive } from './rules.js';
 import { startNight } from './sim.js';
@@ -37,7 +37,7 @@ const HTML = `
     <div class="field"><label for="dv-dread">Dread: <output id="dv-dread-out">0</output>%</label><input class="slider" type="range" id="dv-dread" min="0" max="100" step="5" value="0"></div>
   </div>
   <div class="cn-cluster">
-    ${button('dv-hour', '+1 hour')}${button('dv-late', 'Skip to 5:50')}${button('dv-win', 'Win night')}${button('dv-next', 'Next night')}
+    ${button('dv-hour', '+1 hour')}${button('dv-late', 'Skip to 5:50')}${button('dv-win', 'Win night')}${button('dv-next', 'Next night')}${button('dv-final', 'Jump to last night')}
     ${button('dv-low', 'Power to 5%')}${button('dv-sane', 'Sanity to 15%')}${button('dv-signal', 'Kill camera signal')}
   </div>
   <div class="cn-stack cn-divide" id="dv-mascots"></div>
@@ -51,6 +51,7 @@ const ACTIONS = {
   'dv-late'(S) { S.t = 6 * HOUR - 10; },
   'dv-win'(S) { S.t = 6 * HOUR; },
   'dv-next'(S) { startNight(S.night + 1); },
+  'dv-final'() { startNight(FINAL_NIGHT); },
   'dv-low'(S) { S.power = 5; },
   'dv-sane'(S) { for (const id in game.players) game.players[id].sanity = .15; },
 };

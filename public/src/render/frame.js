@@ -4,12 +4,13 @@ import { sanityOf } from '../rules.js';
 import { c, fitCanvas, resetTransform } from './canvas.js';
 import { drawOffice } from './office.js';
 import { drawCams } from './cams.js';
-import { drawCrank, drawHud, drawScare, drawBackdrop } from './screens.js';
+import { drawCrank, drawHud, drawScare, drawBackdrop, drawDawn } from './screens.js';
 
 export function render(t) {
   const S = game.S;
   fitCanvas(); resetTransform();
   if (!S || S.phase === 'lobby') { drawBackdrop(t); return; }
+  if (S.phase === 'won') { drawDawn(t); return; }
   c.save();
   if (client.shake > 0) c.translate(rnd(-client.shake, client.shake), rnd(-client.shake, client.shake));
   const nerves = Math.max(0, .4 - sanityOf(S, game.myId)) * 5;   // below 40% sanity the picture will not hold still

@@ -1,12 +1,12 @@
 // Host-side simulation. Only the host calls step() and act().
-import { MASC, DOORKEY, DOORS, HOUR } from './config.js';
+import { MASC, DOORKEY, DOORS, HOUR, FINAL_NIGHT } from './config.js';
 import { game, rnd } from './state.js';
 import { isActive, doorWait, leanOf, rotOf, inRoom, atDoor, lightsOn, doorFailChance } from './rules.js';
 
 const OPEN = () => ({ L: false, V: false, R: false });
 
 export function newState(code) {
-  return { phase: 'lobby', night: 1, t: 0, power: 100, doors: OPEN(), m: [], players: [], killer: -1, evs: [], evId: 0, calmUntil: 0, pair: false, attacks: 0, lights: true, code };
+  return { phase: 'lobby', night: 1, t: 0, power: 100, doors: OPEN(), m: [], players: [], killer: -1, evs: [], evId: 0, calmUntil: 0, pair: false, attacks: 0, lights: true, deaths: 0, slams: 0, code };
 }
 
 // Events are how the host tells clients to play a sound or shake the screen.
@@ -23,7 +23,20 @@ export function startNight(n) {
   for (const id in game.players) Object.assign(game.players[id], { view: 'office', cam: 0, sanity: sanityCap(n) });
 }
 
+// Begin again from night 1 with the run's tallies cleared.
+export function restart() {
+  Object.assign(game.S, { deaths: 0, slams: 0 });
+  startNight(1);
+}
+
 const LOW_HALF = 50, LAST_SLIVER = 2;   // percent
+const DRAIN = { base: .07, lights: .12, door: .2, cams: .07 };
+// The building's wiring gets worse too: everything draws 70% of this on night 1,
+// rising to POWER_WEAR_MAX on night 5. The target is a guard who makes a couple of
+// mistakes ending night 5 with under 10% of the battery, without cranking.
+const powerWear = night => Math.min(POWER_WEAR_MAX, .7 + (night - 1) * (POWER_WEAR_MAX - .7) / 4);
+const POWER_WEAR_MAX = 1.05;
+const CRANK = .5;
 
 function drainPower(S, dt) {
   const closed = DOORS.filter(k => S.doors[k]).length;
@@ -32,9 +45,12 @@ function drainPower(S, dt) {
   // The second half of the battery goes faster than the first, and the last
   // sliver hangs on far longer than it should, so running out is drawn out.
   const stage = S.power > LOW_HALF ? 1 : S.power > LAST_SLIVER ? 1.6 : .2;
-  // Leaving the booth lights on costs about as much as holding a third of a door shut.
-  const drain = (.07 + (S.lights ? .06 : 0) + .2 * closed + .07 * count('cams')) * stage;
-  S.power = Math.max(0, Math.min(100, S.power - drain * dt + .5 * count('crank') * dt));
+  // Percent per second. The lights cost more than half of what a shut door does.
+  const drain = (DRAIN.base + (S.lights ? DRAIN.lights : 0) + DRAIN.door * closed + DRAIN.cams * count('cams')) * stage * powerWear(S.night);
+  // Cranking is hand work, and shaking hands are bad at it: a guard at full
+  // sanity returns CRANK percent a second, one at a quarter or less returns a quarter of that.
+  const cranked = S.players.filter(p => p.view === 'crank').reduce((sum, p) => sum + CRANK * Math.max(.25, p.sanity ?? 1), 0);
+  S.power = Math.max(0, Math.min(100, S.power - drain * dt + cranked * dt));
   if (S.dev?.power) S.power = 100;
   if (S.power <= 0) {
     if (was > 0) emit('out');
@@ -44,7 +60,9 @@ function drainPower(S, dt) {
 
 /* ---------- sanity ---------- */
 // Per second, for one guard. See the notes above sanityOf in rules.js.
-const SANITY = { dark: -.012, powerOut: -.03, camsBase: -.004, seenOff: -.01, seenRotten: -.03, atDoor: -.02, atDoorRotten: -.04, rest: .02 };
+// Watching the cameras costs very little: they are how you play, and the feed
+// already punishes staring. The real drains are the dark and an open door.
+const SANITY = { dark: -.012, powerOut: -.03, camsBase: 0, seenOff: -.002, seenRotten: -.004, atDoor: -.02, atDoorRotten: -.04, rest: .02 };
 
 function sanityRate(S, p) {
   const worst = list => Math.max(-1, ...list.map(m => rotOf(S, m)));
@@ -63,16 +81,22 @@ function sanityRate(S, p) {
   return rate * wear(S.night);
 }
 
-// Each night on the job costs you. By night n you lose sanity `wear` times
-// faster, get it back that much slower, and can never get above sanityCap.
-//   night:      1     2     3     4     5     6
-//   wear:       1x    1.3x  1.6x  1.9x  2.2x  2.5x
-//   sanityCap:  100%  92%   84%   76%   68%   60%
+// Each night on the job costs you, and so does each hour of it. By night n
+// you lose sanity `wear` times faster and get it back that much slower. You
+// can never get above sanityCap, which starts lower each night and sinks as
+// the night goes on, faster on later nights.
+//   night:               1     2     3     4     5
+//   wear:                1x    1.3x  1.6x  1.9x  2.2x
+//   cap at midnight:     100%  92%   84%   76%   68%
+//   cap at 6 AM:         92%   76%   61%   45%   29%
+// The target is a guard who makes a couple of mistakes ending night 5 with
+// sanity just into the red (under 25%), and a careful one just above it.
 const wear = night => Math.min(2.5, 1 + (night - 1) * .3);
-export const sanityCap = night => Math.max(.6, 1 - (night - 1) * .08);
+export const sanityCap = (night, t = 0) => Math.max(.2, 1 - (night - 1) * .08 - t / HOUR * CAP_SLIDE * night);
+const CAP_SLIDE = .013;
 
 function updateSanity(S, dt) {
-  const cap = sanityCap(S.night);
+  const cap = sanityCap(S.night, S.t);
   for (const p of S.players) p.sanity = Math.max(0, Math.min(cap, (p.sanity ?? cap) + sanityRate(S, p) * dt));
 }
 
@@ -113,8 +137,9 @@ function moveMascot(S, m, dt, hour) {
     if (m.wait > 0) return true;
     const k = DOORKEY[path[m.pos]];
     // In god mode an open door turns it away like a shut one.
-    if (!S.doors[k] && !S.dev?.god) { S.phase = 'dead'; S.killer = m.i; emit('scare'); return false; }
+    if (!S.doors[k] && !S.dev?.god) { S.phase = 'dead'; S.killer = m.i; S.deaths++; emit('scare'); return false; }
     emit('bang', k);
+    S.slams++;
     m.bangs++;   // being shut out makes it worse (see rotOf)
     m.pos = 0;   // all the way back, so the next approach takes time
     m.timer = rnd(10, 20);
@@ -151,7 +176,8 @@ export function step() {
   S.t += dt;
   const hour = Math.floor(S.t / HOUR);
   if (hour > hourBefore) emit('hour');
-  if (hour >= 6) { S.phase = 'win'; emit('win'); return; }
+  // 'win' ends a night. 'won' ends the game, after the last one.
+  if (hour >= 6) { S.phase = S.night >= FINAL_NIGHT ? 'won' : 'win'; emit('win'); return; }
   drainPower(S, dt);
   updateSanity(S, dt);
   if (S.dev?.freeze) return;
