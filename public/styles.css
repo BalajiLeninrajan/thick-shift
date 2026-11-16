@@ -1,0 +1,61 @@
+/* Game shell. Colors, type and controls come from catppuccin-neu; this file
+   only lays out the stage and adds the two things the system has no class for. */
+
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body {
+  background: var(--crust);
+  touch-action: none;
+  user-select: none; -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ts-shell { height: 100dvh; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; }
+
+/* The stage is the largest 16:9 box that fits above the controls. */
+.ts-stage-box { display: grid; place-items: center; container-type: size; min-height: 0; }
+.ts-stage { position: relative; width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9; background: var(--neu-ink); }
+.ts-stage canvas { display: block; width: 100%; height: 100%; }
+
+/* Film grain. Blending it here is far cheaper than drawing it into the canvas every frame. */
+.ts-stage::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: var(--cn-grain-image) 0 0 / var(--cn-grain-tile);
+  mix-blend-mode: overlay; opacity: .1;
+  animation: ts-grain .5s steps(1) infinite;
+}
+@keyframes ts-grain {
+  0% { background-position: 0 0; } 20% { background-position: 53px 91px; } 40% { background-position: 118px 17px; }
+  60% { background-position: 31px 140px; } 80% { background-position: 97px 62px; }
+}
+@media (prefers-reduced-motion: reduce) { .ts-stage::after { animation: none; } }
+
+.ts-bar {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2);
+  width: 100%; max-width: 960px; margin-inline: auto;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+.ts-bar[hidden], .ts-overlay[hidden] { display: none; }
+/* Touch targets: these share the row evenly instead of sizing to their label. */
+.ts-bar .btn { flex: 1 1 124px; white-space: nowrap; }
+
+/* A door button always says its state in words; color only backs it up. */
+.ts-door span { color: var(--green); }
+.ts-door[aria-pressed="true"] { border-color: var(--red); }
+.ts-door[aria-pressed="true"] span { color: var(--red); }
+
+.ts-overlay {
+  position: fixed; inset: 0; display: grid; place-items: center; overflow: auto;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--crust) 55%, transparent);
+}
+.ts-card { width: min(100%, 520px); }
+.ts-selectable, .ts-overlay input { user-select: text; -webkit-user-select: text; }
+
+.ts-logo {
+  margin: 0;
+  font: 800 clamp(2.5rem, 10vw, 4rem)/1 var(--sans);
+  letter-spacing: -.03em;
+  color: var(--yellow);
+  text-shadow: 4px 4px 0 var(--neu-ink);
+}
+.ts-logo-bad { color: var(--red); }

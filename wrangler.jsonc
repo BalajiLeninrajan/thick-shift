@@ -1,0 +1,7 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "thick-shift",
+  "compatibility_date": "2026-11-15",
+  // Static files only: everything in public/ is served as-is.
+  "assets": { "directory": "./public" }
+}
