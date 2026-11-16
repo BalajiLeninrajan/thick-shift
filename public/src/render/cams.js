@@ -167,7 +167,7 @@ function fog(a) {
 
 // As the signal goes, the camera's light starts cutting out, then stays out.
 function lightOut(signal) {
-  if (signal < .15) return true;
+  if (signal < .15) return true;   // CAM_DARK in rules.js
   return signal < .4 && hash(Math.floor(t * 2.5)) < (.4 - signal) / .25;
 }
 

@@ -26,7 +26,19 @@ export const dreadOf = S => S.dev?.dread >= 0 ? S.dev.dread : Math.min(1, decay(
 
 // Camera feeds wear out while you watch them and come back when you look
 // away. Each player has their own signal level, 1 down to 0 (client.signal).
-// These are its rates per second. Early in the night a feed lasts about a
-// minute; at full dread, about eleven seconds.
-export const camDrain = S => 1 / 60 + (1 / 11 - 1 / 60) * dreadOf(S);
+// The feed tears below .6, its light starts cutting out below .4 and stays
+// out below CAM_DARK.
+//
+// Both numbers below get worse through the night. `late` is hours since
+// midnight, with each later night counting as two hours further on.
+//   camCap    the best the signal can be. From 4 AM a feed is already tearing
+//             the moment you open it.
+//   camLife   seconds of watching before the light goes out for good:
+//             a minute at midnight, 10 seconds at 4 AM, 6 at the end.
+const CAM_DARK = .15;
+const late = S => Math.min(6, decay(S));
+export const camCap = S => { const h = late(S); return h < 2 ? 1 : h < 4 ? 1 - (h - 2) * .2 : .6 - (h - 4) * .05; };
+const camLife = S => { const h = late(S); return h < 4 ? 60 - h * 12.5 : 10 - (h - 4) * 2; };
+// Signal lost per second of watching.
+export const camDrain = S => (camCap(S) - CAM_DARK) / camLife(S);
 export const CAM_RECOVER = 1.5;   // back to full in under a second off the cameras

@@ -2,7 +2,7 @@
 import { DOORS } from './config.js';
 import { game, client } from './state.js';
 import { SFX, ambience } from './audio.js';
-import { threatOf, dreadOf, camDrain, CAM_RECOVER } from './rules.js';
+import { threatOf, dreadOf, camDrain, camCap, CAM_RECOVER } from './rules.js';
 import { syncOverlay, syncControls } from './ui.js';
 import { bindInput } from './input.js';
 import { render } from './render/frame.js';
@@ -34,7 +34,7 @@ function animate(S) {
   if (client.glitch > 0) client.glitch--;
   if (client.scareT > 0) client.scareT--;
   const wear = client.view === 'cams' ? -camDrain(S) : CAM_RECOVER;
-  client.signal = Math.max(0, Math.min(1, client.signal + wear / 60));
+  client.signal = Math.max(0, Math.min(camCap(S), client.signal + wear / 60));
 }
 
 function frame() {
