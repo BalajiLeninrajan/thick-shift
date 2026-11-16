@@ -1,7 +1,7 @@
 // Host-side simulation. Only the host calls step() and act().
 import { MASC, DOORKEY, DOORS, HOUR, FINAL_NIGHT } from './config.js';
 import { game, rnd } from './state.js';
-import { isActive, doorWait, leanOf, rotOf, inRoom, atDoor, lightsOn, doorFailChance } from './rules.js';
+import { isActive, doorWait, leanOf, rotOf, inRoom, atDoor, shownAtDoor, lightsOn, doorFailChance } from './rules.js';
 
 const OPEN = () => ({ L: false, V: false, R: false });
 
@@ -31,12 +31,15 @@ export function restart() {
 
 const LOW_HALF = 50, LAST_SLIVER = 2;   // percent
 const DRAIN = { base: .07, lights: .12, door: .2, cams: .07 };
-// The building's wiring gets worse too: everything draws 70% of this on night 1,
-// rising to POWER_WEAR_MAX on night 5. The target is a guard who makes a couple of
-// mistakes ending night 5 with under 10% of the battery, without cranking.
-const powerWear = night => Math.min(POWER_WEAR_MAX, .7 + (night - 1) * (POWER_WEAR_MAX - .7) / 4);
-const POWER_WEAR_MAX = 1.05;
-const CRANK = .5;
+// The building's wiring gets worse too: everything draws POWER_WEAR_MIN times
+// this on night 1, rising to POWER_WEAR_MAX on night 5.
+//
+// Tuned against scripted guards (not in the repo) played through this file:
+// one that never checks cameras and shuts each door at the last safe moment
+// ends night 5 near 13% without cranking. Anyone less exact has to crank.
+const powerWear = night => Math.min(POWER_WEAR_MAX, POWER_WEAR_MIN + (night - 1) * (POWER_WEAR_MAX - POWER_WEAR_MIN) / 4);
+const POWER_WEAR_MIN = 1, POWER_WEAR_MAX = 1.4;
+const CRANK = 1.4;
 
 function drainPower(S, dt) {
   const closed = DOORS.filter(k => S.doors[k]).length;
@@ -48,8 +51,8 @@ function drainPower(S, dt) {
   // Percent per second. The lights cost more than half of what a shut door does.
   const drain = (DRAIN.base + (S.lights ? DRAIN.lights : 0) + DRAIN.door * closed + DRAIN.cams * count('cams')) * stage * powerWear(S.night);
   // Cranking is hand work, and shaking hands are bad at it: a guard at full
-  // sanity returns CRANK percent a second, one at a quarter or less returns a quarter of that.
-  const cranked = S.players.filter(p => p.view === 'crank').reduce((sum, p) => sum + CRANK * Math.max(.25, p.sanity ?? 1), 0);
+  // sanity returns CRANK percent a second, one at 40% or less returns 40% of that.
+  const cranked = S.players.filter(p => p.view === 'crank').reduce((sum, p) => sum + CRANK * Math.max(.4, p.sanity ?? 1), 0);
   S.power = Math.max(0, Math.min(100, S.power - drain * dt + cranked * dt));
   if (S.dev?.power) S.power = 100;
   if (S.power <= 0) {
@@ -73,7 +76,9 @@ function sanityRate(S, p) {
     rate += SANITY.camsBase + (rot === 2 ? SANITY.seenRotten : rot === 1 ? SANITY.seenOff : 0);
   }
   if (p.view === 'office') {
-    const rot = worst(DOORS.flatMap(k => S.doors[k] ? [] : atDoor(S, k)));
+    // Only once it has stepped into the doorway. Before that you do not know it is there,
+    // and a falling sanity bar would tell you.
+    const rot = worst(DOORS.flatMap(k => S.doors[k] ? [] : shownAtDoor(S, k)));
     if (rot >= 0) rate += rot === 2 ? SANITY.atDoorRotten : SANITY.atDoor;
   }
   // Nothing wrong, lights on, sitting in the booth: you get it back.
@@ -137,7 +142,7 @@ function moveMascot(S, m, dt, hour) {
     if (m.wait > 0) return true;
     const k = DOORKEY[path[m.pos]];
     // In god mode an open door turns it away like a shut one.
-    if (!S.doors[k] && !S.dev?.god) { S.phase = 'dead'; S.killer = m.i; S.deaths++; emit('scare'); return false; }
+    if (!S.doors[k] && !S.dev?.god) { S.phase = 'dead'; S.killer = m.i; S.killDoor = k; S.deaths++; emit('scare'); return false; }
     emit('bang', k);
     S.slams++;
     m.bangs++;   // being shut out makes it worse (see rotOf)

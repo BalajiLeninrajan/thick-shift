@@ -4,6 +4,7 @@ import { inRoom, clock, rotOf, dreadOf, sanityOf } from '../rules.js';
 import { game } from '../state.js';
 import { c, cv, mix, rgba, hash, lerp, ell, rect, rrect, poly, vgrad, glow, vignette, text, pxScale, resetTransform } from './canvas.js';
 import { drawMascot, drawFace } from './mascot.js';
+import { drawCamMap } from './cammap.js';
 
 let t, dread, dark;
 
@@ -107,7 +108,65 @@ function snackBar() {
   rrect(380, 236, 60, 66, 4, mix(P.yellow, P.crust, .35)); glow(410, 268, 80, P.yellow, .22);   // popcorn machine
 }
 
-const ROOM_ART = [stage, mainHall, westHall, eastHall, snackBar];
+function backstage() {
+  rect(0, 0, W, H, vgrad(0, H, [[0, P.ink], [1, P.mantle]]));
+  for (let i = 0; i < 12; i++) rect(i * 70, 0, 70, 200 - (i % 3) * 8, mix(P.red, P.ink, .72 + (i % 2) * .08));   // the back of the curtain
+  rect(0, 330, W, 120, vgrad(330, H, [[0, mix(P.peach, P.crust, .78)], [1, P.crust]]));
+  rect(90, 150, 300, 6, P.surface1);                                   // costume rail
+  for (let i = 0; i < 5; i++) { const x = 120 + i * 58; rect(x - 1, 156, 2, 14, P.surface2); ell(x, 226, 20, 58, mix([P.mauve, P.peach, P.green, P.blue, P.yellow][i], P.crust, .7)); ell(x, 174, 13, 12, mix([P.mauve, P.peach, P.green, P.blue, P.yellow][i], P.crust, .6)); }   // empty suits
+  rrect(500, 120, 150, 190, 6, P.crust); rect(512, 132, 126, 166, mix(P.blue, P.ink, .8));   // mirror
+  for (let i = 0; i < 6; i++) { const lit = hash(Math.floor(t * 6) + i) > .15; ell(506, 136 + i * 32, 5, 5, lit ? P.yellow : P.surface1); ell(644, 136 + i * 32, 5, 5, lit ? P.yellow : P.surface1); }
+  glow(575, 210, 190, P.yellow, .1);
+  rect(680, 270, 80, 62, P.surface0); c.strokeStyle = P.crust; c.lineWidth = 3; c.strokeRect(680, 270, 80, 62);
+}
+
+function arcade() {
+  rect(0, 0, W, H, vgrad(0, H, [[0, P.ink], [1, mix(P.mauve, P.ink, .88)]]));
+  rect(0, 340, W, 110, mix(P.mauve, P.ink, .85));
+  for (let i = 0; i < 40; i++) rect(hash(i) * W, 344 + hash(i + 9) * 100, 14, 4, rgba([P.pink, P.teal, P.yellow][i % 3], .18));   // carpet
+  rrect(290, 40, 220, 44, 6, P.crust);
+  text('ARCADE', 400, 72, { size: 26, weight: 800, col: hash(Math.floor(t * 5)) > .2 ? P.pink : mix(P.pink, P.ink, .6), align: 'center' });
+  glow(400, 62, 190, P.pink, .12);
+  [P.sky, P.pink, P.green, P.yellow, P.sky].forEach((col, i) => {      // cabinets, some still on
+    const x = 50 + i * 150, on = hash(i * 7 + Math.floor(t / 5)) > .35;
+    rrect(x, 150, 100, 200, 6, P.crust); rect(x + 6, 150, 88, 26, mix(col, P.crust, .5));
+    rect(x + 12, 186, 76, 62, on ? mix(col, P.ink, .45) : P.ink);
+    if (on) { glow(x + 50, 217, 90, col, .16); for (let y = 188; y < 248; y += 4) rect(x + 12, y, 76, 1, rgba(P.ink, .35)); }
+    rect(x + 10, 258, 80, 12, P.surface0); ell(x + 34, 263, 5, 5, P.red); ell(x + 62, 263, 4, 4, P.surface2);
+  });
+}
+
+function kitchen() {
+  rect(0, 0, W, H, vgrad(0, H, [[0, mix(P.base, P.teal, .08)], [1, P.mantle]]));
+  c.strokeStyle = rgba(P.ink, .4); c.lineWidth = 1;
+  for (let x = 0; x < W; x += 32) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, 300); c.stroke(); }
+  for (let y = 12; y < 300; y += 32) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  poly([[240, 0], [560, 0], [520, 90], [280, 90]], P.surface1); rect(280, 90, 240, 10, P.surface2);   // extraction hood
+  rect(180, 122, 440, 5, P.surface2);                                  // pot rail
+  for (let i = 0; i < 7; i++) { const x = 210 + i * 62, sway = Math.sin(t * .8 + i) * 3; rect(x + sway * .3, 127, 2, 22, P.overlay0); ell(x + sway, 162 + (i % 2) * 8, 16 + (i % 3) * 3, 14, P.surface1); }
+  rect(0, 290, W, 18, P.overlay0); rect(0, 308, W, 80, vgrad(308, 388, [[0, P.surface1], [1, P.surface0]]));   // steel counter
+  for (let i = 0; i < 5; i++) { rect(60 + i * 160, 318, 120, 58, rgba(P.ink, .25)); rect(110 + i * 160, 326, 20, 4, P.overlay1); }
+  rrect(660, 110, 110, 200, 6, P.surface2); rect(712, 120, 3, 180, P.overlay0); rect(700, 190, 6, 40, P.subtext0);   // fridge
+  rect(0, 388, W, 62, P.crust); for (let i = 0; i < 20; i++) if (i % 2) rect(i * 40, 388, 40, 62, mix(P.surface0, P.crust, .4));
+  const lit = hash(Math.floor(t * 10)) > .12;
+  rrect(300, 100, 200, 6, 3, lit ? P.text : P.surface1); if (lit) glow(400, 110, 300, P.sky, .1);
+}
+
+// Sheet-metal ductwork, looking down its length.
+function ducts() {
+  rect(0, 0, W, H, P.ink);
+  for (let i = 0; i < 7; i++) {
+    const k = (i / 7) ** 1.5, x = 400 * k, y = 225 * k, w = W - x * 2, h = H - y * 2, shade = mix(P.surface1, P.ink, .25 + i * .1);
+    rect(x, y, w, h, shade);
+    c.strokeStyle = rgba(P.ink, .7); c.lineWidth = 3 - i * .3; c.strokeRect(x, y, w, h);
+    for (const [rx, ry] of [[x + 10, y + 10], [x + w - 10, y + 10], [x + 10, y + h - 10], [x + w - 10, y + h - 10]]) ell(rx, ry, 3 - i * .3, 3 - i * .3, P.overlay0);
+  }
+  rect(330, 186, 140, 78, P.ink);
+  rect(0, 372, W, 78, rgba(P.ink, .35));
+}
+
+// In camera order: see ROOMS in config.js.
+const ROOM_ART = [stage, backstage, arcade, mainHall, kitchen, westHall, snackBar, eastHall, ducts];
 
 /* ---------- CCTV treatment ---------- */
 
@@ -140,7 +199,7 @@ function overlayText(S, cam, glitch) {
   }
   text(`CAM 0${cam + 1}  ${ROOMS[cam].toUpperCase()}`, 30, H - 64, { size: 17, weight: 700, col: P.text });
   const sec = String(Math.floor(S.t * 80 % 60)).padStart(2, '0');
-  text(`${clock(S)} :${sec}`, W - 30, H - 44, { size: 12, weight: 500, col: P.subtext0, align: 'right' });
+  text(`${clock(S)} :${sec}`, W - 30, 116, { size: 12, weight: 500, col: P.subtext0, align: 'right' });
   if (Date.now() % 1000 < 600) { ell(W - 74, 67, 6, 6, P.red); glow(W - 74, 67, 20, P.red, .5); }
   text('REC', W - 30, 72, { size: 13, weight: 700, col: P.text, align: 'right' });
   if (glitch > 12) text('SIGNAL LOST', W / 2, H / 2, { size: 26, weight: 800, col: P.text, align: 'center' });
@@ -148,15 +207,39 @@ function overlayText(S, cam, glitch) {
 }
 
 // How a mascot shows up on camera depends on how close it is to you.
+// A rotten mascot is never fully in the camera's light. It is drawn as a
+// silhouette, then the lit version is drawn again through a window: one side
+// of it, only below the waist, or a slash across it. Which one depends on the
+// mascot and the room, so it looks different everywhere but does not flicker.
+// draw(dark) draws the mascot once; x is where it stands.
+const LIGHT = [
+  x => [[x + 6, 0], [W, 0], [W, H], [x - 26, H]],                       // its right side
+  x => [[0, 0], [x - 6, 0], [x + 26, H], [0, H]],                       // its left side
+  () => [[0, 268], [W, 244], [W, H], [0, H]],                           // from the waist down: the face stays dark
+  x => [[x - 150, 0], [x - 40, 0], [x + 170, H], [x + 40, H]],          // a slash of light across it
+];
+function partlyLit(seed, x, draw) {
+  draw(true);
+  const window = LIGHT[Math.floor(hash(seed) * LIGHT.length)](x);
+  c.save();
+  c.beginPath(); window.forEach(([px, py], i) => i ? c.lineTo(px, py) : c.moveTo(px, py)); c.closePath(); c.clip();
+  draw(false);
+  c.restore();
+}
+
 // When the camera's light is out (dark), everything is a silhouette.
 function subject(S, m, cam, x) {
   const path = MASC[m.i].paths[m.side], stepsLeft = path.length - 1 - m.pos, rot = rotOf(S, m);
+  // Costume and off-stage mascots stand in plain light. Rotten ones do not.
+  const show = draw => rot === 2 && !dark ? partlyLit(m.i * 7 + cam * 3, x, draw) : draw(dark);
   // One room from your door: its face is against the lens.
-  if (stepsLeft === 1 && path.length > 2 && rot === 2) return drawFace(m.i, x + 70, H / 2 + 40, 3.1, { t, dark });
+  if (stepsLeft === 1 && path.length > 2 && rot === 2) return show(d => drawFace(m.i, x + 70, H / 2 + 40, 3.1, { t, dark: d }));
   // Still in its starting room: back to the camera, looking over its shoulder.
-  if (m.pos === 0 || rot < 2) return drawMascot(m.i, x, 268, .8, { t, rot, dark, pose: Math.floor(S.t / 17 + m.i + m.pos) % 3 ? 'back' : 'front' });
+  const pose = Math.floor(S.t / 17 + m.i + m.pos) % 3 ? 'back' : 'front';
+  if (m.pos === 0 || rot < 2) return show(d => drawMascot(m.i, x, 268, .8, { t, rot, dark: d, pose }));
   // In between: too big for the hall, most of it lost in the fog.
-  drawMascot(m.i, x + (hash(m.i + cam) - .5) * 80, 236, 1.3, { t, dark });
+  const fx = x + (hash(m.i + cam) - .5) * 80;
+  show(d => drawMascot(m.i, fx, 236, 1.3, { t, dark: d }));
   if (!dark) fog(.62);
 }
 
@@ -206,4 +289,5 @@ export function drawCams(S, cam, glitch, time, signal = 1) {
   feedFx(glitch, signal);
   overlayText(S, cam, glitch);
   signalMeter(signal);
+  drawCamMap(S, cam);
 }

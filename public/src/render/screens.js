@@ -1,7 +1,7 @@
 // The smaller full-canvas scenes: generator, HUD, jumpscare, and the idle backdrop.
 // Film grain is not drawn here. It is a CSS layer over the stage (see styles.css).
 import { W, H, MASC, P } from '../config.js';
-import { atDoor, clock, sanityOf } from '../rules.js';
+import { clock, sanityOf } from '../rules.js';
 import { game, client } from '../state.js';
 import { sanityCap } from '../sim.js';
 import { c, cv, TAU, mix, rgba, hash, ell, rect, rrect, poly, vgrad, glow, vignette, text, pxScale, resetTransform } from './canvas.js';
@@ -83,11 +83,6 @@ export function drawHud(S, view) {
     ell(18, 56 + i * 16, 4, 4, VIEW_COL[pl.view] || P.green);
     text(pl.name + (pl.view === 'office' ? '' : ` (${pl.view})`), 28, 60 + i * 16, { size: 11, weight: 500, col: P.subtext1 });
   });
-  const threat = ['L', 'V', 'R'].some(k => atDoor(S, k).length && !S.doors[k]);
-  if (threat && view !== 'office' && Date.now() % 600 < 380) {
-    rrect(W / 2 - 92, 8, 184, 30, 8, rgba(P.red, .92));
-    text('Thumping nearby', W / 2, 28, { size: 13, weight: 700, col: P.crust, align: 'center' });
-  }
   if (p > 0 && p < 15) {
     const v = c.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 520);
     v.addColorStop(0, rgba(P.red, 0)); v.addColorStop(1, rgba(P.red, .1 + .08 * Math.sin(Date.now() / 160)));

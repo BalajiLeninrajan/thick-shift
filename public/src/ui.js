@@ -1,6 +1,6 @@
 // HTML chrome: the overlay screens and the control bar under the canvas.
 // Everything here is derived from game/client state once per frame.
-import { MASC, ROOMS, CAM_ROOMS, DOORS, FINAL_NIGHT } from './config.js';
+import { MASC, DOORS, FINAL_NIGHT } from './config.js';
 import { game, client } from './state.js';
 import { clock } from './rules.js';
 import { startNight, restart } from './sim.js';
@@ -82,7 +82,7 @@ function nightScreen(S) {
   if (S.phase === 'dead' && client.scareT <= 0) {
     const d = MASC[S.killer];
     return {
-      key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">${esc(d.name)} ${esc(d.how)}.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clock(S)}.</p>`, hostAction('Retry night ' + S.night)),
+      key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">${esc(d.name)} ${esc(d.how)}.</p><p class="cn-meta cn-m-0">It came through ${{ L: 'the left door', R: 'the right door', V: 'the vent' }[S.killDoor] || 'a door'}.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clock(S)}.</p>`, hostAction('Retry night ' + S.night)),
     };
   }
   return { key, html: '' };
@@ -125,17 +125,4 @@ export function syncControls() {
   press('bGen', client.view === 'crank');
   press('bTilt', client.tilt);
   press('bLight', playing && S.lights !== false && S.power > 0);
-  $('cambar').hidden = !(playing && client.view === 'cams');
-  [...$('cambar').children].forEach((b, i) => { const v = String(i === client.cam); if (b.getAttribute('aria-pressed') !== v) b.setAttribute('aria-pressed', v); });
-}
-
-// onPick(i) is called when a camera button is pressed.
-export function buildCamBar(onPick) {
-  ROOMS.slice(0, CAM_ROOMS).forEach((room, i) => {
-    const b = document.createElement('button');
-    b.className = 'btn btn-ghost is-sm';
-    b.textContent = `${i + 1} ${room}`;
-    b.onclick = () => onPick(i);
-    $('cambar').appendChild(b);
-  });
 }

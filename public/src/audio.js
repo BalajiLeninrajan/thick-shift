@@ -171,7 +171,7 @@ export const SFX = {
     lastSteps = ac.currentTime;
     sample(pick('steps1', 'steps2'), { gain: .6, rate: .8, lowpass: 650, wet: .4 }) || tone(48, .3, 'sine', .35, 30);
   },
-  // It is outside one of your doors.
+  // It is outside one of your doors. The creak says so, but not which door.
   arrive() { sample(pick('creak1', 'creak2'), { gain: .7, rate: .8, wet: .3 }); tone(70, .6, 'sawtooth', .05, 50); },
   scare() {
     // The growl leads. The shriek is quieter than it sounds like it should be,

@@ -1,5 +1,5 @@
 // Read-only questions about a game state. Host and guests both use these.
-import { MASC, DOORKEY, DOORS, HOUR } from './config.js';
+import { MASC, DOORKEY, DOORS, HOUR, ZONES, W } from './config.js';
 
 export const hourOf = S => Math.min(6, Math.floor(S.t / HOUR));
 export const clock = S => (hourOf(S) || 12) + ' AM';
@@ -59,3 +59,16 @@ export const sanityOf = (S, id) => me(S, id)?.sanity ?? 1;
 export const doorFailChance = sanity => .7 * (1 - sanity) ** 1.5;
 // The booth lights are on unless someone switched them off or the power is out.
 export const lightsOn = S => S.power > 0 && S.lights !== false;
+
+/* ---------- what the booth lets you know ---------- */
+// A creak says something has reached one of your doors, but not which one.
+// It then hangs back in the dark, unseen, until REVEAL of its wait has gone; then it steps into
+// the doorway. You only see it, and only feel it, if that doorway is on your
+// screen. So the booth alone gives you the last 40% of the wait to react, and
+// only for the door you happen to be looking at. The cameras are how you find
+// out earlier which door to watch.
+export const REVEAL = .6;
+export const shownAtDoor = (S, k) => atDoor(S, k).filter(m => leanOf(S, m) >= REVEAL);
+const onScreen = (k, pan) => ZONES[k].x + ZONES[k].w > pan && ZONES[k].x < pan + W;
+// threatOf, but only for what this guard can see from where they are panned.
+export const seenThreat = (S, pan) => Math.max(0, ...DOORS.flatMap(k => S.doors[k] || !onScreen(k, pan) ? [] : shownAtDoor(S, k).map(m => .35 + leanOf(S, m) * .65)));

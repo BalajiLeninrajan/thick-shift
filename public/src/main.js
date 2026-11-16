@@ -2,7 +2,7 @@
 import { DOORS } from './config.js';
 import { game, client } from './state.js';
 import { SFX, ambience } from './audio.js';
-import { threatOf, dreadOf, camDrain, camCap, CAM_RECOVER, sanityOf } from './rules.js';
+import { seenThreat, dreadOf, camDrain, camCap, CAM_RECOVER, sanityOf } from './rules.js';
 import { syncOverlay, syncControls } from './ui.js';
 import { bindInput } from './input.js';
 import { render } from './render/frame.js';
@@ -47,7 +47,8 @@ function frame() {
   syncOverlay();
   render(performance.now() / 1000);
   if (S) animate(S);
-  if (S && S.phase === 'play') ambience(threatOf(S), dreadOf(S), sanityOf(S, game.myId)); else ambience(-1);
+  // Your pulse only picks up for something you can see: an open doorway on your screen, in the booth.
+  if (S && S.phase === 'play') ambience(client.view === 'office' ? seenThreat(S, client.pan) : 0, dreadOf(S), sanityOf(S, game.myId)); else ambience(-1);
   syncControls();
 }
 

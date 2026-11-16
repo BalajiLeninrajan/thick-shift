@@ -41,6 +41,7 @@ src/
     mascot.js       mascot art
     office.js       the booth
     cams.js         camera rooms and the CCTV treatment
+    cammap.js       the floor plan you tap to switch cameras
     screens.js      generator, HUD, jumpscare, title backdrop
     frame.js        picks the scene for the current state
 ```
@@ -59,13 +60,28 @@ Mascots start each night as the costumes they were and come apart as it goes on.
 
 `dreadOf(S)` is the same idea for the building, from 0 to 1. The office gloom, lamp flicker, fog, camera colour drain, poster glitches and background sound all scale with it. `threatOf(S)` is separate and short-lived: it rises while something stands at an open door, and drives the heartbeat and the red at the edges of the screen.
 
+## The building
+
+Nine rooms with cameras and three ways into the booth (`ROOMS` and the diagram above it in `config.js`). Each mascot has two routes of different lengths, some to different doors (`paths` in `MASC`), and picks one each time it sets off:
+
+- Big Biggs: Stage, Main Hall, then west through the Arcade to the left door, or east through the Kitchen to the right.
+- Madame Flan: Stage, then the short way through Backstage and the Kitchen to the right door, or the long way round to the left.
+- Squish: Snack Bar into the Ducts and out of the vent, or through the Kitchen to the right door.
+- Tank: Backstage, then the long way through the Stage and Arcade to the left door, or straight through the Kitchen to the right.
+
+A mascot turned away at a door goes back to where it rests. The camera map (`render/cammap.js`) is a floor plan of this.
+
+## What the booth tells you
+
+A creak says something has reached one of the doors, but not which one. The mascot then hangs back in the dark, unseen, until 60% of its wait has gone (`REVEAL` in `rules.js`), then steps into the doorway. The heartbeat and the red at the edges of the screen only happen for an open doorway that is on the guard's screen (`seenThreat`). From the booth alone a guard gets the last 40% of the wait, and only for the door they are panned to. The cameras are how they learn earlier which door to watch: a mascot held back by a lull waits one room from its door, and each hall leads to one door.
+
 ## Sanity and the lights
 
 Each guard has a sanity level, kept by the host in their player record (`updateSanity` in `sim.js`, rates in `SANITY`). It falls in the dark and while something stands at an open door. Watching an off or rotten mascot on camera also costs a little, very slowly. It recovers in the booth with the lights on and nothing at the doors.
 
-It gets worse each night and each hour (`wear` and `sanityCap` in `sim.js`): the ceiling starts lower every night and sinks as the night goes on, down to 29% at 6 AM on night 5. Power follows the same idea (`powerWear`): everything draws 70% of its rate on night 1 and 105% by night 5. The crank returns less power the lower the cranking guard's sanity, down to a quarter of its rate.
+It gets worse each night and each hour (`wear` and `sanityCap` in `sim.js`): the ceiling starts lower every night and sinks as the night goes on, down to 29% at 6 AM on night 5. Power follows the same idea (`powerWear`): everything draws its listed rate on night 1 and 140% of it by night 5. The crank returns less power the lower the cranking guard's sanity, down to 40% of its rate.
 
-The tuning target is night 5: a guard who makes a couple of mistakes should end it with under 10% power and sanity just into the red.
+The tuning target is night 5: a guard who never checks cameras and shuts each door at the last safe moment should end it near 13% power without cranking, and anyone less exact should need the crank. Sanity should end just into the red.
 
 Low sanity does three things:
 

@@ -2,7 +2,7 @@
 // Everything that never moves is baked into one wide sprite (see roomSprite);
 // each frame draws a slice of it and then the live parts on top.
 import { W, H, WORLD, ZONES, P } from '../config.js';
-import { atDoor, leanOf, rotOf, dreadOf, threatOf, lightsOn } from '../rules.js';
+import { atDoor, shownAtDoor, seenThreat, leanOf, rotOf, dreadOf, lightsOn, REVEAL } from '../rules.js';
 import { c, mix, rgba, hash, lerp, ell, rect, rrect, poly, vgrad, glow, vignette, text, bake, pxScale } from './canvas.js';
 import { drawMascot, drawFace } from './mascot.js';
 
@@ -186,7 +186,8 @@ function grip(X, z, lean) {
 function doorway(k, label, doorPos) {
   const z = ZONES[k], X = z.x - pan;
   if (X < -260 || X > W + 60) return;
-  const here = atDoor(S, k);
+  // With the power out there is no dark for it to hang back in: you see its eyes at once.
+  const here = powered ? shownAtDoor(S, k) : atDoor(S, k);
   rect(X, z.y, z.w, z.h, vgrad(z.y, z.y + z.h, [[0, P.ink], [1, mix(P.crust, P.blue, .08)]]));
   c.save(); c.beginPath(); c.rect(X, z.y, z.w, z.h); c.clip();
   if (on) rect(X, z.y + z.h * .55, z.w, z.h * .45, vgrad(z.y + z.h * .55, z.y + z.h, [[0, rgba(P.overlay1, 0)], [1, rgba(P.overlay1, dread * .2)]]));   // floor mist
@@ -194,6 +195,7 @@ function doorway(k, label, doorPos) {
   let lean = 0;
   here.forEach((m, j) => { const p = standing(m, X + z.w / 2, j); lean = Math.max(lean, p.lean); drawMascot(m.i, p.x, p.y, p.s, { t, dark: !on, rot: rotOf(S, m) }); });
   // It starts as a shape in the dark and comes into the light as it runs out of patience.
+  if (here.length && powered) rect(X, z.y, z.w, z.h, rgba(P.ink, .96 * Math.max(0, 1 - (lean - REVEAL) / .08)));   // it steps out of the dark over a moment, not a frame
   if (here.length && on) { const a = (.35 + dread * .65) * (1 - lean * .75); rect(X, z.y, z.w, z.h, vgrad(z.y, z.y + z.h, [[0, rgba(P.ink, .82 * a)], [.5, rgba(P.ink, .6 * a)], [1, rgba(P.ink, .78 * a)]])); }
   if (doorPos > .01) slab(X, z.y - z.h * (1 - doorPos), z.w, z.h);
   c.restore();
@@ -207,7 +209,7 @@ function doorway(k, label, doorPos) {
 function doorwayEyes(k) {
   const z = ZONES[k], X = z.x - pan;
   c.save(); c.beginPath(); c.rect(X, z.y, z.w, z.h); c.clip();
-  atDoor(S, k).forEach((m, j) => { const p = standing(m, X + z.w / 2, j); drawMascot(m.i, p.x, p.y, p.s, { t, dark: true, rot: rotOf(S, m) }); });
+  (powered ? shownAtDoor(S, k) : atDoor(S, k)).forEach((m, j) => { const p = standing(m, X + z.w / 2, j); drawMascot(m.i, p.x, p.y, p.s, { t, dark: true, rot: rotOf(S, m) }); });
   c.restore();
 }
 
@@ -221,7 +223,7 @@ function ventEyes(X, y) {
 }
 
 function vent(doorPos, eyesOnly) {
-  const z = ZONES.V, X = z.x - pan, lurking = atDoor(S, 'V').length > 0;
+  const z = ZONES.V, X = z.x - pan, lurking = (powered ? shownAtDoor(S, 'V') : atDoor(S, 'V')).length > 0;
   if (eyesOnly) { if (lurking) ventEyes(X, z.y); return; }
   rect(X, z.y, z.w, z.h, P.ink);
   if (lurking && !S.doors.V) {
@@ -272,8 +274,8 @@ export function drawOffice(state, panX, door, time) {
   if (on) {
     rect(0, 0, W, H, rgba(P.ink, dread * .26 + (1 - level) * .7));   // gloom, and the lamp flicker
     vignette(.6 + dread * .35);
-    // Something is at an open door: the edges of your vision go red in time with your pulse.
-    const threat = threatOf(S);
+    // Something is in an open doorway you can see: the edges of your vision go red in time with your pulse.
+    const threat = seenThreat(S, pan);
     if (threat > 0) { const beat = Math.pow(Math.max(0, Math.sin(t * (4 + threat * 5))), 6); glow(0, H / 2, 300, P.red, threat * .16 * (.4 + beat)); glow(W, H / 2, 300, P.red, threat * .16 * (.4 + beat)); }
   } else {
     // Lights switched off is dark. Power out is darker, with the emergency light.

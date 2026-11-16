@@ -7,9 +7,21 @@ export const HOUR = 45;        // seconds per in-game hour
 export const FINAL_NIGHT = 5;  // survive this one and the game is won
 export const PREFIX = 'thick-shift-v1-';   // PeerJS id namespace
 
-export const ROOMS = ['Storage Stage', 'Main Hall', 'West Hall', 'East Hall', 'Snack Bar', 'LEFT DOOR', 'RIGHT DOOR', 'VENT'];
-export const CAM_ROOMS = 5;    // the first five rooms have cameras
-export const DOORKEY = { 5: 'L', 6: 'R', 7: 'V' };
+// The building. Rooms 0 to 8 have cameras; 9 to 11 are the three ways into the booth.
+//
+//   Stage ----- Backstage
+//     |             |
+//   Main Hall --- Kitchen          Arcade is west of the Main Hall.
+//    |    \         |             Snack Bar hangs off the Main Hall/Kitchen corridor.
+//   Arcade  Snack  East Hall
+//     |       |       |
+//   West Hall Ducts   |
+//     |       |       |
+//   LEFT    VENT    RIGHT
+// Numbered the way the camera map reads: left to right, top to bottom.
+export const ROOMS = ['Storage Stage', 'Backstage', 'Arcade', 'Main Hall', 'Kitchen', 'West Hall', 'Snack Bar', 'East Hall', 'Ducts', 'LEFT DOOR', 'RIGHT DOOR', 'VENT'];
+export const CAM_ROOMS = 9;
+export const DOORKEY = { 9: 'L', 10: 'R', 11: 'V' };
 export const DOORS = ['L', 'V', 'R'];
 
 // Office hit zones in world coordinates. Rendering and input both read these.
@@ -33,12 +45,13 @@ export const P = {
   blue: '#89b4fa', lavender: '#b4befe',
 };
 
-// paths: room indices from spawn to the door the mascot ends up at.
-// from: in-game hours (across nights) before the mascot wakes up.
-// ag: aggression multiplier. col: fur colour, belly: the costume's front patch.
+// paths: the routes a mascot can take, as room indices from where it rests to
+// the door it ends up at. It picks one each time it sets off. Routes differ in
+// length and in which door they reach, so where a mascot is on the cameras
+// tells you how long you have and which way it is coming.
 export const MASC = [
-  { k: 'hippo', name: 'Big Biggs', col: '#9a7fc4', belly: '#e6c8ee', paths: [[0, 1, 2, 5]], from: 0, ag: 1, how: 'sat on you' },
-  { k: 'walrus', name: 'Madame Flan', col: '#b98a6e', belly: '#f5e0dc', paths: [[0, 1, 3, 6]], from: 0, ag: 1, how: 'hugged you a bit too hard' },
-  { k: 'toad', name: 'Squish', col: '#5f8f66', belly: '#cfe2a8', paths: [[4, 7]], from: 2, ag: .55, how: 'somehow fit through the vent' },
-  { k: 'rhino', name: 'Tank', col: '#7d8299', belly: '#a6adc8', paths: [[0, 1, 2, 5], [0, 1, 3, 6]], from: 9, ag: .8, how: 'did not slow down' },
+  { k: 'hippo', name: 'Big Biggs', col: '#9a7fc4', belly: '#e6c8ee', paths: [[0, 3, 2, 5, 9], [0, 3, 4, 7, 10]], from: 0, ag: 1, how: 'sat on you' },
+  { k: 'walrus', name: 'Madame Flan', col: '#b98a6e', belly: '#f5e0dc', paths: [[0, 1, 4, 7, 10], [0, 3, 2, 5, 9]], from: 0, ag: 1, how: 'hugged you a bit too hard' },
+  { k: 'toad', name: 'Squish', col: '#5f8f66', belly: '#cfe2a8', paths: [[6, 8, 11], [6, 4, 7, 10]], from: 2, ag: .7, how: 'found a way in' },
+  { k: 'rhino', name: 'Tank', col: '#7d8299', belly: '#a6adc8', paths: [[1, 0, 3, 2, 5, 9], [1, 4, 7, 10]], from: 9, ag: .8, how: 'did not slow down' },
 ];

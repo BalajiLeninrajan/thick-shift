@@ -1,9 +1,9 @@
 // Buttons, keyboard, pointer panning, and phone tilt.
-import { W, H, WORLD, ZONES } from './config.js';
+import { W, H, WORLD, ZONES, CAM_ROOMS } from './config.js';
 import { game, client } from './state.js';
 import { send } from './net.js';
 import { unlockAudio, click } from './audio.js';
-import { buildCamBar } from './ui.js';
+import { camAt } from './render/cammap.js';
 import { cv } from './render/canvas.js';
 
 const $ = id => document.getElementById(id);
@@ -61,6 +61,7 @@ function bindPointer() {
   cv.addEventListener('pointerup', e => {
     const p = at(e);
     if (drag && !drag.moved && playing() && client.view === 'office') tapOffice(p.x, p.y);
+    if (drag && !drag.moved && playing() && client.view === 'cams') { const cam = camAt(p.x, p.y); if (cam >= 0 && cam !== client.cam) pickCam(cam); }
     drag = null;
   });
 }
@@ -78,7 +79,7 @@ function onKey(e) {
   if (e.target.tagName === 'INPUT') return;
   const k = e.key.toLowerCase();
   if (KEYS[k]) { if (k === ' ') e.preventDefault(); KEYS[k](); }
-  if (client.view === 'cams' && k >= '1' && k <= '5') pickCam(+k - 1);
+  if (client.view === 'cams' && k >= '1' && k <= String(CAM_ROOMS)) pickCam(+k - 1);
 }
 
 export function bindInput() {
@@ -89,7 +90,6 @@ export function bindInput() {
   $('bGen').onclick = () => toggleView('crank');
   $('bTilt').onclick = toggleTilt;
   $('bLight').onclick = toggleLights;
-  buildCamBar(pickCam);
   bindPointer();
   addEventListener('deviceorientation', onTilt);
   addEventListener('keydown', onKey);
