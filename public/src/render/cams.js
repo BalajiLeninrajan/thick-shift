@@ -4,7 +4,7 @@ import { inRoom, clock, rotOf, dreadOf } from '../rules.js';
 import { c, cv, mix, rgba, hash, lerp, ell, rect, rrect, poly, vgrad, glow, vignette, text, pxScale, resetTransform } from './canvas.js';
 import { drawMascot, drawFace } from './mascot.js';
 
-let t, dread;
+let t, dread, dark;
 
 /* ---------- rooms ---------- */
 
@@ -120,13 +120,14 @@ function tearSlices(n) {
   c.restore(); resetTransform();
 }
 
-function feedFx(glitch) {
+function feedFx(glitch, signal) {
   c.save(); c.globalCompositeOperation = 'color'; rect(0, 0, W, H, rgba(mix(P.overlay2, P.teal, .25), .3 + dread * .4)); c.restore();   // drain the color
   rect(0, 0, W, H, rgba(P.ink, .1 + dread * .26));
   const bar = (t * 70) % (H + 120) - 120;
   rect(0, bar, W, 120, vgrad(bar, bar + 120, [[0, rgba(P.text, 0)], [.5, rgba(P.text, .06)], [1, rgba(P.text, 0)]]));
   if (glitch > 0) tearSlices(glitch > 12 ? 9 : 4);
-  for (let i = 0; i < (glitch > 0 ? 240 : 46); i++) rect(Math.random() * W, Math.random() * H, 2 + Math.random() * (glitch > 0 ? 190 : 50), 1.4, rgba(P.text, Math.random() * .22));
+  else if (signal < .6 && hash(Math.floor(t * 8)) < .6 - signal) tearSlices(3);   // a worn feed tears on its own
+  for (let i = 0; i < (glitch > 0 ? 240 : 46 + (1 - signal) * 200); i++) rect(Math.random() * W, Math.random() * H, 2 + Math.random() * (glitch > 0 ? 190 : 50), 1.4, rgba(P.text, Math.random() * .22));
   for (let y = 0; y < H; y += 3) rect(0, y, W, 1, rgba(P.ink, .28));
   vignette(.9);
 }
@@ -146,15 +147,16 @@ function overlayText(S, cam, glitch) {
 }
 
 // How a mascot shows up on camera depends on how close it is to you.
+// When the camera's light is out (dark), everything is a silhouette.
 function subject(S, m, cam, x) {
   const path = MASC[m.i].paths[m.side], stepsLeft = path.length - 1 - m.pos, rot = rotOf(S, m);
   // One room from your door: its face is against the lens.
-  if (stepsLeft === 1 && path.length > 2 && rot === 2) return drawFace(m.i, x + 70, H / 2 + 40, 3.1, { t });
+  if (stepsLeft === 1 && path.length > 2 && rot === 2) return drawFace(m.i, x + 70, H / 2 + 40, 3.1, { t, dark });
   // Still in its starting room: back to the camera, looking over its shoulder.
-  if (m.pos === 0 || rot < 2) return drawMascot(m.i, x, 268, .8, { t, rot, pose: Math.floor(S.t / 17 + m.i + m.pos) % 3 ? 'back' : 'front' });
+  if (m.pos === 0 || rot < 2) return drawMascot(m.i, x, 268, .8, { t, rot, dark, pose: Math.floor(S.t / 17 + m.i + m.pos) % 3 ? 'back' : 'front' });
   // In between: too big for the hall, most of it lost in the fog.
-  drawMascot(m.i, x + (hash(m.i + cam) - .5) * 80, 236, 1.3, { t });
-  fog(.62);
+  drawMascot(m.i, x + (hash(m.i + cam) - .5) * 80, 236, 1.3, { t, dark });
+  if (!dark) fog(.62);
 }
 
 // Grey fog, thickest near the floor.
@@ -163,16 +165,34 @@ function fog(a) {
   for (let i = 0; i < 5; i++) glow((i * 190 + t * (6 + i * 3)) % (W + 300) - 150, 300 + i * 24, 190, P.overlay2, a * .3);
 }
 
-export function drawCams(S, cam, glitch, time) {
-  t = time; dread = dreadOf(S);
+// As the signal goes, the camera's light starts cutting out, then stays out.
+function lightOut(signal) {
+  if (signal < .15) return true;
+  return signal < .4 && hash(Math.floor(t * 2.5)) < (.4 - signal) / .25;
+}
+
+function signalMeter(signal) {
+  const bars = Math.ceil(signal * 5), col = bars > 2 ? P.text : bars > 1 ? P.yellow : P.red;
+  text('SIGNAL', W - 62, 96, { size: 10, weight: 700, col: P.subtext0, align: 'right' });
+  for (let i = 0; i < 5; i++) rect(W - 56 + i * 6, 96 - 3 - i * 2, 4, 3 + i * 2, i < bars ? col : rgba(P.text, .2));
+  if (!dark) return;
+  if (Date.now() % 900 < 600) text('LIGHT FAULT', W / 2, 70, { size: 14, weight: 700, col: P.red, align: 'center' });
+  text('Look away to let the feed recover', W / 2, 90, { size: 11, weight: 500, col: P.subtext0, align: 'center' });
+}
+
+// signal: this player's feed quality, 1 to 0 (see camDrain in rules.js).
+export function drawCams(S, cam, glitch, time, signal = 1) {
+  t = time; dread = dreadOf(S); dark = lightOut(signal);
   ROOM_ART[cam]();
+  if (dark) rect(0, 0, W, H, rgba(P.ink, .84 + .1 * hash(Math.floor(t * 20))));   // the room is still there, barely
   // Movement is hidden behind the static, so you never see anyone walk.
   if (glitch <= 0) {
     const here = inRoom(S, cam);
     here.forEach((m, j) => subject(S, m, cam, W / 2 + (j - (here.length - 1) / 2) * 250));
-    fog(dread * .22);
-    if (!here.length) text('nobody here', W / 2, 236, { size: 13, weight: 500, col: rgba(P.text, .35), align: 'center' });
+    if (!dark) fog(dread * .22);
+    if (!here.length && !dark) text('nobody here', W / 2, 236, { size: 13, weight: 500, col: rgba(P.text, .35), align: 'center' });
   }
-  feedFx(glitch);
+  feedFx(glitch, signal);
   overlayText(S, cam, glitch);
+  signalMeter(signal);
 }

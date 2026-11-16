@@ -12,7 +12,7 @@ export function render(t) {
   c.save();
   if (client.shake > 0) c.translate(rnd(-client.shake, client.shake), rnd(-client.shake, client.shake));
   const playing = S.phase === 'play';
-  if (playing && client.view === 'cams') drawCams(S, client.cam, client.glitch, t);
+  if (playing && client.view === 'cams') drawCams(S, client.cam, client.glitch, t, client.signal);
   else if (playing && client.view === 'crank') drawCrank(S, t);
   else drawOffice(S, client.pan, client.door, t);
   drawHud(S, client.view);

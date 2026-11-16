@@ -23,3 +23,10 @@ const decay = S => S.t / HOUR + (S.night - 1) * 2;
 export const rotOf = (S, m) => { const r = decay(S) / 8 + (m.bangs || 0) * .25; return r < .34 ? 0 : r < .67 ? 1 : 2; };
 // The same idea for the building: 0 is a dull night shift, 1 is not.
 export const dreadOf = S => Math.min(1, decay(S) / 7 + S.m.reduce((n, m) => n + (m.bangs || 0), 0) * .06);
+
+// Camera feeds wear out while you watch them and come back when you look
+// away. Each player has their own signal level, 1 down to 0 (client.signal).
+// These are its rates per second. Early in the night a feed lasts about a
+// minute; at full dread, about eleven seconds.
+export const camDrain = S => 1 / 60 + (1 / 11 - 1 / 60) * dreadOf(S);
+export const CAM_RECOVER = .3;

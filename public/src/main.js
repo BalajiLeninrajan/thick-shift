@@ -2,7 +2,7 @@
 import { DOORS } from './config.js';
 import { game, client } from './state.js';
 import { SFX, ambience } from './audio.js';
-import { threatOf, dreadOf } from './rules.js';
+import { threatOf, dreadOf, camDrain, CAM_RECOVER } from './rules.js';
 import { syncOverlay, syncControls } from './ui.js';
 import { bindInput } from './input.js';
 import { render } from './render/frame.js';
@@ -27,12 +27,14 @@ function reactToEvents(S) {
 }
 
 function animate(S) {
-  if (S.phase === 'play' && S.t < .3) { client.view = 'office'; client.scareT = 0; }   // a new night just began
+  if (S.phase === 'play' && S.t < .3) { client.view = 'office'; client.scareT = 0; client.signal = 1; }   // a new night just began
   client.pan += (client.panT - client.pan) * .18;
   for (const k of DOORS) client.door[k] += ((S.doors[k] ? 1 : 0) - client.door[k]) * .3;
   if (client.shake > 0) { client.shake *= .85; if (client.shake < .5) client.shake = 0; }
   if (client.glitch > 0) client.glitch--;
   if (client.scareT > 0) client.scareT--;
+  const wear = client.view === 'cams' ? -camDrain(S) : CAM_RECOVER;
+  client.signal = Math.max(0, Math.min(1, client.signal + wear / 60));
 }
 
 function frame() {

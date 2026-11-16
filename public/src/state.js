@@ -17,6 +17,7 @@ export const game = {
 export const client = {
   view: 'office',   // 'office' | 'cams' | 'crank'
   cam: 0,
+  signal: 1,        // camera feed quality, 1 to 0. Drops while watching (see camDrain)
   pan: 400,
   panT: 400,        // pan eases toward this
   tilt: false,
