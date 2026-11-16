@@ -24,13 +24,14 @@ public/
 index.html          markup and the control bar
 styles.css          stage layout; everything else comes from catppuccin-neu
 peerjs.min.js       vendored PeerJS, used for rooms
+sfx/                recorded sound effects (CC0, see Sound below)
 src/
   config.js         constants, rooms, hit zones, palette, mascot roster
   state.js          the two shared mutable objects: game (session) and client (this browser's view)
   rules.js          read-only questions about a state: who is at which door, what time it is
   sim.js            host-only simulation: power, mascot movement, player actions
   net.js            hosting and joining rooms; the host broadcasts the whole state
-  audio.js          synthesised sound effects
+  audio.js          recorded and synthesised sound
   ui.js             overlay screens and control-bar state
   input.js          buttons, keyboard, pointer panning, tilt
   dev.js            dev menu, loaded only with ?dev
@@ -57,6 +58,18 @@ Mascots start each night as the costumes they were and come apart as it goes on.
 Camera feeds wear out while a player watches them. Each player has a `client.signal` level that drains at `camDrain(S)` per second (slow early, about eleven seconds at full dread) and recovers in under a second once they leave the cameras. A worn feed tears and fills with static; below about 40% its light starts cutting out and everything in the room is drawn as a silhouette. This is per player and not synced, so two guards can see different feeds.
 
 To add a mascot, add an entry to `MASC` in `config.js`, then give `COSTUME` (stages 0 and 1), `HEAD` (stage 2), `BODY` and `NECK` in `render/mascot.js` an entry with the same key.
+
+## Sound
+
+Doors, bangs, footsteps, creaks, wind and growls are recordings in `public/sfx`. The hum, heartbeat, chimes and UI clicks are synthesised in `audio.js`, because they change with dread and threat as you play. Each recording has a synthesised stand-in that plays if the file has not loaded.
+
+All recordings are CC0, converted to mono MP3:
+
+- `door_*`, `slam*`, `sheet*`, `thud`, `knock*`: [100 CC0 metal and wood SFX](https://opengameart.org/content/100-cc0-metal-and-wood-sfx) (OpenGameArt)
+- `hit_low`, `hit_long`: [Horror hit soundpack 1](https://opengameart.org/content/horror-hit-soundpack-1) (OpenGameArt)
+- `steps*`, `creak*`, `wind`, `scare_growl`, `far_growl*`: [Free horror SFX](https://liminal-space-dev.itch.io/free-horror-sfx-sounds) by Liminal Games (itch.io)
+
+A bang on a shut door is one of four layered recipes in `BANGS`, picked at random. Recordings pass through a generated room reverb (`room()`), with more of it for sounds that are further away.
 
 ## Performance notes
 

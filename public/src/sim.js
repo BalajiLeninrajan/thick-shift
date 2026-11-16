@@ -87,5 +87,5 @@ export function act(pid, a) {
   const S = game.S, p = game.players[pid];
   if (a.t === 'view') { if (p) p.view = a.v; return; }
   if (a.t === 'name') { if (p) p.name = String(a.n || 'Guard').slice(0, 12); return; }
-  if (a.t === 'door' && S.phase === 'play' && S.power > 0 && DOORS.includes(a.k)) { S.doors[a.k] = !S.doors[a.k]; emit('door'); }
+  if (a.t === 'door' && S.phase === 'play' && S.power > 0 && DOORS.includes(a.k)) { S.doors[a.k] = !S.doors[a.k]; emit('door', S.doors[a.k]); }
 }

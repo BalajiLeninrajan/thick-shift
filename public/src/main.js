@@ -21,7 +21,7 @@ function reactToEvents(S) {
   for (const e of S.evs) {
     if (e.id <= client.lastEv) continue;
     client.lastEv = e.id;
-    SFX[e.type]?.();
+    SFX[e.type]?.(e);
     ON_EVENT[e.type]?.();
   }
 }
