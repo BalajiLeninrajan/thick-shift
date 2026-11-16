@@ -29,4 +29,4 @@ export const dreadOf = S => S.dev?.dread >= 0 ? S.dev.dread : Math.min(1, decay(
 // These are its rates per second. Early in the night a feed lasts about a
 // minute; at full dread, about eleven seconds.
 export const camDrain = S => 1 / 60 + (1 / 11 - 1 / 60) * dreadOf(S);
-export const CAM_RECOVER = .3;
+export const CAM_RECOVER = 1.5;   // back to full in under a second off the cameras

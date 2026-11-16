@@ -54,7 +54,7 @@ Mascots start each night as the costumes they were and come apart as it goes on.
 
 `dreadOf(S)` is the same idea for the building, from 0 to 1. The office gloom, lamp flicker, fog, camera colour drain, poster glitches and background sound all scale with it. `threatOf(S)` is separate and short-lived: it rises while something stands at an open door, and drives the heartbeat and the red at the edges of the screen.
 
-Camera feeds wear out while a player watches them. Each player has a `client.signal` level that drains at `camDrain(S)` per second (slow early, about eleven seconds at full dread) and recovers once they leave the cameras. A worn feed tears and fills with static; below about 40% its light starts cutting out and everything in the room is drawn as a silhouette. This is per player and not synced, so two guards can see different feeds.
+Camera feeds wear out while a player watches them. Each player has a `client.signal` level that drains at `camDrain(S)` per second (slow early, about eleven seconds at full dread) and recovers in under a second once they leave the cameras. A worn feed tears and fills with static; below about 40% its light starts cutting out and everything in the room is drawn as a silhouette. This is per player and not synced, so two guards can see different feeds.
 
 To add a mascot, add an entry to `MASC` in `config.js`, then give `COSTUME` (stages 0 and 1), `HEAD` (stage 2), `BODY` and `NECK` in `render/mascot.js` an entry with the same key.
 
