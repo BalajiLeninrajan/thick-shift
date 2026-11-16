@@ -1,5 +1,6 @@
 // Picks the scene for the current state and draws one frame.
 import { game, client, rnd } from '../state.js';
+import { sanityOf } from '../rules.js';
 import { c, fitCanvas, resetTransform } from './canvas.js';
 import { drawOffice } from './office.js';
 import { drawCams } from './cams.js';
@@ -11,6 +12,8 @@ export function render(t) {
   if (!S || S.phase === 'lobby') { drawBackdrop(t); return; }
   c.save();
   if (client.shake > 0) c.translate(rnd(-client.shake, client.shake), rnd(-client.shake, client.shake));
+  const nerves = Math.max(0, .4 - sanityOf(S, game.myId)) * 5;   // below 40% sanity the picture will not hold still
+  if (nerves > 0) c.translate(rnd(-nerves, nerves), rnd(-nerves, nerves));
   const playing = S.phase === 'play';
   if (playing && client.view === 'cams') drawCams(S, client.cam, client.glitch, t, client.signal);
   else if (playing && client.view === 'crank') drawCrank(S, t);

@@ -38,7 +38,7 @@ const HTML = `
   </div>
   <div class="cn-cluster">
     ${button('dv-hour', '+1 hour')}${button('dv-late', 'Skip to 5:50')}${button('dv-win', 'Win night')}${button('dv-next', 'Next night')}
-    ${button('dv-low', 'Power to 5%')}${button('dv-signal', 'Kill camera signal')}
+    ${button('dv-low', 'Power to 5%')}${button('dv-sane', 'Sanity to 15%')}${button('dv-signal', 'Kill camera signal')}
   </div>
   <div class="cn-stack cn-divide" id="dv-mascots"></div>
   <dl class="kv" id="dv-read"></dl>
@@ -52,6 +52,7 @@ const ACTIONS = {
   'dv-win'(S) { S.t = 6 * HOUR; },
   'dv-next'(S) { startNight(S.night + 1); },
   'dv-low'(S) { S.power = 5; },
+  'dv-sane'(S) { for (const id in game.players) game.players[id].sanity = .15; },
 };
 
 const MASCOT_ACTIONS = {
@@ -97,7 +98,7 @@ function sync(el) {
       <span class="cn-cluster">${['door', 'home', 'scare'].map(a => `<button class="btn btn-ghost is-sm" data-act="${a}" data-i="${m.i}"${on ? '' : ' disabled'}>${{ door: 'To door', home: 'Send home', scare: 'Jumpscare' }[a]}</button>`).join('')}</span></div>`;
   }).join('');
   const row = (k, v) => `<dt>${k}</dt><dd class="cn-tabular">${v}</dd>`;
-  $('dv-read').innerHTML = row('Phase', S.phase) + row('Night time', (S.t / HOUR).toFixed(2) + ' h') + row('Threat', threatOf(S).toFixed(2)) + row('Camera signal', Math.round(client.signal * 100) + '%') + row('Guards', S.players.length);
+  $('dv-read').innerHTML = row('Phase', S.phase) + row('Night time', (S.t / HOUR).toFixed(2) + ' h') + row('Threat', threatOf(S).toFixed(2)) + row('Quiet for', Math.max(0, (S.calmUntil || 0) - S.t).toFixed(0) + ' s' + (S.pair ? ', then a pair' : '')) + row('Camera signal', Math.round(client.signal * 100) + '%') + row('Sanity', S.players.map(p => Math.round((p.sanity ?? 1) * 100) + '%').join(', ')) + row('Guards', S.players.length);
 }
 
 export function mountDev() {

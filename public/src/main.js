@@ -2,7 +2,7 @@
 import { DOORS } from './config.js';
 import { game, client } from './state.js';
 import { SFX, ambience } from './audio.js';
-import { threatOf, dreadOf, camDrain, camCap, CAM_RECOVER } from './rules.js';
+import { threatOf, dreadOf, camDrain, camCap, CAM_RECOVER, sanityOf } from './rules.js';
 import { syncOverlay, syncControls } from './ui.js';
 import { bindInput } from './input.js';
 import { render } from './render/frame.js';
@@ -15,6 +15,8 @@ const ON_EVENT = {
   arrive() { client.glitch = 40; },
   scare() { client.scareT = SCARE_FRAMES; },
   out() { client.view = 'office'; },
+  // Only the guard whose hands failed is told why the door is still open.
+  fumble(e) { if (e.x.by === game.myId) { client.fumbleT = 110; client.shake = Math.max(client.shake, 5); } },
 };
 
 function reactToEvents(S) {
@@ -22,7 +24,7 @@ function reactToEvents(S) {
     if (e.id <= client.lastEv) continue;
     client.lastEv = e.id;
     SFX[e.type]?.(e);
-    ON_EVENT[e.type]?.();
+    ON_EVENT[e.type]?.(e);
   }
 }
 
@@ -33,6 +35,7 @@ function animate(S) {
   if (client.shake > 0) { client.shake *= .85; if (client.shake < .5) client.shake = 0; }
   if (client.glitch > 0) client.glitch--;
   if (client.scareT > 0) client.scareT--;
+  if (client.fumbleT > 0) client.fumbleT--;
   const wear = client.view === 'cams' ? -camDrain(S) : CAM_RECOVER;
   client.signal = Math.max(0, Math.min(camCap(S), client.signal + wear / 60));
 }
@@ -44,7 +47,7 @@ function frame() {
   syncOverlay();
   render(performance.now() / 1000);
   if (S) animate(S);
-  if (S && S.phase === 'play') ambience(threatOf(S), dreadOf(S)); else ambience(-1);
+  if (S && S.phase === 'play') ambience(threatOf(S), dreadOf(S), sanityOf(S, game.myId)); else ambience(-1);
   syncControls();
 }
 

@@ -42,3 +42,20 @@ const camLife = S => { const h = late(S); return h < 4 ? 60 - h * 12.5 : 10 - (h
 // Signal lost per second of watching.
 export const camDrain = S => (camCap(S) - CAM_DARK) / camLife(S);
 export const CAM_RECOVER = 1.5;   // back to full in under a second off the cameras
+
+/* ---------- sanity and the lights ---------- */
+// Each guard has a sanity level, 1 down to 0, kept by the host in the player
+// record (see updateSanity in sim.js). It falls in the dark, while looking at
+// a rotten mascot, and while something stands at an open door. It comes back
+// in the booth with the lights on and nothing at the doors.
+//
+// Low sanity does two things. Shutting a door can fail, because your hands
+// will not do it: doorFailChance. And you start hearing and seeing things
+// that are not there (audio.js, cams.js).
+export const me = (S, id) => S.players.find(p => p.id === id);
+export const sanityOf = (S, id) => me(S, id)?.sanity ?? 1;
+// Chance that pressing "shut" does nothing. 0 at full sanity, about a quarter
+// at half, 70% at zero. Opening a door never fails.
+export const doorFailChance = sanity => .7 * (1 - sanity) ** 1.5;
+// The booth lights are on unless someone switched them off or the power is out.
+export const lightsOn = S => S.power > 0 && S.lights !== false;

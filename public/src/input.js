@@ -17,11 +17,13 @@ function toggleView(v) {
   if (!playing()) return;
   unlockAudio();
   client.view = client.view === v ? 'office' : v;
-  send({ t: 'view', v: client.view });
+  send({ t: 'view', v: client.view, cam: client.cam });
   click();
 }
 
-function pickCam(i) { client.cam = i; client.glitch = 6; click(700); }
+function pickCam(i) { client.cam = i; client.glitch = 6; click(700); send({ t: 'view', v: client.view, cam: i }); }   // the host needs to know what you are looking at
+
+function toggleLights() { unlockAudio(); if (playing()) send({ t: 'lights' }); }
 
 async function toggleTilt() {
   unlockAudio();
@@ -69,13 +71,14 @@ const KEYS = {
   w: () => toggleDoor('V'), v: () => toggleDoor('V'),
   s: () => toggleView('cams'), ' ': () => toggleView('cams'),
   g: () => toggleView('crank'),
+  l: () => toggleLights(),
 };
 
 function onKey(e) {
   if (e.target.tagName === 'INPUT') return;
   const k = e.key.toLowerCase();
   if (KEYS[k]) { if (k === ' ') e.preventDefault(); KEYS[k](); }
-  if (client.view === 'cams' && k >= '1' && k <= '5') { client.cam = +k - 1; client.glitch = 6; }
+  if (client.view === 'cams' && k >= '1' && k <= '5') pickCam(+k - 1);
 }
 
 export function bindInput() {
@@ -85,6 +88,7 @@ export function bindInput() {
   $('bCam').onclick = () => toggleView('cams');
   $('bGen').onclick = () => toggleView('crank');
   $('bTilt').onclick = toggleTilt;
+  $('bLight').onclick = toggleLights;
   buildCamBar(pickCam);
   bindPointer();
   addEventListener('deviceorientation', onTilt);

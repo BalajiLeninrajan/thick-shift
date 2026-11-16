@@ -1,7 +1,9 @@
 // The smaller full-canvas scenes: generator, HUD, jumpscare, and the idle backdrop.
 // Film grain is not drawn here. It is a CSS layer over the stage (see styles.css).
 import { W, H, MASC, P } from '../config.js';
-import { atDoor, clock } from '../rules.js';
+import { atDoor, clock, sanityOf } from '../rules.js';
+import { game, client } from '../state.js';
+import { sanityCap } from '../sim.js';
 import { c, cv, TAU, mix, rgba, hash, ell, rect, rrect, poly, vgrad, glow, vignette, text, pxScale, resetTransform } from './canvas.js';
 import { drawMascot, drawFace } from './mascot.js';
 
@@ -48,7 +50,24 @@ export function drawCrank(S, t) {
 /* ---------- HUD ---------- */
 
 const VIEW_COL = { office: P.green, cams: P.blue, crank: P.yellow };
+// Sanity: a thin bar under the power meter, and what low sanity does to the frame.
+function drawSanity(S) {
+  const sanity = sanityOf(S, game.myId), col = sanity > .5 ? P.lavender : sanity > .25 ? P.yellow : P.red;
+  rrect(W - 258, 46, 248, 18, 6, rgba(P.ink, .6));
+  text('Sanity', W - 248, 59, { size: 10, weight: 600, col: P.subtext0 });
+  rrect(W - 164, 52, 141, 6, 3, P.surface0);
+  if (sanity > 0) rrect(W - 164, 52, Math.max(6, 141 * sanity), 6, 3, col);
+  const cap = sanityCap(S.night);                                       // the part of the bar you no longer get back
+  if (cap < 1) rect(W - 164 + 141 * cap, 50, 1.5, 10, P.overlay1);
+  if (client.fumbleT > 0) {
+    rrect(W / 2 - 150, H - 64, 300, 30, 8, rgba(P.ink, .85));
+    text('Your hands are shaking. The door did not shut.', W / 2, H - 44, { size: 12, weight: 600, col: P.red, align: 'center' });
+  }
+  if (sanity < .5) vignette((.5 - sanity) * (1 + .5 * Math.sin(Date.now() / 300)));   // the edges close in
+}
+
 export function drawHud(S, view) {
+  drawSanity(S);
   rrect(10, 8, 150, 34, 8, rgba(P.ink, .6));
   text(clock(S), 22, 32, { size: 20, weight: 700, col: P.text });
   text('Night ' + S.night, 150, 31, { size: 12, weight: 500, col: P.subtext0, align: 'right' });

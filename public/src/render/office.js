@@ -2,13 +2,15 @@
 // Everything that never moves is baked into one wide sprite (see roomSprite);
 // each frame draws a slice of it and then the live parts on top.
 import { W, H, WORLD, ZONES, P } from '../config.js';
-import { atDoor, leanOf, rotOf, dreadOf, threatOf } from '../rules.js';
+import { atDoor, leanOf, rotOf, dreadOf, threatOf, lightsOn } from '../rules.js';
 import { c, mix, rgba, hash, lerp, ell, rect, rrect, poly, vgrad, glow, vignette, text, bake, pxScale } from './canvas.js';
 import { drawMascot, drawFace } from './mascot.js';
 
 const FLOOR_Y = 370;
 const LAMPS = [470, 1130];          // world x of the ceiling lamps
-let S, pan, t, on, dread;
+// on: the booth lights are lit. powered: there is electricity at all.
+// The lights can be off with the power still on, if a guard switched them off.
+let S, pan, t, on, powered, dread;
 
 // Lamp brightness, 0 to 1. Stutters when power is low.
 function lampLevel() {
@@ -100,18 +102,19 @@ function lamps(lit) {
   }
 }
 
-// One sprite per power state, rebuilt if the canvas resolution changes.
+// One sprite per lighting state, rebuilt if the canvas resolution changes.
+// lit: lamps on. live: the monitor and other powered things are on.
 const rooms = {};
-function roomSprite(lit) {
-  const res = pxScale(), hit = rooms[lit];
+function roomSprite(lit, live) {
+  const res = pxScale(), key = `${lit}|${live}`, hit = rooms[key];
   if (hit && hit.res === res) return hit.sprite;
   const sprite = bake(WORLD, H, res, () => {
     wall(); floor();
     poster(360, -.03, mix(P.mauve, P.crust, .55), 0, 'BIGGS LAND');
     poster(1120, .04, mix(P.red, P.crust, .6), 1, 'EST. 1987');
-    furniture(lit); lamps(lit);
+    furniture(live); lamps(lit);
   });
-  rooms[lit] = { res, sprite };
+  rooms[key] = { res, sprite };
   return sprite;
 }
 
@@ -123,7 +126,7 @@ function statusPlate(cx, y, label, shut) {
   const w = c.measureText(str).width + 34;
   rrect(cx - w / 2, y - 14, w, 22, 6, rgba(P.ink, .8));
   ell(cx - w / 2 + 13, y - 3, 4.5, 4.5, col);
-  if (on) glow(cx - w / 2 + 13, y - 3, 16, col, .5);
+  if (powered) glow(cx - w / 2 + 13, y - 3, 16, col, .5);
   text(str, cx - w / 2 + 24, y + 1, { col: P.text });
 }
 
@@ -243,7 +246,7 @@ function vent(doorPos, eyesOnly) {
 // The bits of the desk that move: the monitor's scan bar and the mug's steam.
 function deskLive() {
   const m = ZONES.monitor, MX = m.x - pan, DX = 560 - pan;
-  if (on) rect(MX, m.y + ((t * 30) % (m.h - 14)), m.w, 4, rgba(P.green, .18));
+  if (powered) rect(MX, m.y + ((t * 30) % (m.h - 14)), m.w, 4, rgba(P.green, .18));
   c.strokeStyle = rgba(P.text, .18); c.lineWidth = 2;
   for (let i = 0; i < 2; i++) { const sx = DX + 70 + i * 10, w = Math.sin(t * 1.5 + i * 2) * 4; c.beginPath(); c.moveTo(sx, 300); c.bezierCurveTo(sx + w, 290, sx - w, 282, sx + w, 270); c.stroke(); }
 }
@@ -260,9 +263,9 @@ function dust(level) {
 
 // door: animated door positions from the client, 0 open to 1 shut.
 export function drawOffice(state, panX, door, time) {
-  S = state; pan = panX; t = time; on = S.power > 0; dread = dreadOf(S);
+  S = state; pan = panX; t = time; powered = S.power > 0; on = lightsOn(S); dread = dreadOf(S);
   const level = lampLevel(), res = pxScale();
-  c.drawImage(roomSprite(on), pan * res, 0, W * res, H * res, 0, 0, W, H);
+  c.drawImage(roomSprite(on, powered), pan * res, 0, W * res, H * res, 0, 0, W, H);
   doorway('L', 'Left door', door.L); doorway('R', 'Right door', door.R);
   posterGlitch(360, -.03, 0); posterGlitch(1120, .04, 1);
   vent(door.V); deskLive(); dust(level);
@@ -273,8 +276,9 @@ export function drawOffice(state, panX, door, time) {
     const threat = threatOf(S);
     if (threat > 0) { const beat = Math.pow(Math.max(0, Math.sin(t * (4 + threat * 5))), 6); glow(0, H / 2, 300, P.red, threat * .16 * (.4 + beat)); glow(W, H / 2, 300, P.red, threat * .16 * (.4 + beat)); }
   } else {
-    rect(0, 0, W, H, rgba(P.ink, .93));
-    glow(W / 2, 0, 420, P.red, .06 + .05 * Math.sin(t * 3));
+    // Lights switched off is dark. Power out is darker, with the emergency light.
+    rect(0, 0, W, H, rgba(P.ink, powered ? .84 : .93));
+    if (!powered) glow(W / 2, 0, 420, P.red, .06 + .05 * Math.sin(t * 3));
     doorwayEyes('L'); doorwayEyes('R'); vent(0, true);
   }
 }

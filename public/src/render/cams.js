@@ -1,6 +1,7 @@
 // The camera feed: one backdrop per room, then a CCTV treatment over the top.
 import { W, H, ROOMS, MASC, P } from '../config.js';
-import { inRoom, clock, rotOf, dreadOf } from '../rules.js';
+import { inRoom, clock, rotOf, dreadOf, sanityOf } from '../rules.js';
+import { game } from '../state.js';
 import { c, cv, mix, rgba, hash, lerp, ell, rect, rrect, poly, vgrad, glow, vignette, text, pxScale, resetTransform } from './canvas.js';
 import { drawMascot, drawFace } from './mascot.js';
 
@@ -165,6 +166,15 @@ function fog(a) {
   for (let i = 0; i < 5; i++) glow((i * 190 + t * (6 + i * 3)) % (W + 300) - 150, 300 + i * 24, 190, P.overlay2, a * .3);
 }
 
+// With your sanity low, an empty room sometimes has something standing in it
+// for a few seconds. It is not in the game state and cannot hurt you.
+let phantomShown = false;
+function phantom(S, cam) {
+  const sanity = sanityOf(S, game.myId), slot = Math.floor(S.t / 6);
+  phantomShown = sanity < .5 && hash(slot * 13 + cam * 7) < (.5 - sanity) * 1.2 && (S.t / 6) % 1 < .6;
+  if (phantomShown) drawMascot(Math.floor(hash(slot + cam) * MASC.length), W / 2 + (hash(slot) - .5) * 300, 268, .8, { t, rot: 2, dark: true });
+}
+
 // As the signal goes, the camera's light starts cutting out, then stays out.
 function lightOut(signal) {
   if (signal < .15) return true;   // CAM_DARK in rules.js
@@ -190,7 +200,8 @@ export function drawCams(S, cam, glitch, time, signal = 1) {
     const here = inRoom(S, cam);
     here.forEach((m, j) => subject(S, m, cam, W / 2 + (j - (here.length - 1) / 2) * 250));
     if (!dark) fog(dread * .22);
-    if (!here.length && !dark) text('nobody here', W / 2, 236, { size: 13, weight: 500, col: rgba(P.text, .35), align: 'center' });
+    if (!here.length) phantom(S, cam);
+    if (!here.length && !dark && !phantomShown) text('nobody here', W / 2, 236, { size: 13, weight: 500, col: rgba(P.text, .35), align: 'center' });
   }
   feedFx(glitch, signal);
   overlayText(S, cam, glitch);

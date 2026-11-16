@@ -112,6 +112,7 @@ export function syncControls() {
   press('bCam', client.view === 'cams');
   press('bGen', client.view === 'crank');
   press('bTilt', client.tilt);
+  press('bLight', playing && S.lights !== false && S.power > 0);
   $('cambar').hidden = !(playing && client.view === 'cams');
   [...$('cambar').children].forEach((b, i) => { const v = String(i === client.cam); if (b.getAttribute('aria-pressed') !== v) b.setAttribute('aria-pressed', v); });
 }

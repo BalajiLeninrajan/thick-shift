@@ -25,7 +25,8 @@ export function host() {
   game.isHost = true;
   game.code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('');
   game.S = newState(game.code);
-  game.players = { host: { name: game.myName, view: 'office' } };
+  game.myId = 'host';
+  game.players = { host: { id: 'host', name: game.myName, view: 'office', cam: 0, sanity: 1 } };
   setInterval(() => { step(); broadcast(); }, TICK_MS);
   if (!window.Peer) { game.netNote = 'Multiplayer library missing. Solo only.'; return; }
   game.netNote = 'Opening room…';
@@ -33,7 +34,7 @@ export function host() {
   peer.on('open', () => { game.netNote = ''; });
   peer.on('error', e => { game.netNote = `Multiplayer unavailable (${e.type}). You can still play solo.`; });
   peer.on('connection', k => {
-    k.on('open', () => { conns[k.peer] = k; game.players[k.peer] = { name: 'Guard', view: 'office' }; });
+    k.on('open', () => { conns[k.peer] = k; game.players[k.peer] = { id: k.peer, name: 'Guard', view: 'office', cam: 0, sanity: 1 }; });
     k.on('data', d => act(k.peer, d));
     k.on('close', () => { delete conns[k.peer]; delete game.players[k.peer]; });
   });
@@ -47,9 +48,10 @@ export function join(code) {
   if (!window.Peer) { game.error = { title: 'Multiplayer library missing', detail: 'peerjs.min.js did not load.' }; return; }
   game.joining = true;
   peer = new Peer(undefined, peerOpts());
-  peer.on('open', () => {
+  peer.on('open', id => {
+    game.myId = id;
     conn = peer.connect(PREFIX + code, { reliable: true });
-    conn.on('open', () => { conn.send({ t: 'name', n: game.myName }); conn.send({ t: 'view', v: client.view }); });
+    conn.on('open', () => { conn.send({ t: 'name', n: game.myName }); conn.send({ t: 'view', v: client.view, cam: client.cam }); });
     conn.on('data', d => { if (d.t === 's') { game.S = d.s; game.joining = false; } });
     conn.on('close', () => { game.S = null; game.error = { title: 'The host left', detail: 'Reload to start again.' }; });
   });

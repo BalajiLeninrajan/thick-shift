@@ -8,6 +8,7 @@ export const game = {
   players: {},      // host only: peer id -> { name, view }
   code: '',
   myName: '',
+  myId: '',         // this player's id in S.players: 'host', or the guest's peer id
   netNote: '',      // status line shown in the lobby
   joining: false,
   error: null,      // { title, detail } when the session cannot continue
@@ -25,6 +26,7 @@ export const client = {
   shake: 0,
   glitch: 0,
   scareT: 0,        // frames of jumpscare left
+  fumbleT: 0,       // frames left to show that a door did not shut
   door: { L: 0, V: 0, R: 0 },   // animated door positions, 0 open to 1 shut
 };
 

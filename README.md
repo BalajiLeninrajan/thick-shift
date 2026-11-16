@@ -55,6 +55,22 @@ Mascots start each night as the costumes they were and come apart as it goes on.
 
 `dreadOf(S)` is the same idea for the building, from 0 to 1. The office gloom, lamp flicker, fog, camera colour drain, poster glitches and background sound all scale with it. `threatOf(S)` is separate and short-lived: it rises while something stands at an open door, and drives the heartbeat and the red at the edges of the screen.
 
+## Sanity and the lights
+
+Each guard has a sanity level, kept by the host in their player record (`updateSanity` in `sim.js`, rates in `SANITY`). It falls in the dark, while watching a camera with an off or rotten mascot on it, and while something stands at an open door. It recovers in the booth with the lights on and nothing at the doors.
+
+It gets worse each night (`wear` and `sanityCap` in `sim.js`): by night 6 sanity drains 2.5 times faster, recovers 2.5 times slower, and tops out at 60%.
+
+Low sanity does three things:
+
+- Pressing to shut a door can do nothing (`doorFailChance` in `rules.js`: about a quarter of presses at half sanity, 70% at zero). Opening never fails, and neither does shutting a door in the last quarter of a mascot's wait behind it (`LAST_MOMENT` in `sim.js`). The guard who fumbled is told; everyone hears the click.
+- Below 60% the game plays real event sounds when nothing happened (`FALSE_ALARMS` in `audio.js`).
+- Below 50% an empty camera room sometimes shows a silhouette that is not in the game state (`phantom` in `cams.js`).
+
+The booth lights are a shared switch (`S.lights`, the Lights button or L). Off saves a little under half of the idle power drain, shows doorways as silhouettes, and drains everyone's sanity.
+
+Attacks are paced by lulls. After a mascot is turned away, `S.calmUntil` keeps every mascot from arriving at a door for a random stretch (see `lull` in `sim.js`): usually 20 to 45 seconds, sometimes twice that, and on later nights occasionally almost none. A mascot that wants to arrive during a lull waits one room away. No night has more than seven attacks (`MAX_ATTACKS`), and whatever is left of that budget is spread over the time remaining so the last hours are never safe. Later nights get shorter door timers, some attacks that are two mascots at once from night 4, and a weaker guard (see Sanity).
+
 Camera feeds wear out while a player watches them. Each player has a `client.signal` level that drains while they are on the cameras and recovers in under a second once they leave. A worn feed tears and fills with static; below about 40% its light starts cutting out and everything in the room is drawn as a silhouette. It gets worse through the night: a feed lasts a minute at midnight and 10 seconds at 4 AM, and from 4 AM it is already tearing when you open it (`camCap` and `camLife` in `rules.js`). This is per player and not synced, so two guards can see different feeds.
 
 To add a mascot, add an entry to `MASC` in `config.js`, then give `COSTUME` (stages 0 and 1), `HEAD` (stage 2), `BODY` and `NECK` in `render/mascot.js` an entry with the same key.

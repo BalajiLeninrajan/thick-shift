@@ -184,6 +184,9 @@ export const SFX = {
   win() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, .5, 'triangle', .2), i * 160)); },
   out() { sample('hit_low', { gain: .9, rate: .7 }); tone(200, 1.2, 'sawtooth', .12, 30); },
   hour() { tone(880, .15, 'triangle', .08); },
+  lights(e) { tone(e && e.x ? 1400 : 900, .04, 'square', .06); },
+  // The door control clicks and nothing moves.
+  fumble() { tone(180, .08, 'square', .12); setTimeout(() => tone(140, .1, 'square', .1), 90); },
 };
 
 export const click = (f = 600) => tone(f, .05, 'square', .05);
@@ -192,7 +195,7 @@ export const click = (f = 600) => tone(f, .05, 'square', .05);
 
 // Quiet is the default. The hum is barely there, the wind comes in gusts with
 // long gaps, and a background sound happens about once a minute.
-let bed = null, windGain = null, nextBeat = 0, nextOdd = 0;
+let bed = null, windGain = null, nextBeat = 0, nextOdd = 0, nextFalse = 0;
 
 // A low two-note hum and some filtered hiss that run for the whole night.
 function startBed() {
@@ -229,9 +232,13 @@ const ODD = [
   farGrowl, farGrowl, farGrowl,                             // it, downstairs
 ];
 
+// Sounds the game makes when something real happens, played when nothing has.
+// They are exactly the real ones, so you cannot tell.
+const FALSE_ALARMS = [() => SFX.arrive(), () => SFX.arrive(), () => SFX.bang(), () => { lastSteps = -STEP_GAP; SFX.step(); SFX.step(); }];
+
 // Call once per frame. threat and dread: 0 to 1 while a night is running.
-// threat = -1 goes quiet.
-export function ambience(threat, dread = 0) {
+// sanity: this guard's, 1 to 0. threat = -1 goes quiet.
+export function ambience(threat, dread = 0, sanity = 1) {
   if (!ac || ac.state !== 'running') return;
   if (!bed) startBed();
   if (!windGain && buffers.wind) startWind();
@@ -244,5 +251,7 @@ export function ambience(threat, dread = 0) {
     nextBeat = now + 1 - threat * .55;
     tone(58, .14, 'sine', .22 + threat * .2, 38); setTimeout(() => tone(52, .16, 'sine', .16 + threat * .15, 34), 150);
   }
+  // Below 60% sanity you start hearing things: more often the lower it goes.
+  if (now > nextFalse) { if (nextFalse && Math.random() < (.6 - sanity) * 1.6) pick(...FALSE_ALARMS)(); nextFalse = now + 14 + Math.random() * 22; }
   if (now > nextOdd) { if (nextOdd && dread > .25) ODD[Math.random() * ODD.length | 0](); nextOdd = now + 45 - dread * 15 + Math.random() * 60; }
 }
