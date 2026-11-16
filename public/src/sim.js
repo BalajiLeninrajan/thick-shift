@@ -29,6 +29,7 @@ function drainPower(S, dt) {
   const was = S.power;
   const drain = .11 + .2 * closed + .07 * count('cams');
   S.power = Math.max(0, Math.min(100, S.power - drain * dt + .5 * count('crank') * dt));
+  if (S.dev?.power) S.power = 100;
   if (S.power <= 0) {
     if (was > 0) emit('out');
     S.doors = OPEN();
@@ -42,7 +43,8 @@ function moveMascot(S, m, dt, hour) {
     m.wait -= dt;
     if (m.wait > 0) return true;
     const k = DOORKEY[path[m.pos]];
-    if (!S.doors[k]) { S.phase = 'dead'; S.killer = m.i; emit('scare'); return false; }
+    // In god mode an open door turns it away like a shut one.
+    if (!S.doors[k] && !S.dev?.god) { S.phase = 'dead'; S.killer = m.i; emit('scare'); return false; }
     emit('bang', k);
     m.bangs++;   // being shut out makes it worse (see rotOf)
     m.pos = path.length > 2 ? 1 : 0;
@@ -66,7 +68,7 @@ function moveMascot(S, m, dt, hour) {
 let lastStep = performance.now();
 export function step() {
   const S = game.S, now = performance.now();
-  const dt = Math.min(1.5, (now - lastStep) / 1000);
+  const dt = Math.min(1.5, (now - lastStep) / 1000) * (S.dev?.speed || 1);   // S.dev: cheats from the dev menu (dev.js)
   lastStep = now;
   S.players = Object.values(game.players);
   if (S.phase !== 'play') return;
@@ -76,6 +78,7 @@ export function step() {
   if (hour > hourBefore) emit('hour');
   if (hour >= 6) { S.phase = 'win'; emit('win'); return; }
   drainPower(S, dt);
+  if (S.dev?.freeze) return;
   for (const m of S.m) if (isActive(S, m) && !moveMascot(S, m, dt, hour)) return;
 }
 

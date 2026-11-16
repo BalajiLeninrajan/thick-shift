@@ -52,4 +52,7 @@ bindInput();
 frame();
 
 // ?debug exposes state on window for poking at scenes from the console.
-if (new URLSearchParams(location.search).has('debug')) window.ts = { game, client };
+// ?dev adds the dev menu.
+const params = new URLSearchParams(location.search);
+if (params.has('debug')) window.ts = { game, client };
+if (params.has('dev')) import('./dev.js').then(m => m.mountDev());

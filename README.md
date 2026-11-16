@@ -12,7 +12,9 @@ pnpm dev        # local server through Wrangler
 pnpm deploy     # publish to Cloudflare Workers
 ```
 
-Any static server pointed at `public/` works too. Add `?debug` to the URL to get `window.ts` (the live `game` and `client` state) in the console.
+Any static server pointed at `public/` works too.
+
+Add `?dev` to the URL for the dev menu (the Dev button, or the backtick key): god mode, infinite power, freeze, game speed, forced rot stage and dread, time skips, and per-mascot controls. Only the host's changes reach the simulation. Add `?debug` to get `window.ts` (the live `game` and `client` state) in the console.
 
 ## Layout
 
@@ -31,6 +33,7 @@ src/
   audio.js          synthesised sound effects
   ui.js             overlay screens and control-bar state
   input.js          buttons, keyboard, pointer panning, tilt
+  dev.js            dev menu, loaded only with ?dev
   main.js           the frame loop
   render/
     canvas.js       canvas setup, color helpers, sprite baking

@@ -4,7 +4,7 @@ import { MASC, DOORKEY, DOORS, HOUR } from './config.js';
 export const hourOf = S => Math.min(6, Math.floor(S.t / HOUR));
 export const clock = S => (hourOf(S) || 12) + ' AM';
 
-export const isActive = (S, m) => (S.night - 1) * 6 + S.t / HOUR >= MASC[m.i].from;
+export const isActive = (S, m) => !!S.dev?.wake || (S.night - 1) * 6 + S.t / HOUR >= MASC[m.i].from;
 export const roomOf = m => MASC[m.i].paths[m.side][m.pos];
 export const inRoom = (S, room) => S.m.filter(m => isActive(S, m) && roomOf(m) === room);
 // How long a mascot stands at a door before trying it, in seconds.
@@ -20,9 +20,9 @@ export const threatOf = S => Math.max(0, ...DOORS.flatMap(k => S.doors[k] ? [] :
 // Mascots start the night as the costumes they were and come apart as it goes on.
 // Slamming a door on one speeds it up. 0 = cute, 1 = off, 2 = what is underneath.
 const decay = S => S.t / HOUR + (S.night - 1) * 2;
-export const rotOf = (S, m) => { const r = decay(S) / 8 + (m.bangs || 0) * .25; return r < .34 ? 0 : r < .67 ? 1 : 2; };
+export const rotOf = (S, m) => { if (S.dev?.rot >= 0) return S.dev.rot; const r = decay(S) / 8 + (m.bangs || 0) * .25; return r < .34 ? 0 : r < .67 ? 1 : 2; };
 // The same idea for the building: 0 is a dull night shift, 1 is not.
-export const dreadOf = S => Math.min(1, decay(S) / 7 + S.m.reduce((n, m) => n + (m.bangs || 0), 0) * .06);
+export const dreadOf = S => S.dev?.dread >= 0 ? S.dev.dread : Math.min(1, decay(S) / 7 + S.m.reduce((n, m) => n + (m.bangs || 0), 0) * .06);
 
 // Camera feeds wear out while you watch them and come back when you look
 // away. Each player has their own signal level, 1 down to 0 (client.signal).
