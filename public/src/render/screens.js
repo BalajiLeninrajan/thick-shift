@@ -102,7 +102,7 @@ export function drawBackdrop(t) {
   glow(sweep, 300, 190, P.overlay2, .16);
   MASC.forEach((d, i) => {
     const x = 110 + i * 193, lit = Math.abs(x - sweep) < 90;
-    drawMascot(i, x, 300, .5, { t, dark: !lit, rot: lit ? 0 : 2 });   // cute where the light is
+    drawMascot(i, x, 300, .5, { t, dark: !lit, rot: 0 });   // always the costumes here: the title screen gives nothing away
   });
   rect(0, 330, W, 120, vgrad(330, H, [[0, rgba(P.overlay1, 0)], [1, rgba(P.overlay1, .16)]]));   // mist
   vignette(.9);
