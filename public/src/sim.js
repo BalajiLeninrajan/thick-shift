@@ -23,11 +23,16 @@ export function startNight(n) {
   for (const id in game.players) game.players[id].view = 'office';
 }
 
+const LOW_HALF = 50, LAST_SLIVER = 2;   // percent
+
 function drainPower(S, dt) {
   const closed = DOORS.filter(k => S.doors[k]).length;
   const count = v => S.players.filter(p => p.view === v).length;
   const was = S.power;
-  const drain = .11 + .2 * closed + .07 * count('cams');
+  // The second half of the battery goes faster than the first, and the last
+  // sliver hangs on far longer than it should, so running out is drawn out.
+  const stage = S.power > LOW_HALF ? 1 : S.power > LAST_SLIVER ? 1.6 : .2;
+  const drain = (.11 + .2 * closed + .07 * count('cams')) * stage;
   S.power = Math.max(0, Math.min(100, S.power - drain * dt + .5 * count('crank') * dt));
   if (S.dev?.power) S.power = 100;
   if (S.power <= 0) {
