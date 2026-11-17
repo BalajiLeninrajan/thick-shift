@@ -39,3 +39,20 @@ Materials named `eye_glow` are drawn emissive and unlit by the game, so they sho
 Each mascot has three files, `<key>_0.glb`, `<key>_1.glb`, `<key>_2.glb`, one per rot stage, and a `<key>.json` beside them that tells the game what it cannot read from the file (see any of them for the fields).
 
 Limits per file: 70k triangles, 3 MB, textures at most 2048 px. Mascots at stages 0 and 1 fit in a box 2.3 m wide, 1.9 m deep and 2.7 m tall; stage 2 may be 3.3 m tall and 2.6 m wide. Doorways in the building are 2.6 m wide and 3 m high.
+
+## Building a model
+
+Models are seen close up, from below, by one warm torch beam with everything else black. That decides what matters.
+
+- Run Blender only through `bl`. Blender 5.3's Python API differs from older versions; when a call fails, inspect it from inside Blender (`dir()`, `bl_rna.properties`) before guessing again.
+- Write only in your own script directory here and your own files in `public/models`. Scripts are the source of the model: rebuildable from scratch with fixed seeds, commented with the why, no leftover experiments.
+- You cannot see a model unless you render it. After every change, run `preview(name, ...)` and look at the PNGs. Use `light='studio'` for shape and texture, `focus=((x, y, z), radius)` for close-ups, and the `low` view for what a player at its feet sees. Run `report(name)` and check the node tree, pivots, triangle count and bounds against the contract above. Pose-test the joints (turn head, jaw and limbs 30 to 40 degrees in a throwaway script and render) before calling a stage done.
+- Keep the three or four best previews of each stage in `shots/` in your script directory, so a model can be reviewed without rebuilding it.
+
+What "detailed and scary" means here:
+
+- Surface. Bake procedural materials (colour with AO folded in, normal, roughness) into image textures, or use dense vertex colour. Blender shader nodes do not export to glTF unless baked. Matted fake fur, stitched seams, a zip, foam showing through tears, scratched plastic eyes, yellowed teeth, wet stains.
+- Form. Sculpted masses that flow into each other (metaballs or a voxel remesh, then subdivide, displace and decimate to budget), not primitives parked side by side. Hair and strands are geometry where they show in silhouette.
+- Wrongness before gore. Proportions slightly off, eyes that do not agree, a mouth too wide, human teeth in a plush face. The last stage adds the gore the 2D art in `public/src/render/mascot.js` already has.
+- The torch test. The face has to read when lit from beside the camera, and the `eye_glow` eyes have to show as two points in the dark.
+- The hips. Every mascot has enormous hips and a huge rear, wider than tall, at every stage. It is the joke in the game's title.
