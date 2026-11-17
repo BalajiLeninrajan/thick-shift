@@ -39,10 +39,12 @@ async function upgrade(group, name, lamp, big) {
 // on the move, a lamp for every clock that is due. It needs the power.
 function wallMap(scene) {
   const W = 820, H = 380, k = 8.2, ox = 14, oy = 9, c = canvas(W, H), tex = new THREE.CanvasTexture(c.canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const face = new THREE.MeshBasicMaterial({ map: tex }), g = mount(scene, 'wall map', WALL_MAP, 1.6);
+  // The model's UVs are glTF's, which run the other way up from a plane's: it gets an unflipped copy of the same canvas.
+  const glbTex = new THREE.CanvasTexture(c.canvas); glbTex.flipY = false;
+  tex.colorSpace = glbTex.colorSpace = THREE.SRGBColorSpace;
+  const face = new THREE.MeshBasicMaterial({ map: tex }), glbFace = new THREE.MeshBasicMaterial({ map: glbTex }), g = mount(scene, 'wall map', WALL_MAP, 1.6);
   const plain = new THREE.Mesh(new THREE.PlaneGeometry(1.64, .76), face); plain.position.z = .03; g.add(plain);
-  upgrade(g, 'wall_map').then(model => model?.traverse(o => { if (o.isMesh && o.material.name === 'map') o.material = face; }));
+  upgrade(g, 'wall_map').then(model => model?.traverse(o => { if (o.isMesh && o.material.name === 'map') o.material = glbFace; }));
   let next = 0;
   return (S, t) => {
     if (t < next) return;
@@ -65,7 +67,7 @@ function wallMap(scene) {
       c.fillStyle = '#f9e2af'; c.fillText(due.length ? 'CLOCKS DUE' : 'NO CLOCKS DUE', 400, 160);
       due.forEach((cl, i) => c.fillText('  ' + ROOMS3[cl.room].name, 400 + (i > 6 ? 200 : 0), 188 + (i % 7) * 26));
     }
-    tex.needsUpdate = true;
+    tex.needsUpdate = glbTex.needsUpdate = true;
   };
 }
 
