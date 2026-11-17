@@ -1,7 +1,7 @@
 // This guard: walking, looking, the torch, and using things. The browser
 // owns its own position and tells the host about twelve times a second
 // (a 'p' action); everything else about the guard comes back in S.
-// Keyboard, mouse and gamepad are read here. Touch is in touch.js, which
+// Keyboard (WASD to walk, and arrow keys to look for anyone without a mouse), mouse and gamepad are read here. Touch is in touch.js, which
 // drives the same guard through pad, look() and toggleTorch().
 import * as THREE from 'three';
 import { game } from '../state.js';
@@ -12,6 +12,9 @@ import { F } from './sim3d.js';
 
 const SENS = .0022, SEND_MS = 80;   // radians per pixel of mouse travel at sensitivity 1
 const PITCH_MAX = 1.45;
+// The arrow keys look: radians per second at sensitivity 1, reached after ARROW_RAMP seconds of holding (a tap nudges).
+const ARROW = { turn: 2.2, tilt: 1.4 }, ARROW_RAMP = .35;
+const GAME_KEYS = /^(Key[WASDEFQ]|Arrow|Shift|Space)/;
 // A standard-mapping gamepad: left stick walks, right stick looks.
 const GP = { use: 0, torch: 2, call: 3, sprint: 4, watch: 5, pause: 9, dead: .18, look: 2.8 };   // look: radians per second at full tilt
 
@@ -35,6 +38,7 @@ export function createPlayer(camera, canvas) {
   const gp = { fwd: 0, strafe: 0, sprint: false, use: false };
   let sinceSprint = 0, lastSend = 0, usedTap = false, lastCall = -1e9;
   let mouseLocked = false, gpLive = false, gpWas = [];
+  let keysLive = false, arrowHeld = 0;   // keysLive: playing on the keyboard alone, so there is no pointer to lock
 
   const torch = new THREE.SpotLight(0xfff0d0, 0, 26, .5, .55, 1.5);
   torch.position.set(.22, -.18, 0); torch.target.position.set(.05, -.05, -3);
@@ -68,9 +72,13 @@ export function createPlayer(camera, canvas) {
   }
 
   addEventListener('keydown', e => {
-    if (typing(e) || !playing() || game.S.mode !== 'floor' || me.paused) return;
+    if (typing(e) || !playing() || game.S.mode !== 'floor') return;
+    // Without a locked pointer the browser does not turn Esc into a pause, so do it here; Enter comes back.
+    if (me.paused) { if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); keysLive = true; resume(); } return; }
+    if (e.code === 'Escape' && !mouseLocked) { pause(); return; }
+    if (GAME_KEYS.test(e.code)) keysLive = true;
     if (!e.repeat) ({ KeyF: toggleTorch, KeyQ: call, Space: watchNext })[e.code]?.();
-    if (['Space', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.code)) e.preventDefault();
+    if (e.code === 'Space' || e.code === 'Tab' || e.code.startsWith('Arrow')) e.preventDefault();
     keys.add(e.code);
   });
   addEventListener('keyup', e => keys.delete(e.code));
@@ -87,6 +95,15 @@ export function createPlayer(camera, canvas) {
     if (was && !mouseLocked) { keys.clear(); if (playing()) me.paused = true; }
   });
   addEventListener('mousemove', e => { if (mouseLocked) look(e.movementX, e.movementY); });
+
+  // Arrow keys: left and right turn, up and down look up and down, easing in so a tap is a small nudge.
+  function arrowLook(dt) {
+    const turn = (keys.has('ArrowLeft') ? 1 : 0) - (keys.has('ArrowRight') ? 1 : 0), tilt = (keys.has('ArrowUp') ? 1 : 0) - (keys.has('ArrowDown') ? 1 : 0);
+    if (!turn && !tilt) { arrowHeld = 0; return; }
+    arrowHeld += dt;
+    const k = Math.min(1, .3 + .7 * arrowHeld / ARROW_RAMP) * dt / SENS;
+    look(-turn * ARROW.turn * k, -tilt * ARROW.tilt * k);
+  }
 
   function pollPad(dt) {
     const g = [...(navigator.getGamepads?.() || [])].find(g => g?.connected && g.mapping === 'standard');
@@ -135,7 +152,7 @@ export function createPlayer(camera, canvas) {
   }
 
   function walk(S, dt) {
-    const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) + pad.fwd + gp.fwd;
+    const f = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0) + pad.fwd + gp.fwd;
     const s = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + pad.strafe + gp.strafe;
     const len = Math.hypot(f, s);
     const wantSprint = (keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.sprint || gp.sprint) && f > 0 && me.act === '';
@@ -161,10 +178,10 @@ export function createPlayer(camera, canvas) {
       // Peeled up: stand looking ahead, not at the ceiling the catch left the camera facing.
       if (me.flat && !mine.flat) me.pitch = 0;
       me.flat = !!mine.flat;
-      pollPad(dt);
+      pollPad(dt); arrowLook(dt);
       // The screens between nights need the mouse back.
       if (S.phase !== 'play') { me.paused = false; if (mouseLocked) document.exitPointerLock(); }
-      me.locked = (mouseLocked || me.touch || gpLive) && !me.paused;
+      me.locked = (mouseLocked || me.touch || gpLive || keysLive) && !me.paused;
       if (!S.players.some(p => p.id === me.watch && !p.flat) || !me.flat) me.watch = null;
       if (S.phase === 'play') {
         if (me.flat || me.paused) { me.act = ''; me.target = null; me.sp = false; me.hold = 0; me.moving = 0; if (me.flat) me.on = false; }

@@ -41,7 +41,7 @@ const TOAST_ICON = { info: 'info', tip: 'info', clock: 'clock', missed: 'clock',
 const MAX_TOASTS = 3;
 
 const CONTROLS = {
-  keys: [['Walk', 'W A S D'], ['Run', 'Shift'], ['Look', 'Mouse'], ['Torch', 'F or click'], ['Use, punch, peel', 'E (hold)'], ['Call out while flat', 'Q'], ['Watch a teammate while flat', 'Space'], ['Pause', 'Esc']],
+  keys: [['Walk', 'W A S D'], ['Run', 'Shift'], ['Look', 'Mouse, or the arrow keys'], ['Torch', 'F or click'], ['Use, punch, peel', 'E (hold)'], ['Call out while flat', 'Q'], ['Watch a teammate while flat', 'Space'], ['Pause', 'Esc'], ['Back from pause', 'Enter']],
   touch: [['Walk', 'Left thumb, anywhere'], ['Look', 'Drag the right side'], ['Use, punch, peel', 'Hold Use'], ['Run', 'Tap Run, lift to stop']],
 };
 
@@ -82,7 +82,7 @@ export function createHud(stage, player) {
       <div class="ts-f-stam"><i></i></div>
       <div class="ts-f-torch-row">${icon('torch')}<div class="ts-f-cells">${'<i></i>'.repeat(CELLS)}</div><span></span></div>
     </div>
-    <div class="ts-f-start"><b>Click to play</b><span><kbd class="ts-key">W A S D</kbd> walk <kbd class="ts-key">Shift</kbd> run <kbd class="ts-key">F</kbd> torch <kbd class="ts-key">E</kbd> use <kbd class="ts-key">Esc</kbd> pause</span></div>
+    <div class="ts-f-start"><b>Click, or press a key, to play</b><span><kbd class="ts-key">W A S D</kbd> walk <kbd class="ts-key">← → ↑ ↓</kbd> look <kbd class="ts-key">Shift</kbd> run <kbd class="ts-key">F</kbd> torch <kbd class="ts-key">E</kbd> use <kbd class="ts-key">Esc</kbd> pause</span></div>
     <div class="ts-f-flat">
       <span class="tag cn-tone-danger">Flat</span>
       <b></b>
