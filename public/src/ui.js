@@ -2,7 +2,8 @@
 // Everything here is derived from game/client state once per frame.
 import { MASC, DOORS, FINAL_NIGHT } from './config.js';
 import { game, client } from './state.js';
-import { clock } from './rules.js';
+import { clock, tripLeft, maxAttacks, pairFromNight } from './rules.js';
+import { startFloorNight, restartFloor, clockF } from './three/sim3d.js';
 import { startNight, restart } from './sim.js';
 import { host, join } from './net.js';
 import { unlockAudio } from './audio.js';
@@ -25,7 +26,7 @@ function titleScreen() {
     html: card(`
       <h1 class="ts-logo">Thick Shift</h1>
       <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
-      <p class="cn-meta cn-m-0">The retired theme-park mascots are enormous, and at night they wander. Shut a door when one is outside it, watch the cameras, and keep the power on until 6 AM. Last five nights and you can go home. Works on a phone. Share a room code to play together.</p>
+      <p class="cn-meta cn-m-0">The retired theme-park mascots are enormous, and at night they wander. Shut a door when one is outside it, watch the cameras, and keep the power on until 6 AM. Door motors overheat if you hold them shut, and the generator has one handle. Last five nights and you can go home. Works on a phone. Share a room code to play together.</p>
       <div class="field"><label for="nm">Your name</label><input id="nm" maxlength="12" placeholder="Guard" value="${esc(savedName)}"></div>
       <div class="field"><label for="rc">Room code</label><input id="rc" maxlength="4" placeholder="ABCD" autocapitalize="characters" value="${esc((q.get('room') || '').slice(0, 4))}"><small>Only needed to join a friend's night.</small></div>`,
       '<button class="btn btn-primary" id="hb">Host a night</button><button class="btn btn-secondary" id="jb">Join room</button>'),
@@ -50,11 +51,47 @@ function messageScreen(key, title, detail, back) {
   };
 }
 
+// The two ways to play. The host picks one in the lobby; S.mode carries it to the guests.
+const MODES = {
+  booth: ['The booth', 'Sit in the security booth. Watch the cameras, shut the doors, keep the power on.'],
+  floor: ['The floor (3D)', 'Walk the building with a torch and do the watchman\'s rounds. This is all there is to it:'],
+};
+// The floor's whole loop. Everyone reads it in the lobby while the others join.
+const FLOOR_RULES = [
+  'Every hour a few clocks come due. Find them and punch them, or the building loses power.',
+  'Your torch stops a mascot while the beam is on it. The torch runs down.',
+  'Spare batteries lie around the building, and the booth has a charger.',
+  'Touch a mascot and you are flat on the floor until a friend peels you up.',
+  'Everyone flat at once ends the night.',
+];
+function modePicker(S) {
+  const mode = S.mode || 'booth';
+  const about = `<p class="cn-meta cn-m-0">${game.isHost ? '' : `<strong>${MODES[mode][0]}.</strong> `}${MODES[mode][1]}</p>${mode === 'floor' ? `<ul class="cn-meta cn-m-0 ts-rules">${FLOOR_RULES.map(r => `<li>${r}</li>`).join('')}</ul>` : ''}`;
+  if (!game.isHost) return about;
+  return `<div class="segmented">${Object.keys(MODES).map(m => `<button id="mode-${m}" aria-pressed="${m === mode}"><b>${MODES[m][0]}</b></button>`).join('')}</div>${about}`;
+}
+
+// The floor's tallies as a list: S.tally for one night, S.total for the run (see three/sim3d.js).
+// Flats are grouped by guard, with who did it for a night and a count for the run.
+function floorStats(t, run) {
+  const group = (list, key, val) => { const by = {}; for (const e of list) (by[key(e)] ||= []).push(val(e)); return Object.entries(by); };
+  const flats = group(t.flats, e => e[0], e => MASC[e[1]].name).map(([name, by]) => `${esc(name)} ${run ? by.length : `(${by.map(esc).join(', ')})`}`).join(', ');
+  const peels = group(t.peels, e => e, () => 1).map(([name, n]) => `${esc(name)}${n.length > 1 || run ? ' ' + n.length : ''}`).join(', ');
+  return `<dl class="kv"><dt>Clocks punched</dt><dd class="cn-tabular">${t.punched}</dd><dt>Clocks missed</dt><dd class="cn-tabular">${t.missed}</dd>
+    <dt>Flattened</dt><dd>${flats || 'Nobody'}</dd><dt>Peeled a friend up</dt><dd>${peels || 'Nobody'}</dd></dl>`;
+}
+
 function nightScreen(S) {
   const names = S.players.map(p => p.name), who = names.map(esc).join(', ') || esc(game.myName);
-  const key = [S.phase, S.night, names.join(','), game.netNote, client.scareT > 0].join('|');
-  const next = () => S.phase === 'won' ? restart() : startNight(S.phase === 'win' ? S.night + 1 : S.night);
-  const wire = () => { const go = $('go'); if (go) go.onclick = () => { unlockAudio(); next(); }; };
+  const floor = S.mode === 'floor';
+  // More guards draw more visits (crowdOf in rules.js). Said where a crew reads it: the lobby and between nights.
+  const crowd = !floor && names.length > 1 ? `<p class="cn-meta cn-m-0">${names.length} guards on shift. A crowd draws them: up to ${maxAttacks(S)} visits a night, pairs from night ${pairFromNight(S)}.</p>` : '';
+  const key =[S.phase, S.night, names.join(','), game.netNote, client.scareT > 0, S.mode].join('|');
+  const next = () => S.phase === 'won' ? (floor ? restartFloor : restart)() : (floor ? startFloorNight : startNight)(S.phase === 'win' ? S.night + 1 : S.night);
+  const wire = () => {
+    const go = $('go'); if (go) go.onclick = () => { unlockAudio(); next(); };
+    for (const m in MODES) { const b = $('mode-' + m); if (b) b.onclick = () => { S.mode = m; }; }   // lobby, host only
+  };
   if (S.phase === 'lobby') {
     const link = `${location.origin}${location.pathname}?room=${S.code}`;
     return {
@@ -62,11 +99,25 @@ function nightScreen(S) {
         <div class="stat is-lg"><span>Room code</span><strong>${esc(S.code)}</strong></div>
         <p class="cn-meta cn-m-0">Friends join at<br><span class="cn-code ts-selectable">${esc(link)}</span></p>
         <div class="cn-cluster">${names.map(n => `<span class="chip">${esc(n)}</span>`).join('')}</div>
+        ${modePicker(S)}
+        ${crowd}
         ${game.netNote ? `<div class="banner cn-tone-warning">${esc(game.netNote)}</div>` : ''}`, hostAction('Start night 1')),
     };
   }
+  if (S.phase === 'win' && floor) {
+    const note = S.players.some(p => p.flat) ? 'The day shift will peel up whoever is still on the floor.' : S.tally.flats.length ? 'Everyone is the right shape again.' : 'Nobody was flattened. They are saving it up.';
+    return { key, wire, html: card(`<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(S.tally)}`, hostAction('Start night ' + (S.night + 1))) };
+  }
   if (S.phase === 'win') return {
-    key, wire, html: card(`<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">Everyone is un-squished. Guards: ${who}</p>`, hostAction('Start night ' + (S.night + 1))),
+    key, wire, html: card(`<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">Everyone is un-squished. Guards: ${who}</p>${crowd}`, hostAction('Start night ' + (S.night + 1))),
+  };
+  if (S.phase === 'won' && floor) return {
+    key, wire, html: card(`
+      <h1 class="ts-logo">Shift over</h1>
+      <p class="lede cn-m-0">You walked all ${FINAL_NIGHT} nights at the Mascot Depot.</p>
+      <p class="cn-meta cn-m-0">The sun is up, every clock card is punched or near enough, and the mascots are back on their stage exactly as they were. Guards: ${who}</p>
+      ${floorStats(S.total, true)}
+      <p class="cn-meta cn-m-0">${S.deaths ? `The whole crew went down ${S.deaths === 1 ? 'once' : S.deaths + ' times'} along the way.` : 'The whole crew never went down at once.'}</p>`, hostAction('Start over from night 1')),
   };
   if (S.phase === 'won') {
     const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -79,10 +130,15 @@ function nightScreen(S) {
         <p class="cn-meta cn-m-0">${S.deaths ? `It took ${plural(S.deaths, 'retry').replace('retrys', 'retries')}.` : 'Not flattened once.'}</p>`, hostAction('Start over from night 1')),
     };
   }
+  if (S.phase === 'dead' && client.scareT <= 0 && floor) return {
+    key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(MASC[S.killer].name)} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}. Nobody is left to do the peeling.</p>${floorStats(S.tally)}`, hostAction('Retry night ' + S.night)),
+  };
   if (S.phase === 'dead' && client.scareT <= 0) {
     const d = MASC[S.killer];
+    // The sim stops at the death, so the door it came through is still marked tripped if that is why it was open.
+    const tripped = S.trip?.[S.killDoor] ? '<p class="cn-meta cn-m-0">Its breaker had tripped. The door was held shut until the motor cut out.</p>' : '';
     return {
-      key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">${esc(d.name)} ${esc(d.how)}.</p><p class="cn-meta cn-m-0">It came through ${{ L: 'the left door', R: 'the right door', V: 'the vent' }[S.killDoor] || 'a door'}.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clock(S)}.</p>`, hostAction('Retry night ' + S.night)),
+      key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">${esc(d.name)} ${esc(d.how)}.</p><p class="cn-meta cn-m-0">It came through ${{ L: 'the left door', R: 'the right door', V: 'the vent' }[S.killDoor] || 'a door'}.</p>${tripped}<p class="cn-meta cn-m-0">Night ${S.night}, ${clock(S)}.</p>`, hostAction('Retry night ' + S.night)),
     };
   }
   return { key, html: '' };
@@ -114,12 +170,23 @@ function press(id, on) {
   if (b.getAttribute('aria-pressed') !== v) b.setAttribute('aria-pressed', v);
 }
 
+const flag = (b, name, on) => { const v = String(!!on); if (b.getAttribute(name) !== v) b.setAttribute(name, v); };
+
 export function syncControls() {
   const S = game.S, playing = !!S && S.phase === 'play';
+  // A door button says its state in words and carries its motor's heat as a
+  // bar along the bottom edge (--heat, see styles.css), so the gauge is under
+  // the thumb that is holding the door shut. A tripped one counts down. It
+  // says "out", not "tripped", because the button has no room for more.
   for (const k of DOORS) {
-    const shut = playing && S.doors[k], word = $(DOOR_BTN[k]).querySelector('span');
+    const b = $(DOOR_BTN[k]), word = b.querySelector('span');
+    const shut = playing && S.doors[k], heat = playing ? S.heat?.[k] || 0 : 0, wait = playing ? Math.ceil(tripLeft(S, k)) : 0;
+    const label = wait ? `out ${wait}s` : shut ? 'shut' : 'open', level = heat.toFixed(2);
     press(DOOR_BTN[k], shut);
-    if (word.textContent !== (shut ? 'shut' : 'open')) word.textContent = shut ? 'shut' : 'open';
+    if (word.textContent !== label) word.textContent = label;
+    if (b.style.getPropertyValue('--heat') !== level) b.style.setProperty('--heat', level);
+    flag(b, 'data-hot', heat > .8);
+    flag(b, 'data-tripped', wait > 0);
   }
   press('bCam', client.view === 'cams');
   press('bGen', client.view === 'crank');

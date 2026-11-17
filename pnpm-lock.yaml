@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
       wrangler:
         specifier: ^4.162.0
         version: 4.162.0
@@ -469,6 +472,9 @@ packages:
     resolution: {integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==}
     engines: {node: '>=18'}
 
+  three@0.187.0:
+    resolution: {integrity: sha512-Qiu7R+Cmh8CstZsY1uJOSWnVlfo7ZtNLV7mF8Jltk3LB3AtDu9cRZlcnRKkAk8Y4z6KKw35z7Y7Urd7jWY8etA==}
+
   tslib@2.9.1:
     resolution: {integrity: sha512-a4Ux9VKuIMHsOS7ENbEq6hK2ZGYIT27Rtl0E4eD9KqwxhKiQeMZE/9xb3IdYwWaSOyIBQLExhQgXDTYoiCxnWA==}
 
@@ -849,6 +855,8 @@ snapshots:
       '@img/sharp-win32-x64': 0.35.5
 
   supports-color@10.2.2: {}
+
+  three@0.187.0: {}
 
   tslib@2.9.1:
     optional: true

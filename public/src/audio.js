@@ -1,7 +1,10 @@
 // Sound. Physical events (doors, bangs, footsteps, growls) are recordings from
 // public/sfx; things that change as you play (the hum, the heartbeat) are
 // synthesised. If a recording has not loaded yet, a synthesised stand-in plays.
-let ac = null, master = null;
+// The 3D mode's positioned sound (three/sound.js) is built from the same
+// pieces: it plays them into its own nodes with into().
+let ac = null, master = null, ears = null;
+const OPEN_HZ = 20000;
 
 // Browsers only allow audio after a user gesture, so call this from handlers.
 export function unlockAudio() {
@@ -10,10 +13,51 @@ export function unlockAudio() {
     // Everything goes through one limiter, so a growl over a bass hit does not clip.
     master = ac.createDynamicsCompressor();
     master.threshold.value = -8; master.ratio.value = 12; master.attack.value = .003; master.release.value = .2;
-    master.connect(ac.destination);
+    // After the limiter, one filter over the whole mix. muffle() closes it.
+    ears = ac.createBiquadFilter(); ears.type = 'lowpass'; ears.frequency.value = OPEN_HZ;
+    master.connect(ears).connect(ac.destination);
     loadSamples();
   }
   if (ac.state === 'suspended') ac.resume();
+}
+
+// The context, but only while it can make sound: null before the first
+// gesture and while the browser has it suspended.
+export const ctx = () => ac && ac.state === 'running' ? ac : null;
+export const bus = () => master;
+
+// Everything, heard from under something heavy. No argument opens it again.
+export function muffle(hz = OPEN_HZ, at = 0) {
+  if (ac) ears.frequency.setTargetAtTime(hz, ac.currentTime + at, .12);
+}
+
+// Sounds made inside fn go to this node, not straight to the limiter, and
+// skip their own reverb send: the node is expected to have one.
+let dest = null;
+export function into(node, fn) {
+  const was = dest;
+  dest = node;
+  try { fn(); } finally { dest = was; }
+}
+const out = () => dest || master;
+
+// Every one-shot is counted until the time it is due to end, and cut out of
+// the graph when it does, so a long night cannot pile up nodes. Past
+// MAX_VOICES new ones are dropped. The count goes by the clock and not by
+// `ended` events, because a source the browser collects before it starts never sends one.
+const MAX_VOICES = 32;
+let ends = [];
+export function voices() {
+  if (ends.length) ends = ends.filter(t => t > ac.currentTime);
+  return ends.length;
+}
+const full = () => !ac || voices() >= MAX_VOICES;
+// tail: the last node of this sound's own chain. end: when it will have
+// finished. slice: [offset, seconds] of a buffer to play, in place of all of it.
+function play(src, tail, t0, end, slice) {
+  ends.push(end);
+  src.onended = () => { src.disconnect(); tail.disconnect(); };
+  if (slice) src.start(t0, ...slice); else { src.start(t0); src.stop(end); }
 }
 
 /* ---------- recordings ---------- */
@@ -31,7 +75,7 @@ function loadSamples() {
 
 // A generated room: a second and a half of decaying noise, used as a reverb.
 let roomNode = null;
-function room() {
+export function room() {
   if (roomNode) return roomNode;
   const len = ac.sampleRate * 1.5, ir = ac.createBuffer(2, len, ac.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
@@ -50,43 +94,68 @@ function room() {
 //   lowpass  Hz; makes it sound like it is in another room
 //   at       seconds from now
 //   wet      how much of it goes through the reverb, 0 to 1
-function sample(name, { gain = 1, rate = 1, lowpass = 0, at = 0, wet = 0 } = {}) {
+//   from, len  play only this slice of it, in seconds of the recording
+export function sample(name, { gain = 1, rate = 1, lowpass = 0, at = 0, wet = 0, from = 0, len = 0 } = {}) {
   if (!ac || !buffers[name]) return false;
-  const src = ac.createBufferSource(), g = ac.createGain();
+  if (full()) return true;
+  const src = ac.createBufferSource(), g = ac.createGain(), t = ac.currentTime + at;
   src.buffer = buffers[name]; src.playbackRate.value = rate; g.gain.value = gain;
   let node = src;
   if (lowpass) { const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = lowpass; node.connect(lp); node = lp; }
-  node.connect(g).connect(master);
-  if (wet) { const send = ac.createGain(); send.gain.value = wet; g.connect(send).connect(room()); }
-  src.start(ac.currentTime + at);
+  node.connect(g).connect(out());
+  if (wet && !dest) { const send = ac.createGain(); send.gain.value = wet; g.connect(send).connect(room()); }
+  // A slice ends mid-sound, so fade its last 40 ms.
+  const end = t + (len || src.buffer.duration) / rate;
+  if (len) { g.gain.setValueAtTime(gain, Math.max(t, end - .04)); g.gain.linearRampToValueAtTime(0, end); }
+  play(src, g, t, end, len ? [from, len] : null);
   return true;
 }
-const pick = (...names) => names[Math.random() * names.length | 0];
+export const pick = (...names) => names[Math.random() * names.length | 0];
 
 /* ---------- synthesis ---------- */
 
-export function tone(f, d, type = 'sine', v = .2, f2) {
-  if (!ac) return;
-  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+export function tone(f, d, type = 'sine', v = .2, f2, at = 0) {
+  if (full()) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + at;
   o.type = type;
   o.frequency.setValueAtTime(f, t);
   if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
   g.gain.setValueAtTime(v, t);
   g.gain.exponentialRampToValueAtTime(.001, t + d);
-  o.connect(g).connect(master);
-  o.start(t);
-  o.stop(t + d);
+  o.connect(g).connect(out());
+  play(o, g, t, t + d);
 }
 
-function noise(d, v = .3) {
-  if (!ac) return;
-  const n = ac.sampleRate * d, b = ac.createBuffer(1, n, ac.sampleRate), a = b.getChannelData(0);
-  for (let i = 0; i < n; i++) a[i] = (Math.random() * 2 - 1) * (1 - i / n);
-  const s = ac.createBufferSource(), g = ac.createGain();
-  s.buffer = b;
-  g.gain.value = v;
-  s.connect(g).connect(master);
-  s.start();
+// Two seconds of white noise, made once. Every burst and hiss plays from it.
+let white = null;
+export function whiteNoise() {
+  if (white) return white;
+  white = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+  const a = white.getChannelData(0);
+  for (let i = 0; i < a.length; i++) a[i] = Math.random() * 2 - 1;
+  return white;
+}
+
+// A burst of noise that dies away over d seconds.
+//   band, band2  band-pass it at this many Hz, sweeping to band2 if given
+//   q            how narrow the band is
+//   attack       seconds to fade in; 0 is a hit
+export function noise(d, v = .3, { at = 0, band = 0, band2 = 0, q = 1, attack = 0 } = {}) {
+  if (full()) return;
+  const s = ac.createBufferSource(), g = ac.createGain(), t = ac.currentTime + at;
+  s.buffer = whiteNoise(); s.loop = true;
+  g.gain.setValueAtTime(attack ? 0 : v, t);
+  if (attack) g.gain.linearRampToValueAtTime(v, t + attack);
+  g.gain.linearRampToValueAtTime(0, t + d);
+  let node = s;
+  if (band) {
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = q;
+    bp.frequency.setValueAtTime(band, t);
+    if (band2) bp.frequency.exponentialRampToValueAtTime(band2, t + d);
+    node.connect(bp); node = bp;
+  }
+  node.connect(g).connect(out());
+  play(s, g, t, t + d, [Math.random(), d]);
 }
 
 // A piercing scream: two voices a semitone apart (so they beat against each
@@ -122,12 +191,12 @@ function shriek(level = .7) {
 }
 
 // The part of a heavy impact you feel more than hear.
-function boom({ from = 72, to = 30, level = .9, at = 0 } = {}) {
-  if (!ac) return;
+export function boom({ from = 72, to = 30, level = .9, at = 0 } = {}) {
+  if (full()) return;
   const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + at;
   o.frequency.setValueAtTime(from, t); o.frequency.exponentialRampToValueAtTime(to, t + .45);
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(level, t + .006); g.gain.exponentialRampToValueAtTime(.001, t + .6);
-  o.connect(g).connect(master); o.start(t); o.stop(t + .65);
+  o.connect(g).connect(out()); play(o, g, t, t + .65);
 }
 
 // Something very heavy hitting a shut door. Each is several recordings at
@@ -187,6 +256,20 @@ export const SFX = {
   lights(e) { tone(e && e.x ? 1400 : 900, .04, 'square', .06); },
   // The door control clicks and nothing moves.
   fumble() { tone(180, .08, 'square', .12); setTimeout(() => tone(140, .1, 'square', .1), 90); },
+  // A door breaker goes: a pop and a thud in the wall, then the door dropping open.
+  trip() {
+    noise(.07, .5, { band: 2400, q: .7 }); tone(110, .3, 'sine', .45, 38);
+    sample('door_open', { gain: 1, rate: .8, at: .08, wet: .3 }) || tone(90, .3, 'square', .15, 40, .08);
+  },
+  // The breaker is back in: one relay tick.
+  reset() { tone(1900, .03, 'square', .07); },
+  // A button on a tripped door. Lower and shorter than a fumble, with nothing
+  // after it, so hands failing and hardware failing do not sound the same.
+  dead() { tone(95, .06, 'square', .14, 70); },
+  // The generator seizes: the handle grinds down to a stop.
+  seize() { tone(200, .5, 'sawtooth', .16, 40); noise(.5, .22, { band: 900, band2: 160, q: 1.5 }); },
+  // Cool enough to turn again.
+  unseize() { tone(700, .04, 'triangle', .06); },
 };
 
 export const click = (f = 600) => tone(f, .05, 'square', .05);

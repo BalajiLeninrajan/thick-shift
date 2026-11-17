@@ -28,6 +28,8 @@ body {
   60% { background-position: 31px 140px; } 80% { background-position: 97px 62px; }
 }
 @media (prefers-reduced-motion: reduce) { .ts-stage::after { animation: none; } }
+/* The 3D mode adds its own grain in its last shader pass (three/post.js). */
+.ts-stage.is-floor::after { display: none; }
 
 .ts-bar {
   display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2);
@@ -42,13 +44,30 @@ body {
 .ts-door span { color: var(--green); }
 .ts-door[aria-pressed="true"] { border-color: var(--red); }
 .ts-door[aria-pressed="true"] span { color: var(--red); }
+/* The door motor's heat, as a bar along the bottom of its button (--heat, 0 to
+   1, set by syncControls in ui.js). Red for the last fifth before the breaker
+   trips. A tripped door's button is dimmed and counts down in red ("out 14s"),
+   which is longer than "open", so the door buttons take a wider share of the
+   row than the others. */
+.ts-bar .ts-door { flex: 1.5 1 150px; }
+.ts-bar .btn:not(.ts-door) { flex-basis: 104px; }
+.ts-door { position: relative; overflow: hidden; }
+.ts-door::after {
+  content: ""; position: absolute; left: 0; bottom: 0; height: 4px;
+  width: calc(var(--heat, 0) * 100%);
+  background: var(--yellow); pointer-events: none;
+}
+.ts-door[data-hot="true"]::after, .ts-door[data-tripped="true"]::after { background: var(--red); }
+.ts-door[data-tripped="true"] { opacity: .6; border-color: var(--red); }
+.ts-door[data-tripped="true"] span { color: var(--red); }
 
 .ts-overlay {
-  position: fixed; inset: 0; display: grid; place-items: center; overflow: auto;
+  position: fixed; inset: 0; display: grid; justify-items: center; overflow: auto;
   padding: var(--space-4);
   background: color-mix(in srgb, var(--crust) 55%, transparent);
 }
-.ts-card { width: min(100%, 520px); }
+/* Auto margins centre the card, and let one taller than a phone screen start at the top and scroll. */
+.ts-card { width: min(100%, 520px); margin-block: auto; }
 .ts-selectable, .ts-overlay input { user-select: text; -webkit-user-select: text; }
 
 .ts-logo {
@@ -63,3 +82,181 @@ body {
 /* Dev menu (?dev). Scrolls inside itself and stays narrow enough to play beside. */
 .ts-dev { width: min(380px, 92vw); }
 .ts-dev-body { overflow-y: auto; touch-action: pan-y; }
+
+/* ---------- 3D mode ---------- */
+/* The HUD (three/hud.js) and touch controls (three/touch.js). The HUD sits on
+   a moving picture, so its pieces are bare text and thin marks with an ink
+   shadow, or a translucent ink plate where a line has to be read. Recipes are
+   used where a real surface appears: the pause panel, tags, buttons. */
+
+/* The floor fills the window, not the 16:9 box, up to 21:9, and takes back the scrollbar's gutter. */
+html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
+.ts-shell:has(#c3:not([hidden])) .ts-stage { width: min(100cqw, 100cqh * 21 / 9); height: 100cqh; aspect-ratio: auto; }
+.ts-stage canvas[hidden], .ts-fhud[hidden], .ts-fhud [hidden] { display: none; }
+
+/* The floor's rules in the lobby. */
+.ts-rules { display: grid; gap: var(--space-1); padding-left: 1.2em; }
+.ts-rules li { margin: 0; }
+
+.ts-fhud {
+  --ts-plate: color-mix(in srgb, var(--neu-ink) 74%, transparent);
+  --ts-pad: 16px;
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  font: 600 13px/1.3 var(--sans); color: var(--text); text-shadow: 0 1px 2px var(--neu-ink);
+}
+.ts-fhud svg { flex: 0 0 auto; }
+@keyframes ts-blink { 50% { opacity: .35; } }
+@keyframes ts-ping { from { box-shadow: 0 0 0 0 var(--red); } to { box-shadow: 0 0 0 12px transparent; } }
+@keyframes ts-toast { from { opacity: 0; transform: translateY(-6px); } }
+
+/* Keycap. The system has no kbd recipe. */
+.ts-key {
+  display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px;
+  border: 1px solid var(--overlay-1); border-bottom-width: 2px; border-radius: 5px;
+  background: var(--surface-0); color: var(--text); font: 600 11px/1 var(--sans); text-shadow: none; white-space: nowrap;
+}
+
+/* Top left: the hour, and the building's power under it. */
+.ts-f-status { position: absolute; top: var(--ts-pad); left: var(--ts-pad); display: grid; gap: 6px; }
+.ts-f-time b { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.ts-f-time span { margin-left: 8px; color: var(--subtext-0); font-weight: 500; }
+.ts-f-power { display: flex; align-items: center; gap: 6px; color: var(--subtext-0); }
+.ts-f-power svg { width: 14px; height: 14px; }
+.ts-f-bar { width: 96px; height: 5px; border-radius: 3px; background: var(--ts-plate); }
+.ts-f-bar i { display: block; height: 100%; border-radius: inherit; background: currentColor; }
+.ts-f-power[data-level="crank"] { color: var(--green); }
+.ts-f-power[data-level="low"] { color: var(--yellow); }
+.ts-f-power[data-level="crit"], .ts-f-power[data-level="out"] { color: var(--red); }
+.ts-f-power[data-level="crit"] svg, .ts-f-power[data-level="out"] svg { animation: ts-blink 1s steps(2, jump-none) infinite; }
+.ts-f-power[data-level="out"] .ts-f-bar { display: none; }
+
+/* Top centre: the compass, this hour's clocks, then what just happened. */
+.ts-f-nav { position: absolute; top: 10px; left: 50%; width: min(40%, 400px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ts-f-compass { position: relative; align-self: stretch; height: 44px; }
+.ts-f-compass::before { content: ""; position: absolute; inset: 17px 0 auto; height: 1px; background: linear-gradient(90deg, transparent, var(--overlay-1) 12%, var(--overlay-1) 88%, transparent); }
+.ts-f-compass::after { content: ""; position: absolute; left: 50%; top: 13px; width: 1px; height: 9px; background: var(--text); }
+.ts-f-tick { position: absolute; top: 0; transform: translateX(-50%); font-size: 10px; font-weight: 600; color: var(--overlay-2); }
+.ts-f-tick:empty { top: 13px; width: 1px; height: 4px; background: var(--overlay-1); }
+.ts-f-mark { position: absolute; top: 12px; transform: translateX(-50%); display: grid; justify-items: center; gap: 3px; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ts-f-mark b { font-weight: 600; }
+.ts-f-mark i { box-sizing: border-box; width: 11px; height: 11px; border-radius: 50%; border: 2px solid currentColor; background: var(--neu-ink); }
+.ts-f-mark.is-clock { color: color-mix(in srgb, var(--yellow) 65%, var(--overlay-0)); }
+.ts-f-mark.is-clock.is-near { color: var(--yellow); z-index: 1; }
+.ts-f-mark.is-near i { background: currentColor; }
+.ts-f-mark.is-flat { color: var(--red); z-index: 2; }
+.ts-f-mark.is-flat i { width: 16px; height: 7px; margin: 2px 0; border-radius: 4px; background: currentColor; }
+.ts-f-mark.is-ping i { animation: ts-ping .8s ease-out infinite; }
+.ts-f-mark.is-dock { color: var(--sapphire); }
+.ts-f-mark.is-dock i { border-radius: 2px; }
+/* Past the end of the strip: an arrow says keep turning. */
+.ts-f-mark[data-side="left"] { transform: none; justify-items: start; }
+.ts-f-mark[data-side="right"] { transform: translateX(-100%); justify-items: end; }
+.ts-f-mark[data-side="left"] b::before { content: "\2039\00a0"; }
+.ts-f-mark[data-side="right"] b::after { content: "\00a0\203a"; }
+
+.ts-f-rounds { display: flex; align-items: center; gap: 8px; padding: 3px 10px 3px 7px; border-radius: 999px; background: var(--ts-plate); color: var(--yellow); }
+.ts-f-rounds svg { width: 14px; height: 14px; }
+.ts-f-pips { display: flex; gap: 5px; }
+.ts-f-pips i { box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; }
+.ts-f-pips i.is-done { background: var(--green); border-color: var(--green); }
+.ts-f-rounds[data-state="done"] { color: var(--green); }
+.ts-f-rounds[data-state="hurry"] { color: var(--red); }
+.ts-f-rounds[data-state="hurry"] span { animation: ts-blink .6s steps(2, jump-none) infinite; }
+
+.ts-f-toasts { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ts-f-toast {
+  --tc: var(--subtext-0);
+  display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(520px, 80vw);
+  padding: 5px 12px 5px 8px; border-radius: 8px; border-left: 3px solid var(--tc); background: var(--ts-plate);
+  font-weight: 500; text-shadow: none; animation: ts-toast .25s var(--ease-out); transition: opacity .4s;
+}
+.ts-f-toast svg { width: 16px; height: 16px; color: var(--tc); }
+.ts-f-toast.is-gone { opacity: 0; }
+.ts-f-toast.is-clock, .ts-f-toast.is-power { --tc: var(--yellow); }
+.ts-f-toast.is-missed, .ts-f-toast.is-out, .ts-f-toast.is-down { --tc: var(--red); }
+.ts-f-toast.is-missed, .ts-f-toast.is-down { background: color-mix(in srgb, var(--red) 22%, var(--neu-ink)); }
+.ts-f-toast.is-torch { --tc: var(--peach); }
+.ts-f-toast.is-back, .ts-f-toast.is-up { --tc: var(--green); }
+.ts-f-toast.is-call { --tc: var(--sky); }
+.ts-f-toast.is-tip { --tc: var(--lavender); }
+
+/* Top right: the other guards and the room each is in. */
+.ts-f-crew { position: absolute; top: var(--ts-pad); right: var(--ts-pad); display: grid; gap: 4px; justify-items: end; }
+.ts-f-mate { display: flex; align-items: center; gap: 6px; color: var(--subtext-1); }
+.ts-f-mate span:last-child { color: var(--overlay-2); font-size: 11px; font-weight: 500; }
+.ts-f-mate.is-flat b { color: var(--red); }
+.ts-f-mate .tag { text-shadow: none; }
+
+.ts-f-dot { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: color-mix(in srgb, var(--text) 55%, transparent); }
+
+/* What the use key would do, just under where you are looking. */
+.ts-f-prompt { position: absolute; top: 68%; left: 50%; transform: translateX(-50%); display: grid; gap: 6px; padding: 6px 12px 6px 7px; border-radius: 8px; background: var(--ts-plate); white-space: nowrap; text-shadow: none; }
+.ts-f-prompt-row { display: flex; align-items: center; gap: 8px; }
+.ts-f-prompt.is-busy .ts-key { border-color: var(--yellow); color: var(--yellow); }
+.ts-f-hold { height: 4px; border-radius: 2px; background: var(--surface-1); }
+.ts-f-hold i { display: block; height: 100%; border-radius: inherit; background: var(--yellow); }
+
+/* Bottom left: the torch. Grey while off, yellow while on, red when nearly out. */
+.ts-f-torch { position: absolute; left: var(--ts-pad); bottom: var(--ts-pad); isolation: isolate; display: grid; gap: 8px; color: var(--overlay-2); }
+.ts-f-torch-row { display: flex; align-items: center; gap: 8px; }
+.ts-f-torch svg { width: 20px; height: 20px; }
+.ts-f-cells { position: relative; display: flex; gap: 2px; padding: 2px; border: 2px solid currentColor; border-radius: 4px; }
+.ts-f-cells::after { content: ""; position: absolute; left: 100%; top: 4px; bottom: 4px; width: 3px; margin-left: 2px; border-radius: 0 2px 2px 0; background: currentColor; }
+.ts-f-cells i { width: 8px; height: 11px; border-radius: 1px; }
+.ts-f-cells i.is-full { background: currentColor; }
+.ts-f-torch-row span { margin-left: 4px; }
+.ts-f-torch[data-on="true"] { color: var(--yellow); }
+.ts-f-torch[data-on="true"] svg { filter: drop-shadow(0 0 5px var(--yellow)); }
+.ts-f-torch[data-state="charging"] { color: var(--sapphire); }
+.ts-f-torch[data-state="low"], .ts-f-torch[data-state="dead"] { color: var(--red); font-size: 15px; }
+.ts-f-torch[data-state="low"] .ts-f-cells, .ts-f-torch[data-state="dead"] .ts-f-cells { animation: ts-blink .7s steps(2, jump-none) infinite; }
+/* A red glow in the corner, so a low torch shows without looking at it. */
+.ts-f-torch[data-state="low"]::before, .ts-f-torch[data-state="dead"]::before { content: ""; position: absolute; left: -90px; bottom: -90px; z-index: -1; width: 340px; height: 260px; background: radial-gradient(closest-side, color-mix(in srgb, var(--red) 34%, transparent), transparent); }
+.ts-f-stam { width: 112px; height: 3px; border-radius: 2px; background: var(--ts-plate); }
+.ts-f-stam i { display: block; height: 100%; border-radius: inherit; background: var(--sapphire); }
+
+/* Desktop, before the mouse is captured. Clicks pass through to the canvas. */
+.ts-f-start { position: absolute; left: 50%; bottom: var(--ts-pad); transform: translateX(-50%); display: grid; justify-items: center; gap: 6px; width: max-content; max-width: 92%; padding: 10px 16px; border-radius: 10px; background: var(--ts-plate); color: var(--subtext-0); font-weight: 500; text-shadow: none; }
+.ts-f-start b { color: var(--text); font-size: 15px; }
+.ts-f-start .ts-key { margin: 0 2px 0 8px; }
+.ts-fhud[data-touch="true"] .ts-f-start { display: none; }
+
+/* Flat on the floor. */
+.ts-f-vignette { position: absolute; inset: 0; opacity: 0; transition: opacity .6s; background: radial-gradient(ellipse at 50% 55%, transparent 30%, color-mix(in srgb, var(--red) 20%, transparent) 70%, color-mix(in srgb, var(--neu-ink) 90%, transparent)); }
+.ts-fhud[data-flat="true"] .ts-f-vignette { opacity: 1; }
+.ts-f-flat { position: absolute; left: 50%; bottom: 24px; z-index: 3; transform: translateX(-50%); display: grid; justify-items: center; gap: 8px; width: max-content; max-width: 92%; padding: 14px 20px; border-radius: 12px; background: var(--ts-plate); text-align: center; text-shadow: none; pointer-events: auto; }
+.ts-f-flat > b { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.ts-f-flat > span:not(.tag) { color: var(--subtext-0); font-weight: 500; }
+.ts-f-flat .btn { gap: 8px; }
+.ts-fhud[data-touch="true"] .ts-f-flat .ts-key { display: none; }
+
+/* Pause and settings. */
+.ts-f-pause { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 12px; background: color-mix(in srgb, var(--crust) 62%, transparent); pointer-events: auto; font-size: 14px; font-weight: 400; text-shadow: none; }
+.ts-f-panel { display: flex; flex-direction: column; width: min(100%, 620px); max-height: 100%; }
+.ts-f-panel-body { display: grid; grid-template-columns: 1.1fr 1fr; gap: var(--space-5); align-items: start; overflow-y: auto; touch-action: pan-y; }
+@media (max-width: 560px) { .ts-f-panel-body { grid-template-columns: 1fr; } }
+
+/* Touch: pause and fullscreen in the corner, the stick and three buttons under the thumbs. */
+.ts-f-menu { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; gap: 6px; pointer-events: auto; text-shadow: none; }
+.ts-f-menu .btn { background: var(--ts-plate); color: var(--subtext-1); }
+.ts-t-layer { position: absolute; inset: 0; z-index: 2; pointer-events: auto; touch-action: none; }
+.ts-fhud:not([data-touch="true"]) :is(.ts-f-menu, .ts-t-layer) { display: none; }
+.ts-fhud[data-touch="true"] .ts-f-crew { top: 64px; }
+.ts-fhud[data-touch="true"] .ts-f-torch { left: 50%; transform: translateX(-50%); justify-items: center; }
+.ts-t-stick { position: absolute; left: 104px; top: calc(100% - 96px); width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--text) 30%, transparent); background: color-mix(in srgb, var(--neu-ink) 35%, transparent); opacity: .4; pointer-events: none; }
+.ts-t-stick.is-held { opacity: 1; }
+.ts-t-stick i { position: absolute; inset: 30px; border-radius: 50%; background: color-mix(in srgb, var(--text) 50%, transparent); }
+.ts-t-btn { position: absolute; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--text) 35%, transparent); background: var(--ts-plate); color: var(--text); font: 600 14px/1 var(--sans); touch-action: none; }
+.ts-t-btn svg { width: 26px; height: 26px; }
+.ts-t-use { right: 24px; bottom: 26px; width: 84px; height: 84px; }
+.ts-t-torch { right: 124px; bottom: 18px; width: 66px; height: 66px; }
+.ts-t-run { right: 34px; bottom: 126px; width: 62px; height: 62px; }
+.ts-t-btn[aria-pressed="true"] { border-color: var(--yellow); color: var(--yellow); }
+.ts-t-use.is-ready { border-color: var(--yellow); }
+.ts-t-use.is-held { background: color-mix(in srgb, var(--yellow) 30%, var(--neu-ink)); }
+
+.ts-f-rotate { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .ts-f-rotate { position: absolute; inset: 0; z-index: 9; display: grid; place-items: center; background: var(--crust); pointer-events: auto; text-shadow: none; }
+  .ts-f-rotate svg { color: var(--subtext-0); }
+}

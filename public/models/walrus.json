@@ -1,0 +1,34 @@
+{
+ "key": "walrus",
+ "stages": [
+  {
+   "file": "walrus_0.glb",
+   "height": 2.58,
+   "radius": 1.06,
+   "face": [
+    0,
+    2.09,
+    0.38
+   ],
+   "floats": false,
+   "nodes": [
+    "arm_L",
+    "arm_R",
+    "body",
+    "eye_L",
+    "eye_R",
+    "forearm_L",
+    "forearm_R",
+    "head",
+    "leg_L",
+    "leg_R",
+    "root",
+    "shin_L",
+    "shin_R"
+   ],
+   "notes": "Walk: a slow heavy waddle, hips rolling side to side (roll body about 4 degrees), legs short-stepping; swing leg_* at the hip up to 30 degrees and bend shin_* back up to 40. The leg and arm joints are balls buried in fur, safe to 40 degrees about any axis. Idle: dead still, then a small head tilt (head roll or yaw 10 to 15 degrees). Head joint is hidden in the shoulders and by the pearls, which belong to body: keep head pitch within 15 degrees down, 25 up, yaw 40, or the tusks and chin meet the pearls. Arms hang; arm_* can lift 40 forward for the hug, forearm_* bend up to 40. No jaw at this stage. Eyes are googly balls, any angle. Attack: arms open wide then close, head tips back."
+  },
+  null,
+  null
+ ]
+}

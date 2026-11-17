@@ -7,7 +7,8 @@ import { camAt } from './render/cammap.js';
 import { cv } from './render/canvas.js';
 
 const $ = id => document.getElementById(id);
-const playing = () => !!game.S && game.S.phase === 'play';
+// The 3D mode has its own input (three/player.js); these controls are the booth's.
+const playing = () => !!game.S && game.S.phase === 'play' && game.S.mode !== 'floor';
 const clampPan = x => Math.max(0, Math.min(WORLD - W, x));
 const inZone = (z, x, y) => x > z.x && x < z.x + z.w && y > z.y && y < z.y + z.h;
 

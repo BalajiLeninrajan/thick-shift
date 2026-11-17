@@ -1,2 +1,4 @@
 node_modules
 .wrangler
+tools/models/previews
+__pycache__

@@ -1,0 +1,35 @@
+{
+ "key": "rhino",
+ "stages": [
+  {
+   "file": "rhino_0.glb",
+   "height": 2.62,
+   "radius": 1.07,
+   "face": [
+    0.0,
+    2.15,
+    0.5
+   ],
+   "floats": false,
+   "nodes": [
+    "arm_L",
+    "arm_R",
+    "body",
+    "eye_L",
+    "eye_R",
+    "forearm_L",
+    "forearm_R",
+    "head",
+    "leg_L",
+    "leg_R",
+    "root",
+    "shin_L",
+    "shin_R",
+    "sway_1"
+   ],
+   "notes": "The costume as built: heavy, upright, cheerful. Walk: a slow waddle, swing leg_L/leg_R about x by up to 25 degrees with the shin following 10 to 15 more, body rolling 3 to 4 degrees about z onto the standing leg; the hips are 2 m wide so keep the stride short. Arms swing opposite the legs, 20 degrees at the shoulder. Idle: breathe by scaling body a little, turn head up to 35 degrees about y, tilt 15 about z. The eyes never blink; let eye_L and eye_R track the player (up to 30 degrees) while the head stays still. Attack: it charges, body pitched forward 15 degrees, head down 20 so the horn leads, arms back. Jumpscare: push the head at the camera, horn first. Limits: leg 35, shin 40 (bend backward only, positive x), arm 60 forward and back and 30 out to the side (the fists pass the hips), forearm 50, head 40 about y and 25 about x before the neck opens. No jaw: the smile is sewn on. Parts: sway_1: the tail: a short rope with a tuft, hangs over the rear."
+  },
+  null,
+  null
+ ]
+}

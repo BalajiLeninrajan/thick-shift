@@ -3,13 +3,14 @@
 //
 // Cheats that change the simulation live in S.dev, so sim.js and rules.js can
 // read them and guests see their effects. Only the host can set them.
-import { MASC, ROOMS, HOUR, FINAL_NIGHT } from './config.js';
+import { MASC, ROOMS, DOORS, HOUR, FINAL_NIGHT } from './config.js';
 import { game, client } from './state.js';
-import { rotOf, dreadOf, threatOf, roomOf, hourOf, doorWait, isActive } from './rules.js';
+import { rotOf, dreadOf, threatOf, roomOf, hourOf, doorWait, isActive, maxAttacks, crankerOf } from './rules.js';
 import { startNight } from './sim.js';
 
 const $ = id => document.getElementById(id);
-const DEFAULTS = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: -1, dread: -1 };
+const DEFAULTS = { god: false, power: false, freeze: false, wake: false, cold: false, speed: 1, rot: -1, dread: -1 };
+const SWITCHES = ['god', 'power', 'freeze', 'wake', 'cold'];
 const cheats = () => (game.S.dev ||= { ...DEFAULTS });
 const playing = () => !!game.S && game.S.phase === 'play';
 const STAGES = [[-1, 'Auto'], [0, 'Cute'], [1, 'Off'], [2, 'Rotten']];
@@ -26,6 +27,7 @@ const HTML = `
     ${toggle('dv-power', 'Infinite power')}
     ${toggle('dv-freeze', 'Freeze mascots')}
     ${toggle('dv-wake', 'Wake every mascot now')}
+    ${toggle('dv-cold', 'Cold motors: doors and the generator never overheat')}
   </div>
   <div class="cn-stack">
     <span class="cn-label">Rot stage</span>
@@ -39,6 +41,7 @@ const HTML = `
   <div class="cn-cluster">
     ${button('dv-hour', '+1 hour')}${button('dv-late', 'Skip to 5:50')}${button('dv-win', 'Win night')}${button('dv-next', 'Next night')}${button('dv-final', 'Jump to last night')}
     ${button('dv-low', 'Power to 5%')}${button('dv-sane', 'Sanity to 15%')}${button('dv-signal', 'Kill camera signal')}
+    ${button('dv-hot', 'Door heat to 85%')}${button('dv-trip', 'Trip left door')}${button('dv-seize', 'Seize generator')}
   </div>
   <div class="cn-stack cn-divide" id="dv-mascots"></div>
   <dl class="kv" id="dv-read"></dl>
@@ -54,6 +57,10 @@ const ACTIONS = {
   'dv-final'() { startNight(FINAL_NIGHT); },
   'dv-low'(S) { S.power = 5; },
   'dv-sane'(S) { for (const id in game.players) game.players[id].sanity = .15; },
+  // These set the heat and leave the tripping and seizing to sim.js, so the events and sounds are the real ones.
+  'dv-hot'(S) { for (const k of DOORS) S.heat[k] = Math.max(S.heat[k], .85); },
+  'dv-trip'(S) { S.doors.L = true; S.heat.L = 1; },
+  'dv-seize'(S) { S.gen = 1; },
 };
 
 const MASCOT_ACTIONS = {
@@ -64,7 +71,7 @@ const MASCOT_ACTIONS = {
 
 function bind(el) {
   const host = fn => () => { if (game.isHost && playing()) { fn(game.S); sync(el); } };
-  for (const key of ['god', 'power', 'freeze', 'wake']) $('dv-' + key).onchange = e => { if (game.isHost && game.S) cheats()[key] = e.target.checked; sync(el); };
+  for (const key of SWITCHES) $('dv-' + key).onchange = e => { if (game.isHost && game.S) cheats()[key] = e.target.checked; sync(el); };
   $('dv-rot').onclick = e => { const b = e.target.closest('button'); if (b && game.isHost && game.S) { cheats().rot = +b.dataset.v; sync(el); } };
   $('dv-speed').oninput = e => { if (game.isHost && game.S) cheats().speed = +e.target.value; sync(el); };
   const dread = () => { if (game.isHost && game.S) cheats().dread = $('dv-dread-on').checked ? $('dv-dread').value / 100 : -1; sync(el); };
@@ -87,7 +94,7 @@ function sync(el) {
   for (const input of el.querySelectorAll('input, button')) if (input.id !== 'dv-close' && input.id !== 'dv-signal') input.disabled = !on;
   if (!S) return;
   const dv = cheats();
-  for (const key of ['god', 'power', 'freeze', 'wake']) $('dv-' + key).checked = dv[key];
+  for (const key of SWITCHES) $('dv-' + key).checked = dv[key];
   for (const b of $('dv-rot').children) b.setAttribute('aria-pressed', String(+b.dataset.v === dv.rot));
   $('dv-speed').value = dv.speed; $('dv-speed-out').textContent = dv.speed;
   $('dv-dread-on').checked = dv.dread >= 0;
@@ -99,7 +106,10 @@ function sync(el) {
       <span class="cn-cluster">${['door', 'home', 'scare'].map(a => `<button class="btn btn-ghost is-sm" data-act="${a}" data-i="${m.i}"${on ? '' : ' disabled'}>${{ door: 'To door', home: 'Send home', scare: 'Jumpscare' }[a]}</button>`).join('')}</span></div>`;
   }).join('');
   const row = (k, v) => `<dt>${k}</dt><dd class="cn-tabular">${v}</dd>`;
-  $('dv-read').innerHTML = row('Phase', S.phase) + row('Night time', (S.t / HOUR).toFixed(2) + ' h') + row('Threat', threatOf(S).toFixed(2)) + row('Quiet for', Math.max(0, (S.calmUntil || 0) - S.t).toFixed(0) + ' s' + (S.pair ? ', then a pair' : '')) + row('Camera signal', Math.round(client.signal * 100) + '%') + row('Sanity', S.players.map(p => Math.round((p.sanity ?? 1) * 100) + '%').join(', ')) + row('Guards', S.players.length);
+  $('dv-read').innerHTML = row('Phase', S.phase) + row('Night time', (S.t / HOUR).toFixed(2) + ' h') + row('Threat', threatOf(S).toFixed(2)) + row('Quiet for', Math.max(0, (S.calmUntil || 0) - S.t).toFixed(0) + ' s' + (S.pair ? ', then a pair' : '')) + row('Camera signal', Math.round(client.signal * 100) + '%') + row('Sanity', S.players.map(p => Math.round((p.sanity ?? 1) * 100) + '%').join(', '))  + row('Guards', S.players.length)
+    + row('Attacks', `${S.attacks} of ${maxAttacks(S)}`)
+    + row('Door heat', DOORS.map(k => `${k} ${Math.round((S.heat?.[k] || 0) * 100)}%${S.trip?.[k] ? ' tripped' : ''}`).join(', '))
+    + row('Generator heat', Math.round((S.gen || 0) * 100) + '%' + (S.seized ? ' seized' : '') + (crankerOf(S) ? ', handle taken' : ''));
 }
 
 export function mountDev() {

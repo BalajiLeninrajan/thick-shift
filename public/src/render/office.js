@@ -2,7 +2,7 @@
 // Everything that never moves is baked into one wide sprite (see roomSprite);
 // each frame draws a slice of it and then the live parts on top.
 import { W, H, WORLD, ZONES, P } from '../config.js';
-import { atDoor, shownAtDoor, seenThreat, leanOf, rotOf, dreadOf, lightsOn, REVEAL } from '../rules.js';
+import { atDoor, shownAtDoor, seenThreat, leanOf, rotOf, dreadOf, lightsOn, REVEAL, DOOR_HEAT, tripLeft } from '../rules.js';
 import { c, mix, rgba, hash, lerp, ell, rect, rrect, poly, vgrad, glow, vignette, text, bake, pxScale } from './canvas.js';
 import { drawMascot, drawFace } from './mascot.js';
 
@@ -120,14 +120,44 @@ function roomSprite(lit, live) {
 
 /* ---------- live parts ---------- */
 
-function statusPlate(cx, y, label, shut) {
-  const col = shut ? P.red : P.green, str = `${label}: ${shut ? 'shut' : 'open'}`;
+// The plate under each way in: its state in words, and how hot its motor is
+// (S.heat, see DOOR_HEAT in rules.js). The bar is the gauge to play by: green
+// is fine, yellow is getting there, red is about to trip. The dot blinks for
+// the last fifth before a trip. A tripped door counts down the seconds to its
+// reset, and the tick on the bar is the heat it has to cool to.
+function statusPlate(cx, y, label, k) {
+  const shut = S.doors[k], heat = S.heat?.[k] || 0, tripped = !!S.trip?.[k], hot = heat > .8;
+  const col = shut || tripped ? P.red : P.green, str = `${label}: ${tripped ? `TRIPPED ${Math.ceil(tripLeft(S, k))}s` : shut ? 'shut' : 'open'}`;
   c.font = '600 12px Inter, system-ui, sans-serif';
-  const w = c.measureText(str).width + 34;
-  rrect(cx - w / 2, y - 14, w, 22, 6, rgba(P.ink, .8));
-  ell(cx - w / 2 + 13, y - 3, 4.5, 4.5, col);
-  if (powered) glow(cx - w / 2 + 13, y - 3, 16, col, .5);
-  text(str, cx - w / 2 + 24, y + 1, { col: P.text });
+  const w = c.measureText(tripped ? `${label}: TRIPPED 00s` : str).width + 34, x = cx - w / 2;   // the countdown must not make the plate twitch
+  rrect(x, y - 14, w, 30, 6, rgba(P.ink, .8));
+  const lit = !(tripped || shut && hot) || Math.sin(t * 14) > 0;
+  ell(x + 13, y - 3, 4.5, 4.5, lit ? col : mix(col, P.ink, .7));
+  if (powered && lit) glow(x + 13, y - 3, 16, col, .5);
+  text(str, x + 24, y + 1, { col: tripped ? P.red : P.text });
+  rrect(x + 10, y + 7, w - 20, 4, 2, P.surface0);
+  if (heat > 0) rrect(x + 10, y + 7, Math.max(4, (w - 20) * heat), 4, 2, tripped || hot ? P.red : heat >= .5 ? P.yellow : P.green);
+  if (tripped) rect(x + 10 + (w - 20) * DOOR_HEAT.reset, y + 5, 1.5, 8, P.text);
+}
+
+// A door frame's colour: the plain frame cold, through peach, to red at the
+// point of tripping. mix() caches by its arguments, so heat is rounded first.
+function frameCol(k) {
+  const plain = mix(P.surface0, P.crust, .35), heat = Math.round((S.heat?.[k] || 0) * 20) / 20;
+  return heat <= .5 ? mix(plain, P.peach, heat * .9) : mix(mix(plain, P.peach, .45), P.red, (heat - .5) * 1.4);
+}
+
+// For two seconds after a breaker trips, sparks fall from the top of the
+// frame. S.heat is the clock (it trips at 1 and has cooled to .95 two seconds
+// later), so every guard sees them and nothing is kept on the client.
+function tripSparks(k, X, y, w) {
+  if (!S.trip?.[k] || S.heat[k] <= .95) return;
+  const fade = (S.heat[k] - .95) / .05;
+  for (let i = 0; i < 18; i++) {
+    const life = (t * 2.2 + hash(i) * 3) % 1, sx = X + (i % 2 ? w : 0) + (hash(i + 20) - .5) * 70 * life;
+    ell(sx, y + life * life * 110, 2.4 * (1 - life), 2.4 * (1 - life), rgba(i % 3 ? P.yellow : P.peach, (1 - life) * fade));
+  }
+  glow(X, y, 90, P.yellow, .3 * fade); glow(X + w, y, 90, P.yellow, .3 * fade);
 }
 
 function slab(X, y, w, h) {
@@ -199,10 +229,11 @@ function doorway(k, label, doorPos) {
   if (here.length && on) { const a = (.35 + dread * .65) * (1 - lean * .75); rect(X, z.y, z.w, z.h, vgrad(z.y, z.y + z.h, [[0, rgba(P.ink, .82 * a)], [.5, rgba(P.ink, .6 * a)], [1, rgba(P.ink, .78 * a)]])); }
   if (doorPos > .01) slab(X, z.y - z.h * (1 - doorPos), z.w, z.h);
   c.restore();
-  c.lineWidth = 14; c.strokeStyle = mix(P.surface0, P.crust, .35); c.strokeRect(X, z.y, z.w, z.h);
+  c.lineWidth = 14; c.strokeStyle = frameCol(k); c.strokeRect(X, z.y, z.w, z.h);
   c.lineWidth = 1.5; c.strokeStyle = rgba(P.surface2, .7); c.strokeRect(X - 7, z.y - 7, z.w + 14, z.h + 14);
   if (here.some(m => rotOf(S, m) === 2) && doorPos < .5) grip(X, z, lean);
-  statusPlate(X + z.w / 2, z.y + z.h + 30, label, S.doors[k]);
+  tripSparks(k, X, z.y, z.w);
+  statusPlate(X + z.w / 2, z.y + z.h + 30, label, k);
 }
 
 // Eyes only, redrawn over the blackout so they still glow.
@@ -240,9 +271,10 @@ function vent(doorPos, eyesOnly) {
   c.strokeStyle = rgba(P.surface1, .9); c.lineWidth = 3;
   for (let y = z.y + 12; y < z.y + z.h; y += 13) { c.beginPath(); c.moveTo(X, y); c.lineTo(X + z.w, y); c.stroke(); }
   c.restore();
-  c.lineWidth = 10; c.strokeStyle = mix(P.surface0, P.crust, .35); c.strokeRect(X, z.y, z.w, z.h);
+  c.lineWidth = 10; c.strokeStyle = frameCol('V'); c.strokeRect(X, z.y, z.w, z.h);
   for (const [sx, sy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) ell(X + sx * z.w, z.y + sy * z.h, 2.5, 2.5, P.overlay1);
-  statusPlate(X + z.w / 2, z.y + z.h + 24, 'Vent', S.doors.V);
+  tripSparks('V', X, z.y + z.h, z.w);
+  statusPlate(X + z.w / 2, z.y + z.h + 24, 'Vent', 'V');
 }
 
 // The bits of the desk that move: the monitor's scan bar and the mug's steam.

@@ -27,6 +27,8 @@ export const client = {
   glitch: 0,
   scareT: 0,        // frames of jumpscare left
   fumbleT: 0,       // frames left to show that a door did not shut
+  deadT: 0,         // frames left to show that a door's breaker is out
+  deadK: null,      // which door that was
   door: { L: 0, V: 0, R: 0 },   // animated door positions, 0 open to 1 shut
 };
 

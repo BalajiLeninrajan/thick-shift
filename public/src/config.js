@@ -5,7 +5,6 @@ export const H = 450;          // canvas logical height
 export const WORLD = 1600;     // width of the pannable office
 export const HOUR = 45;        // seconds per in-game hour
 export const FINAL_NIGHT = 5;  // survive this one and the game is won
-export const PREFIX = 'thick-shift-v1-';   // PeerJS id namespace
 
 // The building. Rooms 0 to 8 have cameras; 9 to 11 are the three ways into the booth.
 //

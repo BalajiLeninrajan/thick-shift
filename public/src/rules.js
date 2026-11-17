@@ -72,3 +72,50 @@ export const shownAtDoor = (S, k) => atDoor(S, k).filter(m => leanOf(S, m) >= RE
 const onScreen = (k, pan) => ZONES[k].x + ZONES[k].w > pan && ZONES[k].x < pan + W;
 // threatOf, but only for what this guard can see from where they are panned.
 export const seenThreat = (S, pan) => Math.max(0, ...DOORS.flatMap(k => S.doors[k] || !onScreen(k, pan) ? [] : shownAtDoor(S, k).map(m => .35 + leanOf(S, m) * .65)));
+
+/* ---------- breakers, the handle, and a crowd ---------- */
+// The three ways in are held shut by motors on one old breaker. A motor that
+// is holding gets hot (S.heat, 0 to 1) and cools once the door is open. One
+// door alone can hold for DOOR_HEAT.hold seconds from cold. Each other door
+// shut at the same time adds DOOR_HEAT.share of that rate to all of them, and
+// a mascot hitting a shut door adds DOOR_HEAT.bang in one go. At 1 the breaker
+// trips: the door drops open and will not shut again until it has cooled to
+// DOOR_HEAT.reset.
+//   doors shut together:     1      2      3
+//   seconds from cold:       25     16.7   12.5
+//   locked open after:       20 s
+// This is what stops a crew from shutting everything and waiting for 6 AM.
+// Shutting a door on what is behind it costs a few seconds of heat. Holding
+// one shut costs all of it.
+export const DOOR_HEAT = { hold: 25, share: .5, cool: 40, bang: .15, reset: .5 };
+// Heat gained per second by each shut door, given how many are shut.
+export const heatRate = closed => (1 + DOOR_HEAT.share * (closed - 1)) / DOOR_HEAT.hold;
+// Seconds until a tripped door works again. 0 when it has not tripped.
+export const tripLeft = (S, k) => S.trip?.[k] ? Math.max(0, (S.heat[k] - DOOR_HEAT.reset) * DOOR_HEAT.cool) : 0;
+
+// The generator has one handle and it runs hot too (S.gen, 0 to 1): GEN_HEAT.run
+// seconds of turning from cold seizes it, and it cools four times slower than
+// it heats, so nobody gets more than a fifth of the night out of it. A second
+// guard at the generator adds nothing.
+export const GEN_HEAT = { run: 15, cool: 60, reset: .5 };
+// Seconds until a seized generator turns again. 0 when it is not seized.
+export const genLeft = S => S.seized ? Math.max(0, (S.gen - GEN_HEAT.reset) * GEN_HEAT.cool) : 0;
+// The guard holding the handle, and whether it is going round.
+export const crankerOf = S => S.players.find(p => p.id === S.cranker);
+export const turning = S => !!crankerOf(S) && !S.seized;
+
+// More guards draw more visits. Every number below is the old fixed one for
+// one guard, so playing alone is unchanged.
+//   guards:              1    2    3    4    6
+//   attacks per night:   7    10   13   16   22
+//   quiet between them:  1x   .7x  .54x .44x .32x
+//   pairs from night:    4    3    2    2    2
+//   chance of a pair:    35%  47%  59%  71%  80%
+// With three attacks per extra guard, each of a trio's two door guards sees
+// about what one guard sees alone.
+export const CROWD_MAX = 5;
+export const crowdOf = S => Math.min(CROWD_MAX, Math.max(0, (S.players?.length || 1) - 1));
+export const SOLO_ATTACKS = 7, CROWD_ATTACKS = 3;
+export const maxAttacks = S => SOLO_ATTACKS + CROWD_ATTACKS * crowdOf(S);
+export const pairFromNight = S => 4 - Math.min(2, crowdOf(S));
+export const pairChance = S => Math.min(.8, .35 + .12 * crowdOf(S));

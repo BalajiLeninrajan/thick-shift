@@ -1,0 +1,317 @@
+{
+ "guard": {
+  "file": "guard.glb",
+  "height": 1.8,
+  "nodes": [
+   "arm_L",
+   "arm_R",
+   "body",
+   "head",
+   "leg_L",
+   "leg_R",
+   "root"
+  ]
+ },
+ "props": {
+  "flashlight": {
+   "size": [
+    0.07,
+    0.07,
+    0.26
+   ],
+   "mount": "held",
+   "children": [],
+   "notes": "First-person torch, 0.24 m. Points along three.js -Z from the origin, which is the middle of the grip. Lens material is lamp_glow."
+  },
+  "battery": {
+   "size": [
+    0.09,
+    0.14,
+    0.09
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Pickup: a 6 V lantern battery, 0.14 m tall. Yellow label on all four sides."
+  },
+  "time_clock": {
+   "size": [
+    0.45,
+    0.55,
+    0.22
+   ],
+   "mount": "wall",
+   "children": [
+    "lever"
+   ],
+   "notes": "Watchman's punch clock. Origin at the centre of the back. The lever (child `lever`) is hinged on the right side and turns about X; pull it down to punch. The round lamp at lower right is status_glow."
+  },
+  "generator": {
+   "size": [
+    1.5,
+    0.99,
+    1.04
+   ],
+   "mount": "floor",
+   "children": [
+    "crank"
+   ],
+   "notes": "Hand-crank generator on a skid, 1.4 x 0.8 footprint. The crank wheel (child `crank`) is on the front, axle along the depth axis (three.js Z), and overhangs the skid by about 0.2 m toward the player."
+  },
+  "charger_dock": {
+   "size": [
+    0.6,
+    0.4,
+    0.14
+   ],
+   "mount": "wall",
+   "children": [],
+   "notes": "Charging rack for three torches. Origin at the centre of the back. The dome on the transformer box is status_glow."
+  },
+  "door_panel": {
+   "size": [
+    0.25,
+    0.43,
+    0.14
+   ],
+   "mount": "wall",
+   "children": [
+    "button"
+   ],
+   "notes": "Door control box. Origin at the centre of the back. Child `button` is the mushroom head: push it along three.js -Z (into the box) by up to 0.012 m. The lamp above it is status_glow."
+  },
+  "booth_door": {
+   "size": [
+    2.6,
+    3.0,
+    0.23
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Shutter slab that fills a 2.6 x 3.0 doorway. Origin at the bottom centre; slide it up by 3 m to open. The outside (clawed) face is three.js +Z."
+  },
+  "vent_cover": {
+   "size": [
+    1.2,
+    0.8,
+    0.09
+   ],
+   "mount": "wall",
+   "children": [],
+   "notes": "Louvred grate over a vent mouth. Origin at the centre of the back. The dark sheet behind the slats stands in for the duct; one slat is missing and one is bent."
+  },
+  "fuse_box": {
+   "size": [
+    0.51,
+    0.77,
+    0.67
+   ],
+   "mount": "wall",
+   "children": [],
+   "notes": "Fuse box with its door hanging open. Origin at the centre of the back of the 0.5 x 0.7 box; the open door swings out to the left and reaches about 0.6 m in front of the wall, so leave that space clear."
+  },
+  "desk": {
+   "size": [
+    2.4,
+    1.12,
+    0.99
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Security desk, 2.4 x 0.9, top at 0.75 m. The guard sits on the three.js +Z side (drawers and kneehole face that way). Clutter is modelled on the front 0.4 m of the top and both ends; the rear middle 1.8 x 0.5 is left clear for monitor_bank."
+  },
+  "office_chair": {
+   "size": [
+    0.66,
+    0.97,
+    0.71
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Swivel chair. Seat at 0.48 m, faces three.js +Z, turned a few degrees as if someone just left."
+  },
+  "monitor_bank": {
+   "size": [
+    1.8,
+    0.62,
+    0.54
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Three CRT monitors on a rack, made to sit on the desk top (origin at the centre of its footprint). Screens are screen_glow and carry a dead-channel picture as base colour and emissive map; from the viewer's left to right they map to atlas pictures screen_0, screen_1, screen_2."
+  },
+  "wall_map": {
+   "size": [
+    1.8,
+    1.1,
+    0.06
+   ],
+   "mount": "wall",
+   "children": [
+    "map_face"
+   ],
+   "notes": "Framed pin board. Origin at the centre of the back. Child `map_face` is a flat 1.64 x 0.76 plane (material `map`, UVs 0..1, U to the viewer's right, V up) for the live floor plan. The strip below it holds a title plate, a calendar and a note."
+  },
+  "locker": {
+   "size": [
+    0.9,
+    1.88,
+    0.61
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Two-door steel locker, 0.9 x 0.5 x 1.9. Doors face three.js +Z. The left door stands a few degrees open on a dark interior."
+  },
+  "coat_rack": {
+   "size": [
+    0.7,
+    1.89,
+    0.42
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Coat stand with a guard jacket and a cap. The jacket hangs on the right-hand hook, so it reads like a figure standing in the corner."
+  },
+  "ceiling_light": {
+   "size": [
+    1.2,
+    0.1,
+    0.3
+   ],
+   "mount": "ceiling",
+   "children": [],
+   "notes": "Twin-tube fluorescent batten, 1.2 m, hangs below the origin (centre of its top). Both tubes are lamp_glow."
+  },
+  "hanging_bulb": {
+   "size": [
+    0.1,
+    0.96,
+    0.1
+   ],
+   "mount": "ceiling",
+   "children": [],
+   "notes": "Bare bulb on a 0.8 m flex. Origin at the top of the cord; the bulb (lamp_glow) is centred about 0.91 m below it. The game may swing the whole prop about its origin."
+  },
+  "exit_sign": {
+   "size": [
+    0.4,
+    0.24,
+    0.08
+   ],
+   "mount": "wall",
+   "children": [],
+   "notes": "Emergency exit box. Origin at the centre of the back. The lettered face is exit_glow, with the picture as both base colour and emissive map."
+  },
+  "pipe_run": {
+   "size": [
+    0.6,
+    0.5,
+    2.0
+   ],
+   "mount": "ceiling",
+   "children": [],
+   "notes": "Three pipes on two trapeze hangers, a 2 m module running along three.js Z; modules butt end to end. Origin at the centre of the top (the ceiling). About 0.6 wide and 0.5 deep including the valve wheel that hangs below."
+  },
+  "duct_run": {
+   "size": [
+    0.66,
+    0.53,
+    2.01
+   ],
+   "mount": "ceiling",
+   "children": [],
+   "notes": "Sheet-metal duct, a 2 m module running along three.js Z; modules butt end to end (the ends are dark, as if open). Origin at the centre of the top; the duct hangs 0.08 m below it on straps. A grille faces down near one end."
+  },
+  "wall_fan": {
+   "size": [
+    1.2,
+    1.2,
+    0.33
+   ],
+   "mount": "wall",
+   "children": [
+    "blades"
+   ],
+   "notes": "Extractor fan in a 1.2 m square frame, 0.3 deep. Origin at the centre of the back. Child `blades` spins about the depth axis (three.js Z) at the hub. A wire guard covers the front."
+  },
+  "crate": {
+   "size": [
+    1.05,
+    1.04,
+    1.05
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Wooden shipping crate, 1 m cube, lid slightly lifted. Stencils and a shipping label on the three.js +Z face."
+  },
+  "cardboard_box": {
+   "size": [
+    0.54,
+    0.5,
+    0.55
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Cardboard box, 0.5 m, sagging and taped, damp at the bottom. Printing on the three.js +Z face."
+  },
+  "barrel": {
+   "size": [
+    0.59,
+    0.88,
+    0.59
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Oil drum, 0.58 across, 0.88 tall, dented. Label and stencil face three.js +Z."
+  },
+  "pallet": {
+   "size": [
+    1.2,
+    0.16,
+    1.0
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Timber pallet, 1.2 x 1.0 x 0.15, one deck board broken."
+  },
+  "wet_floor_sign": {
+   "size": [
+    0.32,
+    0.64,
+    0.37
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Folding wet-floor sign, 0.62 tall; the two printed faces look along three.js +Z and -Z."
+  },
+  "mop_bucket": {
+   "size": [
+    0.74,
+    1.35,
+    0.42
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "Mop bucket on castors with a wringer and a mop standing in it; the mop handle leans to 1.35 m."
+  },
+  "trash_bag": {
+   "size": [
+    0.99,
+    0.83,
+    0.67
+   ],
+   "mount": "floor",
+   "children": [],
+   "notes": "A full bin bag slumped on the floor with a smaller one against it; a party hat has poked through the small one."
+  },
+  "fire_extinguisher": {
+   "size": [
+    0.17,
+    0.52,
+    0.23
+   ],
+   "mount": "wall",
+   "children": [],
+   "notes": "Dry-powder extinguisher on a wall bracket. Origin at the centre of the back of the bracket; the cylinder hangs 0.09 m in front of the wall."
+  }
+ }
+}

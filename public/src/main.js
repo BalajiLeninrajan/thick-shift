@@ -17,13 +17,18 @@ const ON_EVENT = {
   out() { client.view = 'office'; },
   // Only the guard whose hands failed is told why the door is still open.
   fumble(e) { if (e.x.by === game.myId) { client.fumbleT = 110; client.shake = Math.max(client.shake, 5); } },
+  // A breaker went and a door dropped open. Everyone feels that one.
+  trip() { client.shake = Math.max(client.shake, 8); },
+  // The guard who pressed a tripped door's button is told it is the breaker, not their hands.
+  dead(e) { if (e.x.by === game.myId) { client.deadT = 110; client.deadK = e.x.k; } },
 };
 
 function reactToEvents(S) {
   for (const e of S.evs) {
     if (e.id <= client.lastEv) continue;
     client.lastEv = e.id;
-    SFX[e.type]?.(e);
+    // On the floor every sound has a place, and three/sound.js plays it there. The win jingle has none.
+    if (S.mode !== 'floor' || e.type === 'win') SFX[e.type]?.(e);
     ON_EVENT[e.type]?.(e);
   }
 }
@@ -36,8 +41,22 @@ function animate(S) {
   if (client.glitch > 0) client.glitch--;
   if (client.scareT > 0) client.scareT--;
   if (client.fumbleT > 0) client.fumbleT--;
+  if (client.deadT > 0) client.deadT--;
   const wear = client.view === 'cams' ? -camDrain(S) : CAM_RECOVER;
   client.signal = Math.max(0, Math.min(camCap(S), client.signal + wear / 60));
+}
+
+// The 3D mode (three/app.js) is fetched the first time a night on the floor
+// is drawn. Until it arrives the 2D canvas keeps showing the backdrop.
+let floor = null, floorLoading = false, floorThreat = 0;
+function drawFloor() {
+  if (!floor) {
+    if (!floorLoading) { floorLoading = true; import('./three/app.js').then(m => { floor = m; }, err => { game.error = { title: 'The 3D mode failed to load', detail: String(err.message || err) }; }); }
+    return;
+  }
+  const app = floor.frame(performance.now());
+  floorThreat = app.threat();
+  if (window.ts) window.ts.floor = app;   // ?debug
 }
 
 function frame() {
@@ -45,10 +64,11 @@ function frame() {
   const S = game.S;
   if (S) reactToEvents(S);
   syncOverlay();
-  render(performance.now() / 1000);
+  const onFloor = S && S.mode === 'floor' && S.phase !== 'lobby' && S.phase !== 'won';
+  if (onFloor) drawFloor(); else { floor?.hide(); render(performance.now() / 1000); }
   if (S) animate(S);
   // Your pulse only picks up for something you can see: an open doorway on your screen, in the booth.
-  if (S && S.phase === 'play') ambience(client.view === 'office' ? seenThreat(S, client.pan) : 0, dreadOf(S), sanityOf(S, game.myId)); else ambience(-1);
+  if (S && S.phase === 'play') ambience(onFloor ? floorThreat : client.view === 'office' ? seenThreat(S, client.pan) : 0, dreadOf(S), onFloor ? 1 : sanityOf(S, game.myId)); else ambience(-1);
   syncControls();
 }
 

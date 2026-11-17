@@ -139,16 +139,24 @@ function teeth(x0, x1, y, h, n) {
 // Costume fur: the mascot's colour, duller with each stage.
 const furCol = d => mix(d.col, P.surface0, [.02, .2, .32][o.rot]);
 
-// The one part nobody slimmed down.
+// The one part nobody slimmed down. HIPS is the knob: [width, height] scale
+// about the hip line. Wider than tall, so it reads as a shelf, not a balloon.
+const HIPS = [1.6, 1.38], HIP_Y = 74;
 function rear(B, back) {
-  if (!back) { blob(-24, 72, 24, 25, B); blob(24, 72, 24, 25, B); blob(0, 64, 36, 30, B); return; }
+  c.save(); c.translate(0, HIP_Y); c.scale(HIPS[0], HIPS[1]); c.translate(0, -HIP_Y);
+  if (!back) { blob(-24, 72, 24, 25, B); blob(24, 72, 24, 25, B); blob(0, 64, 36, 30, B); c.restore(); return; }
   blob(-20, 76, 26, 28, B); blob(20, 76, 26, 28, B);
-  if (o.dark) return;
-  c.beginPath(); c.moveTo(0, 50); c.quadraticCurveTo(-2, 80, 0, 104); c.strokeStyle = P.ink; c.lineWidth = 2.5; c.stroke();
-  for (const sx of [-1, 1]) { c.beginPath(); c.arc(sx * 20, 76, 20, sx > 0 ? Math.PI - 2.2 : .5, sx > 0 ? Math.PI - .5 : 2.2); c.strokeStyle = rgba(P.ink, .45); c.lineWidth = 2.5; c.stroke(); }
+  if (!o.dark) {
+    c.beginPath(); c.moveTo(0, 50); c.quadraticCurveTo(-2, 80, 0, 104); c.strokeStyle = P.ink; c.lineWidth = 2; c.stroke();
+    for (const sx of [-1, 1]) {
+      c.beginPath(); c.arc(sx * 20, 76, 20, sx > 0 ? Math.PI - 2.2 : .5, sx > 0 ? Math.PI - .5 : 2.2); c.strokeStyle = rgba(P.ink, .45); c.lineWidth = 2; c.stroke();
+      c.beginPath(); c.arc(sx * 21, 78, 23, sx > 0 ? .5 : Math.PI - 1.5, sx > 0 ? 1.5 : Math.PI - .5); c.strokeStyle = rgba(P.ink, .55); c.lineWidth = 1.8; c.stroke();   // the fold underneath
+    }
+  }
+  c.restore();
 }
 function legs(B, kneeX = 60, kneeY = 118) {
-  for (const sx of [-1, 1]) { limb([[sx * 30, 86], [sx * kneeX, kneeY], [sx * 44, 148]], 20, 10, B); blob(sx * 52, 151, 22, 7, B); }
+  for (const sx of [-1, 1]) { limb([[sx * 36, 86], [sx * kneeX, kneeY], [sx * 44, 148]], 30, 10, B); blob(sx * 52, 151, 22, 7, B); }
 }
 function arms(B, elbow = [72, -18], wrist = [90, 72]) {
   for (const sx of [-1, 1]) { limb([[sx * 30, -92], [sx * elbow[0], elbow[1]], [sx * wrist[0], wrist[1]]], 14, 7, B); hand(sx * wrist[0], wrist[1], sx, B); }
@@ -245,7 +253,7 @@ const GORE = {
 function costume(d, back) {
   const B = furCol(d);
   if (!back) rear(B, false);
-  for (const sx of [-1, 1]) { limb([[sx * 30, 90], [sx * 40, 146]], 26, 20, B); blob(sx * 44, 151, 24, 8, B); }
+  for (const sx of [-1, 1]) { limb([[sx * 36, 90], [sx * 42, 146]], 34, 20, B); blob(sx * 44, 151, 24, 8, B); }
   blob(0, -30, 46, 62, B);
   if (!back) blob(0, -18, 30, 44, d.belly);
   for (const sx of [-1, 1]) { limb([[sx * 38, -70], [sx * 66, 4]], 20, 15, B); blob(sx * 68, 10, 13, 12, B); }
