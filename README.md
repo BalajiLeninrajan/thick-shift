@@ -9,7 +9,7 @@ There is no build step. The game is plain ES modules in `public/`, served by a C
 ```sh
 pnpm install
 pnpm dev        # local server through Wrangler
-pnpm deploy     # publish to Cloudflare Workers
+pnpm run deploy # publish to Cloudflare Workers (plain `pnpm deploy` is a pnpm command)
 ```
 
 Any static server pointed at `public/` runs the game solo. Rooms need the Worker.
