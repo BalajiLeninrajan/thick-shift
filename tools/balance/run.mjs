@@ -10,13 +10,16 @@
 //                                                 sim.js, rules.js, config.js and state.js
 //
 // --src is how to see what a rules change did: save the old files somewhere
-// (git show HEAD:public/src/sim.js > /tmp/old/sim.js, and the other three, plus
-// a package.json holding {"type":"module"}) and run both. The guards cope with
-// a sim that has no breakers or generator heat.
+// (git show HEAD:public/src/sim.js > /tmp/old/sim.js, and the other three) and
+// run both. The guards cope with a sim that has no breakers or generator heat.
+//
+// It exits non-zero if a target is missed, unless --src is given: another copy
+// of the sim is being measured, not judged.
 //
 // Needs Node 22.7 or later (it imports the game's .js files as ES modules).
-// No dependencies. Each cell runs in its own process, as many at once as there
-// are cores.
+// No dependencies. Each row runs in its own process, as many at once as there
+// are cores (--jobs changes that). The whole table is about 40 million sim
+// ticks, which is minutes, not seconds. --n 50 is enough for a quick look.
 //
 // The guards (see crew below):
 //   exact    sees every door, shuts when a mascot's leanOf reaches .78, reopens at once.
@@ -26,9 +29,14 @@
 //            the booth it sweeps between the two halves of the room every .8 s.
 //            Two or more in the booth see every door.
 //   sloppy   human with .6 to 1.4 s to shut and 2 to 5 s to reopen.
-//   cranker  turns the handle whenever power is under 97% and it is not seized.
+//   cranker  turns the handle whenever power is under 97%, lets go when it is
+//            nearly seized (heat .95) and comes back once it is out of the red (.8).
+//   rider    a cranker who never lets go and waits out every seize.
 //   turtle   presses shut on every open door every .35 s.
 //   slam all shuts all three doors .3 to .8 s after a creak, opens them when the doors are clear.
+//   counter  never looks. Shuts all three a count after each creak (a fixed share of
+//            the night's door wait, with 10% error) and opens them .3 to .8 s after the bang.
+//   dark     any of the above with the booth lights switched off all night.
 import { execFile } from 'node:child_process';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -73,6 +81,19 @@ const ROWS = [
   ['G7', 'six, 5 booth, 1 crank', 6, { crank: 1 }],
   ['G8', 'six sloppy, 5 booth, 1 crank', 6, { crank: 1, r0: .6, r1: 1.4, o0: 2, o1: 5 }],
   ['G9', 'four, two at the generator at once', 4, { crank: 2 }],
+  ['G10', 'trio, the cranker rides it to the seize', 3, { crank: 1, ride: true }],
+  // Counting after the creak and shutting everything, nobody looking. Each
+  // count is the one of .3, .4 and .5 of the wait that did best for that crew.
+  ['K1', 'counter, solo, no crank', 1, { count: .4 }],
+  ['K2', 'counter, 2 guards, 1 cranks', 2, { count: .3, crank: 1 }],
+  ['K4', 'counter, 4 guards, 1 cranks', 4, { count: .3, crank: 1 }],
+  ['K6', 'counter, 6 guards, 1 cranks', 6, { count: .4, crank: 1 }],
+  // The lights off all night, watching the doors in the dark, nobody cranking.
+  ['D1', 'dark, solo human sweep', 1, { dark: true }],
+  ['D2', 'dark, duo on the doors', 2, { dark: true }],
+  ['D4', 'dark, four on the doors', 4, { dark: true }],
+  ['D6', 'dark, six on the doors', 6, { dark: true }],
+  ['D9', 'dark between attacks, lit on the creak, duo', 2, { darkLull: true }],
 ];
 
 // What each scenario has to do. r is the scenario's results by night, all is
@@ -89,7 +110,8 @@ const CHECKS = {
   ],
   S2: r => [['wins at least 85% of night 5s', on(r, [5], x => x.win >= 85)], ['never trips a breaker', on(r, ALL, x => x.trips === 0)]],
   S3: r => [['night 5: at most 66 s on the handle, ends at 30 to 50%', on(r, [5], x => x.crank <= 66 && x.endP >= 30 && x.endP <= 50)]],
-  S4: r => [['trips a breaker on at most one night in fifty', on(r, ALL, x => x.trips <= .02)]],
+  // Shutting everything blind holds the doors through the whole lurk, so it trips now and then. It should cost heat, not the night.
+  S4: r => [['wins at least 93% of nights 1 and 3 and 70% of night 5s', on(r, ALL, (x, n) => x.win >= (n === 5 ? 70 : 93))], ['at most 3% of nights end through a tripped door', on(r, ALL, x => x.tripDeath * (100 - x.win) / 100 <= 3)]],
   S5: r => [['wins at least 97% of every night', on(r, ALL, x => x.win >= 97)]],
   T1: r => [['wins at most 5%', on(r, ALL, x => x.win <= 5)]],
   T2: r => [['never wins, dead before 3 AM', on(r, ALL, x => x.win <= 1 && x.diedAt < 3)], ['at least 90% of deaths come through a tripped door', on(r, ALL, x => x.tripDeath >= 90)]],
@@ -97,7 +119,8 @@ const CHECKS = {
   T4: r => [['never wins, dead before 3 AM', on(r, ALL, x => x.win <= 1 && x.diedAt < 3)]],
   T5: r => [['never wins, dead before 3 AM', on(r, ALL, x => x.win <= 1 && x.diedAt < 3)]],
   T6: r => [['wins at most 5%', on(r, ALL, x => x.win <= 5)]],
-  T7: (r, all) => [['clearly worse than the trio that plays properly (G4): at least 10 points fewer wins, and under 70% on night 5', on(r, ALL, (x, n) => x.win <= (n === 5 ? 70 : 90) && (!all.G4?.[n] || x.win <= all.G4[n].win - 10))]],
+  // This guard sees a mascot in the dark the moment it arrives (atDoor), which no player can, so it is an upper bound.
+  T7: (r, all) => [['clearly worse than the trio that plays properly (G4): at least 10 points fewer wins every night', on(r, ALL, (x, n) => !all.G4?.[n] || x.win <= all.G4[n].win - 10)], ['night 5 ends under 10% power', on(r, [5], x => x.endP == null || x.endP < 10)]],
   T8: r => [['wins at most 2%', on(r, ALL, x => x.win <= 2)]],
   T9: r => [['wins under 35% of night 1s and under 20% after', on(r, ALL, (x, n) => x.win < (n === 1 ? 35 : 20))]],
   C2: r => [['wins under 65%', on(r, ALL, x => x.win < 65)]],
@@ -107,10 +130,20 @@ const CHECKS = {
   G3: r => [['night 5 wins 50 to 75%: not calling the cranker back is what kills', on(r, [5], x => x.win >= 50 && x.win <= 75)]],
   G4: r => [['wins at least 97%', on(r, ALL, x => x.win >= 97)], ['night 5 ends at 50 to 70%', on(r, [5], x => x.endP >= 50 && x.endP <= 70)], ['never trips a breaker', on(r, ALL, x => x.trips === 0)]],
   G5: r => [['wins at least 97%', on(r, ALL, x => x.win >= 97)], ['night 5 ends at 15 to 35%: one camera watcher is paid for', on(r, [5], x => x.endP >= 15 && x.endP <= 35)]],
-  G6: r => [['night 5 runs out of power at least 90% of the time: two camera watchers are not paid for', on(r, [5], x => x.out >= 90)]],
+  G6: r => [['night 5 runs out of power or ends under 10%: two camera watchers use up all one handle makes', on(r, [5], x => x.out >= 50 || x.endP < 10)]],
   G7: r => [['wins at least 97%', on(r, ALL, x => x.win >= 97)], ['night 5 ends at 50 to 70%', on(r, [5], x => x.endP >= 50 && x.endP <= 70)]],
   G8: r => [['wins at least 95%', on(r, ALL, x => x.win >= 95)], ['at most 3% of nights end through a tripped door', on(r, ALL, x => x.tripDeath * (100 - x.win) / 100 <= 3)]],
   G9: (r, all) => [['a second guard at the generator adds nothing: night 5 within 3 points of G7', on(r, [5], x => !all.G7?.[5] || near(x.endP, all.G7[5].endP, 3))]],
+  G10: (r, all) => [['riding the handle into a seize costs at least 10 s of cranking on night 5 against G4', on(r, [5], x => !all.G4?.[5] || x.crank <= all.G4[5].crank - 10)]],
+  K1: r => [['a solo guard who never looks loses at least one night in ten', on(r, ALL, x => x.win <= 90)]],
+  K2: (r, all) => [['worse than the duo that plays properly (G2): night 5 ends at least 10 points of power lower, night 3 wins under 95%', on(r, [5], x => !all.G2?.[5] || x.endP <= all.G2[5].endP - 10) && on(r, [3], x => x.win < 95)]],
+  K4: r => [['wins under 90% of nights, under 65% of night 3s', on(r, ALL, (x, n) => x.win < (n === 3 ? 65 : 90))]],
+  K6: r => [['wins under 60%', on(r, ALL, x => x.win < 60)]],
+  D1: r => [['wins at most 10%', on(r, ALL, x => x.win <= 10)]],
+  D2: r => [['wins under 35% from night 3', on(r, [3, 4, 5], x => x.win < 35)]],
+  D4: r => [['wins under 35% from night 3', on(r, [3, 4, 5], x => x.win < 35)]],
+  D6: r => [['wins under 35% from night 3', on(r, [3, 4, 5], x => x.win < 35)]],
+  D9: r => [['night 5 wins under 70%: the lights take too long to strike to switch them on at the creak', on(r, [5], x => x.win < 70)]],
 };
 
 /* ---------- one cell: a scenario on one night, N times ---------- */
@@ -141,6 +174,7 @@ async function runCell({ id, guards, crewOpts, night, n, seed }) {
   //   o0, o1          seconds to reopen a clear door, default .6 to 2
   //   sweep           seconds between pans for a guard alone in the booth, default .8
   //   crank: n        the last n guards are crankers. below: they crank under this power, default 97
+  //   ride            crankers never let go before it seizes
   //   crankQuiet      crankers come back to the booth .4 to .8 s after a creak
   //   cams: n         the n guards before the crankers sit on the cameras all night
   //   soloCrank: p    the first guard also cranks under p% power while nothing is at a door
@@ -148,13 +182,29 @@ async function runCell({ id, guards, crewOpts, night, n, seed }) {
   //   cycle: [hi, lo] never look: open a door at heat hi, shut it again at lo
   //   smart: [hi, lo] the same, but always shut on a mascot at the door
   //   creakAll        slam all
+  //   count: f        the counter, shutting all three f of the night's door wait after each creak
+  //   dark            the first guard switches the lights off whenever they are on
+  //   darkLull        the lights go off when the doors are clear and on again .2 to .4 s after a creak
   function crew(g, o) {
     const ids = Array.from({ length: g }, (_, i) => 'p' + i);
-    const st = { shutAt: {}, openAt: {}, retry: {}, pan: 0, panAt: 0, lastEv: 0, backAt: 0, shutWant: { L: true, V: true, R: true } };
+    const st = { shutAt: {}, openAt: {}, retry: {}, pan: 0, panAt: 0, lastEv: 0, backAt: 0, shutWant: { L: true, V: true, R: true }, heard: 0, pending: [], reopenAt: 0, litAt: 0 };
     const view = (id, v) => { if (game.players[id].view !== v) sim.act(id, { t: 'view', v, cam: 0 }); };
     const press = (id, k) => { if ((st.retry[k] || 0) > game.S.t) return; st.retry[k] = game.S.t + .35; sim.act(id, { t: 'door', k }); };
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
     return S => {
-      const t = S.t, canCrank = S.power < (o.below ?? 97) && !S.seized;
+      const t = S.t;
+      // A cranker lets go near the top of the dial and waits for it to leave the red, unless it rides.
+      if (!o.ride && (S.gen ?? 0) >= .95) st.cooling = true;
+      if ((S.gen ?? 0) < .8) st.cooling = false;
+      const canCrank = S.power < (o.below ?? 97) && !S.seized && !st.cooling;
+      const fresh = S.evs.filter(e => e.id > st.heard);
+      if (fresh.length) st.heard = fresh[fresh.length - 1].id;
+      if (o.dark && S.lights && S.power > 0) sim.act(ids[0], { t: 'lights' });
+      if (o.darkLull && S.power > 0) {
+        if (fresh.some(e => e.type === 'arrive')) st.litAt = t + rnd(.2, .4);
+        const want = anyAt(S) ? t >= st.litAt : false;
+        if (S.lights !== want) sim.act(ids[0], { t: 'lights' });
+      }
       ids.forEach((id, i) => {
         if (i >= g - (o.crank || 0)) {
           const at = anyAt(S);
@@ -178,6 +228,22 @@ async function runCell({ id, guards, crewOpts, night, n, seed }) {
       const booth = ids.filter(id => game.players[id].view === 'office');
       if (!booth.length) return;
       const p = booth[0];
+      if (o.count) {
+        // Nobody looks. Each creak starts a count, and the doors stay shut from
+        // the end of the count until the bang, or until it has surely passed.
+        const W = R.doorWait(S.night), longest = W * (1 + (R.REVEAL ?? .6) * (R.LURK ?? 0));
+        for (const e of fresh) {
+          if (e.type === 'arrive') st.pending.push({ at: t + rnd(.15, .35) + o.count * W * (1 + gauss() * .1), until: t + longest + 1 });
+          if (e.type === 'bang') { st.pending.shift(); st.reopenAt = t + rnd(.3, .8); }
+        }
+        st.pending = st.pending.filter(x => t < x.until);
+        const want = st.pending.some(x => t >= x.at);
+        for (const k of DOORS) {
+          if (want && !S.doors[k] && !S.trip?.[k]) press(p, k);
+          if (!want && S.doors[k] && t >= st.reopenAt) press(p, k);
+        }
+        return;
+      }
       if (o.hold) for (const k of o.hold) if (!S.doors[k]) press(p, k);
       if (o.cycle || o.smart) {
         const [hi, lo] = o.cycle || o.smart;
@@ -293,6 +359,5 @@ crank  seconds the handle turned  att    attacks per night                     t
   console.log('\nTargets');
   for (const id in by) for (const [text, ok] of CHECKS[id]?.(by[id], by) || []) { if (!ok) failed++; console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${id}  ${text}`); }
   console.log(failed ? `\n${failed} target${failed === 1 ? '' : 's'} missed.` : '\nEvery target met.');
-  // Another copy of the sim is being measured, not judged.
   if (failed && !arg('src')) process.exitCode = 1;
 }

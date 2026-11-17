@@ -28,10 +28,14 @@ FUR, HAT, POM, TOOTH, EYE, DARK, GUM, SKIN, BONE, MEAT, GUT, STRAND, MASK, ZIP, 
 _CLS = {}
 
 
+_TUFTS = [0]      # tufts made so far in this scene: each gets its own cell in the atlas
+
+
 def fresh():
     """Empty the scene and forget the class materials that went with it."""
     reset()
     _CLS.clear()
+    _TUFTS[0] = 0
 
 
 def cmat(cls):
@@ -294,7 +298,7 @@ def tufts(ob, n, length, width, seed, where=None, droop=.55, cls=FUR, jitter=.35
     up the silhouette. Returns a new object to join into the part."""
     rng = np.random.default_rng(seed)
     pts, nrm = surface_points(ob, n, rng, where)
-    vs, fs = [], []
+    vs, fs, tuv = [], [], []
     for p, nn in zip(pts, nrm):
         L = length * (.45 + rng.random() * .9); w = width * (.6 + rng.random() * .8)
         d = nn * (1 - droop) + np.array([0, 0, -1.0]) * droop + (rng.random(3) - .5) * jitter
@@ -310,7 +314,9 @@ def tufts(ob, n, length, width, seed, where=None, droop=.55, cls=FUR, jitter=.35
             for k in range(3):
                 a = k * 2.094 + s * .5
                 vs.append(centre + (side * math.cos(a) * 1.6 + up * math.sin(a) * .6) * rr)
+                tuv.append((.15 + .35 * k, t))
         vs.append(p + d * L + np.array([0, 0, -1.0]) * L * .35)
+        tuv.append((.5, 1))
         tip = len(vs) - 1
         for s in range(segs - 1):
             for k in range(3):
@@ -318,7 +324,19 @@ def tufts(ob, n, length, width, seed, where=None, droop=.55, cls=FUR, jitter=.35
                 fs.append((a0, a1, a1 + 3, a0 + 3))
         top = base + (segs - 1) * 3
         for k in range(3): fs.append((top + k, top + (k + 1) % 3, tip))
-    return mesh_obj('tufts', vs, fs, cls)
+    ob = mesh_obj('tufts', vs, fs, cls)
+    # Thousands of spikes would shred the atlas into islands that are mostly margin. Each tuft
+    # instead carries its own number and a root-to-tip UV, and unwrap() gives it one small cell.
+    me = ob.data
+    per = (segs - 1) * 3 + 3                                   # faces per tuft
+    ids = _TUFTS[0] + 1 + np.arange(len(me.polygons)) // per
+    _TUFTS[0] += len(pts)
+    me.attributes.new('tuft_id', 'INT', 'FACE').data.foreach_set('value', ids.astype(np.int32))
+    lv = np.empty(len(me.loops), dtype=np.int32); me.loops.foreach_get('vertex_index', lv)
+    # a 3-vector, not FLOAT2: Blender treats every FLOAT2 corner attribute as a UV map, and unwrap() clears those
+    t3 = np.zeros((len(lv), 3), dtype=np.float32); t3[:, :2] = np.array(tuv, dtype=np.float32).reshape(-1, 2)[lv]
+    me.attributes.new('tuft_uv', 'FLOAT_VECTOR', 'CORNER').data.foreach_set('vector', t3.ravel())
+    return ob
 
 
 def strand(p0, length, r, rng, cls=STRAND, lean=(0, 0, 0), wave=.03, segs=5, sides=3):
@@ -423,11 +441,24 @@ class Tex:
         if h is not None: self.h += h * m
 
 
+TUFT_COLS, TUFT_ROW = 256, 24 / 2048      # tuft cells: 8 x 24 texels of a 2048 atlas
+
+
+def _tuft_ids(o):
+    a = o.data.attributes.get('tuft_id')
+    ids = np.zeros(len(o.data.polygons), dtype=np.int32)
+    if a is not None: a.data.foreach_get('value', ids)
+    return ids
+
+
 def unwrap(objs, dense=()):
     """One atlas for every part. Objects in `dense` get more texels per
-    metre (pairs of object, factor): faces deserve it, soles do not."""
+    metre (pairs of object, factor): faces deserve it, soles do not. Tufts
+    are kept out of the packing and laid in a strip of cells along the bottom."""
     for o in objs:
         while o.data.uv_layers: o.data.uv_layers.remove(o.data.uv_layers[0])
+        o.data.uv_layers.new(name='uv')
+        o.data.polygons.foreach_set('hide', _tuft_ids(o) > 0)       # hidden faces are left alone by the UV operators
     select(objs)
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
@@ -439,8 +470,24 @@ def unwrap(objs, dense=()):
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.select_all(action='SELECT')
-    bpy.ops.uv.pack_islands(rotate=True, margin=.0025, scale=True)
+    bpy.ops.uv.pack_islands(rotate=True, margin=.002, scale=True)
     bpy.ops.object.mode_set(mode='OBJECT')
+    strip = math.ceil(_TUFTS[0] / TUFT_COLS) * TUFT_ROW
+    for o in objs:
+        me = o.data
+        ids = _tuft_ids(o)
+        me.polygons.foreach_set('hide', np.zeros(len(ids), dtype=bool))
+        lt = np.empty(len(ids), dtype=np.int32); me.polygons.foreach_get('loop_total', lt)
+        lid = np.repeat(ids, lt)                                    # tuft number of every corner
+        uv = np.empty(len(me.loops) * 2, dtype=np.float32); me.uv_layers.active.data.foreach_get('uv', uv); uv = uv.reshape(-1, 2)
+        uv[:, 1] = strip + uv[:, 1] * (1 - strip)                   # everything else moves up above the strip
+        if (lid > 0).any():
+            t = np.empty(len(me.loops) * 3, dtype=np.float32); me.attributes['tuft_uv'].data.foreach_get('vector', t); t = t.reshape(-1, 3)
+            cell = lid - 1
+            tu = ((cell % TUFT_COLS) + .125 + t[:, 0] * .75) / TUFT_COLS
+            tv = ((cell // TUFT_COLS) + .06 + t[:, 1] * .88) * TUFT_ROW
+            uv[lid > 0] = np.stack([tu, tv], axis=1)[lid > 0]
+        me.uv_layers.active.data.foreach_set('uv', uv.ravel())
 
 
 def raster(uv, attrs, W):

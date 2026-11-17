@@ -55,4 +55,4 @@ What "detailed and scary" means here:
 - Form. Sculpted masses that flow into each other (metaballs or a voxel remesh, then subdivide, displace and decimate to budget), not primitives parked side by side. Hair and strands are geometry where they show in silhouette.
 - Wrongness before gore. Proportions slightly off, eyes that do not agree, a mouth too wide, human teeth in a plush face. The last stage adds the gore the 2D art in `public/src/render/mascot.js` already has.
 - The torch test. The face has to read when lit from beside the camera, and the `eye_glow` eyes have to show as two points in the dark.
-- The hips. Every mascot has enormous hips and a huge rear, wider than tall, at every stage. It is the joke in the game's title.
+- The hips. At stages 0 and 1 every mascot has enormous hips and a huge rear, wider than tall. It is the joke in the game's title. Stage 2 drops the joke: the rear is small and wasted, no wider than the shoulders, so the nightmare form reads as starved rather than comic.

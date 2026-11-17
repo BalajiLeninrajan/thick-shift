@@ -2,7 +2,7 @@
 // Everything that never moves is baked into one wide sprite (see roomSprite);
 // each frame draws a slice of it and then the live parts on top.
 import { W, H, WORLD, ZONES, P } from '../config.js';
-import { atDoor, shownAtDoor, seenThreat, leanOf, rotOf, dreadOf, lightsOn, REVEAL, DOOR_HEAT, tripLeft } from '../rules.js';
+import { atDoor, shownAtDoor, seenThreat, leanOf, rotOf, dreadOf, lightsOn, revealAt, DOOR_HEAT, tripLeft } from '../rules.js';
 import { c, mix, rgba, hash, lerp, ell, rect, rrect, poly, vgrad, glow, vignette, text, bake, pxScale } from './canvas.js';
 import { drawMascot, drawFace } from './mascot.js';
 
@@ -225,7 +225,7 @@ function doorway(k, label, doorPos) {
   let lean = 0;
   here.forEach((m, j) => { const p = standing(m, X + z.w / 2, j); lean = Math.max(lean, p.lean); drawMascot(m.i, p.x, p.y, p.s, { t, dark: !on, rot: rotOf(S, m) }); });
   // It starts as a shape in the dark and comes into the light as it runs out of patience.
-  if (here.length && powered) rect(X, z.y, z.w, z.h, rgba(P.ink, .96 * Math.max(0, 1 - (lean - REVEAL) / .08)));   // it steps out of the dark over a moment, not a frame
+  if (here.length && powered) rect(X, z.y, z.w, z.h, rgba(P.ink, .96 * Math.max(0, 1 - (lean - revealAt(S)) / .08)));   // it steps out of the dark over a moment, not a frame
   if (here.length && on) { const a = (.35 + dread * .65) * (1 - lean * .75); rect(X, z.y, z.w, z.h, vgrad(z.y, z.y + z.h, [[0, rgba(P.ink, .82 * a)], [.5, rgba(P.ink, .6 * a)], [1, rgba(P.ink, .78 * a)]])); }
   if (doorPos > .01) slab(X, z.y - z.h * (1 - doorPos), z.w, z.h);
   c.restore();
@@ -236,7 +236,8 @@ function doorway(k, label, doorPos) {
   statusPlate(X + z.w / 2, z.y + z.h + 30, label, k);
 }
 
-// Eyes only, redrawn over the blackout so they still glow.
+// Eyes only, redrawn over the blackout so they still glow. With the lights
+// switched off shownAtDoor holds them back until the last moment (REVEAL_DARK).
 function doorwayEyes(k) {
   const z = ZONES[k], X = z.x - pan;
   c.save(); c.beginPath(); c.rect(X, z.y, z.w, z.h); c.clip();
@@ -298,6 +299,8 @@ function dust(level) {
 // door: animated door positions from the client, 0 open to 1 shut.
 export function drawOffice(state, panX, door, time) {
   S = state; pan = panX; t = time; powered = S.power > 0; on = lightsOn(S); dread = dreadOf(S);
+  // Switched on but not struck yet (LIGHTS_WARM): the tubes flicker. What is in a doorway still follows the dark rules.
+  if (!on && powered && S.lights !== false && hash(Math.floor(t * 14)) > .55) on = true;
   const level = lampLevel(), res = pxScale();
   c.drawImage(roomSprite(on, powered), pan * res, 0, W * res, H * res, 0, 0, W, H);
   doorway('L', 'Left door', door.L); doorway('R', 'Right door', door.R);

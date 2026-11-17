@@ -12,6 +12,8 @@
 # renders previews of the named props only. `studio` lights the previews
 # evenly instead of by flashlight, `noprev` skips them. `pose` also renders
 # the guard with every joint turned, to show that no gap opens.
+# `spot=desk:0.5,-0.3,0.8,0.3,20` adds a close-up of a prop: a point in the
+# prop's own Blender axes, a radius and a camera azimuth (props_a_desk_close.png).
 #
 # Files here: textures.py draws the textures (run automatically when ./tex is
 # missing), kit.py is the mesh and material toolkit, gameplay.py, booth.py
@@ -26,6 +28,7 @@ import kit
 ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 ONLY = next((a[5:].split(',') for a in ARGS if a.startswith('only=')), None)
 PREV = next((a[5:].split(',') for a in ARGS if a.startswith('prev=')), None)
+SPOTS = [a[5:].split(':') for a in ARGS if a.startswith('spot=')]
 LIGHT = 'studio' if 'studio' in ARGS else 'flashlight'
 PREVIEW = 'noprev' not in ARGS
 DO_GUARD = 'guard' in ARGS or not (ONLY or 'props' in ARGS)
@@ -80,7 +83,9 @@ def shots(name, spots, res=400, samples=12, pose=None):
         cam.location = eye; cam.rotation_euler = (c - eye).to_track_quat('-Z', 'Y').to_euler()
         if lamp.data.type == 'SPOT':
             lamp.data.energy = 180 * max(1, r) ** 2
-            lamp.location = eye + Vector((math.cos(a), math.sin(a), 0)) * .35 + Vector((0, 0, -.3))
+            k = min(1, r * 2)                                         # hold the torch closer in for small things, and above the floor
+            lamp.location = eye + Vector((math.cos(a), math.sin(a), 0)) * .35 * k + Vector((0, 0, -.3 * k))
+            lamp.location.z = max(lamp.location.z, .05)
             lamp.rotation_euler = (c - lamp.location).to_track_quat('-Z', 'Y').to_euler()
         else:
             lamp.rotation_euler = (math.radians(50), 0, a + math.radians(30))
@@ -93,12 +98,12 @@ def build_props():
     import gameplay, booth, service                                    # each registers its props with kit.prop
     fresh()
     names = [n for n in kit.PROPS if not ONLY or n in ONLY]
-    info = {}; spots = {}; roots = []
+    info = {}; spots = {}; origins = {}; roots = []
     for i, name in enumerate(names):
         spec = kit.PROPS[name]
         at = ((i % 6) * CELL, (i // 6) * CELL, MOUNT_Z[spec['mount']])
         ob, lo, hi, kids = assemble(name, spec, at)
-        roots.append(ob)
+        roots.append(ob); origins[name] = at
         size = hi - lo
         info[name] = dict(size=[round(size.x, 2), round(size.z, 2), round(size.y, 2)], mount=spec['mount'], children=kids, notes=spec['notes'])
         spots[name] = ((Vector(at) + (lo + hi) / 2), max(size.length / 2 * 1.05, .12), tris([ob] + list(ob.children)))
@@ -106,7 +111,11 @@ def build_props():
     export_glb('props_a', roots)
     rep = report('props_a')
     shown = [n for n in names if not PREV or n in PREV]
-    if PREVIEW and shown: shots('props_a', {n: (*spots[n][:2], 35) for n in shown})
+    views = {n: (*spots[n][:2], 35) for n in shown}
+    for n, v in SPOTS:
+        x, y, z, r, az = map(float, v.split(','))
+        views[n + '_close'] = (Vector(origins[n]) + Vector((x, y, z)), r, az)
+    if PREVIEW and views: shots('props_a', views)
     return info, rep
 
 

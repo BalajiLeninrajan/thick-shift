@@ -270,6 +270,13 @@ export const SFX = {
   seize() { tone(200, .5, 'sawtooth', .16, 40); noise(.5, .22, { band: 900, band2: 160, q: 1.5 }); },
   // Cool enough to turn again.
   unseize() { tone(700, .04, 'triangle', .06); },
+  // A shut door's motor is close to tripping its breaker: a rising whine and
+  // the relay chattering. Played in every view, so a guard on the cameras
+  // hears a trip coming in time to open the door.
+  strain() {
+    tone(140, .9, 'sawtooth', .07, 230); tone(281, .9, 'square', .025, 460);
+    for (let i = 0; i < 5; i++) tone(2200, .015, 'square', .05, 0, .25 + i * .11);
+  },
 };
 
 export const click = (f = 600) => tone(f, .05, 'square', .05);

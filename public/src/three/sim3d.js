@@ -14,7 +14,11 @@
 // The numbers here were tuned against scripted guards in tools/balance/floor.mjs
 // (`node tools/balance/floor.mjs`), which plays every night with careless,
 // competent and expert guards alone and in groups, and with the strategies that
-// should not work. What each number was tuned against is noted beside it.
+// should not work. What each number was tuned against is noted beside it. The
+// target: a competent crew of three survives night 1 every time and each later
+// night about 22 points less often (78, 55, 33, then 10% of night 5s); a guard
+// alone and crews of two, four and six fall the same way with no cliffs; and
+// every strategy in the harness's second half loses.
 import { MASC, FINAL_NIGHT, DOORS } from '../config.js';
 import { game, rnd } from '../state.js';
 import { CLOCKS, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, REST, BOOTH, DUCTS, MASCOT_R, PLAYER_R, DOORWAYS, ROOMS3, walkable, slide, clear, sees, reaches, roomAt, roomCentre, route, spawnPoint } from './map.js';
@@ -23,43 +27,60 @@ import { CLOCKS, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, REST, BOOTH, DUCTS, 
 export const F = {
   HOUR: 70,            // seconds per in-game hour: a night is seven minutes
   WALK: 3, SPRINT: 5.2,
-  BAT_LIFE: 80,        // seconds of light in a full torch
-  BAT_PICKUP: .5,      // what a spare battery adds
-  CHARGE: 1 / 20,      // torch charge per second at the booth dock
+  // Seconds of light in a full torch, what a spare battery adds, and charge per second at the booth dock. Tuned
+  // so the dock cannot keep up with a torch left on outside: a competent guard spends a quarter to a third of
+  // night 5 under a quarter of a torch and runs dry about once every three nights, and a tenth to a third of
+  // all flattenings happen with the torch dead.
+  BAT_LIFE: 65,
+  BAT_PICKUP: .5,
+  CHARGE: 1 / 60,
   REACH: 2.2,          // how close you must be to use something
   PUNCH_HOLD: 1.2, PEEL_HOLD: 3,   // seconds of holding the use key (timed by the client)
   BEAM_RANGE: 12, BEAM_HALF: .3,   // how far and how wide (radians) a torch holds a mascot
   CATCH: 1.25,         // a mascot this close has you
   GRAB: 2.6,           // and one that cannot get closer than this reaches in for you, after GRAB_TIME
   CALL_GAP: 3,         // seconds between a flat guard's calls for help
-  RESTART: 6,          // after the power goes out, the generator has to get it back to this before anything works
+  RESTART: 14,         // with the power out, the crank has to put this much back before anything works again
 };
-// Percent of building power per second, and per event.
-const DRAIN = { base: .02, lights: .03, door: .25, charge: .3 };
-const WEAR = .1;   // everything draws this much more for each night after the first
-const CRANK = 1, MISS_COST = 13, BANG_COST = 2.5;
+// Percent of building power per second, and per event. Tuned so a competent guard alone ends night 5 near half
+// power and a crew of four near 15%, losing the power on half its nights and winning under half as often if
+// nobody cranks, and so a crew that shuts the doors and stays in is dead soon after 2 AM.
+const DRAIN = { base: .02, lights: .03, door: .18, charge: .12 };
+const WEAR = .07;   // everything draws this much more for each night after the first
+const CRANK = .7, BANG_COST = 2.5;
+// What missing every clock of one hour costs: power now, and ceiling for the rest of the night. Tuned so ignoring
+// the clocks loses every night however the doors and the crank are used.
+const MISS = { power: 22, cap: 25 };
 // Metres per second. Hunt speed is per mascot, by MASC index. Biggs is slower
 // than a walking guard and never stops coming. Flan crawls while a guard is
 // looking at her and runs when nobody is. Squish is quick, quicker in the
 // ducts. Tank walks until it has a straight run, then charges.
-const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 3.1], unwatched: 4.2, ducts: 1.4, charge: 8, dark: 1.15 };
-const KEEN = [.85, .035];   // the share of those speeds they manage on night 1, and what each later night adds
+const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6], unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15 };
+const KEEN = [.8, .04];   // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
-const LIT_SPEED = [0, .3, .5];
-const ROT = { night: .19, hour: .066, ire: .25 };
+const LIT_SPEED = [0, .2, .4];
+const ROT = { night: .12, hour: .066, ire: .25 };
 const BANG_IRE = .1, GLARE_PER_IRE = 40;   // what a bang on a shut door adds to m.ire, and the seconds in a torch beam that add 1
 const FLAT_BAT = .5;         // what is left of a torch its guard was flattened on top of
+// Seconds one sits on the guard it caught. It then looks round for whoever comes to peel them up rather than going
+// home, so a catch is no breather for the rest of a crew: when it went home, four guards won most of night 5.
+const FEAST = 3.5;
 const GRAB_TIME = 1.2;       // seconds a mascot stuck behind furniture takes to reach over it
 const STARE = 5;             // seconds one waiting its turn stands and stares before it goes back to what it was doing
-const WINDUP = { time: 1.2, commit: .4 };   // Tank's wind-up before a charge, and how much of it at the end is spent not turning
+const CHARGE_GAP = 10;       // seconds before Tank can charge again
+const WINDUP = { time: 1.5, commit: .5 };   // Tank's wind-up before a charge, and how much of it at the end is spent not turning
+const SEARCH_MAX = 14;       // seconds one spends looking for what it heard or lost before it gives that up
 const NOTICE = .7;          // seconds a mascot stands and stares after spotting a guard, before it moves
 // How long a mascot keeps after a guard before it gives up and goes home: seconds on night 1, and more each night after.
 // Biggs keeps on twice as long. With the power out nothing gives up.
-const WIND = [9, 1.5];
+const WIND = [8, .75];
 const RELENT = 8;           // seconds Biggs keeps knowing where its guard is after losing sight of them
 // The mascots stir and settle in turns: seconds of each, before the night's heat stretches one and shrinks the other.
 const STIR = [28, 42], CALM = [24, 38];
-const SPENT = [14, 24];     // seconds one stays put after it has had a guard or given up on a door
+const SPENT = [18, 30];     // seconds one stays put after it has given up on a guard or a door
+// How many nights' worth of wear each night has had, for rot, heat, speed and power drain. Night 5 counts for more
+// than one step past night 4: with a plain 4, a crew of three won 18% of night 5s against a target of 10.
+const RAMP = [0, 1, 2, 3.15, 4.3];
 
 const OPEN = () => ({ L: false, V: false, R: false });
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -68,26 +89,38 @@ const pick = list => list[Math.random() * list.length | 0];
 
 export const hourF = S => Math.min(6, Math.floor(S.t / F.HOUR));
 export const clockF = S => (hourF(S) || 12) + ' AM';
-// The building has light, doors and a charging dock until the power runs out, and again once it is cranked back to F.RESTART.
+// The building has light, doors and a charging dock until the power runs out, and again once it has been cranked
+// back to F.RESTART. S.power is 0 for exactly as long as S.out is set.
 export const lightsF = S => !S.out;
+const late = S => S.night <= RAMP.length ? RAMP[S.night - 1] : RAMP.at(-1) + S.night - RAMP.length;
 // The same three stages as rotOf in rules.js, on this mode's clock. Left alone they are whole until 5 AM on
 // night 1, so the torch stops them dead while a guard is learning what it is for, and fully rotten from
-// midnight on night 5, when it only slows them. Torchlight and doors slammed on one (m.ire) bring it on sooner.
+// 3 AM on night 5, when it only slows them. Torchlight and doors slammed on one (m.ire) bring it on sooner.
 function rot(S, m) {
   if (S.dev?.rot >= 0) return S.dev.rot;
-  const r = (S.night - 1) * ROT.night + S.t / F.HOUR * ROT.hour + (m.ire || 0) * ROT.ire;
+  const r = late(S) * ROT.night + S.t / F.HOUR * ROT.hour + (m.ire || 0) * ROT.ire;
   return r < .34 ? 0 : r < .67 ? 1 : 2;
 }
 // How bad the night is by now, 0 to 1: later nights, later hours, missed clocks and bigger crews all raise it.
-// It shortens the calm between waves, lengthens the waves, and draws the mascots toward the guards.
-const heat = S => S.out ? 1 : Math.min(1, (S.night - 1) * .15 + S.t / F.HOUR * .04 + S.missed * .03 + (S.players.length - 1) * .05);
+// It shortens the calm between waves, lengthens the waves, and draws the mascots toward the guards. The crew term
+// grows with the square of the extra guards: crews of two and three already carry each other's loss, and a linear
+// term had them losing night 5 far more often than a guard alone while four and six won it twice as often.
+const heat = S => S.out ? 1 : Math.min(1, late(S) * .07 + S.t / F.HOUR * .03 + (100 - S.cap) / MISS.cap * .06 + (S.players.length - 1) ** 2 * .02);
 // How many mascots may be after the guards at the same time.
-const pack = S => S.out ? 4 : 1 + Math.floor(heat(S) * 2 + (S.players.length - 1) / 2);
+const pack = S => S.out ? 4 : 1 + Math.floor(heat(S) * 1.2 + (S.players.length - 1) * .45);
+// How many may be out of their places at the same time. A guard alone meets two at once, and three from 5 AM on
+// night 3, 3 AM on night 4 and 1 AM on night 5. A crew of three meets all four from 2 AM on night 1, four or more
+// from the start.
+const roster = S => S.out ? 4 : 2 + Math.floor(heat(S) * 3.3 + (S.players.length - 1) * .75);
 const COMING = ['hunt', 'windup', 'charge'];
 const inDucts = p => !p.flat && roomAt(p.x, p.z) === DUCTS;
-// More guards wake the mascots sooner: each one past the first counts as an hour and a half.
-// With the power out they are all awake, and Squish wakes for anyone in its ducts.
-const isActive = (S, m) => !!S.dev?.wake || S.out || (S.night - 1) * 6 + S.t / F.HOUR + (S.players.length - 1) * 1.5 >= MASC[m.i].from || (m.i === 2 && S.players.some(inDucts));
+// When each mascot first comes out, by MASC index: hours of the run (six to a night), and how many hours sooner
+// for each guard past the first. Alone, Squish turns up at 3 AM on night 1. Tank turns up on night 2 for every
+// crew: at 4 AM alone, 2:24 for three, midnight for six. When it waited for night 3 or 4, night 2 played like
+// night 1 and the night it woke was a cliff. With the power out they are all up, and Squish is up for anyone in
+// its ducts.
+const WAKE = [[0, 2], [0, 2], [3, 2], [10, .8]];
+const isActive = (S, m) => !!S.dev?.wake || S.out || (S.night - 1) * 6 + S.t / F.HOUR + (S.players.length - 1) * WAKE[m.i][1] >= WAKE[m.i][0] || (m.i === 2 && S.players.some(inDucts));
 
 function emit(type, x) {
   const S = game.S;
@@ -101,6 +134,7 @@ function emit(type, x) {
 let brains = [];
 let batTimers = [];   // seconds until a taken battery turns up somewhere else
 let wave = 0;         // seconds until the mascots stir or settle
+let crankNoise = 0;   // seconds until the turning crank is heard again
 // The balance harness reads what a mascot is after. Nothing in the game does.
 export const brainOf = i => brains[i];
 
@@ -119,12 +153,12 @@ function placeGuard(p, i) {
 
 export function startFloorNight(n) {
   const S = game.S;
-  Object.assign(S, { mode: 'floor', phase: 'play', night: n, t: 0, power: 100, out: false, stir: false, doors: OPEN(), killer: -1, killDoor: null, missed: 0, crank: false, round: -1 });
+  Object.assign(S, { mode: 'floor', phase: 'play', night: n, t: 0, power: 100, cap: 100, out: false, restart: 0, stir: false, doors: OPEN(), killer: -1, killDoor: null, missed: 0, crank: false, round: -1 });
   S.m = MASC.map((d, i) => ({ i, x: REST[i].x, z: REST[i].z, yaw: REST[i].yaw, st: 'rest', rot: 0, lit: false, ire: 0 }));
   // Nothing moves for the first half minute of night 1, and a quarter minute after that.
   const quiet = n === 1 ? 34 : Math.max(12, 26 - n * 3);
   wave = quiet + rnd(0, 6);
-  brains = MASC.map((d, i) => ({ path: [], repath: 0, dest: null, tgt: null, last: null, lost: 0, timer: rnd(0, 8), bangs: 0, cool: 0, dir: null, stuck: 0, key: null, home: false, spent: false, notice: 0, wind: 0, stared: 0, reach: null }));
+  brains = MASC.map((d, i) => ({ path: [], repath: 0, dest: null, tgt: null, last: null, lost: 0, timer: rnd(0, 8), bangs: 0, cool: 0, dir: null, stuck: 0, key: null, home: false, spent: false, woke: false, notice: 0, wind: 0, stared: 0, reach: null }));
   S.clocks = CLOCKS.map(() => 0);   // 0 idle, 1 due, 2 punched this hour
   S.tally = newTally(); S.total ||= newTally();
   const all = guards();
@@ -132,7 +166,7 @@ export function startFloorNight(n) {
   S.players = all;
   const spots = BATTERY_SPOTS.map((_, i) => i).sort(() => Math.random() - .5);
   S.bats = spots.slice(0, Math.min(spots.length, 3 + all.length));
-  batTimers = [];
+  batTimers = []; crankNoise = 0;
 }
 
 export function restartFloor() {
@@ -140,9 +174,10 @@ export function restartFloor() {
   startFloorNight(1);
 }
 
-// Each hour some clocks come due: one more than there are guards, so nobody gets to stay in.
+// Each hour two clocks come due for every guard, so the work per guard is the same however many there are,
+// and one guard running round for a crew that stays in cannot get to them all.
 function openRound(S) {
-  const n = Math.min(CLOCKS.length - 2, 1 + S.players.length);
+  const n = Math.min(CLOCKS.length, 2 * S.players.length);
   const order = CLOCKS.map((_, i) => i).sort((a, b) => (S.clocks[a] ? 1 : 0) - (S.clocks[b] ? 1 : 0) + Math.random() - .5);   // not the same ones twice running
   const due = new Set(order.slice(0, n));
   S.clocks = CLOCKS.map((_, i) => due.has(i) ? 1 : 0);
@@ -151,8 +186,12 @@ function openRound(S) {
 function closeRound(S) {
   const missed = S.clocks.filter(c => c === 1).length;
   if (!missed) return;
+  // The hour's clocks are worth the same between them however many there are, so a crew of six pays what a
+  // guard alone does for missing half. A miss takes power now and, for the rest of the night, some of what
+  // the building can hold: the crank can make up the first and not the second.
+  const share = missed / S.clocks.filter(c => c).length;
   S.missed += missed; count(S, 'missed', missed);
-  if (!S.dev?.power) S.power = Math.max(0, S.power - MISS_COST * missed);
+  if (!S.dev?.power) { S.cap = Math.max(0, S.cap - MISS.cap * share); S.power = Math.max(0, Math.min(S.cap, S.power - MISS.power * share)); }
   emit('miss', missed);
 }
 
@@ -163,11 +202,18 @@ function drainPower(S, dt) {
   // One handle: a second guard at the generator adds nothing.
   S.crank = S.players.some(p => p.act === 'crank' && near(p, GENERATOR));
   for (const p of charging) p.bat = Math.min(1, p.bat + F.CHARGE * dt);
-  const drain = S.out ? 0 : (DRAIN.base + DRAIN.lights + DRAIN.door * shut + DRAIN.charge * charging.length) * (1 + WEAR * (S.night - 1));
-  S.power = Math.max(0, Math.min(100, S.power + ((S.crank ? CRANK : 0) - drain) * dt));
-  if (S.dev?.power) S.power = 100;
-  if (!S.out && S.power <= 0) { S.out = true; S.doors = OPEN(); emit('out'); }
-  else if (S.out && S.power >= F.RESTART) { S.out = false; emit('on'); }
+  if (S.dev?.power) { S.power = S.cap = 100; S.out = false; }
+  if (S.out) {
+    // Dead until the crank has put F.RESTART back in. S.power reads 0 the whole time; S.restart is how far along it is.
+    S.power = 0;
+    if (S.crank && S.cap >= F.RESTART && (S.restart += CRANK * dt / F.RESTART) >= 1) { S.out = false; S.power = F.RESTART; emit('on'); }
+  } else {
+    // A bigger crew has more torches to charge from the same supply, so each draws less: two guards' worth at most.
+    const drain = (DRAIN.base + DRAIN.lights + DRAIN.door * shut + DRAIN.charge * charging.length * 2 / (S.players.length + 1)) * (1 + WEAR * late(S));
+    // A missed clock or a bang on a door can take the last of it between ticks, crank turning or not.
+    if (S.power > 0) S.power = Math.max(0, Math.min(S.cap, S.power + ((S.crank ? CRANK : 0) - drain) * dt));
+    if (S.power <= 0) { S.out = true; S.restart = 0; S.doors = OPEN(); emit('out'); }
+  }
   for (const p of S.players) if (p.on) { p.bat = Math.max(0, p.bat - dt / F.BAT_LIFE); if (p.bat <= 0) p.on = false; }
 }
 
@@ -217,7 +263,7 @@ function canSee(S, m, p) {
 function noise(S, x, z, radius, chance) {
   S.m.forEach((m, i) => {
     const b = brains[i];
-    if (!isActive(S, m) || !['roam', 'search'].includes(m.st) || b.home || Math.hypot(m.x - x, m.z - z) > radius || Math.random() > chance) return;
+    if (!['roam', 'search'].includes(m.st) || b.home || Math.hypot(m.x - x, m.z - z) > radius || Math.random() > chance) return;
     m.st = 'search'; b.last = { x, z }; b.timer = rnd(3, 6); b.repath = 0;
   });
 }
@@ -250,12 +296,21 @@ const turn = (m, to, rate) => { m.yaw += Math.max(-rate, Math.min(rate, angDiff(
 // furniture short of it) or 'going'.
 function goTo(S, m, b, goal, speed, dt, eager) {
   b.repath -= dt;
+  // Close enough. (Asking for a route from here can lead away and back, when the goal is no place for a mascot.)
+  if (dist(m, goal) < .6) { b.path = []; return 'there'; }
   if (b.repath <= 0 || !b.path.length) {
     const r = route(m.x, m.z, goal.x, goal.z, { doors: S.doors, ducts: m.i === 2 });
     b.path = r.path; b.key = r.blocked || null; b.repath = eager ? .35 : 1.5;
     if (!r.path.length && !r.blocked) return 'nowhere';
+    // The last few metres to a guard tucked somewhere a mascot does not fit: straight at them, not back to the
+    // nearest waypoint every time it asks again. Whatever stops it short, it reaches over (see tucked).
+    if (eager && r.path.length > 1 && !r.blocked && dist(m, goal) < 4 && clear(m.x, m.z, goal.x, goal.z, PLAYER_R, S.doors)) b.path = [goal];
   }
-  while (b.path.length && dist(m, b.path[0]) < .6) b.path.shift();
+  // Near enough a waypoint counts as there, but only if the way on is clear from here: a prop can stand close
+  // beside the line between two waypoints. The last leg is to wherever the guard is, which may be no place for a
+  // mascot, so it only has to be clear for a guard; and standing on the waypoint counts whatever is ahead.
+  const onward = () => clear(m.x, m.z, b.path[1].x, b.path[1].z, b.path.length === 2 ? PLAYER_R : MASCOT_R, S.doors);
+  while (b.path.length && dist(m, b.path[0]) < .6 && (b.path.length === 1 || dist(m, b.path[0]) < .1 || onward())) b.path.shift();
   const next = b.path[0];
   if (!next) return b.key ? 'blocked' : 'there';
   const dx = next.x - m.x, dz = next.z - m.z, d = Math.hypot(dx, dz), stepLen = Math.min(d, speed * dt);
@@ -275,7 +330,8 @@ function flatten(S, p, m, b) {
   S.flats = (S.flats || 0) + 1; record(S, 'flats', [p.name, m.i]);
   emit('flat', { id: p.id, by: m.i, x: p.x, z: p.z });
   p.bat *= FLAT_BAT;
-  m.st = 'feast'; b.timer = 3.5; b.tgt = null; b.path = []; b.spent = true;
+  // It sits on what it caught, then stays and looks round for whoever comes to peel them up.
+  m.st = 'feast'; b.timer = FEAST; b.tgt = null; b.path = []; b.last = { x: p.x, z: p.z };
   if (!standing(S).length) endNight(S, m.i);
 }
 function endNight(S, by) { S.phase = 'dead'; S.killer = by; S.killDoor = null; S.deaths++; emit('scare'); }
@@ -288,12 +344,13 @@ function catchGuards(S, m, b) {
 
 // It has seen this guard. The first time, it stops and stares before it comes.
 function spot(S, m, b, p) {
-  if (m.st !== 'hunt') { emit('spot', { i: m.i, id: p.id, x: m.x, z: m.z }); b.notice = NOTICE; b.repath = 0; b.home = false; b.wind = (WIND[0] + WIND[1] * S.night) * (m.i ? 1 : 2); }
+  if (m.st !== 'hunt') { emit('spot', { i: m.i, id: p.id, x: m.x, z: m.z }); b.notice = NOTICE; b.repath = 0; b.home = false; b.wind = (WIND[0] + WIND[1] * S.night) * (m.i ? 1 : 1.5); }
   m.st = 'hunt'; b.tgt = p.id; b.last = { x: p.x, z: p.z }; b.lost = 0;
 }
 
 function runMascot(S, m, b, dt) {
-  if (!isActive(S, m)) return;
+  // Once one is up it is up for the night, even if what woke it (the power going out) is put right.
+  if (!(b.woke ||= isActive(S, m))) return;
   m.rot = rot(S, m);
   const up = standing(S);
   // One standing where it stands is switched off: a torch does nothing to it.
@@ -301,19 +358,23 @@ function runMascot(S, m, b, dt) {
   m.lit = !!lighter;
   if (lighter) m.ire += dt / GLARE_PER_IRE;
   b.cool -= dt;
+  if (m.st !== b.was) { b.was = m.st; b.since = S.t; }
   const ductGuest = m.i === 2 ? up.find(p => inDucts(p) && S.t >= p.safe) : null;
 
   // Standing where it stands. A wave gets it moving, or (Squish) someone in the ducts.
   if (m.st === 'rest') {
     b.timer -= dt;
     if (ductGuest) spot(S, m, b, ductGuest);
-    else if (b.timer <= 0 && S.stir) { m.st = 'roam'; b.dest = null; b.home = false; }
+    else if (b.timer <= 0 && S.stir && S.m.filter(o => o.st !== 'rest').length < roster(S)) { m.st = 'roam'; b.dest = null; b.home = false; }
     return;
   }
   // States that run on a timer and ignore everything else.
   if (m.st === 'feast' || m.st === 'stun') {
     b.timer -= dt;
-    if (b.timer <= 0) { m.st = 'roam'; b.dest = null; b.path = []; b.home = false; }
+    if (b.timer > 0) return;
+    if (m.st === 'feast') { m.st = 'search'; b.timer = rnd(4, 7); b.repath = 0; }
+    else { m.st = 'roam'; b.dest = null; b.home = false; }
+    b.path = [];
     return;
   }
   if (m.st === 'windup') {
@@ -329,8 +390,8 @@ function runMascot(S, m, b, dt) {
     const got = slide(m, b.dir.x * SPEED.charge * dt, b.dir.z * SPEED.charge * dt, MASCOT_R, S.doors);
     if (catchGuards(S, m, b)) return;
     b.timer -= dt;
-    if (got < .5) { m.st = 'stun'; b.timer = 2.6; b.cool = 7; emit('crash', { x: m.x, z: m.z }); }
-    else if (b.timer <= 0) { m.st = 'hunt'; b.cool = 6; }
+    if (got < .5) { m.st = 'stun'; b.timer = 4; b.cool = CHARGE_GAP; emit('crash', { x: m.x, z: m.z }); }
+    else if (b.timer <= 0) { m.st = 'hunt'; b.cool = CHARGE_GAP; }
     return;
   }
 
@@ -374,24 +435,25 @@ function runMascot(S, m, b, dt) {
     if (loud) { m.st = 'search'; b.last = { x: loud.x, z: loud.z }; b.timer = rnd(3, 6); }
   }
 
-  // They are slow on night 1 and quicker every night after, quicker for every missed clock, and quickest in the dark.
-  const angry = (KEEN[0] + KEEN[1] * (S.night - 1)) * (1 + .02 * Math.min(8, S.missed)) * (S.out ? SPEED.dark : 1);
+  // They are slow on night 1 and quicker every night after, quicker for every hour's worth of clocks missed, and quickest in the dark.
+  const angry = (KEEN[0] + KEEN[1] * late(S)) * (1 + .04 * Math.min(4, (100 - S.cap) / MISS.cap)) * (S.out ? SPEED.dark : 1);
   let speed, goal, eager = false;
   if (m.st === 'hunt') {
     goal = b.last; eager = true;
     if (b.notice > 0) { b.notice -= dt; turn(m, Math.atan2(goal.x - m.x, goal.z - m.z), 5 * dt); speed = 0; }
     // Tank: with a clear run at you, it winds up and charges.
-    else if (m.i === 3 && seen && b.cool <= 0 && near > 5 && near < 15 && clear(m.x, m.z, seen.x, seen.z, MASCOT_R, S.doors)) {
+    else if (m.i === 3 && seen && b.cool <= 0 && near > 6 && near < 16 && clear(m.x, m.z, seen.x, seen.z, MASCOT_R, S.doors)) {
       m.st = 'windup'; b.timer = WINDUP.time; emit('roar', { i: m.i, x: m.x, z: m.z }); return;
     } else {
       speed = SPEED.hunt[m.i] * angry;
       if (m.i === 1 && !up.some(p => watchedBy(S, p, m))) speed = SPEED.unwatched * angry;
       if (m.i === 2 && roomAt(m.x, m.z) === DUCTS) speed *= SPEED.ducts;
     }
-  } else if (m.st === 'search') { speed = SPEED.search * angry; goal = b.last; }
+  } else if (m.st === 'search' && S.t - b.since > SEARCH_MAX) { m.st = 'roam'; b.dest = null; return; }
+  else if (m.st === 'search') { speed = SPEED.search * angry; goal = b.last; }
   else {
-    // Between waves they walk back to where they stand. So does one that has flattened a guard
-    // or been turned away at a door, and it stays there a while. With the power out nothing goes home.
+    // Between waves they walk back to where they stand. So does one that has run out of puff or been
+    // turned away at a door, and it stays there a while. With the power out nothing goes home.
     const settle = (!S.stir || b.spent) && !S.out;
     if (settle !== b.home) { b.home = settle; b.dest = settle ? REST[m.i] : null; b.repath = 0; }
     if (b.home && dist(m, REST[m.i]) < 1.5) { m.st = 'rest'; b.timer = b.spent ? rnd(...SPENT) * (1 - .5 * heat(S)) : rnd(0, 8); b.spent = false; b.path = []; return; }
@@ -404,10 +466,13 @@ function runMascot(S, m, b, dt) {
 
   const res = speed > 0 ? goTo(S, m, b, goal, speed, dt, eager) : 'going';
   if (catchGuards(S, m, b)) return;
-  // Free to move, within arm's reach of a guard, and getting no nearer: they are tucked in behind the furniture. It reaches in.
-  const tucked = m.st === 'hunt' && speed > 0 && seen && near < F.GRAB && b.reach && dist(m, b.reach) < .4 && reaches(m.x, m.z, seen.x, seen.z, S.doors);
-  if (!tucked) b.reach = { x: m.x, z: m.z, t: S.t };
-  else if (S.t - b.reach.t > GRAB_TIME) { flatten(S, seen, m, b); return; }
+  // Free to move, within arm's reach of a guard who is staying put, and getting no nearer however it tries: they
+  // are tucked in behind the furniture. It reaches in. (A mascot wedged on a prop can rock back and forth a metre
+  // looking for a way round, so this goes by the gap between them, not by whether it has moved.)
+  const tucked = m.st === 'hunt' && speed > 0 && seen && near < F.GRAB && reaches(m.x, m.z, seen.x, seen.z, S.doors);
+  const r = b.reach;
+  if (!tucked || !r || r.id !== seen.id || near < r.d - .3 || dist(seen, r) > .5) b.reach = tucked ? { id: seen.id, d: near, x: seen.x, z: seen.z, t: S.t } : null;
+  else if (S.t - r.t > GRAB_TIME) { flatten(S, seen, m, b); return; }
   if (res === 'blocked') { m.st = 'siege'; b.timer = 1.2; b.bangs = 0; emit('arrive', b.key); return; }
   if (res === 'nowhere') { m.st = 'roam'; b.tgt = null; b.dest = b.home ? REST[m.i] : null; return; }
   // Wedged short of somewhere it was only looking: look somewhere else.
@@ -421,7 +486,7 @@ function runMascot(S, m, b, dt) {
 
 /* ---------- the tick ---------- */
 
-let lastStep = performance.now(), crankNoise = 0;
+let lastStep = performance.now();
 export function stepFloor() {
   const S = game.S, now = performance.now();
   const dt = Math.min(.25, (now - lastStep) / 1000) * (S.dev?.speed || 1);

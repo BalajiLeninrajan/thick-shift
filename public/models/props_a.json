@@ -21,7 +21,7 @@
    ],
    "mount": "held",
    "children": [],
-   "notes": "First-person torch, 0.24 m. Points along three.js -Z from the origin, which is the middle of the grip. Lens material is lamp_glow."
+   "notes": "First-person torch, 0.24 m, built pointing at Blender -Y as the brief asks, so in three.js the beam leaves along +Z: turn it half a turn about Y to aim it down the camera. Origin is the middle of the grip. Lens and bulb are lamp_glow. Not a placed prop, so mount is \"held\"."
   },
   "battery": {
    "size": [
@@ -123,7 +123,7 @@
    "size": [
     0.66,
     0.97,
-    0.71
+    0.64
    ],
    "mount": "floor",
    "children": [],
@@ -245,7 +245,7 @@
   },
   "cardboard_box": {
    "size": [
-    0.54,
+    0.55,
     0.5,
     0.55
    ],
@@ -295,9 +295,9 @@
   },
   "trash_bag": {
    "size": [
-    0.99,
+    0.96,
     0.83,
-    0.67
+    0.66
    ],
    "mount": "floor",
    "children": [],

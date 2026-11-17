@@ -40,6 +40,14 @@ def runs(P, seed, width=45):
     return sstep(.58, .8, vnoise(Q, width, seed))
 
 
+def dried(objs):
+    """Mark all the blood on objs as old (kit.paint's dry): brown-black, not red."""
+    for o in objs:
+        a = o.data.color_attributes.get('aux')
+        arr = np.empty(len(a.data) * 4, dtype=np.float32); a.data.foreach_get('color', arr)
+        arr[3::4] = 1; a.data.foreach_set('color', arr)
+
+
 # ---------- head ----------
 
 def lip(H, phi, slope, inset=0.):
@@ -98,6 +106,12 @@ def make_head(H, stage):
         delete(b)
     decimate(head, H['tris'])
     if jaw: decimate(jaw, H['jaw_tris'])
+    # Split the sharp lip edge, so the flat faces the mouth cut has its own
+    # vertices and can be painted dark without bleeding onto the lip.
+    for o in (head, jaw):
+        if o is None: continue
+        m = o.modifiers.new('es', 'EDGE_SPLIT'); m.split_angle = math.radians(40); m.use_edge_sharp = False
+        apply_mods(o)
     return head, jaw, warts
 
 
@@ -110,15 +124,21 @@ def paint_head(o, H, stage, warts):
         rho = np.linalg.norm(q, axis=1)
         inb = np.minimum(*[np.linalg.norm(P - np.array((sx * bx, by, bz)), axis=1) / br for sx in (-1, 1)])
         inward = np.einsum('ij,ij->i', N, q) < 0
+        lipz = H['zh'] - H['sl'] * (H['yh'] - P[:, 1])
+        lipu = H['zh'] - H['su'] * (H['yh'] - P[:, 1])
+        # the flat faces the mouth cut left: they face up or down, not inward, so find them by the planes
+        # the flat faces the mouth cut left: on one of the two planes and facing along its normal (the lip edge is split, see make_head)
+        plane = lambda s_: np.abs(N @ (np.array((0, -s_, 1)) / math.hypot(1, s_))) > .9
+        cut = (P[:, 1] < H['yh'] + .01) & (((np.abs(P[:, 2] - lipz) < .01) & plane(H['sl'])) | ((np.abs(P[:, 2] - lipu) < .01) & plane(H['su'])))
         inside = ((rho < .9) | (inward & (rho < .985))) & (inb > 1.02)
+        mw = (inside | cut).astype(float)                                           # how much of the mouth's paint a vertex gets
         rgb = skin(P, stage)
         rgb = rgb * (1 - .3 * sstep(.1, .9, q[:, 2]))[:, None]                      # darker on top, like the animal
-        lipz = H['zh'] - H['sl'] * (H['yh'] - P[:, 1])
         throat = sstep(.0, .1, lipz - P[:, 2]) * sstep(.25, -.25, q[:, 1]) * (inb > 1.05)
         rgb = mixc(rgb, mixc(BELLY, GREY, DULL[stage] * 1.3), throat * (.9 - .15 * stage))
         rough, fuzz, blood = np.full(len(P), .93), np.ones(len(P)), np.zeros(len(P))
         seams = []
-        if stage < 2: seams.append((np.abs(P[:, 0]) + inside * 1, P[:, 2] - P[:, 1]))       # the costume's centre seam
+        if stage < 2: seams.append((np.abs(P[:, 0]) + (mw > .5) * 1, P[:, 2] - P[:, 1]))       # the costume's centre seam
         for p, wr in warts:                                                           # sewn-on warts, darker, each with its ring of stitches
             dist = np.linalg.norm(P - np.array(p), axis=1)
             rgb = mixc(rgb, mixc(SKIN, '#22331f', .55 + .1 * stage), sstep(wr * 1.15, wr * .7, dist) * .8)
@@ -128,30 +148,40 @@ def paint_head(o, H, stage, warts):
                 seams.append((np.where(near, np.abs(dist - wr * 1.2), 1), ang))
         if stage == 0:
             for sx in (-1, 1):                                                        # blush
-                bp = lip(H, sx * 1.05, H['su']) + Vector((0, 0, .15))
+                bp = lip(H, sx * .72, H['su']) + Vector((0, 0, .13))          # on the cheeks, where the front view sees it
                 rgb = mixc(rgb, lin('#e58a9c'), sstep(.17, .05, np.linalg.norm(P - np.array(bp), axis=1)) * .75)
         if stage == 1:
             # the first bloodstain: from the lower lip, down the chin, off centre
             below = lipz - P[:, 2]
             blood = np.exp(-((P[:, 0] + .22) / .3) ** 2) * sstep(.42, .0, below) * (below > -.03) * (q[:, 1] < 0) * (.45 + .5 * runs(P, 4))
         if stage == 2:
+            # Old blood only, and little of it (all of it is dried, see stage2): a few runs down from
+            # the lower lip, never a band along it, and the torn underside. A red line round the mouth
+            # or the eyes reads as a cartoon outline, not as a wound.
             below = lipz - P[:, 2]
-            mouth = sstep(.5, .0, np.abs(below + .08)) * (q[:, 1] < .2) * (.4 + .45 * runs(P, 4) + .3 * fbm(P, 6, 5))
-            tear = sstep(-.55, -.95, q[:, 2]) * .9 + sstep(.3, .0, np.linalg.norm((P - np.array(H['tear_c'])) / np.array(H['tear_r']), axis=1) - 1) * .8
-            blood = np.maximum(mouth, tear)
-            for sx in (-1, 1):                                                        # raw sockets
+            drips = runs(P, 4) * sstep(.3, .0, below) * (below > 0) * (q[:, 1] < .2) * .9
+            tear = sstep(-.6, -.95, q[:, 2]) * .7 + sstep(.3, .0, np.linalg.norm((P - np.array(H['tear_c'])) / np.array(H['tear_r']), axis=1) - 1) * .6
+            blood = np.maximum(drips, tear)
+            for sx in (-1, 1):
+                # The costume's eyes are gone and the real ones sit in the holes: no lids, so the skin
+                # round each one has shrunk back into a dark sunken hollow, wet at the edge.
                 sc_, sr = H['socket'](sx)
                 ds = np.linalg.norm(P - np.array(sc_), axis=1) / sr
-                rim = sstep(1.5, 1.05, ds)
-                rgb = mixc(rgb, lin('#6e1a1c'), rim * .9)
-                blood = np.maximum(blood, rim * .5 + (ds < 1.08) * .2)
-                rgb = mixc(rgb, lin('#120304'), (ds < 1.04) * 1.)
-                rough = np.where(ds < 1.3, .35, rough); fuzz = np.where(ds < 1.3, .2, fuzz)
+                rgb = rgb * (1 - .5 * sstep(1.75, 1.1, ds))[:, None]
+                rgb = mixc(rgb, lin('#211814'), sstep(1.32, 1.06, ds) * (.65 + .35 * fbm(P, 20, 7 + sx)))
+                rgb = mixc(rgb, lin('#040303'), (ds < 1.04) * 1.)
+                rough = np.where(ds < 1.3, .18, rough); fuzz = np.where(ds < 1.3, .1, fuzz)
+            # one dried track down the cheek from the inner corner of the right eye, the one that stares
+            sc_, sr = H['socket'](-1)
+            wob = sc_[0] + sr * .45 + .025 * np.sin(P[:, 2] * 19)
+            track = sstep(.03, .008, np.abs(P[:, 0] - wob)) * sstep(sc_[2] - sr * .85, sc_[2] - sr * 1.1, P[:, 2]) * sstep(H['zh'] - .08, H['zh'] + .1, P[:, 2]) * (N[:, 1] < -.2)
+            blood = np.maximum(blood, track * .85)
         # inside the mouth
         deep = sstep(.85, .45, rho)
-        rgb = np.where(inside[:, None], mixc(MOUTH, THROAT, deep), rgb)
-        rough = np.where(inside, .28, rough); fuzz = np.where(inside, .25, fuzz)
-        if stage: blood = np.where(inside, .3 + .3 * fbm(P, 9, 2), blood)
+        mouth = mixc(MOUTH, '#160b09', .6) if stage == 2 else lin(MOUTH)          # by stage 2 the lining has dried dark, no red at the lip
+        rgb = mixc(rgb, mixc(mouth, THROAT, deep), mw)
+        rough = rough + (.28 - rough) * mw; fuzz = fuzz + (.25 - fuzz) * mw
+        if stage: blood = blood + (.3 + .3 * fbm(P, 9, 2) - blood) * mw
         sd, su = nearest_seam(*seams) if seams else (1, 0)
         return dict(rgb=rgb, rough=rough, fuzz=fuzz, blood=blood, seam=sd, seam_u=su)
     return paint(o, fn)
@@ -172,7 +202,7 @@ def teeth(H, stage, upper, n, size, span, seed):
         root = p.z - sgn * .03
         t = box((tw, dpt, th + .03), at=(p.x, p.y, root + sgn * (th + .03) / 2),
                 rot=(rng.uniform(-.1, .1), rng.uniform(-.07, .07), math.atan2(nx, -ny) + rng.uniform(-.08, .08)), bevel=min(tw, dpt) * .3, segments=2)
-        bloody = stage == 2 and rng.random() > .35
+        bloody = stage == 2 and rng.random() > .7
         cut = rng.uniform(.3, .6)
 
         def fn(P, N, root=root, sgn=sgn, th=th, bloody=bloody, cut=cut, i=i):
@@ -227,6 +257,55 @@ def googly(c, r, stage, sx):
     rim = torus(c + Vector((0, -.02, 0)), r * .99, r * .12)
     paint(rim, lambda P, N: dict(rgb=mixc('#1b2a1e', '#0b0b0d', .3), rough=.4, fuzz=.1))
     return eye, glint, rim
+
+
+def stare(c, r, gaze, pupil, iris, iris_col, seed):
+    """A real eyeball, wet and lidless, for stage 2: pale white, a domed cornea,
+    an iris and a round pupil. pupil and iris are angular radii (radians) about
+    gaze. The sphere is built with its pole on the gaze and rings placed on the
+    pupil's and the iris's edges, so a pinprick stays a sharp dot through the
+    bake instead of smearing over a 1 cm vertex grid. Returns (eye, glint)."""
+    c, gz = Vector(c), Vector(gaze).normalized()
+    M = gz.to_track_quat('Z', 'X').to_matrix()           # up on x: the gaze is close to -y, which would make 'Y' degenerate
+    dome = lambda t: 1 + .045 * max(0, 1 - (t / iris) ** 2)                       # the cornea stands proud of the white
+    fill = lambda a, b, step: [a + (b - a) * i / n for n in [max(1, math.ceil((b - a) / step))] for i in range(1, n)]
+    e1, e2 = .01, .014
+    th = [*fill(0, pupil - e1, .1), pupil - e1, pupil + e1, *fill(pupil + e1, iris - e2, .07), iris - e2, iris + e2, *fill(iris + e2, math.pi, .14)]
+    seg = 48
+    bm = bmesh.new()
+    point = lambda t, a: c + M @ Vector((math.sin(t) * math.cos(a), math.sin(t) * math.sin(a), math.cos(t))) * r * dome(t)
+    front, back = bm.verts.new(point(0, 0)), bm.verts.new(c - gz * r)
+    rings = [[bm.verts.new(point(t, k / seg * math.tau)) for k in range(seg)] for t in th]
+    for k in range(seg):
+        k1 = (k + 1) % seg
+        bm.faces.new((front, rings[0][k], rings[0][k1]))
+        for a, b in zip(rings, rings[1:]): bm.faces.new((a[k], b[k], b[k1], a[k1]))
+        bm.faces.new((rings[-1][k], back, rings[-1][k1]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    eye = bm_obj(bm, 'eye')
+    ax, ay = np.array(M.col[0]), np.array(M.col[1])
+
+    def fe(P, N):
+        v = P - np.array(c)
+        u = v / np.linalg.norm(v, axis=1)[:, None]
+        t = np.arccos(np.clip(u @ np.array(gz), -1, 1))
+        phi = np.arctan2(u @ ay, u @ ax)
+        # the white: a dead, bluish pale at the front, yellowing and veined toward the back
+        rgb = mixc('#ebe8de', '#a3946c', sstep(.8, 1.7, t) * .7) * (.92 + .1 * fbm(P, 30, seed))[:, None]
+        rgb = mixc(rgb, lin('#7a5048'), sstep(.62, .78, fbm(P, 26, seed + 1)) * sstep(.9, 1.5, t) * .55)
+        # the iris: fibres running out from the pupil, a dark ring at its edge
+        Q = np.column_stack([np.cos(phi) * 3, np.sin(phi) * 3, t * .4])
+        ir = mixc(iris_col, lin(iris_col) * .45, sstep(.35, .75, vnoise(Q, 9, seed + 2)))
+        ir = ir * (1 - .65 * sstep(iris - .1, iris - e2, t))[:, None]
+        rgb = mixc(rgb, ir, sstep(iris + e2, iris - e2, t))
+        rgb = mixc(rgb, lin('#010102'), sstep(pupil + e1, pupil - e1, t))
+        return dict(rgb=rgb, rough=np.where(t < iris, .03, .07), fuzz=0)
+    paint(eye, fe)
+    # the catchlight: just up and to the model's right of the pupil, the same way on both eyes, as if from one lamp
+    gl = (gz + Vector((-.1, 0, .22))).normalized()
+    glint = ball(c + gl * r * dome(gl.angle(gz)) * .995, .011, sub=2, name='glint')
+    glint.data.materials.append(glow_material())
+    return eye, glint
 
 
 def strands(name, roots, length, seed, col=HAIR, r0=.006, blood=0.):
@@ -297,8 +376,9 @@ def stage0():
     rims = []
     for sx, side in ((1, 'L'), (-1, 'R')):
         bx, by, bz, br = H['bump']
-        eye, glint, rim = googly((sx * bx, by - .16, bz + .03), .2, 0, sx)
-        eyes[side] = (eye, glint, (sx * bx, by - .16, bz + .03))
+        c = (sx * bx, by - .19, bz + .04)                                # big and forward on the bump, so they read from the floor
+        eye, glint, rim = googly(c, .25, 0, sx)
+        eyes[side] = (eye, glint, c)
         rims.append(rim)
     hz = zip_down(head, [1.93 - i * .016 for i in range(40)], rng)
     join(head, [panel, hz] + rims)
@@ -448,7 +528,7 @@ def stage1():
         limbs['arm_' + side] = (paint(upper, fa), sh, 'body')
         limbs['forearm_' + side] = (paint(fore, fa), el, 'arm_' + side)
         # legs: thighs straight out sideways like a frog's, knees high
-        hip, kn, an = Vector((sx * .6, .12, .62)), Vector((sx * 1.01, .02, .88)), Vector((sx * .95, -.2, .1))
+        hip, kn, an = Vector((sx * .6, .14, .64)), Vector((sx * 1.03, .08, 1.04)), Vector((sx * .97, -.2, .1))   # knees out past the hips and up by the head
         thigh = sculpt(Forms().tube([hip, kn], [.19, .11]).ball(kn, .12), 'leg', voxel=.014, soften=4, lumps=[(.2, .02)])
         decimate(thigh, 1800)
         f = Forms().tube([kn, an], [.1, .06]).ball(kn, .115)
@@ -488,25 +568,32 @@ def stage1():
              "Body stays low and level, head bobs late. Idle: still, then one jerk of the head. Attack: arms up and forward (arm x "
              "-80, forearm x -50), jaw 0.6, head pitched 20 degrees down. Limits: head +-20 any axis; arm +-60; forearm +-70; leg "
              "+-35; shin +-45. The zip on the back of the head ends at the hips.")
-    return dict(root=root, baked=baked, glows=glows, face=(0, 1.15, .68), radius=1.13, floats=False, notes=notes)
+    return dict(root=root, baked=baked, glows=glows, face=(0, 1.15, .68), radius=1.15, floats=False, notes=notes)
 
 
 # ---------- stage 2: what is underneath ----------
 
 def vertebra(c, s, seed):
+    """One vertebra, sized so it reads as bone from across a room: a squat
+    drum of a body, an arch behind it, a long spike pointing back and down,
+    a wing each side, and a lump of torn disc underneath. A gap is left to
+    the next one so the chain reads as separate links, not a screw thread."""
     f = Forms()
     c = Vector(c)
-    f.ball(c, (.05 * s, .042 * s, .03 * s))
-    f.tube([c + Vector((0, .03 * s, 0)), c + Vector((0, .1 * s, -.035 * s))], [.02 * s, .01 * s])                 # spinous process, pointing back
-    for sx in (-1, 1): f.tube([c + Vector((sx * .03 * s, .02 * s, 0)), c + Vector((sx * .085 * s, .04 * s, .005))], [.017 * s, .009 * s])
-    f.ball(c + Vector((0, 0, -.03 * s)), (.03 * s, .028 * s, .02 * s))                                                # disc, what is left of it
-    v = sculpt(f, 'vert', voxel=.0075, soften=2, lumps=[(.04, .004)])
-    decimate(v, 420)
+    f.ball(c, (.048 * s, .042 * s, .024 * s))                                                                        # the body
+    for sx in (-1, 1):
+        f.tube([c + Vector((sx * .03 * s, .03 * s, 0)), c + Vector((sx * .022 * s, .07 * s, .004 * s))], [.013 * s, .011 * s])   # the arch
+        f.tube([c + Vector((sx * .03 * s, .045 * s, .004 * s)), c + Vector((sx * .105 * s, .06 * s, .012 * s))], [.014 * s, .007 * s])   # wings
+    f.tube([c + Vector((0, .07 * s, .004 * s)), c + Vector((0, .135 * s, -.05 * s))], [.016 * s, .007 * s])          # spinous process
+    f.ball(c + Vector((0, 0, -.03 * s)), (.036 * s, .032 * s, .011 * s))                                            # disc, what is left of it
+    v = sculpt(f, 'vert', voxel=.0065, soften=2, lumps=[(.04, .004)])
+    decimate(v, 500)
 
     def fn(P, N, c=c, s=s):
         rgb = mixc(BONE, '#7d6b45', sstep(.4, .7, fbm(P, 40, seed)))
-        low = sstep(.0, -.03 * s, P[:, 2] - c.z)
-        return dict(rgb=rgb, rough=.4, fuzz=.15, blood=low * .6 + .35 * fbm(P, 25, seed + 2))
+        disc = sstep(-.02 * s, -.027 * s, P[:, 2] - c.z)
+        rgb = mixc(rgb, lin('#47271e'), disc)
+        return dict(rgb=rgb, rough=np.where(disc > .5, .25, .4), fuzz=.15, blood=disc * .55 + .3 * fbm(P, 25, seed + 2))
     return paint(v, fn)
 
 
@@ -516,7 +603,13 @@ def stage2():
              warts=34, voxel=.018, soften=8, lumps=[(.4, .07), (.13, .022)], tris=22000, jaw_tris=9000)
     look = lambda sx: Vector((sx * .3, -1, -.2)).normalized()
     bc = lambda sx: Vector((sx * H['bump'][0], H['bump'][1], H['bump'][2]))
-    H['socket'] = lambda sx: (tuple(bc(sx) + look(sx) * .15), .125 if sx > 0 else .11)
+    # The eyes, and they do not match. Left: bigger, sitting lower, its pupil blown open and turned out and
+    # up, past you. Right: a pinprick in a washed-out iris, aimed down at whoever is under it. Both bulge
+    # half out of the head, so the torch finds them before anything else.
+    EYE = {1: dict(r=.17, drop=.035, gaze=(.45, -1, .06), pupil=.56, iris=.68, iris_col='#4c3a22'),
+           -1: dict(r=.15, drop=0, gaze=(.1, -1, -.24), pupil=.065, iris=.46, iris_col='#a7aa94')}
+    ec = lambda sx: bc(sx) + look(sx) * .1 - Vector((0, 0, EYE[sx]['drop']))
+    H['socket'] = lambda sx: (tuple(ec(sx)), EYE[sx]['r'] * 1.07)     # concentric with the eye, so it turns freely
     cav, throat = ((0, -.07, 1.78), (.64, .5, .3)), ((0, .16, 1.72), .27)
     H['cavity'] = [cav, throat]
     H['carve'] = [cav, throat] + [H['socket'](sx) for sx in (-1, 1)]
@@ -535,12 +628,13 @@ def stage2():
     grid = []
     for i in range(seg):
         a = i / seg * math.tau
-        drop = (.14 + rng.random() * .1) if i % 2 else (.3 + rng.random() * .3)
+        drop = (.08 + rng.random() * .1) if i % 2 else (.18 + rng.random() * .18)   # short, so the shrunken rear shows below it
         ring = []
         for k in range(rows):
             t = k / (rows - 1)
             flare = 1 + .08 * t + (rng.random() - .5) * .08 * t
-            ring.append(bm.verts.new((math.sin(a) * .47 * flare, .3 - math.cos(a) * .27 * flare, 1.66 - t * drop - .12 * t)))
+            # the top ring sits inside the head, so only the torn edge shows below it
+            ring.append(bm.verts.new((math.sin(a) * .4 * flare, .2 - math.cos(a) * .2 * flare, 1.68 - t * drop - .14 * t)))
         grid.append(ring)
     for i in range(seg):
         a, b = grid[i], grid[(i + 1) % seg]
@@ -551,8 +645,8 @@ def stage2():
     apply_mods(skirt)
 
     def fs(P, N):
-        out = np.einsum('ij,ij->i', N[:, :2], P[:, :2] - np.array((0, .3))) > 0
-        rgb = np.where(out[:, None], skin(P, 2, 3), lin('#3a0b0e'))
+        out = np.einsum('ij,ij->i', N[:, :2], P[:, :2] - np.array((0, .2))) > 0
+        rgb = np.where(out[:, None], skin(P, 2, 3), lin('#2a1511'))
         edge = sstep(1.5, 1.2, P[:, 2])
         return dict(rgb=rgb, rough=np.where(out, .85, .3), fuzz=np.where(out, .8, .2), blood=np.where(out, edge * .75 + .25 * runs(P, 6), .65))
     paint(skirt, fs)
@@ -560,14 +654,9 @@ def stage2():
 
     eyes = {}
     for sx, side in ((1, 'L'), (-1, 'R')):
-        sc_, sr = H['socket'](sx)
-        c = Vector(sc_) - look(sx) * .025
-        r = sr * .8
-        eye = ball(c, r, sub=3, name='eye')
-        paint(eye, lambda P, N: dict(rgb=mixc('#020203', '#2a0608', sstep(.5, .8, fbm(P, 30, 4))), rough=.07, fuzz=.05))
-        glint = ball(c + Vector((0, -r * .97, 0)), .017, sub=2, name='glint')
-        glint.data.materials.append(glow_material())
-        eyes[side] = (eye, glint, tuple(c))
+        e = EYE[sx]
+        eye, glint = stare(ec(sx), e['r'], e['gaze'], e['pupil'], e['iris'], e['iris_col'], 40 + sx)
+        eyes[side] = (eye, glint, tuple(ec(sx)))
 
     sways = []
     for i in range(5):                                                   # black strands across the mouth
@@ -579,44 +668,53 @@ def stage2():
         roots = [lip(H, a + rng.uniform(0, .5), H['su'], inset=.03) + Vector((0, 0, .012)) for _ in range(3)]
         sways.append((strands(f'sway_{i + 6}', roots, .6, 60 + i, col=BLOOD, r0=.008, blood=1), 'head'))
     for i, sx in enumerate((-1, 1)):                                     # off the tear, either side
-        roots = [(sx * (.2 + .26 * k / 4) + rng.uniform(-.02, .02), .3 - math.sqrt(max(0, 1 - ((.2 + .26 * k / 4) / .5) ** 2)) * .28, 1.4) for k in range(5)]
+        roots = [(sx * (.16 + .2 * k / 4) + rng.uniform(-.02, .02), .2 - math.sqrt(max(0, 1 - ((.16 + .2 * k / 4) / .42) ** 2)) * .21, 1.46) for k in range(5)]
         sways.append((strands(f'sway_{i + 9}', roots, .6, 70 + i, col=BLOOD if i else HAIR, r0=.008, blood=i), 'head'))
 
-    # the rear came with it. Hips, two lobes, and the stump of the neck going up into the head
+    # The rear came with it, but it has emptied out: a small shrivelled lump,
+    # lopsided and torn open on one side, hanging from a stump of neck. It is
+    # kept small on purpose (owner's call for this stage) so the mouth and the
+    # spine are what you see, not a joke.
     f = Forms()
-    f.ball((0, .3, 1.0), (.82, .5, .32), sub=4)
-    for sx in (-1, 1):
-        f.ball((sx * .37, .58, .98), (.45, .4, .4))
-        f.ball((sx * .68, .32, .96), (.26, .36, .28))
-    f.ball((0, .3, 1.36), (.3, .2, .26))
-    f.ball((.08, .28, 1.5), (.2, .16, .14))
-    body = sculpt(f, 'body', voxel=.02, soften=6, lumps=[(.4, .05), (.12, .018)])
-    decimate(body, 12000)
+    f.ball((0, .24, 1.08), (.3, .23, .19), sub=4)
+    f.ball((.15, .33, 1.03), (.17, .15, .15))                          # two sagging lobes, not a matched pair
+    f.ball((-.13, .35, 1.06), (.14, .13, .12))
+    f.ball((0, .28, 1.32), (.17, .13, .2))                             # neck stump, up into the head
+    f.ball((.04, .27, 1.48), (.13, .1, .1))
+    body = sculpt(f, 'body', voxel=.014, soften=4, lumps=[(.2, .06), (.05, .028)])     # strong fine lumps read as wrinkles
+    tears = [((-.27, .2, 1.04), .1), ((-.2, .1, .98), .07)]            # the torn side, opening into it
+    for cc, cr in tears:
+        b = ball(cc, cr, sub=3); boolean(body, b); delete(b)
+    decimate(body, 9000)
 
     def fb(P, N):
         rgb = skin(P, 2, 5)
+        # dried out and grey-brown all over, near black in the creases, so it reads as dead tissue and not as a soft cushion
+        rgb = mixc(rgb, lin('#3b3a26'), .45 + .35 * sstep(.4, .65, fbm(P, 14, 12)))
+        rgb = rgb * (.55 + .5 * sstep(.25, .6, fbm(P, 22, 13)))[:, None]
         raw = sstep(1.24, 1.34, P[:, 2])
-        rgb = mixc(rgb, lin('#4a1014'), raw)
-        soak = sstep(1.0, 1.3, P[:, 2]) * (.5 + .6 * runs(P, 3)) + sstep(.75, .6, P[:, 2]) * .5 * runs(P, 8)
-        under = sstep(.2, .0, np.linalg.norm((P - np.array((0, .12, .82))) / np.array((1, 1, 1.)), axis=1)) * .9
+        for cc, cr in tears: raw = np.maximum(raw, sstep(cr * 1.5, cr * 1.0, np.linalg.norm(P - np.array(cc), axis=1)))
+        rgb = mixc(rgb, lin('#3b1c16'), raw)
+        soak = sstep(1.0, 1.3, P[:, 2]) * (.25 + .6 * runs(P, 3)) + sstep(.98, .88, P[:, 2]) * .6 * runs(P, 8)
+        under = sstep(.16, .0, np.linalg.norm(P - np.array((0, .2, .9)), axis=1)) * .9
         return dict(rgb=rgb, rough=np.where(raw > .5, .3, .9), fuzz=1 - raw * .7, blood=np.clip(np.maximum(soak, under) + raw * .6, 0, 1))
     paint(body, fb)
 
-    # a length of bare spine out of the underside, in four links of two vertebrae
+    # a length of bare spine out of the underside, in four links of two
+    # vertebrae, bigger near the body and hanging in a slight curve
     links, pivots = [], []
-    top, n = Vector((0, .12, .86)), 8
+    top, n, step = Vector((0, .2, .92)), 8, .07
     for i in range(n):
-        s = 1 - i * .055
-        c = top + Vector((math.sin(i * .9) * .008, -.012 * i + .004 * i * i * .2, -.064 * i))
+        s = 1.3 - i * .06
+        c = top + Vector((math.sin(i * .9) * .01, -.016 * i + .0028 * i * i, -step * i))
         v = vertebra(c, s, 80 + i)
         if i % 2 == 0: links.append(v); pivots.append(tuple(c + Vector((0, 0, .03))))
         else: join(links[-1], [v])
-    low = top.z - .064 * (n - 1) - .05
     # drips off the spine, stopping short of its end
-    drip = strands('sway_11', [tuple(top + Vector((rng.uniform(-.03, .03), -.012 * i + rng.uniform(-.03, .05), -.064 * i))) for i in (3, 4, 5)], .1, 90, col=BLOOD, r0=.006, blood=1)
+    drip = strands('sway_11', [tuple(top + Vector((rng.uniform(-.03, .03), -.016 * i + .0028 * i * i + rng.uniform(-.03, .05), -step * i))) for i in (3, 4, 5)], .1, 90, col=BLOOD, r0=.006, blood=1)
 
     root = empty('root')
-    body = part(body, 'body', root, (0, .3, 1.0))
+    body = part(body, 'body', root, (0, .24, 1.1))
     head = part(head, 'head', body, (0, .3, 1.5))
     jaw = part(jaw, 'jaw', head, (0, H['yh'], H['zh']))
     baked, glows = [body, head, jaw], []
@@ -629,17 +727,22 @@ def stage2():
         parent = part(o, 'extra_1' if i == 0 else f'extra_1_{i + 1}', parent, pivot)
         baked.append(parent)
         if i == 1: baked.append(part(drip[0], 'sway_11', parent, drip[1]))
+    dried(baked)                         # every drop of blood on it is old
     notes = ("No legs: it hangs in the air, so bob root about 7 cm at 1.2 rad/s and let it drift, never step. head carries the "
-             "ragged skirt of torn neck; body is the rear and the neck stump. jaw hinges behind the eyes at full head width: rest "
+             "ragged skirt of torn neck; body is what is left of the rear, a small shrivelled lump torn open on its right side, and "
+             "the neck stump. jaw hinges behind the eyes at full head width: rest "
              "is a 20 cm grin showing 17 upper teeth, x 0.5 is a scream, and it goes on to 1.1 for the jumpscare, which is far "
-             "more than a jaw should. Past 1.1 the chin enters the rear. extra_1 > extra_1_2 > extra_1_3 > extra_1_4 is the bare "
+             "more than a jaw should. Tested at 0.9 with the head pitched 0.35: no gaps; keep it at 1.1 or less. extra_1 > extra_1_2 > extra_1_3 > extra_1_4 is the bare "
              "spine under the rear, two vertebrae a link: swing each link 5 to 10 degrees on x and z with a lag down the chain, "
              "more when it turns. sway_1 to sway_5 are black strands on the upper lip (left to right as you face it), sway_6 to "
              "sway_8 blood strings on the lip, sway_9 (black) and sway_10 (blood) hang off the torn neck on either side, sway_11 "
-             "drips off the spine (child of extra_1_2). Idle: bob, spine trailing, eyes fixed on the player; each eye has one "
-             "eye_glow pinprick on its front, so keep the eyes turned to the player or the points vanish into the sockets. Attack: "
-             "tilt head back 15 degrees (head x -0.25) while the jaw drops, then lunge. Limits: head +-20 on x and z, +-30 on y "
-             "(the skirt hides the join); the eyes can turn about 35 degrees before the pinprick meets the socket rim.")
+             "drips off the spine (child of extra_1_2); all the blood is old and near black. The eyes are big, pale, lidless and "
+             "never blink, and they disagree by construction: eye_R has a pinprick pupil aimed down at the player, eye_L is bigger, "
+             "sits lower and has a blown pupil turned out and up, past them. So aim eye_R at the player and let eye_L lag or stay "
+             "put. Each eye has one small eye_glow catchlight just above its pupil. Idle: bob, spine trailing, eye_R fixed on the "
+             "player. Attack: tilt head back 15 degrees (head x -0.25) while the jaw drops, then lunge. Limits: head +-20 on x and "
+             "z, +-30 on y (the skirt hides the join); each eye sits in a socket centred on it, so it can turn any amount without "
+             "a gap, and its pupil stays in view to about 45 degrees.")
     return dict(root=root, baked=baked, glows=glows, face=(0, 1.85, .62), radius=.95, floats=True, notes=notes)
 
 

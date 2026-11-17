@@ -164,13 +164,31 @@ def head(rig, M, stage, T, parent, rng, tris):
             dot = setmat(solid(cen + d * (r + .004) + np.array([sx * .0, 0, 0]), (.011, .011, .003), rot=aim(d), sub=1, name='dot'), shade.glow())
             eye_parts.append((side, cen, [ball, pupil], [dot]))
         else:
-            r = .064 if side == 'L' else .052
-            cen = hit + np.array([0, r * 1.25, 0])
-            ring = loop(hit + (0, .03, 0), r * 1.45, .024, n=20, m=7, name='rim', wobble=.12, rng=rng)
-            roughen(ring, .006, 40, seed=5)
-            pieces.append(mat(ring, M['meat']))
-            ball = mat(solid(cen, (r, r, r), sub=3, name='ball'), M['eyeball'])
-            dot = setmat(solid(cen + np.array([0, -(r + .002), 0]), (.0095, .0095, .003), rot=aim((0, -1, 0)), sub=1, name='dot'), shade.glow())
+            # The plastic eyes are gone and something's own eyes fill the
+            # sockets: bigger than the costume's, bulging, wet, lidless. They
+            # do not match. The left is blown, all pupil, and aimed off to the
+            # side; the right is a pinprick and looks down at whoever is
+            # holding the torch. The gazes are given in the world, past the
+            # lolled head, so the right one meets the player in the rest pose.
+            # The iris and pupil are painted (shade.stare) in the ball's own
+            # space, gaze along +z, so the ball turns as one.
+            r, dw = ((.104, (.55, -1, .3)) if side == 'L' else (.094, (.02, -1, -.38)))
+            d = np.array(T.to_3x3().inverted() @ Vector(dw))
+            d = d / np.linalg.norm(d)
+            cen = hit + np.array([0, r * .42, 0])
+            ball = solid((0, 0, 0), (1, 1, 1), sub=4, name='ball')
+            v = co(ball)
+            rho = np.hypot(v[:, 0], v[:, 1])
+            v *= (1 + .07 * np.exp(-(rho / .45) ** 2) * (v[:, 2] > 0))[:, None]   # the cornea, proud of the ball
+            setco(ball, v)
+            stamp_rest(ball)
+            R = aim(d).to_matrix()
+            xform(ball, Matrix.Translation(Vector(cen)) @ R.to_4x4() @ Matrix.Scale(r, 4))
+            mat(ball, M['stare_' + side])
+            # a catchlight, the same way up on both, so it sits somewhere
+            # different on each iris: the one point that shows in the dark
+            cl = d + np.array([-.22, 0, .3]); cl /= np.linalg.norm(cl)
+            dot = setmat(solid(cen + cl * (r * 1.06 + .002), (.0105, .0105, .003), rot=aim(cl), sub=1, name='dot'), shade.glow())
             eye_parts.append((side, cen, [ball], [dot]))
 
     # fur that breaks the outline
@@ -180,7 +198,7 @@ def head(rig, M, stage, T, parent, rng, tris):
     if stage == 0:
         tf = tufts(skull, 70, .035, rng, lambda p, nn: (p[:, 2] > .78) | ((np.abs(p[:, 0]) > .36) & (p[:, 2] < .3)), width=.012, droop=.3)
     else:
-        tf = tufts(skull, 230 if stage == 1 else 260, .075, rng, furry, width=.016, droop=.9)
+        tf = tufts(skull, 230 if stage == 1 else 170, .075, rng, furry, width=.022, droop=1.0)
     mat(skull, M['head']); decimate(skull, tris)
     if tf is not None: pieces.append(mat(tf, M['head']))
     pieces.insert(0, skull)
@@ -212,7 +230,7 @@ def head(rig, M, stage, T, parent, rng, tris):
                 bloody = stage == 2 and (j + g) % 3 == 0
                 Ls = maxlen * rng.uniform(.3, 1.0) * (.75 if bloody else 1)
                 s = strand(tp, Ls, rng.uniform(.006, .01), rng, wave=.035, segs=8, n=5, blob=.011 if bloody else 0)
-                ss.append(mat(s, M['wetblood'] if bloody else M['hair']))
+                ss.append(mat(s, M['crust'] if bloody else M['hair']))
             piv = np.mean([tp for tp in sel], axis=0)
             rig.sway('head', piv, ss, 'black strands hanging from under the muzzle' + (', some clotted with blood' if stage == 2 else ''))
 
@@ -335,8 +353,11 @@ def worm(rig, M, ctrl, links, rng, r0=.2, r1=.135):
         for k in range(1, 4):
             th = k / 4 * math.pi / 2
             us.append(b + jb * math.sin(th)); rs.append(jb * math.cos(th))
-        us = np.clip(np.array(us), 0, total + 1)
-        pts = np.array([at(u) if u <= total else path[-1] + (path[-1] - path[-2]) / np.linalg.norm(path[-1] - path[-2]) * (u - total) for u in us])
+        # past either end of the path, carry straight on, so the end caps stay round
+        d0 = (path[1] - path[0]) / np.linalg.norm(path[1] - path[0])
+        d1 = (path[-1] - path[-2]) / np.linalg.norm(path[-1] - path[-2])
+        us = np.array(us)
+        pts = np.array([path[0] + d0 * u if u < 0 else at(u) if u <= total else path[-1] + d1 * (u - total) for u in us])
         lump = fbm(np.stack([np.cos(ang)[None, :] * 3 + i * 9.1 + 0 * us[:, None], np.sin(ang)[None, :] * 3 + 0 * us[:, None], us[:, None] * 9 + 0 * ang[None, :]], -1).reshape(-1, 3), 3, seed=i).reshape(len(us), n)
         sag = 1 + .06 * np.cos(ang - math.pi)[None, :]             # heavier underneath
         rad = np.array(rs)[:, None] * (1 + .1 * lump) * sag
@@ -394,7 +415,7 @@ def worm_mouth(rig, M, name, parent, tip, rj, rng, first_ring=2):
         dy = -lipw[i] * .03 * lobe * size
         return dy, dr
 
-    bell = fix_normals(revolve(prof, n=120, name='bell', mod=mod))
+    bell = fix_normals(revolve(prof, n=105, name='bell', mod=mod))
     roughen(bell, .004, 30, seed=2, mask=lambda p: (p[:, 1] > .06) * 1.0)
     pieces, glow = [mat(bell, M['mouth'])], []
     # bead eyes round the rim, each with its own pinprick
@@ -409,8 +430,8 @@ def worm_mouth(rig, M, name, parent, tip, rj, rng, first_ring=2):
     for (a0, a1) in ((.4, 3.3), (2.2, 5.3), (4.6, 1.2)):
         p0 = np.array([math.cos(a0) * .2, .0, math.sin(a0) * .2]); p1 = np.array([math.cos(a1) * .19, .04, math.sin(a1) * .19])
         tt = np.linspace(0, 1, 9)
-        pts = p0 + (p1 - p0) * tt[:, None] + np.outer(np.sin(tt * math.pi), (0, .015, -.05))
-        pieces.append(mat(tube(pts, .0035 + .004 * np.abs(np.cos(tt * math.pi)) ** 3, n=5, name='string'), M['slime']))
+        pts = p0 + (p1 - p0) * tt[:, None] + np.outer(np.sin(tt * math.pi), (0, .02, -.09))
+        pieces.append(mat(tube(pts, .0018 + .006 * np.abs(np.cos(tt * math.pi)) ** 4, n=5, name='string'), M['slime']))
 
     Tm = Matrix.Translation(Vector(tip) - Vector((0, LEN, 0)))
     made = [(name, parent, (0, LEN, 0), pieces, glow, None)]

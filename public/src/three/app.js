@@ -21,7 +21,7 @@ function create() {
   const stage = document.querySelector('.ts-stage'), flat2d = document.getElementById('c'), bar = document.getElementById('hud');
   const canvas = document.createElement('canvas'); canvas.id = 'c3'; stage.append(canvas);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x030305);
   scene.fog = new THREE.FogExp2(0x030305, FOG);
@@ -114,7 +114,7 @@ function create() {
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch);   // also runs the catch, which takes the camera
       sound.update(S, player.me, dt);
-      hud.update(S, player.me);
+      hud.update(S, player.me, actors.scare.active);
       post.render(scene, camera, now, fear, dread, world.stop);
       actors.after();
     },

@@ -4,7 +4,7 @@
   {
    "file": "rhino_0.glb",
    "height": 2.62,
-   "radius": 1.07,
+   "radius": 1.1,
    "face": [
     0.0,
     2.15,
@@ -29,7 +29,91 @@
    ],
    "notes": "The costume as built: heavy, upright, cheerful. Walk: a slow waddle, swing leg_L/leg_R about x by up to 25 degrees with the shin following 10 to 15 more, body rolling 3 to 4 degrees about z onto the standing leg; the hips are 2 m wide so keep the stride short. Arms swing opposite the legs, 20 degrees at the shoulder. Idle: breathe by scaling body a little, turn head up to 35 degrees about y, tilt 15 about z. The eyes never blink; let eye_L and eye_R track the player (up to 30 degrees) while the head stays still. Attack: it charges, body pitched forward 15 degrees, head down 20 so the horn leads, arms back. Jumpscare: push the head at the camera, horn first. Limits: leg 35, shin 40 (bend backward only, positive x), arm 60 forward and back and 30 out to the side (the fists pass the hips), forearm 50, head 40 about y and 25 about x before the neck opens. No jaw: the smile is sewn on. Parts: sway_1: the tail: a short rope with a tuft, hangs over the rear."
   },
-  null,
-  null
+  {
+   "file": "rhino_1.glb",
+   "height": 2.14,
+   "radius": 1.15,
+   "face": [
+    0.0,
+    1.5,
+    0.55
+   ],
+   "floats": false,
+   "nodes": [
+    "arm_L",
+    "arm_R",
+    "body",
+    "eye_L",
+    "eye_R",
+    "forearm_L",
+    "forearm_R",
+    "head",
+    "leg_L",
+    "leg_R",
+    "root",
+    "shin_L",
+    "shin_R",
+    "sway_1",
+    "sway_2",
+    "sway_3",
+    "sway_4"
+   ],
+   "notes": "Folded into a deep crouch: rear on the floor, knees up beside the ears, long arms planted between them. The rest pose is the idle. Idle: almost still, then small wrong movements: rock body 3 degrees about x, let the head drop and snap back, twitch one forearm. The eyes do not agree (the pupils are baked off-axis), so turning eye_L and eye_R to the player still leaves them looking two ways. Walk: it does not stand. Move it as a crawl or a frog hop: both arms reach forward (arm about x by -30, forearm +20), body pitches forward 15, then the legs fold shut (leg about x by -15, shin +25) as the rear drags up behind. Or just slide it between hops; the hop is what sells it. Attack: the spring. Body pitches forward 30 to 40 degrees and rises, legs straighten (leg +40, shin -50), arms come up and out. Jumpscare: head and stitched mouth into the camera, arms either side. Limits: leg 40, shin 50, arm 45, forearm 40, head 35 any axis. The shoulders are thin; past 45 degrees the arm leaves its socket. The hands are part of the forearm and do not articulate. Parts: sway_1: the tail: a short rope with a tuft, hangs over the rear; sway_2: black strands hanging from under the muzzle; sway_3: black strands hanging from under the muzzle; sway_4: black strands hanging from under the muzzle."
+  },
+  {
+   "file": "rhino_2.glb",
+   "height": 3.06,
+   "radius": 1.09,
+   "face": [
+    0.28,
+    2.62,
+    1.0
+   ],
+   "floats": false,
+   "nodes": [
+    "arm_L",
+    "arm_R",
+    "body",
+    "extra_1",
+    "extra_1_10",
+    "extra_1_11",
+    "extra_1_12",
+    "extra_1_13",
+    "extra_1_2",
+    "extra_1_3",
+    "extra_1_4",
+    "extra_1_5",
+    "extra_1_6",
+    "extra_1_7",
+    "extra_1_8",
+    "extra_1_9",
+    "extra_2",
+    "extra_3",
+    "extra_4",
+    "extra_5",
+    "eye_L",
+    "eye_R",
+    "forearm_L",
+    "forearm_R",
+    "head",
+    "leg_L",
+    "leg_R",
+    "neck",
+    "root",
+    "shin_L",
+    "shin_R",
+    "sway_1",
+    "sway_10",
+    "sway_2",
+    "sway_3",
+    "sway_4",
+    "sway_5",
+    "sway_6",
+    "sway_7",
+    "sway_8",
+    "sway_9"
+   ],
+   "notes": "It stands, slack, hung from the worm that came out of its belly; the costume is a puppet now. The big rear of the earlier stages is gone: the hips are emptied out, narrower than the shoulders, with the empty plush hanging off them in folds (part of body), so the worm is the biggest thing on it. The head lolls on a broken neck (the 40 degree tilt is baked into neck and head) and should only swing loosely, never look at anything. The eyes are what is alive in it: two big pale wet eyeballs bulging from the sockets, lidless, never blinking, that do not match. eye_R has a pinprick pupil and should hold on the player; eye_L is all pupil, aimed off to the side, and should arrive late or not at all. Each carries one small catchlight of eye_glow. Eyes: up to 35 degrees any axis before the iris turns under the socket. The worm is the chain extra_1 (at the belly) to extra_1_12 with its head, the mouth, as extra_1_13; each link turns about its joint with the one before. Idle: a slow travelling sway, 4 to 8 degrees per link about x and z with a phase lag down the chain, and a swallowing pulse (scale links 1.0 to 1.08 in sequence). The mouth faces forward and holds its gaze on the player while the body under it drifts. extra_2, extra_3, extra_4 are the three tooth rings (outer to inner): spin each about its local z, alternate directions. extra_5 is the second mouth down the throat: slide it out along +z by up to 0.22 m and back. Walk: the worm leads and the body is dragged: lean the first links forward, then let the legs catch up in short stiff steps (leg 15 degrees, shin 10), feet scraping, arms swinging dead from the shoulders a beat late. Attack: the worm rears back (links 8 to 12 pitch back 10 degrees each) then whips forward. Jumpscare: straighten the upper links toward the camera so the mouth fills the view, spin the rings fast, push extra_5 out. The inside of the mouth is modelled and textured to hold at close range. Limits: 25 degrees per worm link on any axis before the joints open; link 1 (extra_1) 15 degrees, it sits in the wound. Leg 30, shin 35, arm 50, forearm 45, neck 20, head 30. Parts: extra_2: tooth ring 1 of 3 in the worm mouth (19 hooked teeth, outer). Spin it about its own z; turn neighbouring rings opposite ways; extra_3: tooth ring 2 of 3 in the worm mouth (14 hooked teeth, middle). Spin it about its own z; turn neighbouring rings opposite ways; extra_4: tooth ring 3 of 3 in the worm mouth (10 hooked teeth, inner). Spin it about its own z; turn neighbouring rings opposite ways; extra_5: the second, smaller mouth deep in the throat. Slide it toward +z (out of the mouth, up to 0.22 m) and spin it; sway_1: the tail: a short rope with a tuft, hangs over the rear; sway_10: drool hanging from the lower lip of the worm mouth; sway_2: torn flaps of belly and ropes of dried blood hanging from the bottom of the wound, under the worm; sway_3: black strands hanging from under the muzzle, some clotted with blood; sway_4: black strands hanging from under the muzzle, some clotted with blood; sway_5: black strands hanging from under the muzzle, some clotted with blood; sway_6: black strands hanging from under the muzzle, some clotted with blood; sway_7: slime strands hanging under worm link 4; sway_8: slime strands hanging under worm link 7; sway_9: slime strands hanging under worm link 10."
+  }
  ]
 }

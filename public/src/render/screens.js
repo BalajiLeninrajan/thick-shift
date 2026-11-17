@@ -1,7 +1,7 @@
 // The smaller full-canvas scenes: generator, HUD, jumpscare, and the idle backdrop.
 // Film grain is not drawn here. It is a CSS layer over the stage (see styles.css).
 import { W, H, MASC, DOORS, P } from '../config.js';
-import { clock, sanityOf, tripLeft, heatRate, GEN_HEAT, genLeft, crankerOf, turning } from '../rules.js';
+import { clock, sanityOf, tripLeft, heatRate, GEN_HEAT, GEN_LOCK, genLeft, crankerOf, turning } from '../rules.js';
 import { game, client } from '../state.js';
 import { sanityCap } from '../sim.js';
 import { c, cv, TAU, mix, rgba, hash, font, ell, rect, rrect, poly, vgrad, glow, vignette, text, pxScale, resetTransform } from './canvas.js';
@@ -60,10 +60,10 @@ export function drawCrank(S, t) {
     ell(290 + hash(i + 70) * 220 + Math.sin(t + i) * 8, 152 - life * 80, 10 + life * 22, 8 + life * 16, rgba(P.overlay1, (1 - life) * .4 * Math.min(1, (heat - .7) / .2)));
   }
   // What the guard at the generator needs to know: is it mine, is it turning, and if not, when.
-  const lock = Math.round((1 - GEN_HEAT.reset) * GEN_HEAT.cool);
-  const [title, note] = S.seized ? ['Generator seized', `Too hot to turn. Ready in ${Math.ceil(genLeft(S))} s.`]
+  // Letting go in the red costs nothing. Riding it into a seize locks it for GEN_LOCK, which is longer (GEN_HEAT.jam).
+  const [title, note] = S.seized ? ['Generator seized', `Jammed. Ready in ${Math.ceil(genLeft(S))} s.`]
     : !mine ? [`${by.name} has the handle`, 'One handle. Go back to the doors or wait.']
-    : heat > .7 ? ['Cranking the generator', `It is running hot. Let go before the red runs out, or it seizes for ${lock} s.`]
+    : heat > .7 ? ['Cranking the generator', `It is running hot. Let go before the red runs out, or it jams for ${Math.round(GEN_LOCK)} s.`]
     : ['Cranking the generator', 'Power is coming back. You can\'t see the doors from here, and they can hear you.'];
   text(title, W / 2, 90, { size: 22, weight: 700, col: S.seized ? P.red : P.text, align: 'center' });
   text(note, W / 2, 116, { size: 13, weight: 400, col: P.subtext0, align: 'center' });
@@ -135,9 +135,18 @@ export function drawHud(S, view) {
     rrect(W - 164 + i * 9, 16, 6, 18, 2, lit ? col : P.surface0);
   }
   if (p > 0) glow(W - 92, 25, 80, col, .1);
+  // Who is where, on a plate like the strips above so it reads as HUD and not
+  // as part of the room. Past three guards it goes two to a row with shorter
+  // names, so it never runs further down the left doorway than three do.
+  const n = S.players.length, cols = n > 3 ? 2 : 1, rows = Math.ceil(n / cols);
+  const labels = S.players.map(pl => (cols === 2 ? pl.name.slice(0, 8) : pl.name) + (pl.view === 'office' ? '' : ` (${pl.view})`));
+  c.font = font(500, 11);
+  const colW = Math.max(0, ...labels.map(s => c.measureText(s).width)) + 26;
+  if (n) rrect(10, 68, cols * colW, rows * 16 + 4, 6, rgba(P.ink, .6));
   S.players.forEach((pl, i) => {
-    ell(18, 78 + i * 16, 4, 4, VIEW_COL[pl.view] || P.green);
-    text(pl.name + (pl.view === 'office' ? '' : ` (${pl.view})`), 28, 82 + i * 16, { size: 11, weight: 500, col: P.subtext1 });
+    const x = 10 + (i % cols) * colW, y = 78 + Math.floor(i / cols) * 16;
+    ell(x + 8, y, 4, 4, VIEW_COL[pl.view] || P.green);
+    text(labels[i], x + 18, y + 4, { size: 11, weight: 500, col: P.subtext1 });
   });
   if (p > 0 && p < 15) {
     const v = c.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 520);

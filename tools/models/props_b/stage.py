@@ -38,7 +38,8 @@ def curtain(p):
         depth = (w.y + .15) / .3            # 0 at the front of a pleat, 1 at the back
         k = 1.05 - .5 * max(0, min(1, depth))
         low = max(0, min(1, (-w.z - 2.6) / .8))
-        return mixc((.62 * k, .07 * k, .08 * k), (.2, .09, .06), low * .6)
+        dust = max(0, min(1, (w.z + .9) / .9)) * (1 - .6 * max(0, min(1, depth)))   # grey on the folds near the rail
+        return mixc(mixc((.62 * k, .07 * k, .08 * k), (.2, .09, .06), low * .6), (.42, .38, .36), dust * .4)
 
     p.sheet(f, 100, 22, size=(4.6, H), keep=holes, t='velvet', c=col)
     p.box((W, .012, .07), (0, 0, -.045), t='velvet', c=(.5, .4, .2), ts=.2)      # the heading tape
@@ -64,7 +65,7 @@ def stage_light(p):
     with p.place((0, 0, -.31), rot=(35, 0, 0)):
         # the can lies along local -Y (front); built along z and laid over
         prof = [(0, .2), (.06, .195), (.1, .16), (.115, .1), (.12, -.16), (.128, -.165), (.128, -.2), (.112, -.2), (.108, -.17)]
-        p.lathe(prof, rot=(-90, 0, 0), segs=16, **dark)
+        p.lathe(prof, rot=(-90, 0, 0), segs=20, **dark)
         p.lathe([(0, -.168), (.07, -.17), (.108, -.176)], rot=(-90, 0, 0), segs=16, m='lamp_glow')   # lens, set back in the rim
         for i in range(6):   # cooling slots at the back
             a = D(i * 60)
@@ -78,7 +79,7 @@ def stage_light(p):
     p.tube([(0, .02, -.1), (.05, .05, -.2), (.02, .1, -.26), (0, .03, -.12)], .003, segs=3, t='steel', c=STEEL)   # safety wire
 
 
-@prop('speaker', notes='PA speaker on a tripod. The legs reach 0.45 m from the pole, so keep it off the walls.')
+@prop('speaker', notes='PA speaker on a tripod. The legs reach 0.45 m from the pole, so the feet span 0.9 m. Keep it off the walls.')
 def speaker(p):
     dark = dict(t='plastic', c=(.12, .12, .13))
     for i in range(3):
@@ -128,7 +129,7 @@ def suit(p, kind, fat=1., full=False, slip=0., tall=1.):
     """An empty fur suit on a hanger. Local origin is the rail (the hanger
     hooks over it), front toward -Y. full: it hangs the way a filled suit
     would, round, with the feet on the floor."""
-    fur, belly = faded(FUR[kind], .45), faded(BELLY[kind], .5)
+    fur, belly = faded(FUR[kind], .2), faded(BELLY[kind], .25)
     inv = p.M.inverted()
     ry = (1.75 if full else 1.) * fat
 
@@ -137,7 +138,12 @@ def suit(p, kind, fat=1., full=False, slip=0., tall=1.):
         on_belly = q.y < 0 and ((q.x / .15) ** 2 + ((q.z + .68) / .27) ** 2) < 1 and abs(q.x) < .2
         c = belly if on_belly else fur
         k = .8 + .2 * min(1, max(0, -q.y / .08 + .5))      # the side that faced the room is paler
-        return (c[0] * k, c[1] * k, c[2] * k)
+        # long damp stains run down from the collar and pool at the seat and knees
+        streak = noise.noise(Vector((q.x * 9, q.y * 9, q.z * 1.4)) + Vector((kind * 3.7, 0, 0)))
+        pool = max(0, min(1, (-q.z - .7) / .25)) * max(0, min(1, 1 - abs(-q.z - 1.0) / .3))
+        wet = max(0, min(1, (streak - .15) * 3)) * .55 + pool * .25
+        k *= 1 - wet
+        return (c[0] * k * (1 - .1 * wet), c[1] * k * (1 - .25 * wet), c[2] * k * (1 - .4 * wet))
 
     st = dict(t='fur', c=col)
     wire = dict(t='steel', c=(.7, .7, .72))
@@ -182,7 +188,7 @@ def suit(p, kind, fat=1., full=False, slip=0., tall=1.):
         p.tufts(tuft, length=.07, width=.014, c=fur)
 
 
-@prop('costume_rack', notes='Four headless suits on a rolling rail. The third from the left hangs full and has its feet on the floor; the others are empty. Put it side on to a doorway so the row is seen from across the room.')
+@prop('costume_rack', notes='Four headless suits on a rolling rail, 1.8 m long; the sleeves reach about 0.05 m past each end. The third from the left hangs full and has its feet on the floor; the others are empty. Put it side on to a doorway so the row is seen from across the room.')
 def costume_rack(p):
     chrome = dict(t='steel', c=(.75, .75, .78))
     for s in (-1, 1):
@@ -195,7 +201,8 @@ def costume_rack(p):
             p.cyl(.035, .026, (x - .013, y, .036), rot=(0, 90, 0), segs=10, t='vinyl', c=(.12, .12, .12))
     p.tube([(-.86, 0, 1.82), (0, 0, 1.812), (.86, 0, 1.82)], .014, segs=8, **chrome)      # the rail bows under the weight
     p.tube([(-.86, 0, .12), (.86, 0, .12)], .012, segs=6, **chrome)
-    spots = [(-.6, 0, 6, 1., False, 5, 1.), (-.2, 1, -9, 1.08, False, -3, .96), (.2, 2, 4, 1., True, 0, 1.), (.62, 3, 14, .95, False, 9, 1.02)]
+    # packed close, as on a real rail, so the sleeves stay within the 1.8 m frame
+    spots = [(-.5, 0, 6, 1., False, 5, 1.), (-.17, 1, -9, 1.08, False, -3, .96), (.18, 2, 4, 1., True, 0, 1.), (.5, 3, 9, .95, False, 6, 1.02)]
     for x, kind, yaw, fat, full, slip, tall in spots:
         with p.place((x, 0, 1.812 + .004 * abs(x)), rot=(0, 0, yaw)):
             suit(p, kind, fat, full, slip, tall)
@@ -210,7 +217,7 @@ def costume_rack(p):
 
 # -------------------------------------------------------------------- heads
 
-def eye(p, r, at, bad=False, missing=False, yaw=0., pitch=0.):
+def eye(p, r, at, bad=False, missing=False, yaw=0., pitch=0., glass=True):
     """A moulded plastic costume eye, far too big, under a clear dome so it
     throws the torch back."""
     with p.place(at, rot=(90 + pitch, 0, yaw)):
@@ -218,9 +225,9 @@ def eye(p, r, at, bad=False, missing=False, yaw=0., pitch=0.):
             p.lathe([(0, -r * .45), (r * .7, -r * .3), (r * 1.02, 0)], segs=10, t='vinyl', c=(.25, .2, .12), ts=.2)
             return
         dome = [(0, r * .5), (r * .5, r * .43), (r * .87, r * .25), (r, 0)]
-        p.lathe(dome, segs=12, disc=True, rect='eye_bad' if bad else 'eye')
-        p.lathe([(q[0] * 1.04, q[1] * 1.08) for q in dome], segs=12, m='glass')
-        p.lathe([(r, 0), (r * 1.12, -.002), (r * 1.1, -r * .2)], segs=12, t='plastic', c=(.05, .05, .05))   # the rim
+        p.lathe(dome, segs=10, disc=True, rect='eye_bad' if bad else 'eye')
+        if glass: p.lathe([(q[0] * 1.04, q[1] * 1.08) for q in dome], segs=10, m='glass')
+        p.lathe([(r, 0), (r * 1.12, -.002), (r * 1.1, -r * .2)], segs=10, t='plastic', c=(.05, .05, .05))   # the rim
 
 
 def smile(p, w, y, z, bend=.06, lift=.05, r=.014, teeth=0, c=(.12, .02, .03)):
@@ -234,7 +241,7 @@ def smile(p, w, y, z, bend=.06, lift=.05, r=.014, teeth=0, c=(.12, .02, .03)):
 
 def head(p, kind, damage=''):
     """A spare mascot head, sitting on its neck hole, facing -Y. About 0.5 m."""
-    fur, belly = faded(FUR[kind], .4), faded(BELLY[kind], .4)
+    fur, belly = faded(FUR[kind], .2), faded(BELLY[kind], .2)
     st = dict(t='fur', c=fur, ts=.35)
     lite = dict(t='fur', c=belly, ts=.35)
     bad = 'eye_bad' in damage
@@ -246,8 +253,8 @@ def head(p, kind, damage=''):
             tuft.append(((math.cos(a) * rx, math.sin(a) * ry, z), (math.cos(a), math.sin(a), 1.5)))
 
     if kind == 0:     # hippo: a barrel of a muzzle and two peg teeth
-        p.ball((.25, .24, .23), (0, 0, .25), segs=14, rings=9, bump=(.012, 6), **st)
-        p.ball((.25, .17, .15), (0, -.2, .15), segs=14, rings=8, bump=(.008, 7), **lite)
+        p.ball((.25, .24, .23), (0, 0, .25), segs=12, rings=8, bump=(.012, 6), **st)
+        p.ball((.25, .17, .15), (0, -.2, .15), segs=12, rings=7, bump=(.008, 7), **lite)
         for s in (-1, 1):
             p.ball((.055, .03, .06), (s * .17, .02, .47), segs=8, rings=5, **st)
             p.ball((.028, .02, .02), (s * .07, -.33, .22), segs=6, rings=4, t='vinyl', c=(.1, .05, .08))
@@ -256,7 +263,7 @@ def head(p, kind, damage=''):
         smile(p, .2, -.365, .1, bend=.1, lift=.06)
         crown(10, .12, .1, .46)
     elif kind == 1:   # walrus: whisker pads and tusks, one snapped
-        p.ball((.24, .23, .25), (0, 0, .26), segs=14, rings=9, bump=(.012, 6), **st)
+        p.ball((.24, .23, .25), (0, 0, .26), segs=12, rings=8, bump=(.012, 6), **st)
         for s in (-1, 1):
             p.ball((.12, .11, .1), (s * .09, -.2, .17), segs=10, rings=6, bump=(.006, 9), **lite)
             long = s < 0 or 'tusk' not in damage
@@ -268,14 +275,14 @@ def head(p, kind, damage=''):
         smile(p, .1, -.27, .1, bend=.04, lift=.03, r=.01)
         crown(8, .1, .1, .5)
     elif kind == 2:   # toad: wide, flat, eyes on top, and a mouth that goes round the sides
-        p.ball((.31, .25, .17), (0, 0, .18), segs=16, rings=9, bump=(.012, 5), **st)
+        p.ball((.31, .25, .17), (0, 0, .18), segs=14, rings=8, bump=(.012, 5), **st)
         p.ball((.3, .22, .1), (0, -.04, .1), segs=14, rings=6, **lite)
         for s in (-1, 1):
             p.ball((.115, .11, .1), (s * .16, -.04, .33), segs=10, rings=6, **st)
             eye(p, .095, (s * .16, -.125, .35), bad=bad and s > 0, missing='eye_missing' in damage and s < 0, yaw=s * 14, pitch=-14)
         smile(p, .3, -.285, .14, bend=.22, lift=.05, r=.018)
     elif kind == 3:   # rhino: long face, horn broken off short
-        p.ball((.22, .25, .23), (0, 0, .25), segs=14, rings=9, bump=(.012, 6), **st)
+        p.ball((.22, .25, .23), (0, 0, .25), segs=12, rings=8, bump=(.012, 6), **st)
         p.ball((.17, .21, .15), (0, -.22, .17), segs=12, rings=7, bump=(.008, 7), **st)
         stub = 'horn' in damage
         p.lathe([(.07, 0), (.055, .06), (.045, .07) if stub else (.03, .16), (0, .06) if stub else (0, .26)], (0, -.33, .28), rot=(-25, 0, 0), segs=8, bump=(.006, 30), t='plastic', c=(.8, .76, .62), ts=.2)
@@ -285,7 +292,7 @@ def head(p, kind, damage=''):
             p.ball((.02, .015, .015), (s * .06, -.42, .2), segs=6, rings=4, t='vinyl', c=(.1, .06, .08))
         smile(p, .14, -.41, .1, bend=.14, lift=.04, r=.011)
     elif kind == 4:   # bear: the friendly one, with a row of teeth that are the wrong sort
-        p.ball((.25, .24, .24), (0, 0, .25), segs=14, rings=9, bump=(.012, 6), **st)
+        p.ball((.25, .24, .24), (0, 0, .25), segs=12, rings=8, bump=(.012, 6), **st)
         p.ball((.13, .1, .1), (0, -.2, .17), segs=10, rings=6, **lite)
         for s in (-1, 1):
             p.ball((.09, .04, .09), (s * .19, 0, .45), segs=9, rings=6, **st)
@@ -295,7 +302,7 @@ def head(p, kind, damage=''):
         smile(p, .11, -.29, .12, bend=.05, lift=.04, r=.024, teeth=8)
         crown(8, .1, .1, .48)
     else:             # rabbit: one ear folded over
-        p.ball((.22, .22, .25), (0, 0, .25), segs=14, rings=9, bump=(.012, 6), **st)
+        p.ball((.22, .22, .25), (0, 0, .25), segs=12, rings=8, bump=(.012, 6), **st)
         p.ball((.12, .09, .09), (0, -.18, .16), segs=10, rings=6, **lite)
         p.tube([(-.08, .02, .46), (-.1, .03, .65), (-.11, .03, .85)], [(.055, .025), (.07, .025), (.03, .015)], segs=8, bump=(.006, 9), **st)
         p.tube([(.08, .02, .46), (.11, .02, .62), (.2, -.04, .66), (.27, -.1, .52)], [(.055, .025), (.065, .025), (.06, .025), (.03, .015)], segs=8, bump=(.006, 9), **st)
@@ -330,7 +337,7 @@ def steel_shelf(p, w, d, h, levels, c=(.75, .75, .78), lip=.03):
     p.tube([(w / 2 - .02, d / 2 + .004, .15), (-w / 2 + .02, d / 2 + .004, h - .15)], (.012, .002), segs=4, up=(0, 1, 0), t='paint', c=c)
 
 
-@prop('spare_heads', notes='Six heads on steel shelving, all facing the front (-Y in Blender, +Z in three.js). Stand it against a wall facing a door.')
+@prop('spare_heads', notes='Six heads on steel shelving and a seventh on top, tipped forward to look down at the room, all facing the front (-Y in Blender, +Z in three.js). Stand it against a wall facing a door.')
 def spare_heads(p):
     steel_shelf(p, 2.0, .6, 2.0, (.28, .9, 1.52, 1.99), c=(.55, .6, .62))
     lay = [(0, -.66, 1.52, 4, ''), (4, 0, 1.52, -3, 'eye_missing'), (5, .64, 1.52, 7, 'eye_bad'),
@@ -338,13 +345,17 @@ def spare_heads(p):
     for kind, x, z, yaw, dmg in lay:
         with p.place((x, .0, z + .003), rot=(0, 0, yaw)):
             head(p, kind, dmg)
+    # one more left on top of the shelving, tipped forward so it looks down at
+    # whoever comes in, with its chin over the edge
+    with p.place((.3, -.08, 2.03), rot=(24, 0, -12)):
+        head(p, 0, 'eye_bad,torn')
     # the bottom shelf: a box of eyes, a jaw, off-cuts
     p.box((.5, .38, .26), (-.6, 0, .28 + .13), rot=(0, 0, 6), t='cardboard', c=(1, 1, 1))
     p.box((.42, .3, .006), (-.6, 0, .28 + .262), rot=(0, 0, 6), t='cardboard', c=(.25, .2, .15))
-    for i in range(9):
+    for i in range(4):
         a = i * 2.4
         with p.place((-.6 + .13 * math.cos(a) * (i % 3) / 2, .1 * math.sin(a), .56 + .01 * (i % 2)), rot=(-90 + 40 * math.sin(a * 3), 30 * math.cos(a * 2), i * 50)):
-            eye(p, .05 + .01 * (i % 3), (0, 0, 0), bad=i == 4)
+            eye(p, .05 + .01 * (i % 3), (0, 0, 0), bad=i == 2, glass=False)
     p.ball((.2, .14, .1), (.1, 0, .38), rot=(0, 0, 20), segs=10, rings=6, bump=(.02, 9), t='fur', c=faded(FUR[0], .4))
     p.ball((.16, .12, .08), (.42, .05, .36), rot=(0, 0, -30), segs=10, rings=6, bump=(.02, 9), t='fur', c=faded(FUR[2], .4))
     p.tube([(.7, -.1, .3), (.72, 0, .34), (.8, .1, .3)], [(.05, .04), (.06, .05), (.04, .03)], segs=7, bump=(.01, 12), t='vinyl', c=(.75, .6, .3), ts=.2)
@@ -353,7 +364,7 @@ def spare_heads(p):
 
 # ---------------------------------------------------------------- the rest
 
-@prop('mannequin', notes='Headless dress form on a wheeled stand, a fur suit half pinned on with one empty sleeve. Reads as a person from behind.')
+@prop('mannequin', notes='Dress form on a castor stand, 2.0 m to the top of the spare bear head someone jammed on it askew, with a fur suit half pinned on and one empty sleeve. Reads as a person in the dark.')
 def mannequin(p):
     # stand
     for i in range(4):
@@ -425,6 +436,9 @@ def mannequin(p):
         tape.append((math.cos(a) * .075, math.sin(a) * .068, 1.5 - .012 * math.sin(a)))
     tape = [(-.08, -.11, 1.02), (-.09, -.115, 1.2), (-.085, -.1, 1.38), (-.075, -.03, 1.49)] + tape[4:13] + [(.06, -.09, 1.4), (.07, -.11, 1.25)]
     p.tube(tape, (.008, .0008), segs=4, caps=False, up=(0, 0, 1), t='paper', c=(.95, .8, .25), ts=.3)
+    # a spare head pushed down onto the neck, turned and tipped as if it were listening
+    with p.place((.0, .015, 1.5), rot=(-6, 10, -16)):
+        head(p, 4, 'eye_missing')
 
 
 @prop('vanity', notes='Make-up table with a bulb mirror. Ten bulbs in lamp_glow, three more dead or missing. A foam wig head stands on the top.')

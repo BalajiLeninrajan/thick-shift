@@ -8,7 +8,7 @@ import atlas
 BLACK = (.1, .1, .11)
 CHROME = dict(t='steel', c=(.78, .78, .8))
 PARTY = [(.85, .3, .3), (.3, .55, .8), (.9, .78, .3), (.4, .7, .45), (.8, .45, .7), (.9, .55, .25)]
-PASTEL = [faded(c, .45) for c in PARTY]
+PASTEL = [faded(c, .3) for c in PARTY]
 
 
 def cup(p, at, c, rot=(0, 0, 0)):
@@ -27,9 +27,9 @@ def hat(p, at, c, rot=(0, 0, 0)):
         p.tufts([((0, 0, .17), (math.cos(i * 1.3), math.sin(i * 1.3), .6)) for i in range(8)], length=.03, width=.004, droop=.2, t='paper', c=(.9, .85, .5))
 
 
-@prop('table_round', notes='Round table, 1.5 m across, laid for a party that was not cleared away. The cloth hangs to about 0.45 m off the floor.')
+@prop('table_round', notes='Round table, 1.3 m across the top, laid for a party that was not cleared away. The cloth flares to 1.5 m and hangs to about 0.45 m off the floor.')
 def table_round(p):
-    R, H = .75, .74
+    R, H = .65, .74
     p.cyl(R - .01, .03, (0, 0, H - .03), segs=24, t='wood', c=(.7, .65, .6))
     p.cyl(.04, H - .06, (0, 0, .03), segs=8, **CHROME)
     for i in range(4):
@@ -56,17 +56,17 @@ def table_round(p):
     r = p.rng
     for i in range(6):   # six places
         a = D(i * 60 + 12)
-        x, y = math.cos(a) * .52, math.sin(a) * .52
+        x, y = math.cos(a) * .45, math.sin(a) * .45
         food = [(.6, .45, .3), None, (.75, .7, .5), (.4, .3, .25), None, (.7, .5, .45)][i]
         plate(p, (x, y, T), food=food, rot=(0, 0, i * 40))
         ca = a + .45
-        if i == 2: cup(p, (math.cos(ca) * .5, math.sin(ca) * .5, T + .036), PASTEL[i], rot=(90, 0, i * 70))   # knocked over
-        else: cup(p, (math.cos(ca) * .5, math.sin(ca) * .5, T), PASTEL[i])
+        if i == 2: cup(p, (math.cos(ca) * .44, math.sin(ca) * .44, T + .036), PASTEL[i], rot=(90, 0, i * 70))   # knocked over
+        else: cup(p, (math.cos(ca) * .44, math.sin(ca) * .44, T), PASTEL[i])
         if i in (0, 3, 4):
             ha = a - .5
-            hat(p, (math.cos(ha) * .45, math.sin(ha) * .45, T + (.055 if i == 3 else 0)), PASTEL[(i + 2) % 6], rot=(0, 0, 0) if i != 3 else (95, 0, i * 50))
-        p.box((.012, .14, .003), (math.cos(a - .25) * .5, math.sin(a - .25) * .5, T + .002), rot=(0, 0, math.degrees(a) + 80 + i * 13), t='plastic', c=(.9, .9, .88))   # a fork
-    p.sheet(lambda u, v: (-.1 + u * .35 + .04 * math.sin(v * 7), .28 + v * .2 + .03 * math.sin(u * 9), T + .001), 5, 4, size=(.35, .2), t='gunk', c=(.35, .12, .15), ts=.5)   # juice, dried sticky
+            hat(p, (math.cos(ha) * .39, math.sin(ha) * .39, T + (.055 if i == 3 else 0)), PASTEL[(i + 2) % 6], rot=(0, 0, 0) if i != 3 else (95, 0, i * 50))
+        p.box((.012, .14, .003), (math.cos(a - .25) * .44, math.sin(a - .25) * .44, T + .002), rot=(0, 0, math.degrees(a) + 80 + i * 13), t='plastic', c=(.9, .9, .88))   # a fork
+    p.sheet(lambda u, v: (-.1 + u * .3 + .04 * math.sin(v * 7), .24 + v * .17 + .03 * math.sin(u * 9), T + .001), 5, 4, size=(.35, .2), t='gunk', c=(.35, .12, .15), ts=.5)   # juice, dried sticky
     # the cake: sagged, furred over, the candles burnt to stubs
     p.cyl(.2, .008, (0, 0, T), segs=16, t='cardboard', c=(.9, .85, .6))
     p.lathe([(.17, 0), (.18, .03), (.165, .065), (.12, .08), (.05, .06), (0, .05)], (0, 0, T + .008), segs=16, bump=(.02, 14), t='gunk', c=(.85, .7, .75), ts=.35)
@@ -80,7 +80,7 @@ def table_round(p):
     p.box((.022, .1, .014), (.1, -.21, T + .185), rot=(-28, 0, 20), bevel=.004, t='plastic', c=(.15, .1, .1))
     for i in range(5):   # napkins and scraps
         a = i * 1.9
-        p.ball((.05, .04, .02), (math.cos(a) * .3, math.sin(a) * .32, T + .015), rot=(0, 0, i * 50), segs=6, rings=4, bump=(.012, 35), t='paper', c=PASTEL[(i * 2) % 6], ts=.2)
+        p.ball((.05, .04, .02), (math.cos(a) * .27, math.sin(a) * .28, T + .015), rot=(0, 0, i * 50), segs=6, rings=4, bump=(.012, 35), t='paper', c=PASTEL[(i * 2) % 6], ts=.2)
 
 
 def chair_geo(p, c):
@@ -124,7 +124,7 @@ def chair_fallen(p):
 def table_long(p):
     L, W, H = 2.4, .75, .75
     sag = lambda x: -.012 * (1 - (2 * x / L) ** 2)      # years of stacked chairs
-    p.sheet(lambda u, v: ((u - .5) * L, (v - .5) * W, H + sag((u - .5) * L)), 12, 3, size=(L, W), t='laminate', c=(.9, .86, .8), ts=1.1)
+    p.sheet(lambda u, v: ((u - .5) * L, (v - .5) * W, H + sag((u - .5) * L)), 24, 4, size=(L, W), t='laminate', c=(.9, .86, .8), ts=1.1)
     p.sheet(lambda u, v: ((u - .5) * L, (.5 - v) * W, H - .025 + sag((u - .5) * L)), 12, 1, size=(L, W), t='wood', c=(.6, .55, .5))
     for s in (-1, 1):
         p.sheet(lambda u, v: ((u - .5) * L, s * W / 2, H - .027 + v * .028 + sag((u - .5) * L)), 12, 1, size=(L, .03), t='plastic', c=(.25, .22, .2), ts=.3)
@@ -201,7 +201,7 @@ def banner(p):
                 p.text(ch, .13, (ox, -.012, -.17), depth=.0, c=(.95, .93, .85) if i % 2 else (.15, .12, .15))
 
 
-@prop('standee', notes='Plywood photo board, cut to the outline of the two mascots, with two face holes at 1.47 and 1.33 m. It is 0.02 m thick on feet 0.4 m deep; seen from behind it is bare ply.')
+@prop('standee', notes='Plywood photo board, cut to the outline of the two mascots, with two face holes at 1.47 and 1.33 m. It is 1.8 m wide and 0.02 m thick on feet 0.4 m deep; seen from behind it is bare ply.')
 def standee(p):
     S = atlas.STANDEE
 
@@ -238,7 +238,7 @@ def high_chair(p):
     wood = dict(t='wood', c=(.95, .88, .75))
     for sx in (-1, 1):
         for sy in (-1, 1):
-            p.tube([(sx * .25, sy * .27 + .02, .008), (sx * .17, sy * .16 + .02, .58)], [.02, .016], segs=6, **wood)
+            p.tube([(sx * .25, sy * .27 + .02, .008), (sx * .21, sy * .215 + .02, .29), (sx * .17, sy * .16 + .02, .58)], [.02, .018, .016], segs=8, **wood)
         p.tube([(sx * .232, -.225, .13), (sx * .232, .265, .13)], .012, segs=5, **wood)
         p.tube([(sx * .17, .18, .58), (sx * .16, .22, 1.0)], [.016, .014], segs=6, **wood)         # back posts
         p.tube([(sx * .18, .16, .74), (sx * .2, -.1, .76), (sx * .2, -.22, .75)], .013, segs=5, **wood)    # arms

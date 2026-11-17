@@ -275,6 +275,7 @@ def paint(o, fn):
          rough  roughness
          fuzz   1 = velour (grain, speckle), 0 = hard and smooth
          blood  0..1; the shader gives it a ragged edge and makes it wet
+         dry    0..1; 1 turns that blood old: brown-black and crusted, not red
          seam   distance in metres to the nearest stitched seam (default: far)
          seam_u distance along that seam, to space the stitches
          weave  1 = see-through costume mesh"""
@@ -287,7 +288,7 @@ def paint(o, fn):
     layers = {
         'paint': np.column_stack([full(d['rgb'], 3), one]),
         'props': np.column_stack([full(d.get('rough', .9)), full(d.get('fuzz', 1)), full(d.get('blood', 0)), one]),
-        'aux': np.column_stack([full(d.get('seam', 1)), full(d.get('seam_u', 0)), full(d.get('weave', 0)), one]),
+        'aux': np.column_stack([full(d.get('seam', 1)), full(d.get('seam_u', 0)), full(d.get('weave', 0)), full(d.get('dry', 0))]),
     }
     for name, arr in layers.items():
         a = o.data.color_attributes.get(name) or o.data.color_attributes.new(name, 'FLOAT_COLOR', 'POINT')
@@ -348,7 +349,7 @@ def sculpt_material():
     def attr(name):
         a = node('ShaderNodeAttribute', attribute_name=name)
         s = node('ShaderNodeSeparateXYZ'); nt.links.new(a.outputs['Vector'], s.inputs[0])
-        return a.outputs['Vector'], s.outputs[0], s.outputs[1], s.outputs[2]
+        return a.outputs['Vector'], s.outputs[0], s.outputs[1], s.outputs[2], a.outputs['Alpha']
 
     def noise(scale, detail):
         n = node('ShaderNodeTexNoise'); nt.links.new(pos, n.inputs['Vector'])
@@ -357,9 +358,9 @@ def sculpt_material():
 
     pos = node('ShaderNodeNewGeometry').outputs['Position']
     psep = node('ShaderNodeSeparateXYZ'); nt.links.new(pos, psep.inputs[0])
-    col, _, _, _ = attr('paint')
-    _, rough, fuzz, blood = attr('props')
-    _, seam, seam_u, weave = attr('aux')
+    col = attr('paint')[0]
+    _, rough, fuzz, blood, _ = attr('props')
+    _, seam, seam_u, weave, dry = attr('aux')
     grain, mottle, clot, crease = noise(140, 2), noise(9, 4), noise(22, 3), noise(38, 3)
 
     # velour: fine speckle and slow mottling, only where the surface is fuzzy
@@ -376,9 +377,12 @@ def sculpt_material():
     base = vmix(math_('MULTIPLY', stitch, .6), base, (.55, .5, .36))
     # blood: the painted amount plus noise, thresholded, so stains get a torn edge
     wet = smoothstep(.42, .56, math_('ADD', blood, math_('MULTIPLY', math_('SUBTRACT', clot, .5), .7)))
-    gore = vscale((.11, .006, .008), math_('ADD', .35, math_('MULTIPLY', mottle, 1.3)))
+    # fresh is a wet red; dried is brown-black with a dull crust
+    clump = math_('ADD', .35, math_('MULTIPLY', mottle, 1.3))
+    gore = vmix(dry, vscale((.11, .006, .008), clump), vscale((.026, .012, .007), clump))
     base = vmix(wet, base, gore)
-    rough_out = math_('ADD', math_('MULTIPLY', rough, math_('SUBTRACT', 1, wet)), math_('MULTIPLY', wet, math_('ADD', .1, math_('MULTIPLY', clot, .25))))
+    gore_rough = math_('ADD', math_('ADD', .1, math_('MULTIPLY', dry, .38)), math_('MULTIPLY', clot, .25))
+    rough_out = math_('ADD', math_('MULTIPLY', rough, math_('SUBTRACT', 1, wet)), math_('MULTIPLY', wet, gore_rough))
     rough_out = math_('ADD', rough_out, math_('MULTIPLY', math_('SUBTRACT', grain, .5), math_('MULTIPLY', fuzz, .15)))
 
     # height in metres: grain and creases on fuzz, a little pitting on hard things, the seam groove

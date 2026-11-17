@@ -26,7 +26,8 @@ function titleScreen() {
     html: card(`
       <h1 class="ts-logo">Thick Shift</h1>
       <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
-      <p class="cn-meta cn-m-0">The retired theme-park mascots are enormous, and at night they wander. Shut a door when one is outside it, watch the cameras, and keep the power on until 6 AM. Door motors overheat if you hold them shut, and the generator has one handle. Last five nights and you can go home. Works on a phone. Share a room code to play together.</p>
+      <p class="cn-meta cn-m-0">The retired theme-park mascots are enormous, and at night they wander. Shut a door when one is outside it, watch the cameras, and keep the power on until 6 AM. Door motors overheat if you hold a door shut through a quiet spell, and a whine means one is about to trip. The generator has one handle. Last five nights and you can go home. Works on a phone. Share a room code to play together.</p>
+      <p class="cn-meta cn-m-0">Or walk the floor in 3D. Do the watchman's rounds with a torch whose battery runs down. Touch a mascot and you are flat until a teammate peels you up. The host picks the mode in the lobby.</p>
       <div class="field"><label for="nm">Your name</label><input id="nm" maxlength="12" placeholder="Guard" value="${esc(savedName)}"></div>
       <div class="field"><label for="rc">Room code</label><input id="rc" maxlength="4" placeholder="ABCD" autocapitalize="characters" value="${esc((q.get('room') || '').slice(0, 4))}"><small>Only needed to join a friend's night.</small></div>`,
       '<button class="btn btn-primary" id="hb">Host a night</button><button class="btn btn-secondary" id="jb">Join room</button>'),

@@ -1,7 +1,7 @@
 // Host-side simulation. Only the host calls step() and act().
 import { MASC, DOORKEY, DOORS, HOUR, FINAL_NIGHT } from './config.js';
 import { game, rnd } from './state.js';
-import { isActive, doorWait, leanOf, rotOf, inRoom, atDoor, shownAtDoor, lightsOn, doorFailChance, DOOR_HEAT, heatRate, GEN_HEAT, turning, SOLO_ATTACKS, maxAttacks, pairFromNight, pairChance } from './rules.js';
+import { isActive, doorWait, leanOf, rotOf, inRoom, atDoor, shownAtDoor, lightsOn, LIGHTS_WARM, doorFailChance, REVEAL, LURK, DOOR_HEAT, heatRate, GEN_HEAT, turning, SOLO_ATTACKS, maxAttacks, pairFromNight, pairChance } from './rules.js';
 
 const OPEN = () => ({ L: false, V: false, R: false });
 const COLD = () => ({ L: 0, V: 0, R: 0 });
@@ -9,7 +9,7 @@ const COLD = () => ({ L: 0, V: 0, R: 0 });
 const FRESH = () => ({ heat: COLD(), trip: OPEN(), gen: 0, seized: false, cranker: null });
 
 export function newState(code) {
-  return { phase: 'lobby', night: 1, t: 0, power: 100, doors: OPEN(), m: [], players: [], killer: -1, evs: [], evId: 0, calmUntil: 0, pair: false, attacks: 0, lights: true, deaths: 0, slams: 0, code, ...FRESH() };
+  return { phase: 'lobby', night: 1, t: 0, power: 100, doors: OPEN(), m: [], players: [], killer: -1, evs: [], evId: 0, calmUntil: 0, pair: false, attacks: 0, lights: true, litAt: 0, deaths: 0, slams: 0, code, ...FRESH() };
 }
 
 // Events are how the host tells clients to play a sound or shake the screen.
@@ -23,7 +23,7 @@ function emit(type, x) {
 
 export function startNight(n) {
   const S = game.S;
-  Object.assign(S, { phase: 'play', night: n, t: 0, power: 100, doors: OPEN(), killer: -1, calmUntil: rnd(15, 30), pair: false, attacks: 0, lights: true, ...FRESH() });
+  Object.assign(S, { phase: 'play', night: n, t: 0, power: 100, doors: OPEN(), killer: -1, calmUntil: rnd(15, 30), pair: false, attacks: 0, lights: true, litAt: 0, ...FRESH() });
   S.m = MASC.map((d, i) => ({ i, pos: 0, side: 0, timer: rnd(6, 12), wait: 0, bangs: 0 }));
   for (const id in game.players) Object.assign(game.players[id], { view: 'office', cam: 0, sanity: sanityCap(n) });
 }
@@ -65,7 +65,13 @@ function drainPower(S, dt) {
   S.power = Math.max(0, Math.min(100, S.power - drain * dt + cranked * dt));
   if (S.dev?.power) S.power = 100;
   if (S.power <= 0) {
-    if (was > 0) emit('out');
+    if (was > 0) {
+      emit('out');
+      // Everyone is thrown back to the booth, and each client does the same to
+      // its own screen (main.js). The host's record has to agree, or a guard
+      // who was at the generator keeps the handle while sitting in the booth.
+      for (const p of S.players) p.view = 'office';
+    }
     S.doors = OPEN();
   }
 }
@@ -73,30 +79,35 @@ function drainPower(S, dt) {
 // One handle. The first guard to reach the generator holds it until they
 // leave, and anyone else there is only watching. Turning it heats it: see
 // GEN_HEAT in rules.js. Returns the percent per second going into the battery.
+// Seizing is tested before this tick's heat, so a value set from outside (the
+// dev menu) acts on the next tick whether or not anyone is turning.
 //
 // Cranking is hand work, and shaking hands are bad at it: a guard at full
 // sanity returns CRANK percent a second, one at 40% or less returns 40% of that.
 function crankHandle(S, dt) {
   const at = S.players.filter(p => p.view === 'crank');
   if (!at.some(p => p.id === S.cranker)) S.cranker = at[0]?.id ?? null;
-  const hand = at.find(p => p.id === S.cranker), turns = !!hand && !S.seized;
-  const hot = turns && !S.dev?.cold;   // S.dev.cold: nothing overheats (dev.js)
-  S.gen = Math.max(0, Math.min(1, S.gen + (hot ? dt / GEN_HEAT.run : -dt / GEN_HEAT.cool)));
   if (S.gen >= 1 && !S.seized) { S.seized = true; emit('seize'); }
   else if (S.seized && S.gen <= GEN_HEAT.reset) { S.seized = false; emit('unseize'); }
+  const hand = at.find(p => p.id === S.cranker), turns = !!hand && !S.seized;
+  const hot = turns && !S.dev?.cold;   // S.dev.cold: nothing overheats (dev.js)
+  S.gen = Math.max(0, Math.min(1, S.gen + (hot ? dt / GEN_HEAT.run : -dt / (GEN_HEAT.cool * (S.seized ? GEN_HEAT.jam : 1)))));
   return turns ? CRANK * Math.max(.4, hand.sanity ?? 1) : 0;
 }
 
 // Door motors heat while they hold and cool while the door is open: see
 // DOOR_HEAT in rules.js. A tripped door drops open whatever is behind it.
 // This runs after drainPower, so a power cut, which opens every door, cools them.
+// Like the generator, the trip is tested before this tick's heat, so heat
+// added from outside (a bang, the dev menu) trips the door on the next tick.
 function heatDoors(S, dt) {
   const closed = DOORS.filter(k => S.doors[k]).length;
   for (const k of DOORS) {
-    const holding = S.doors[k] && !S.dev?.cold;
-    S.heat[k] = holding ? S.heat[k] + heatRate(closed) * dt : Math.max(0, S.heat[k] - dt / DOOR_HEAT.cool);
-    if (holding && S.heat[k] >= 1) { S.heat[k] = 1; S.doors[k] = false; S.trip[k] = true; emit('trip', k); }
+    if (S.doors[k] && S.heat[k] >= 1) { S.heat[k] = 1; S.doors[k] = false; S.trip[k] = true; emit('trip', k); }
     else if (S.trip[k] && S.heat[k] <= DOOR_HEAT.reset) { S.trip[k] = false; emit('reset', k); }
+    const was = S.heat[k], holding = S.doors[k] && !S.dev?.cold;
+    S.heat[k] = holding ? Math.min(1, was + heatRate(closed) * dt) : Math.max(0, was - dt / DOOR_HEAT.cool);
+    if (holding && was < DOOR_HEAT.strain && S.heat[k] >= DOOR_HEAT.strain) emit('strain', k);   // the motor whines
   }
 }
 
@@ -209,7 +220,8 @@ function moveMascot(S, m, dt, hour) {
   if (m.pos + 1 === last && (S.t < S.calmUntil || S.attacks >= maxAttacks(S) || atDoors(S) >= maxAtDoors(S))) { m.timer = rnd(2, 4); return true; }   // not yet
   if (m.pos === 0 && d.paths.length > 1) m.side = Math.random() < .5 ? 0 : 1;
   m.pos++;
-  if (m.pos === d.paths[m.side].length - 1) { m.wait = doorWait(S.night); S.attacks++; emit('arrive'); }
+  // How long it hangs back before stepping into the doorway is never the same twice (LURK in rules.js).
+  if (m.pos === d.paths[m.side].length - 1) { m.wait = doorWait(S.night) * (1 + REVEAL * rnd(-LURK, LURK)); S.attacks++; emit('arrive'); }
   else emit('step');
   return true;
 }
@@ -241,9 +253,18 @@ const LAST_MOMENT = .75;
 export function act(pid, a) {
   const S = game.S, p = game.players[pid];
   if (a.t === 'view') { if (p) { p.view = a.v; p.cam = a.cam | 0; } return; }
-  if (a.t === 'lights' && S.phase === 'play' && S.power > 0) { S.lights = !S.lights; emit('lights', S.lights); return; }
+  if (a.t === 'lights' && S.phase === 'play' && S.power > 0) {
+    S.lights = !S.lights;
+    if (S.lights) S.litAt = S.t + LIGHTS_WARM;   // they flicker before they strike (lightsOn)
+    emit('lights', S.lights);
+    return;
+  }
   if (a.t === 'name') { if (p) p.name = String(a.n || 'Guard').slice(0, 12); return; }
   if (a.t === 'door' && S.phase === 'play' && S.power > 0 && DOORS.includes(a.k)) {
+    // Both hands are on the generator's handle. A guard there who presses a
+    // door key lets go of it first (toggleDoor in input.js sends the view
+    // change before the press), so this only stops a client that did not.
+    if (p?.view === 'crank') return;
     // A tripped breaker comes first. It is hardware, not nerves: nothing shuts
     // that door until it resets, and the guard who pressed is told why.
     if (!S.doors[a.k] && S.trip[a.k]) { emit('dead', { k: a.k, by: p?.id }); return; }

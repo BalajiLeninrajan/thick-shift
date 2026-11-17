@@ -22,7 +22,7 @@ def plush(p, c, s=1., lod=0):
         p.lathe([(0, .012), (.025, .009), (.042, 0)], (0, -.062, .168), rot=(90, 0, 0), segs=8, disc=True, rect='plush', c=mixc(c, (1, 1, 1), .5))
 
 
-PLUSH_COLS = [faded(c, .5) for c in FUR] + [(.75, .72, .65), (.6, .35, .3)]
+PLUSH_COLS = [faded(c, .3) for c in FUR] + [(.75, .72, .65), (.6, .35, .3)]
 
 
 @prop('arcade_cabinet', notes='Upright cabinet. Screen is screen_glow, marquee is sign_glow; both take their picture from the art atlas, so tint the emissive rather than replacing the map.')
@@ -138,7 +138,7 @@ def claw_machine(p):
         plush(p, PLUSH_COLS[2], 1.15)
 
 
-@prop('skee_ball', notes='Lane runs back from the player along +Y in Blender (-Z in three.js); the origin is the centre of the 0.8 x 2.8 footprint. Wants a wall behind it.')
+@prop('skee_ball', notes='Lane runs back from the player along +Y in Blender (-Z in three.js); the origin is the centre of the 0.8 x 2.8 cabinet. Tickets and a stray ball lie on the floor up to 0.35 m in front of it. Wants a wall behind it.')
 def skee_ball(p):
     side = dict(t='paint', c=(.3, .45, .7))
     wood = dict(t='wood', c=(.9, .8, .65))
@@ -187,7 +187,7 @@ def skee_ball(p):
     p.box((.34, .1, .02), (-.2, y0 - .05, .43), bevel=.005, **wood)
     for i, x in enumerate((-.3, -.215, -.12)):
         p.ball(.04, (x, y0 - .05 + .01 * (i % 2), .48), segs=10, rings=6, t='wood', c=(.55, .4, .35), ts=.2)
-    p.ball(.04, (.52, y0 + .3, .04), segs=10, rings=6, t='wood', c=(.55, .4, .35), ts=.2)         # one got away
+    p.ball(.04, (.3, y0 - .32, .04), segs=10, rings=6, t='wood', c=(.55, .4, .35), ts=.2)         # one got away
     p.box((.16, .02, .22), (.24, y0 - .008, .45), bevel=.005, t='steel', c=(.6, .6, .62))
     p.box((.006, .01, .04), (.24, y0 - .02, .5), t='plastic', c=(.02, .02, .02))
     p.box((.1, .012, .02), (.24, y0 - .012, .26), t='plastic', c=(.02, .02, .02))

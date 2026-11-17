@@ -13,7 +13,7 @@ import { prefs, savePrefs } from './player.js';
 import { createTouch, toggleFullscreen, canFullscreen } from './touch.js';
 
 const HALF_SPAN = 1.3;    // radians either side of straight ahead that fit on the compass
-const LABEL_GAP = .22;    // compass labels closer than this (as a share of half the strip) would overlap
+const LABEL_GAP = 6;      // pixels kept between two compass labels
 const NAV_MS = 150;       // one compass mark has its walking route refreshed this often, in turn
 const LOW_BAT = .25, LOW_POWER = 25, CRIT_POWER = 10;
 const HURRY = 15;         // seconds left in the hour when unpunched clocks turn red
@@ -193,12 +193,8 @@ export function createHud(stage, player) {
       t.off = -angDiff(Math.atan2(r.x - me.x, r.z - me.z), me.yaw) / HALF_SPAN;
       if (t.kind === 'clock' && (!nearest || t.dist < nearest.dist)) nearest = t;
     }
-    // Where two marks crowd each other, only the more urgent keeps its label.
-    const rank = t => t.kind === 'flat' ? 0 : t === nearest ? 1 : t.kind === 'dock' ? 2 : 3, placed = [];
-    for (const t of list.sort((a, b) => rank(a) - rank(b))) {
+    for (const t of list) {
       t.at = Math.max(-1, Math.min(1, t.off));
-      t.quiet = placed.some(o => Math.abs(o.at - t.at) < (o.name || t.name ? LABEL_GAP * 2 : LABEL_GAP));
-      placed.push(t);
       let m = marks.get(t.key);
       if (!m) { m = el('div', 'ts-f-mark is-' + t.kind, compass); m.innerHTML = '<i></i><b></b>'; marks.set(t.key, m); }
       m.style.left = 50 + t.at * 50 + '%';
@@ -206,10 +202,39 @@ export function createHud(stage, player) {
       data(m, 'side', t.off < -1 ? 'left' : t.off > 1 ? 'right' : '');
       m.classList.toggle('is-near', t === nearest);
       m.classList.toggle('is-ping', !!t.ping);
-      m.lastChild.hidden = t.quiet;
       set(m.lastChild, (t.name ? t.name + ' ' : '') + metres(t.dist));
     }
     for (const [key, m] of marks) if (!list.some(t => t.key === key)) { m.remove(); marks.delete(key); routes.delete(key); }
+    spread(list);
+  }
+  // Where labels would overlap, lay them side by side instead, centred on
+  // where they wanted to be and kept inside the strip, so all stay readable.
+  // The marks stay on their bearings. b._dx: how far a label is moved now,
+  // so where it would sit unmoved can be measured.
+  function spread(list) {
+    const strip = compass.getBoundingClientRect(), W = strip.width, runs = [];
+    const place = run => Math.max(0, Math.min(W - run.w, run.mid - run.w / 2));
+    const row = list.map(t => {
+      const b = marks.get(t.key).lastChild, r = b.getBoundingClientRect();
+      return { b, x: r.left - (b._dx || 0) - strip.left, w: r.width };
+    }).sort((a, c) => a.x - c.x);
+    for (const l of row) {
+      let run = { ls: [l], mid: l.x + l.w / 2, w: l.w };
+      for (let last = runs.at(-1); last && place(last) + last.w + LABEL_GAP > place(run); last = runs.at(-1)) {
+        runs.pop();
+        const n = last.ls.length + run.ls.length;
+        run = { ls: [...last.ls, ...run.ls], mid: (last.mid * last.ls.length + run.mid * run.ls.length) / n, w: last.w + LABEL_GAP + run.w };
+      }
+      runs.push(run);
+    }
+    for (const run of runs) {
+      let x = place(run);
+      for (const l of run.ls) {
+        const dx = Math.round(x - l.x);
+        if (dx !== (l.b._dx || 0)) { l.b._dx = dx; l.b.style.translate = dx ? dx + 'px 0' : ''; }
+        x += l.w + LABEL_GAP;
+      }
+    }
   }
 
   /* ---------- once a frame ---------- */
@@ -219,10 +244,11 @@ export function createHud(stage, player) {
     root, say, tip,
     // Someone flat called out: their compass mark pulses for a few seconds.
     ping(id) { if (id === game.myId) calledAt = performance.now(); else pings.set(id, performance.now() + 4000); },
-    update(S, me) {
+    // scared: the catch has the camera (actors/scare.js), and the face fills the screen with nothing over it.
+    update(S, me, scared) {
       const now = performance.now(), mine = S.players.find(p => p.id === game.myId) || {}, bat = mine.bat ?? 1;
       const mates = S.players.filter(p => p.id !== game.myId && p.x != null);
-      root.hidden = S.phase !== 'play';
+      root.hidden = S.phase !== 'play' || !!scared;
       if (S.t < lastT) was = { bat: 1, power: 100 };   // a night began
       lastT = S.t;
       for (let i = live.length - 1; i >= 0; i--) if (now > live[i].until) drop(live.splice(i, 1)[0]);

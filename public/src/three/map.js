@@ -64,7 +64,8 @@ export const DOORWAYS = [
 /* ---------- things with a place ---------- */
 // face: the way the thing looks out from its wall, as a yaw (0 faces south, +z).
 
-// Watchman's clocks, one in each room outside the booth and the ducts.
+// Watchman's clocks: one in each room outside the booth and the ducts, and a second in four of the big rooms, so a
+// crew of six still gets two each an hour (sim3d.js openRound).
 export const CLOCKS = [
   { room: 0, x: 14.5, z: 10.95, face: Math.PI },   // by the door, not in the corner beside where two of them stand
   { room: 1, x: 41.95, z: 8.5, face: -Math.PI / 2 },
@@ -74,6 +75,10 @@ export const CLOCKS = [
   { room: 5, x: 2.05, z: 33, face: Math.PI / 2 },
   { room: 6, x: 30.95, z: 31, face: -Math.PI / 2 },
   { room: 7, x: 39.95, z: 32, face: -Math.PI / 2 },
+  { room: 0, x: 10.05, z: 5, face: Math.PI / 2 },
+  { room: 2, x: 8, z: 24.95, face: Math.PI },
+  { room: 3, x: 23.5, z: 24.95, face: Math.PI },
+  { room: 4, x: 31.7, z: 24.95, face: Math.PI },
 ];
 // The generator is the point a guard cranks it from; the machine stands behind that, against the north wall.
 export const GENERATOR = { room: 1, x: 40.4, z: 1.6, face: 0 };
@@ -261,15 +266,15 @@ export const nav = () => NAV || (NAV = buildNav());
 // Props added after the first path was asked for change what is walkable.
 export function resetNav() { NAV = null; buckets = null; }
 
-// The nearest waypoint that can be walked to in a straight line: one of the dozen nearest, or failing that the nearest.
+// The nearest waypoint that a walker of radius r can reach in a straight line: one of the dozen nearest, or failing that the nearest.
 // ducts: false leaves out the waypoints inside the ducts, for a walker that cannot go in.
-function nearestNode(x, z, doors, ducts) {
+function nearestNode(x, z, doors, ducts, r) {
   const { nodes } = nav(), tried = [];
   for (let k = 0; k < 12; k++) {
     let best = -1, bd = 1e9;
     for (let i = 0; i < nodes.length; i++) { const n = nodes[i], d = Math.hypot(n.x - x, n.z - z); if (d < bd && (ducts || n.room !== DUCTS) && !tried.includes(i)) { bd = d; best = i; } }
     if (best < 0) break;
-    if (clear(x, z, nodes[best].x, nodes[best].z, PLAYER_R, doors)) return best;
+    if (clear(x, z, nodes[best].x, nodes[best].z, r, doors)) return best;
     tried.push(best);
   }
   return tried[0];
@@ -284,7 +289,7 @@ function nearestNode(x, z, doors, ducts) {
 export function route(ax, az, bx, bz, opts = {}) {
   const { nodes, links } = nav(), r = opts.r || MASCOT_R;
   if (clear(ax, az, bx, bz, r, opts.doors)) return { path: [{ x: bx, z: bz }] };
-  const from = nearestNode(ax, az, opts.doors, opts.ducts), goal = nearestNode(bx, bz, opts.doors, opts.ducts);
+  const from = nearestNode(ax, az, opts.doors, opts.ducts, r), goal = nearestNode(bx, bz, opts.doors, opts.ducts, r);
   const search = respectDoors => {
     const n = nodes.length, dist = new Float64Array(n).fill(1e9), prev = new Int16Array(n).fill(-1), via = new Array(n).fill(null), done = new Uint8Array(n);
     dist[from] = 0;

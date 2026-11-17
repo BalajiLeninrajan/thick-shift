@@ -159,9 +159,16 @@ export function lit(material) {
 /* ---------- fittings ---------- */
 
 // A soft round glow for halos. Tubes and bulbs use its white centre.
+// The tail eases out to nothing well inside the rim. A straight fade reads as
+// a flat disc with a hard edge once tone mapped, and on a dark ceiling (the
+// stage's) that disc is all you see of the lamp.
 function glowTexture() {
   const c = canvas(64), g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, '#fff'); g.addColorStop(.12, '#aaa'); g.addColorStop(.4, '#333'); g.addColorStop(1, '#000');
+  g.addColorStop(0, '#fff');
+  for (let i = 0; i <= 10; i++) {
+    const r = .12 + i * .088, s = Math.min(1, (r - .12) / .7), v = Math.round(170 * (1 - s * s * (3 - 2 * s)) ** 3.5);
+    g.addColorStop(Math.min(1, r), `rgb(${v},${v},${v})`);
+  }
   c.fillStyle = g; c.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(c.canvas);
 }

@@ -37,10 +37,12 @@ for (const [x0, z0, x1, z1] of M.OBSTACLES) {
   if (!inside) warn.push(`obstacle [${[x0, z0, x1, z1].map(v => v.toFixed(2))}] pokes through a wall`);
 }
 // The footprints here are typed in by hand; compare them with what the kits measured.
+// These props measure bigger than FOOT on purpose: the extra is walk-through or overhead.
+const LOOSE = { skee_ball: 'tickets on the floor', soda_machine: 'the lead and the puddle', spare_heads: 'the top head, 2.3 m up' };
 const sizes = {};
 let built = 0;
 for (const kit of ['props_a', 'props_b']) { const f = new URL(`../public/models/${kit}.json`, import.meta.url); if (existsSync(f)) { built++; Object.assign(sizes, JSON.parse(readFileSync(f)).props); } else warn.push(`${kit}.json is not built yet, so its props are unchecked`); }
-for (const name in FOOT) if (sizes[name]) { const [w, , d] = sizes[name].size; if (Math.abs(w - FOOT[name][0]) > .2 || Math.abs(d - FOOT[name][1]) > .2) warn.push(`${name}: FOOT says ${FOOT[name]}, the kit says ${[w, d]}`); }
+for (const name in FOOT) if (sizes[name] && !LOOSE[name]) { const [w, , d] = sizes[name].size; if (Math.abs(w - FOOT[name][0]) > .2 || Math.abs(d - FOOT[name][1]) > .2) warn.push(`${name}: FOOT says ${FOOT[name]}, the kit says ${[w, d]}`); }
 if (built === 2) for (const name of new Set(DRESSING.flat().map(row => row[0]))) if (!sizes[name]) warn.push(`${name} is placed but is in neither kit`);
 
 for (const w of warn) console.log('warning:', w);

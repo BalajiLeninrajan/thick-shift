@@ -63,11 +63,6 @@ export function buildRig(model) {
   return rig;
 }
 
-// The world position of a point given in a part's own space.
-export function worldOf(part, local, out) { return part.o ? part.o.localToWorld(out.copy(local)) : out.set(0, 0, 0); }
-// A point in the model's space, as a point in a part's own space at rest.
-export function localAt(rig, part, modelPoint, out) { return out.copy(modelPoint).sub(part.at); }   // parts have no rest rotation
-
 // A hanging part lags behind what it hangs from: a damped spring pulled by
 // (tx, tz), the angles it would settle at. Cheap, and enough for hair and guts.
 export function lag(p, tx, tz, dt, stiff, damp, limit) {

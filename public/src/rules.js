@@ -58,7 +58,11 @@ export const sanityOf = (S, id) => me(S, id)?.sanity ?? 1;
 // at half, 70% at zero. Opening a door never fails.
 export const doorFailChance = sanity => .7 * (1 - sanity) ** 1.5;
 // The booth lights are on unless someone switched them off or the power is out.
-export const lightsOn = S => S.power > 0 && S.lights !== false;
+// They are old strip lights: switched back on, they flicker for LIGHTS_WARM
+// seconds before they strike (S.litAt), and the booth is dark until then. So
+// switching them on at the creak is not the same as having them on.
+export const LIGHTS_WARM = 1.2;
+export const lightsOn = S => S.power > 0 && S.lights !== false && !(S.t < S.litAt);
 
 /* ---------- what the booth lets you know ---------- */
 // A creak says something has reached one of your doors, but not which one.
@@ -68,7 +72,23 @@ export const lightsOn = S => S.power > 0 && S.lights !== false;
 // only for the door you happen to be looking at. The cameras are how you find
 // out earlier which door to watch.
 export const REVEAL = .6;
-export const shownAtDoor = (S, k) => atDoor(S, k).filter(m => leanOf(S, m) >= REVEAL);
+// How long it hangs back changes from visit to visit, anywhere from no time at
+// all to twice the usual (1 - LURK to 1 + LURK times REVEAL of the wait, picked
+// in sim.js on arrival). It averages the same, and the time in the doorway is
+// always the last 40%, so a guard who watches gets what they always got. A
+// guard who counts after the creak does not: a creak means "soon", never "in
+// four seconds", and a crew that shuts everything on a count has to hold all
+// three doors for most of a wait to be safe. The shared breaker makes that
+// expensive (DOOR_HEAT below).
+export const LURK = 1;
+// With the booth lights off you see nothing in a doorway but eyes, and only
+// once it is about to come through: the last 1 - REVEAL_DARK of its wait,
+// under a second on every night. The dark is for the quiet between attacks,
+// not for watching a door. A power cut is different: with no lights anywhere
+// there is no dark to hang back in (office.js).
+export const REVEAL_DARK = .88;
+export const revealAt = S => S.power > 0 && !lightsOn(S) ? REVEAL_DARK : REVEAL;
+export const shownAtDoor = (S, k) => atDoor(S, k).filter(m => leanOf(S, m) >= revealAt(S));
 const onScreen = (k, pan) => ZONES[k].x + ZONES[k].w > pan && ZONES[k].x < pan + W;
 // threatOf, but only for what this guard can see from where they are panned.
 export const seenThreat = (S, pan) => Math.max(0, ...DOORS.flatMap(k => S.doors[k] || !onScreen(k, pan) ? [] : shownAtDoor(S, k).map(m => .35 + leanOf(S, m) * .65)));
@@ -86,8 +106,9 @@ export const seenThreat = (S, pan) => Math.max(0, ...DOORS.flatMap(k => S.doors[
 //   locked open after:       20 s
 // This is what stops a crew from shutting everything and waiting for 6 AM.
 // Shutting a door on what is behind it costs a few seconds of heat. Holding
-// one shut costs all of it.
-export const DOOR_HEAT = { hold: 25, share: .5, cool: 40, bang: .15, reset: .5 };
+// one shut costs all of it. A shut door that heats past DOOR_HEAT.strain whines
+// (the 'strain' event), so a guard on the cameras hears a trip coming.
+export const DOOR_HEAT = { hold: 25, share: .5, cool: 40, bang: .15, reset: .5, strain: .8 };
 // Heat gained per second by each shut door, given how many are shut.
 export const heatRate = closed => (1 + DOOR_HEAT.share * (closed - 1)) / DOOR_HEAT.hold;
 // Seconds until a tripped door works again. 0 when it has not tripped.
@@ -95,11 +116,17 @@ export const tripLeft = (S, k) => S.trip?.[k] ? Math.max(0, (S.heat[k] - DOOR_HE
 
 // The generator has one handle and it runs hot too (S.gen, 0 to 1): GEN_HEAT.run
 // seconds of turning from cold seizes it, and it cools four times slower than
-// it heats, so nobody gets more than a fifth of the night out of it. A second
+// it heats. A guard who lets go in time can turn it for a fifth of the time
+// after the first cold 15 s, about 66 s of a 270 s night at most. A second
 // guard at the generator adds nothing.
-export const GEN_HEAT = { run: 15, cool: 60, reset: .5 };
+// A seized generator is jammed and sheds heat GEN_HEAT.jam times slower, so it
+// stays locked for 45 s, not the 30 s it would take to cool after letting go.
+// Riding it into the red costs about a third of the night's cranking.
+export const GEN_HEAT = { run: 15, cool: 60, reset: .5, jam: 1.5 };
 // Seconds until a seized generator turns again. 0 when it is not seized.
-export const genLeft = S => S.seized ? Math.max(0, (S.gen - GEN_HEAT.reset) * GEN_HEAT.cool) : 0;
+export const genLeft = S => S.seized ? Math.max(0, (S.gen - GEN_HEAT.reset) * GEN_HEAT.cool * GEN_HEAT.jam) : 0;
+// How long a seize locks it from the moment it seizes, in seconds.
+export const GEN_LOCK = (1 - GEN_HEAT.reset) * GEN_HEAT.cool * GEN_HEAT.jam;
 // The guard holding the handle, and whether it is going round.
 export const crankerOf = S => S.players.find(p => p.id === S.cranker);
 export const turning = S => !!crankerOf(S) && !S.seized;

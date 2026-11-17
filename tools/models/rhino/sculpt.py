@@ -300,7 +300,12 @@ def frames(pts):
     """Tangent, normal, binormal along a polyline, without twist."""
     pts = np.asarray(pts, float)
     T = np.gradient(pts, axis=0)
-    T /= np.linalg.norm(T, axis=1)[:, None] + 1e-12
+    L = np.linalg.norm(T, axis=1)
+    ok = np.nonzero(L > 1e-9)[0]
+    # Repeated points give no direction: borrow the nearest real one, or the
+    # first normal below turns into NaN and takes the whole atlas with it.
+    near = ok[np.clip(np.searchsorted(ok, np.arange(len(pts))), 0, len(ok) - 1)]
+    T = T[near] / L[near][:, None]
     up = np.array([0, 0, 1.0]) if abs(T[0][2]) < .9 else np.array([1.0, 0, 0])
     N = [np.cross(T[0], np.cross(up, T[0]))]
     N[0] /= np.linalg.norm(N[0])
@@ -378,6 +383,7 @@ def strand(top, length, r0, rng, wave=.03, drift=(0, 0, 0), n=5, segs=7, blob=0.
     """A hanging strand: a thin tapering tube from `top`, straight down with
     a little wander. blob > 0 ends it in a drop of that radius."""
     top = np.asarray(top, float)
+    length = max(.03, min(length, top[2] - .03))    # stop short of the floor: a strand flattened onto it has no area to texture
     t = np.linspace(0, 1, segs)
     ph, ph2 = rng.uniform(0, 6.28, 2)
     pts = top[None, :] + np.stack([np.sin(t * 5 + ph) * wave * t, np.sin(t * 4 + ph2) * wave * t, -t * length], 1) + np.outer(t ** 1.5, drift)

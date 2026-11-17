@@ -1,0 +1,94 @@
+{
+ "key": "toad",
+ "stages": [
+  {
+   "file": "toad_0.glb",
+   "height": 2.18,
+   "radius": 1.1,
+   "face": [
+    0,
+    1.62,
+    0.72
+   ],
+   "floats": false,
+   "nodes": [
+    "arm_L",
+    "arm_R",
+    "body",
+    "eye_L",
+    "eye_R",
+    "head",
+    "leg_L",
+    "leg_R",
+    "root"
+   ],
+   "notes": "The costume, intact. No jaw: the smile is a fixed slot with a mesh panel behind it. Walk: a slow, heavy waddle, body rolling side to side over the hips, legs swinging about +-20 degrees on x, arms barely moving. Idle: sway, and let eye_L and eye_R drift separately; they never blink. Attack or jumpscare: pitch head down 15 to 20 degrees so the smile fills the view, raise both arms (arm x to about -70). Limits: head +-25 on y (yaw) and +-20 on x before the torso shows under the rim; arms +-80 on x, +-30 on z; legs +-35 on x. The zip runs down the back of head and body, so a head yaw past 25 visibly breaks it."
+  },
+  {
+   "file": "toad_1.glb",
+   "height": 1.71,
+   "radius": 1.15,
+   "face": [
+    0,
+    1.15,
+    0.68
+   ],
+   "floats": false,
+   "nodes": [
+    "arm_L",
+    "arm_R",
+    "body",
+    "eye_L",
+    "eye_R",
+    "forearm_L",
+    "forearm_R",
+    "head",
+    "jaw",
+    "leg_L",
+    "leg_R",
+    "root",
+    "shin_L",
+    "shin_R",
+    "sway_1",
+    "sway_2",
+    "sway_3"
+   ],
+   "notes": "The torso is gone: the head sits on the hips and everything hangs from it. jaw is a chin flap hinged at the mouth corners; rest is a 12 cm grin, jaw x 0 to 0.6 opens it (past 0.6 the flap comes away from the cheeks). sway_1 to sway_3 are black strands on the upper lip, left to right as you face it; swing them a few degrees, more when it moves. The eyes no longer agree by construction: eye_L sits lower, has a smaller pupil and its pupil is off axis, so aim eye_R at the player and let eye_L follow late or not at all. Walk: a frog's crawl. Thighs stick out sideways, so step by turning leg on y (+-25) and shin on x (+-30); the hands walk on their fingertips, arm x +-30 with forearm x +-40. Body stays low and level, head bobs late. Idle: still, then one jerk of the head. Attack: arms up and forward (arm x -80, forearm x -50), jaw 0.6, head pitched 20 degrees down. Limits: head +-20 any axis; arm +-60; forearm +-70; leg +-35; shin +-45. The zip on the back of the head ends at the hips."
+  },
+  {
+   "file": "toad_2.glb",
+   "height": 2.58,
+   "radius": 0.95,
+   "face": [
+    0,
+    1.85,
+    0.62
+   ],
+   "floats": true,
+   "nodes": [
+    "body",
+    "extra_1",
+    "extra_1_2",
+    "extra_1_3",
+    "extra_1_4",
+    "eye_L",
+    "eye_R",
+    "head",
+    "jaw",
+    "root",
+    "sway_1",
+    "sway_10",
+    "sway_11",
+    "sway_2",
+    "sway_3",
+    "sway_4",
+    "sway_5",
+    "sway_6",
+    "sway_7",
+    "sway_8",
+    "sway_9"
+   ],
+   "notes": "No legs: it hangs in the air, so bob root about 7 cm at 1.2 rad/s and let it drift, never step. head carries the ragged skirt of torn neck; body is what is left of the rear, a small shrivelled lump torn open on its right side, and the neck stump. jaw hinges behind the eyes at full head width: rest is a 20 cm grin showing 17 upper teeth, x 0.5 is a scream, and it goes on to 1.1 for the jumpscare, which is far more than a jaw should. Tested at 0.9 with the head pitched 0.35: no gaps; keep it at 1.1 or less. extra_1 > extra_1_2 > extra_1_3 > extra_1_4 is the bare spine under the rear, two vertebrae a link: swing each link 5 to 10 degrees on x and z with a lag down the chain, more when it turns. sway_1 to sway_5 are black strands on the upper lip (left to right as you face it), sway_6 to sway_8 blood strings on the lip, sway_9 (black) and sway_10 (blood) hang off the torn neck on either side, sway_11 drips off the spine (child of extra_1_2); all the blood is old and near black. The eyes are big, pale, lidless and never blink, and they disagree by construction: eye_R has a pinprick pupil aimed down at the player, eye_L is bigger, sits lower and has a blown pupil turned out and up, past them. So aim eye_R at the player and let eye_L lag or stay put. Each eye has one small eye_glow catchlight just above its pupil. Idle: bob, spine trailing, eye_R fixed on the player. Attack: tilt head back 15 degrees (head x -0.25) while the jaw drops, then lunge. Limits: head +-20 on x and z, +-30 on y (the skirt hides the join); each eye sits in a socket centred on it, so it can turn any amount without a gap, and its pupil stays in view to about 45 degrees."
+  }
+ ]
+}

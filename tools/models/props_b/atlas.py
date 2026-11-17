@@ -121,17 +121,20 @@ def tile_steel(r):
     sc = scratches(r, 90, 160)
     rust = ss(fbm(r, 48, octs=2), .66, .74) * ss(fbm(r, 5, octs=3), .5, .65)
     lime = rings(fbm(r, 5, octs=4), .6, .02)
-    col = rgb(.58 + .18 * brush + .2 * sc - .12 * ss(smudge, .5, .8), (1, 1, 1.02))
+    col = rgb(.62 + .14 * brush + .08 * sc - .1 * ss(smudge, .5, .8), (1, 1, 1.02))
     col = mix(col, rgb(.6 + .3 * lime, (.8, .8, .74)), lime * .5)
     col = mix(col, rgb(.5 + .5 * brush, (.42, .2, .08)), rust)
-    rough = .26 + .32 * smudge + .1 * brush + .3 * lime + .5 * rust
-    return col, brush * .12 - sc * .5 + rust * .5, rough, 1 - rust * .9
+    rough = .36 + .32 * smudge + .1 * brush + .3 * lime + .5 * rust
+    # Only half metal: a dark room has nothing for full metal to reflect, and
+    # the game draws it with no environment map, so steel would come out black.
+    return col, brush * .12 - sc * .5 + rust * .5, rough, .5 - rust * .45
 
 
 def tile_paint(r):
     # Enamel over steel: chips to rust, and the rust runs.
-    chips = ss(fbm(r, 26, octs=4) * .55 + fbm(r, 5, octs=3) * .45, .6, .625)
-    run = drip(chips) * (1 - chips)
+    # chipping only where the broad field is high, so most of the enamel is whole
+    chips = ss(fbm(r, 26, octs=4) * .55 + fbm(r, 5, octs=3) * .45, .675, .69)
+    run = drip(chips, 50, .95) * (1 - chips)
     peel = fbm(r, 180, octs=1)
     col = rgb(.88 - .1 * ss(fbm(r, 6, octs=4), .4, .8), (1, 1, 1))
     col = mix(col, np.broadcast_to(np.array((.5, .27, .1), np.float32), (N, N, 3)), run * .55)
@@ -175,7 +178,7 @@ def tile_grille(r):
     hole = ss(np.hypot(dx, dy), p * .36, p * .28)
     dust = fbm(r, 8, octs=4)
     col = rgb((.62 + .2 * dust) * (1 - hole * .93), (1, 1, 1))
-    return col, -hole * 1.2, .55 + .3 * dust, (1 - hole) * .7
+    return col, -hole * 1.2, .55 + .3 * dust, (1 - hole) * .4
 
 
 def tile_gift(r):
@@ -238,7 +241,7 @@ def tile_mirror(r):
     rot = ss(fbm(r, 30, octs=3) * .5 + fbm(r, 4, octs=3) * .5, .58, .63)   # desilvering
     wipe = scratches(r, 25, 300, bend=1.5)
     col = mix(rgb(.86 - .1 * smudge, (1, 1, 1)), rgb(.06 + 0 * smudge, (1, .9, .8)), rot)
-    return col, 0 * smudge, .05 + .3 * ss(smudge, .45, .8) + .2 * wipe + .5 * rot, 1 - rot
+    return col, 0 * smudge, .05 + .3 * ss(smudge, .45, .8) + .2 * wipe + .5 * rot, .7 - .7 * rot
 
 
 def tile_rust(r):
@@ -266,6 +269,22 @@ def tile_vinyl(r):
     return col, grain * .25 - crack * 1.2, .4 + .3 * grime + .5 * crack, 0
 
 
+# Mean brightness (sRGB) each swatch is brought to. A prop multiplies the
+# swatch by its tint and then by baked occlusion, so a swatch painted around
+# mid grey leaves a dark red curtain black under the torch.
+BRIGHT = dict(fur=.76, velvet=.78, steel=.74, paint=.8, plastic=.82, wood=.62, paper=.82, grille=.6,
+              gift=.74, gunk=.7, wrap=.76, laminate=.8, mirror=.76, rust=.46, cardboard=.7, vinyl=.78)
+
+
+def lift(c, target):
+    """Bend the swatch's tones with a gamma until its mean is `target`. A gamma
+    keeps 0 and 1 where they are, so the detail is not clipped away."""
+    c = np.clip(c, 1e-4, 1)
+    for _ in range(4):
+        c = c ** (np.log(target) / np.log(max(c.mean(), 1e-3)))
+    return c
+
+
 def build_a():
     """Returns colour, normal and occlusion/roughness/metal arrays, (2048, 2048, 3) in 0..1."""
     col = np.zeros((SIZE, SIZE, 3), np.float32)
@@ -273,6 +292,7 @@ def build_a():
     orm = np.ones((SIZE, SIZE, 3), np.float32)
     for i, name in enumerate(TILES):
         c, h, rough, metal = globals()['tile_' + name](np.random.default_rng(100 + i))
+        c = lift(np.asarray(c, np.float32), BRIGHT[name]).astype(np.float32)
         h = np.asarray(h, np.float32) * 3.0
         nx = -(np.roll(h, -1, 1) - np.roll(h, 1, 1)) * .5
         ny = -(np.roll(h, -1, 0) - np.roll(h, 1, 0)) * .5
@@ -541,9 +561,15 @@ def art_label(r, i):
 
 def art_eye(r, bad):
     # A moulded plastic costume eye: a dome, far too big, with a painted pupil.
+    # A pinprick pupil, so the stare is fixed and a little surprised, and a
+    # fine red vein or two where the paint has crazed.
     cv = Canvas(128, 128, 1, 1, (.93, .91, .82))
-    cv.paint(cv.ell(.5 + (.06 if bad else 0), .48, .27, .29), (.02, .02, .02))
-    cv.paint(cv.ell(.4, .6, .07, .07), (.95, .95, .95))
+    for k in range(7):
+        a = r.random() * 6.283
+        x0, y0 = .5 + .46 * np.cos(a), .5 + .46 * np.sin(a)
+        cv.paint(cv.seg(x0, y0, .5 + .22 * np.cos(a + .3), .5 + .22 * np.sin(a + .3), .006), (.6, .15, .12), .7)
+    cv.paint(cv.ell(.5 + (.07 if bad else 0), .5 - (.05 if bad else 0), .1, .11), (.02, .02, .02))
+    cv.paint(cv.ell(.44, .57, .035, .035), (.95, .95, .95))
     yel = ss(np.hypot(cv.x - .5, cv.y - .5), .3, .52)
     cv.img *= 1 - yel[..., None] * np.array((.1, .2, .45), np.float32)
     sc = cv.noise(r, 180, 1, gy=8)

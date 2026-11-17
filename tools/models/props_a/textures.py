@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # Draws every texture the guard and the prop kit use, into ./tex.
 #
-#   python3 tools/models/props_a/textures.py      (needs numpy and Pillow)
+#   python3 tools/models/props_a/textures.py [name ...]     (needs numpy and Pillow)
+#
+# With names (paint, bag, atlas, ...) only those are redrawn.
 #
 # build.py runs this by itself when ./tex is missing. Two kinds of texture:
 #
@@ -16,7 +18,7 @@
 #    name to its UV rectangle.
 #
 # Every random draw is seeded, so the output is the same on every run.
-import json, math, os, subprocess
+import json, math, os, subprocess, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
@@ -108,12 +110,13 @@ def col(*c):
 # ---------------------------------------------------------------- tiling surfaces
 
 def tex_paint():
-    """Old enamel on steel: orange peel, runs, scuffs, and chips down to rust."""
-    n = 512
+    """Old enamel on steel: orange peel, runs, scuffs, and chips down to rust.
+    The most used surface in the kit, so it gets twice the resolution."""
+    n = 1024
     big = fnoise(n, 2.6, 1); fine = fnoise(n, 1.2, 2); runs = fnoise(n, 2.2, 3, (6, 1))
     chips = step(fnoise(n, 1.9, 4) * .75 + fnoise(n, 2.8, 5) * .35, .77, .8)
-    halo = np.clip(smear_down(blur(chips, 5), 90) * 3.2, 0, 1)
-    scr = scratches(n, 70, 6)
+    halo = np.clip(smear_down(blur(chips, 10), 180) * 3.2, 0, 1)
+    scr = scratches(n, 110, 6, width=2, soft=.9)
     c = np.ones((n, n, 3)) * .8
     c *= (.86 + .14 * big)[..., None] * (.94 + .06 * fine)[..., None] * (.93 + .07 * runs)[..., None]
     c = mix(c, c * col(.86, .66, .46), halo * .75)                     # rust weeping below each chip
@@ -121,7 +124,7 @@ def tex_paint():
     rust = mix(col(.2, .1, .06), col(.42, .2, .08), fnoise(n, 1.5, 7)[..., None])
     c = mix(c, rust, chips)
     h = (1 - chips) * .55 + fine * .1 + runs * .1 - scr * .22
-    save_set('paint', c, h, .012, mix(.5 + .15 * big, .9, chips) + scr * .2, chips * .25)
+    save_set('paint', c, h, .008, mix(.5 + .15 * big, .9, chips) + scr * .2, chips * .25)
 
 
 def tex_steel():
@@ -228,6 +231,18 @@ def tex_rubber():
     save_set('rubber', c, fine * .7 + big * .3, .03, .8 + .15 * dust, np.zeros((n, n)))
 
 
+def tex_bag():
+    """Bin-liner film: sharp creases running every way, shiny between them."""
+    n = 512
+    ridge = lambda seed, beta: 1 - np.abs(fnoise(n, beta, seed) * 2 - 1)
+    crease = ridge(91, 3.6) ** 10 * .8 + ridge(92, 3.0) ** 14 * .6 + ridge(93, 2.6) ** 18 * .4
+    soft = fnoise(n, 2.4, 94)
+    c = np.ones((n, n, 3)) * .7
+    c *= (.8 + .2 * soft)[..., None]
+    c = mix(c, np.ones(3), np.clip(crease, 0, 1) * .5)                  # the film stretches pale along a crease
+    save_set('bag', c, crease * .6 + soft * .4, .02, .3 + .25 * soft + .3 * np.clip(crease, 0, 1), np.zeros((n, n)))
+
+
 def tex_knurl():
     """Diamond knurling for the torch grip, with dirt packed into the cuts."""
     n = 256
@@ -302,7 +317,7 @@ def stencil_mask(s, size, w, h, seed, kind='cond'):
         d.rectangle([cx - b / 2, 0, cx + b / 2, h], fill=0)
     n = 1 << (max(w, h) - 1).bit_length()
     a = np.asarray(im, float) / 255
-    a = a * step(fnoise(n, 1.3, seed)[:h, :w] * .6 + fnoise(n, 2.5, seed + 1)[:h, :w] * .5, .3, .42)
+    a = a * step(fnoise(n, 1.3, seed)[:h, :w] * .6 + fnoise(n, 2.5, seed + 1)[:h, :w] * .5, .2, .3)
     return a
 
 
@@ -705,9 +720,9 @@ def c_handprint(w, h):
 
 
 CUTOUTS = [
-    ('st_fragile', 384, 96, lambda w, h: c_stencil('FRAGILE', 78, w, h, 520, (.1, .09, .08))),
-    ('st_depot', 448, 80, lambda w, h: c_stencil('MASCOT DEPOT', 62, w, h, 530, (.1, .09, .08))),
-    ('st_up', 384, 80, lambda w, h: c_stencil('THIS WAY UP', 62, w, h, 540, (.55, .1, .08))),
+    ('st_fragile', 384, 96, lambda w, h: c_stencil('FRAGILE', 78, w, h, 520, (.06, .05, .05))),
+    ('st_depot', 448, 80, lambda w, h: c_stencil('MASCOT DEPOT', 62, w, h, 530, (.06, .05, .05))),
+    ('st_up', 384, 80, lambda w, h: c_stencil('THIS WAY UP', 62, w, h, 540, (.6, .06, .05))),
     ('st_oil', 320, 112, lambda w, h: c_stencil('OIL 55', 92, w, h, 550, (.92, .9, .82))),
     ('st_booth', 448, 144, lambda w, h: c_stencil('BOOTH', 124, w, h, 560, (.9, .86, .7))),
     ('st_keep', 448, 64, lambda w, h: c_stencil('KEEP SHUT AFTER DARK', 44, w, h, 570, (.9, .86, .7))),
@@ -741,7 +756,10 @@ def pack(items, size, rgba):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    for f in (tex_paint, tex_steel, tex_rust, tex_wood, tex_cardboard, tex_fabric, tex_plastic, tex_rubber, tex_knurl): f()
+    only = sys.argv[1:]
+    for f in (tex_paint, tex_steel, tex_rust, tex_wood, tex_cardboard, tex_fabric, tex_plastic, tex_rubber, tex_bag, tex_knurl):
+        if not only or f.__name__[4:] in only: f()
+    if only and 'atlas' not in only: return
     dec, r1 = pack(DECALS, 2048, False)
     save('decals', dec)
     cut, r2 = pack(CUTOUTS, 1024, True)

@@ -14,7 +14,6 @@ const TAG_NEAR = 7, TAG_FLAT = 25;    // metres a name shows from: standing (and
 const THIN = .035;                    // how much of a guard is left, front to back, once flat
 // A leg's angle through the walk cycle: the first half on the ground, the foot going back at ground speed; the second half swinging forward.
 const legAt = (q, A, S) => q < .5 ? Math.asin(S * (q * 4 - 1)) : A * Math.cos(Math.PI * (q * 2 - 1));
-const HAND = { x: -.23, y: 1.42, z: .55 };   // the torch's lens in the guard's own space: guard.glb holds it straight out from the right shoulder
 const LOWERED = .9;                   // radians the torch arm drops when the torch is off
 
 const GEO = {
@@ -35,6 +34,25 @@ function standIn() {
   node('arm_L', body, .31, .52, 0, [GEO.limb, MAT.cloth]); node('arm_R', body, -.31, .52, 0, [GEO.reach, MAT.cloth], [GEO.torch, MAT.dark]);   // held out, like the model's
   node('leg_L', body, .13, 0, 0, [GEO.leg, MAT.dark]); node('leg_R', body, -.13, 0, 0, [GEO.leg, MAT.dark]);
   return root;
+}
+
+// A point on arm_R at the front of the torch (the middle of guard.glb's
+// lamp_glow face), so the lens glow and the lent light go where the torch is.
+function lensOn(model) {
+  const arm = model.getObjectByName('arm_R'), box = new THREE.Box3(), part = new THREE.Box3();
+  if (!arm) return null;
+  model.updateWorldMatrix(true, true);
+  const back = arm.matrixWorld.clone().invert();
+  arm.traverse(m => {
+    if (!m.isMesh || m.material.name !== 'lamp_glow') return;
+    m.geometry.computeBoundingBox();
+    box.union(part.copy(m.geometry.boundingBox).applyMatrix4(back.clone().multiply(m.matrixWorld)));
+  });
+  const at = new THREE.Object3D();
+  if (box.isEmpty()) at.position.set(0, .05, .61);   // the stand-in's torch
+  else box.getCenter(at.position).setZ(box.max.z + .01);
+  arm.add(at);
+  return at;
 }
 
 let lensTex = null;
@@ -63,13 +81,17 @@ export class Guard {
     this.id = p.id; this.name = p.name;
     this.group = new THREE.Group(); this.pivot = new THREE.Group(); this.group.add(this.pivot); scene.add(this.group);
     this.track = new Track();
-    this.model = standIn(); this.rig = buildRig(this.model); this.pivot.add(this.model);
-    loadActor('guard').then(src => { if (!src) return; this.pivot.remove(this.model); this.model = instance(src); this.rig = buildRig(this.model); this.pivot.add(this.model); });
+    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: lens(), blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); this.glow.scale.setScalar(.12);
+    this.wear(standIn());
+    loadActor('guard').then(src => { if (src) { this.pivot.remove(this.model); this.wear(instance(src)); } });
     this.tag = nameTag(p.name); this.group.add(this.tag);
-    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: lens(), blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); this.glow.scale.setScalar(.12); this.group.add(this.glow);
     this.phase = 0; this.walk = 0; this.t = 0; this.raise = 0; this.busy = 0;
     this.flat = 0; this.flatV = 0; this.isFlat = false; this.seen = true; this.lookT = 0;
     this.on = false; this.dist = 0; this.aim = new THREE.Vector3(); this.hand = new THREE.Vector3();
+  }
+  wear(model) {
+    this.model = model; this.rig = buildRig(model); this.pivot.add(model);
+    this.lens = lensOn(model) || this.pivot; this.lens.add(this.glow);
   }
   dispose(scene) { scene.remove(this.group); this.tag.material.map.dispose(); this.tag.material.dispose(); this.glow.material.dispose(); }
 
@@ -93,9 +115,11 @@ export class Guard {
     this.pivot.scale.set(spread, f < 0 ? 1 - f * .12 : spread, thin);   // the pop on the way up is a stretch
 
     // Name: only where you could have read a badge, or when they are on the floor waiting for you.
-    const tag = this.tag; tag.visible = flat ? this.dist < TAG_FLAT : this.seen && this.dist < TAG_NEAR;
+    // A flat guard watching through this one's eyes (view.watch) is inside their head: draw none of them.
+    const inside = this.id === view.watch;
+    const tag = this.tag; tag.visible = !inside && (flat ? this.dist < TAG_FLAT : this.seen && this.dist < TAG_NEAR);
     tag.material.depthTest = !flat; tag.position.y = flat ? .55 : 2.05;
-    this.group.visible = this.seen || flat;
+    this.group.visible = this.seen || flat; this.pivot.visible = !inside;
     if (!this.group.visible) return;
 
     /* legs from the ground actually covered */
@@ -130,9 +154,9 @@ export class Guard {
     rig.apply();
 
     // Where the torch is and where it points, for the light (actors.js lends it one) and the lens glow.
-    const sin = Math.sin(tr.yaw), cos = Math.cos(tr.yaw), cp = Math.cos(pitch);
-    this.hand.set(tr.x + HAND.x * cos + HAND.z * sin, HAND.y + Math.sin(pitch) * HAND.z, tr.z - HAND.x * sin + HAND.z * cos);
-    this.aim.set(sin * cp, Math.sin(pitch), cos * cp);
-    this.glow.visible = this.on; this.glow.position.set(HAND.x, this.hand.y, HAND.z + .03);
+    const cp = Math.cos(pitch);
+    this.lens.getWorldPosition(this.hand);
+    this.aim.set(Math.sin(tr.yaw) * cp, Math.sin(pitch), Math.cos(tr.yaw) * cp);
+    this.glow.visible = this.on && !inside;
   }
 }

@@ -273,10 +273,11 @@ def paint(o, fn):
 
 # ---------------------------------------------------------------- fur geometry
 
-def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shade=1.0, lift=.35, min_fur=.8):
+def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shade=1.0, lift=.35, min_fur=.8, tip=1.12):
     """Locks of fur as real geometry, so the outline is shaggy under a
     flashlight. Each lock is a flat two-sided leaf of three triangles that
-    leaves the skin along the normal and bends over to hang. Grown only where the skin is fur, and
+    leaves the skin along the normal and bends over to hang. tip: colour of
+    the tip against the root; above 1 is clean pile, below 1 greasy and matted. Grown only where the skin is fur, and
     coloured from the skin under it. Returns a mesh for the fibre material."""
     me = src.data
     me.calc_loop_triangles()
@@ -297,7 +298,7 @@ def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shad
         b = rng.dirichlet((1, 1, 1))
         p = (P[T[t]] * b[:, None]).sum(axis=0); nn = N[T[t]].mean(axis=0); nn /= np.linalg.norm(nn) + 1e-9
         c = (col[T[t]] * b[:, None]).sum(axis=0) * shade
-        if prm[T[t]][:, 2].mean() > .45: c = np.array([.1, .012, .01]) * (.5 + rng.rand())
+        if prm[T[t]][:, 2].mean() > .45: c = np.array([.06, .006, .005]) * (.5 + rng.rand())   # soaked: near black
         L = rng.uniform(*length); wd = width * rng.uniform(.7, 1.3)
         out = nn * lift + down * droop + rng.normal(0, .25, 3); out /= np.linalg.norm(out)
         side = np.cross(out, nn + rng.normal(0, .3, 3)); side /= np.linalg.norm(side) + 1e-9
@@ -308,8 +309,9 @@ def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shad
         i0 = len(verts)
         verts += [p0 - side * wd, p0 + side * wd, p1 - side * wd * .7, p1 + side * wd * .7, p2]
         k0 = rng.uniform(.8, 1.2)
-        cols += [c * .8 * k0] * 2 + [c * k0] * 2 + [c * 1.12 * k0]
+        cols += [c * .8 * k0] * 2 + [c * k0] * 2 + [c * tip * k0]
         faces += [(i0, i0 + 1, i0 + 3, i0 + 2), (i0 + 2, i0 + 3, i0 + 4)]
+    verts = np.array(verts); verts[:, 2] = np.maximum(verts[:, 2], .004)   # locks on the feet lie on the floor, not through it
     o = mesh_obj('tufts', verts, faces)
     set_attr(o.data, 'Col', np.array(cols))
     smooth_shade(o)
@@ -381,12 +383,17 @@ class Nodes:
         return n.outputs[0]
 
 
-def bake_material(matting=0.0, bald=0.0, grime=0.0):
+FRESH_BLOOD = dict(rim=(.25, .09, .07), dark=(.045, .003, .003), light=(.22, .012, .01), rough=.2)
+DRIED_BLOOD = dict(rim=(.5, .4, .34), dark=(.018, .011, .008), light=(.06, .033, .022), rough=.6)
+
+
+def bake_material(matting=0.0, bald=0.0, grime=0.0, blood_tone=FRESH_BLOOD):
     """The procedural surface every textured piece shares. It reads two
     vertex colour layers: Col (base colour) and Prm (fur, roughness, blood),
     and adds what vertices cannot carry: pile fibres, clumps, greasy matted
     patches, bald patches down to the backing cloth, and ragged blood.
-    Noise is in world space, so it does not care about UV seams."""
+    Noise is in world space, so it does not care about UV seams.
+    blood_tone: FRESH_BLOOD (red, wet) or DRIED_BLOOD (brown-black, matte)."""
     mat = bpy.data.materials.new('bake'); mat.use_nodes = True
     g = Nodes(mat)
     pos = g.new('ShaderNodeNewGeometry').outputs['Position']
@@ -428,9 +435,10 @@ def bake_material(matting=0.0, bald=0.0, grime=0.0):
     bn = g.add(blood, g.mul(g.mul(g.sub(big, .5), 1.1), g.math('MINIMUM', 1, g.mul(blood, 6))))
     bn = g.add(bn, g.mul(g.mul(g.sub(clump, .5), .5), g.math('MINIMUM', 1, g.mul(blood, 6))))
     rim = g.step(.3, .42, bn); wet = g.step(.44, .6, bn)
-    c = g.mix(rim, c, g.mix(1, c, (.25, .09, .07), 'MULTIPLY'))
-    c = g.mix(wet, c, g.mix(g.mul(fib, clump), (.045, .003, .003), (.22, .012, .01)))
-    rough = g.lerp(wet, rough, .2)
+    bt = blood_tone
+    c = g.mix(rim, c, g.mix(1, c, bt['rim'], 'MULTIPLY'))
+    c = g.mix(wet, c, g.mix(g.mul(fib, clump), bt['dark'], bt['light']))
+    rough = g.lerp(wet, rough, bt['rough'])
 
     h = g.mul(g.mul(furw, g.sub(1, bm)), g.add(g.mul(fib, .8), g.mul(clump, .9)))
     h = g.add(h, g.mul(g.add(g.mul(clothw, .12), g.mul(bm, .25)), weave))

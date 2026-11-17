@@ -75,7 +75,7 @@ A mascot turned away at a door goes back to where it rests. The camera map (`ren
 
 ## What the booth tells you
 
-A creak says something has reached one of the doors, but not which one. The mascot then hangs back in the dark, unseen, until 60% of its wait has gone (`REVEAL` in `rules.js`), then steps into the doorway. The heartbeat and the red at the edges of the screen only happen for an open doorway that is on the guard's screen (`seenThreat`). From the booth alone a guard gets the last 40% of the wait, and only for the door they are panned to. The cameras are how they learn earlier which door to watch: a mascot held back by a lull waits one room from its door, and each hall leads to one door.
+A creak says something has reached one of the doors, but not which one. The mascot then hangs back in the dark, unseen, and steps into the doorway for the last 40% of its wait (`REVEAL` in `rules.js`). How long it hangs back first changes every visit, from no time at all to twice the usual (`LURK`), so a creak says something is coming but not when. A crew that counts after the creak and shuts every door has to hold all three for most of a wait, and the shared breaker (below) makes that expensive. The heartbeat and the red at the edges of the screen only happen for an open doorway that is on the guard's screen (`seenThreat`). From the booth alone a guard gets the last 40% of the wait, and only for the door they are panned to. The cameras are how they learn earlier which door to watch: a mascot held back by a lull waits one room from its door, and each hall leads to one door.
 
 ## Sanity and the lights
 
@@ -91,7 +91,7 @@ Low sanity does three things:
 - Below 60% the game plays real event sounds when nothing happened (`FALSE_ALARMS` in `audio.js`).
 - Below 50% an empty camera room sometimes shows a silhouette that is not in the game state (`phantom` in `cams.js`).
 
-The booth lights are a shared switch (`S.lights`, the Lights button or L). Off saves about two thirds of the idle power drain (`DRAIN` in `sim.js`), shows doorways as silhouettes, and drains everyone's sanity.
+The booth lights are a shared switch (`S.lights`, the Lights button or L). Off saves about two thirds of the idle power drain (`DRAIN` in `sim.js`) and drains everyone's sanity. In the dark a doorway shows nothing but eyes, and only for the last 12% of the wait (`REVEAL_DARK`), which is under a second on every night. Switched back on, the strip lights flicker for 1.2 seconds before they strike (`LIGHTS_WARM`, `S.litAt`), and the booth counts as dark until then. So the dark is for the quiet between attacks, and switching the lights on at the creak is a gamble on how long the thing at the door hangs back. A power cut is different: with no light anywhere there is no dark to hide in, and the eyes show from the moment it arrives.
 
 Attacks are paced by lulls. After a mascot is turned away, `S.calmUntil` keeps every mascot from arriving at a door for a random stretch (see `lull` in `sim.js`): usually 20 to 45 seconds, sometimes twice that, and on later nights occasionally almost none. A mascot that wants to arrive during a lull waits one room away. No night has more than `maxAttacks(S)` attacks, seven for one guard, and whatever is left of that budget is spread over the time remaining so the last hours are never safe. Later nights get shorter door timers, some attacks that are two mascots at once from night 4 for one guard, earlier for a crowd, and a weaker guard (see Sanity).
 
@@ -105,7 +105,7 @@ These three rules exist because a group used to win by shutting every door and c
 
 The three doors are held shut by motors on one breaker. A motor heats while it holds and cools while the door is open (`S.heat`, `DOOR_HEAT` in `rules.js`). One door can hold for 25 seconds from cold. Each other door shut at the same time makes all of them heat half as fast again, and a mascot hitting a shut door adds a lump of heat. At the top the breaker trips: the door drops open and will not shut for 20 seconds (`S.trip`, `tripLeft`). The door buttons and the plates under the doors show the heat.
 
-The generator has one handle (`S.cranker`). Whoever gets there first holds it, and a second guard adds nothing. Turning it heats it: 15 seconds from cold seizes it, and it cools four times slower than it heats (`S.gen`, `GEN_HEAT`), so a night has about a minute of cranking in it at most. A seized generator stays locked for 30 seconds (`S.seized`, `genLeft`). The mascots hear the handle only while it turns.
+The generator has one handle (`S.cranker`). Whoever gets there first holds it, and a second guard adds nothing. Turning it heats it: 15 seconds from cold seizes it, and it cools four times slower than it heats (`S.gen`, `GEN_HEAT`), so a night has about a minute of cranking in it at most (66 seconds for a guard who lets go in time). Letting go in the red costs nothing, because it has to cool anyway. Riding it until it seizes jams it: a seized generator cools half again slower and stays locked for 45 seconds (`GEN_HEAT.jam`, `S.seized`, `genLeft`), and a guard who always rides it gets about a sixth less cranking out of a night. The mascots hear the handle only while it turns. Both hands are on the handle, so a guard at the generator who presses a door key lets go of it and is back in the booth (`toggleDoor` in `input.js`; `act` in `sim.js` ignores a door press from the generator). When the power runs out everyone is thrown back to the booth, and the host lets go of the handle for them.
 
 More guards draw more visits (`crowdOf`, `maxAttacks`, `pairFromNight`, `pairChance` in `rules.js`). One guard gets the same seven attacks as before. Each extra guard adds three, shortens the lulls to fit them, and brings pairs a night earlier and more often. The count is read from `S.players` as the night runs, so a guest who joins or leaves changes it at once.
 
@@ -121,12 +121,13 @@ What a guard sees and hears of this:
 
 - Each door button has a bar along its bottom edge that fills as the motor heats, yellow then red for the last fifth. The plate under each door in the booth has the same bar, the door frame goes from grey through orange to red, and the plate's light blinks before a trip.
 - With two or three doors shut, a line at the top of every view says so: "2 doors on one breaker: heating 1.5x".
-- A trip is a pop, a thud and the door dropping, with sparks at the frame for two seconds. The plate reads "TRIPPED 14s" and the button "out 14s", both counting down. Pressing the button does nothing (`dead` event): the guard who pressed hears a dull clunk and is told "Left door breaker is out. 14 s." A relay tick says it is back.
+- A trip is a pop, a thud and the door dropping, with sparks at the frame for two seconds. The plate reads "TRIPPED 14s" and the button "out 14s", both counting down. Pressing the button shuts nothing. Everyone hears a dull clunk, lower than the click of a fumble, and the guard who pressed is told "Left door breaker is out. 14 s." A relay tick says it is back.
+- A shut door whose motor passes 80% heat whines, with the relay chattering (`strain` event, `DOOR_HEAT.strain`). Everyone hears it in every view, so a guard on the cameras who shut a door early knows to open it.
 - If a mascot came through a tripped door, the death card says so.
-- A Generator strip under the clock is in every view. It shows the generator's heat, the name of whoever is turning it, and "seized 24s" while it is locked. At the generator there is a temperature dial, smoke above 70%, and a wheel that only moves while someone is turning it. The heading says whether you have the handle, someone else has it, or it has seized.
+- A Generator strip under the clock is in every view. It shows the generator's heat, the name of whoever is turning it, and "seized 24s" while it is locked. Under it a plate lists the guards and where each one is, two to a row past three guards. At the generator there is a temperature dial, smoke above 70%, and a wheel that only moves while someone is turning it. The heading says whether you have the handle, someone else has it, or it has seized.
 - The lobby and the card between nights tell a crew of two or more how many visits to expect.
 
-The sim tells clients about these through events: `trip` and `reset` (with the door), `dead` (the door and who pressed), `seize` and `unseize`.
+The sim tells clients about these through events: `trip`, `strain` and `reset` (with the door), `dead` (the door and who pressed), `seize` and `unseize`.
 
 ## Balance
 
@@ -138,24 +139,78 @@ node tools/balance/run.mjs --only S1,T2,G4   # some of them
 node tools/balance/run.mjs --src /tmp/old    # the same guards through another copy of the four sim files
 ```
 
-The guards are scripts: an exact one that shuts each door at the last safe moment (the solo tuning target), a human one that reacts in .3 to .7 seconds and has to sweep the room when alone, a sloppy one, a cranker, a turtle that holds doors shut, and one that slams every door on the creak. The rows are solo play (S), turtles (T), slamming everything in a group (C) and playing properly in a group (G). The header of the file describes each guard and each column.
+The guards are scripts: an exact one that shuts each door at the last safe moment (the solo tuning target), a human one that reacts in .3 to .7 seconds and has to sweep the room when alone, a sloppy one, a cranker who lets go before it seizes and one who rides it, a turtle that holds doors shut, one that slams every door on the creak, a counter that never looks and shuts every door a fixed count after each creak, and crews that play with the lights off. The rows are solo play (S), turtles (T), slamming everything in a group (C), playing properly in a group (G), counting (K) and the dark (D). Each exploit that was found and closed has a row with a losing target, so a later tuning pass cannot quietly reopen it. The header of the file describes each guard and each column.
 
-Run it after changing anything in `sim.js` or the constants in `rules.js`. `--src` is for comparing against the rules before a change: save the old `sim.js`, `rules.js`, `config.js` and `state.js` to a folder with `git show`, add a `package.json` holding `{"type":"module"}`, and point `--src` at it.
+Run it after changing anything in `sim.js` or the constants in `rules.js`. To compare against the rules before a change, save the old `sim.js`, `rules.js`, `config.js` and `state.js` to a folder with `git show` and point `--src` at it.
+
+What it measures on the current rules, over 200 nights each:
+
+- One exact guard ends nights 1 to 5 at 46, 37, 29, 20 and 12% power without cranking and never trips a breaker. These are the same numbers as before breakers existed. The one change for a solo guard is the handle: a guard who cranks whenever the doors are clear gets about 35 seconds of it on night 5 and ends at 39%, where the old generator gave a minute and 60%.
+- A crew that shuts all three doors and holds them never wins, with one guard cranking or five. The mean time of death is around 1 AM, before 2:30 AM on every night measured, and over 95% of those deaths come through a tripped door.
+- Slamming every door on the creak gets worse with crew size: two guards usually live, four win 11 to 40%, six win under one night in ten. A solo guard who does it trips a breaker most of night 1 and still wins 98%.
+- Counting after the creak with nobody looking: a solo guard wins 68 to 84%, a duo with a cranker 86 to 100% but ends night 5 at 47% (proper play ends at 66%), four guards 49 to 83%, six 14 to 47%. The duo is the weak spot: its lulls are long enough to cool three hot doors.
+- The lights off all night: everyone loses from night 3, and a solo guard loses from night 1. Off between attacks and on at the creak still works on nights 1 and 3 and loses half of night 5s.
+- Three guards playing properly (two on the doors, one on the handle) win every night and end night 5 at 64%. A fourth guard on the cameras all night brings that to 26%. Two camera watchers use up everything the handle makes (2% left).
 
 ## The floor
+
+The second mode is the same building walked in first person. The host runs `three/sim3d.js` in place of `sim.js`, on the same state object, and everything below is in that file unless it says otherwise. `three/map.js` is the building as data, and the host uses it too: rooms, doorways, where the clocks and batteries are, what can be walked on and seen through, and how to get from one place to another.
+
+### The rules
+
+A night is six hours of 70 seconds (`F.HOUR`). At the start of each hour two of the twelve watchman's clocks come due for every guard, so the walking per guard is the same in any crew and one guard cannot do a crew's round alone. A guard punches one by standing at it and holding the use key for 1.2 seconds. The punch is loud, and anything out and nearby may come to look.
+
+Whatever is still due when the hour ends is missed. An hour's clocks are worth 22 points of power and 25 points of ceiling between them (`MISS`), shared by how many were missed, so a guard alone who misses one of two pays what a crew of four pays for missing four of eight. The ceiling is `S.cap`: the most the building can hold for the rest of the night. The crank cannot lift power above it. That is what stops a crew ignoring the clocks and cranking instead.
+
+Power also goes on standing still (3 points a minute, more each night, `DRAIN` and `WEAR`), on each shut booth door (11 a minute), on charging a torch, and 2.5 for every bang on a shut door. One guard at the generator backstage puts back 0.7 a second (`CRANK`). There is one handle, it roots whoever is on it, and it is loud. Half the time a wandering mascot picks where to go next, it picks the generator room while the crank is turning.
+
+At zero the power is out (`S.out`). The booth doors open, the lights and the charging dock go dead, every mascot gets up, and none of the limits below apply: all four hunt at once, faster, and do not give up or go home. `S.power` stays at 0 until someone has cranked `F.RESTART` back in, which is 20 seconds at the handle in the dark (`S.restart` is the progress, 0 to 1). If the ceiling has fallen under `F.RESTART` it never comes back.
+
+The torch is the one thing a guard has. A full one is 65 seconds of light (`F.BAT_LIFE`). The dock in the booth fills it in a minute, so it cannot keep up with a torch left on outside, a spare battery adds half, and a guard who is flattened loses half of what was in it. There are three batteries around the building plus one per guard, and a taken one turns up somewhere else half a minute later. A beam on a mascot within 12 metres holds it by how far it has rotted (`LIT_SPEED`): stage 0 stops dead, stage 1 keeps a fifth of its speed, stage 2 keeps two fifths. Rot follows the night and the hour (`rot`). Left alone they are whole until 5 AM on night 1 and fully rotten from 3 AM on night 5. Every second of torchlight and every bang on a door brings that mascot's rot on sooner (`m.ire`), so the more a crew leans on its torches the less they do. One standing in its place is switched off and a torch does nothing to it.
+
+The mascots come in waves (`turnWave`, `S.stir`). They stand where they stand, stir for half a minute to a minute, walk the rooms, then go back, and the building is quiet for 15 to 40 seconds. Nothing moves for the first 34 seconds of night 1. `heat` is how bad the night is, from 0 to 1. Later nights, later hours, missed clocks and bigger crews raise it, and it stretches the waves, shrinks the calm between them and draws the wanderers toward the guards. Two more limits come from it: `roster` is how many may be out of their places at once, and `pack` is how many may be after the guards at once. A guard alone meets two at a time, three late on nights 3 to 5, and is hunted by one. A crew of four meets all four and is hunted by two, three from about 3 AM on night 5. The crew's share of `heat` grows with the square of the extra guards. One that sees a guard while the pack is full stops and stares for a few seconds and goes back to what it was doing.
+
+A wandering mascot sees a guard inside 12 metres, 17 if their torch is on and 5 if the power is out and it is off, and only in front of itself. It stops and stares for 0.7 seconds (the `spot` event), then comes. A hunt ends in one of four ways. It touches the guard. It runs out of puff (`WIND`: 9 seconds on night 1, 12 on night 5, the `quit` event), walks home looking at nobody, and stays there 18 to 30 seconds. It loses sight of the guard for four seconds and searches where it last saw them. Or the guard gets into the booth and shuts the door, and it bangs on the door three times (four from night 3) and goes home. Walking into one always counts, hunting or not.
+
+Each is a different problem:
+
+- Big Biggs is slower than a walking guard, hunts half as long again as the others, and keeps knowing where his guard is for eight seconds after losing sight of them. He cannot be shaken round a corner, only outwalked.
+- Madame Flan crawls while any guard is looking her way and runs when nobody is, faster than a guard can walk. The torch is not needed to slow her. Turning your back is the mistake.
+- Squish is quicker than a walk and the only one that fits the ducts, where it is quicker still. It comes for whoever is sitting in the booth, by the vent if it is open, and it gets up for anyone who goes into the ducts, at any hour of any night.
+- Tank walks slowly until it has six to sixteen clear metres to a guard. Then it roars, winds up for a second and a half, and charges in a straight line at more than twice a guard's walk. It does not steer and a torch does not stop it. If it hits a wall it is stunned for four seconds. Step out of the line, or do not be in a corridor.
+
+Alone, Biggs and Flan are there from night 1, Squish from 3 AM that night and Tank from night 4 (`WAKE`). Each extra guard brings them two hours sooner. They are slowest on night 1 (`KEEN`).
+
+A mascot within 1.25 metres with no wall between has you (`F.CATCH`). Furniture does not count as a wall, and one that is stuck behind furniture within 2.6 metres of the guard it is after reaches over after 1.2 seconds (`F.GRAB`), so there is nowhere in the building to stand that they cannot get to. The harness checks that against the furniture in `world/dressing.js`.
+
+A flattened guard stays on the floor until another guard stands over them and holds use for three seconds, and then has four seconds in which nothing can touch them. The mascot that did it sits on them for three and a half seconds (`FEAST`), then stays and looks round for whoever comes to peel them up. Everyone flat at once ends the night, which for a guard alone is the first touch.
+
+The booth has three doors, and each button works from both sides of the wall, so nobody can be shut out. A door will not shut on anyone standing in it, guard or mascot. The wall map shows every mascot that is out of its place while the power is on.
+
+### Balance on the floor
+
+`node tools/balance/floor.mjs` plays every scenario 40 times through the real `sim3d.js` and `map.js` and prints a table (`--seeds`, `--only`, `--deaths` and `--trace` are explained at the top of the file). The guards walk with `route()` and `slide()` at the game's speeds, react a quarter to most of a second late, and only know what a person could: what is lit and in front of them, what is close enough to hear, the HUD, the wall map from the booth and a flat teammate's call. Careless, competent and expert guards play alone and in crews of 2, 3, 4 and 6. Then come the strategies that must lose: the booth sealed, one cranking while the rest hide, torches from a corner, ignoring the clocks, one runner for three who stay in, camping the charger, kiting a loop, and standing in the ducts or the vent doorway. It exits non-zero on a softlock (a mascot standing still for 30 seconds, a guard who cannot move, a night that does not end), a guard flattened in the first 30 seconds of night 1, or a bad strategy winning more than one night in ten and more than half as often as playing properly.
+
+Where the rules stand, over 40 nights a row:
+
+- A competent guard alone wins nights 1 to 5 about 95, 83, 68, 35 and 25% of the time. A careless guard wins 40% of night 1s. The expert script wins 83% of night 3s but no more night 5s than the competent one (10 to 25% from run to run).
+- Crews of 2, 3, 4 and 6 win 68 to 88% of night 3s and 10 to 45% of night 5s. A crew of four wins a fifth to a third of night 5s, and under one in ten if nobody cranks or nobody peels.
+- A competent guard who is caught had a mascot in sight or earshot for a median 5 to 12 seconds first, and under 1.5 seconds one time in fourteen or less.
+- The torch runs dry about once in three nights per guard on nights 3 to 5, and a tenth to a third of all flattenings happen with it dead.
+- The strategies that must lose lose every night 3. On night 1 one runner with three staying in wins under half (a crew playing properly wins them all), and the rest win one in ten or less.
 
 ### HUD, input and the screens around a night
 
 `three/hud.js` draws the HUD as HTML over the canvas, styled by the "3D mode" block at the end of `styles.css`. It stays at the edges:
 
 - Top left: the hour, the night, and building power. The bar turns yellow under 25% and red under 10%, and reads "Power out" at zero.
-- Top centre: a compass. Each clock due this hour is a yellow mark with its walking distance, and the nearest one is filled. A mark points at the next corner of the route there (`route` in `map.js`), not through the walls, because nobody knows the building on their first night. Flat teammates are red marks with a name, and a blue mark leads to the booth charger once the torch is under 25%. A mark past the end of the strip sits at that end with an arrow.
+- Top centre: a compass. Each clock due this hour is a yellow mark with its walking distance, and the nearest one is filled. A mark points at the next corner of the route there (`route` in `map.js`), not through the walls, because nobody knows the building on their first night. Flat teammates are red marks with a name, and a blue mark leads to the booth charger once the torch is under 25%. A mark past the end of the strip sits at that end with an arrow. Labels that would overlap are laid side by side under their marks (`spread` in `hud.js`).
 - Under the compass: one pip per clock in this hour's round, filled green once punched, and the time left. It turns red for the last 15 seconds. Toasts for events appear under that. Each kind has its own icon and colour (`TOAST_ICON` in `hud.js`, the `.ts-f-toast.is-*` rules in the stylesheet), and the lines are in the `SAY` table in `app.js`.
 - Top right: the other guards and the room each is in. A flat one is red and tagged.
 - Bottom left: the torch as a five-bar battery. Grey is off, yellow is on, red and blinking with a red glow in the corner is under 25%. Stamina is a thin bar above it that shows only while it is not full.
 - Centre: the prompt for whatever is in reach, with a bar for the ones that need holding.
 
-A flattened guard gets a panel saying who did it and how far the nearest standing guard is, and two things to do. Q (or the button) sends a `call` action. The host emits a `call` event at most every `F.CALL_GAP` seconds, and everyone else hears two notes, reads a toast and sees that guard's compass mark pulse. Space steps through the standing guards' views (`player.me.watch`, drawn by `spectate` in `app.js`) and back to your own.
+A flattened guard gets a panel saying who did it and how far the nearest standing guard is, and two things to do. Q (or the button) sends a `call` action. The host emits a `call` event at most every `F.CALL_GAP` seconds, and everyone else hears two notes, reads a toast and sees that guard's compass mark pulse. Space steps through the standing guards' views (`player.me.watch`, drawn by `spectate` in `app.js`) and back to your own. The watched guard's body, name tag and lens glow are not drawn while you look out through their eyes.
 
 Input is in `three/player.js`. The mouse is captured on the first click. Esc releases it and opens a pause panel with the controls, look sensitivity and invert-Y (kept in `localStorage.tsFloor`), and a fullscreen button. The night does not stop. The mouse is released for the screens between nights so their buttons can be clicked. A standard gamepad works: left stick walks, right stick looks, A uses, X is the torch, LB runs, Y calls, RB watches, Start pauses.
 
@@ -204,7 +259,7 @@ The building's lamps are not three.js lights. `light.js` bakes them at load into
 
 The same patch adds two terms no spotlight gives. One is a little spill round the torch, so a mascot standing beside the beam is a shape. The other is a trace of night vision within a couple of metres, so the dark is not one flat value. The torch itself (`player.js`) gets a cookie texture with a hot centre and the reflector's rings, and dust that shows only inside the beam. Held close to a wall the beam would bleach it, so the exposure stops down as the lit surface comes nearer than five metres (`GLARE_FROM`). That is what makes a notice readable at arm's length.
 
-Real lights in the scene: the local torch (the only shadow caster, and its shadow pass is skipped while it is off), two point lights that move to the nearest clocks that are due, and whatever `actors.js` gives other guards' torches. With `?debug`, `ts.floor.renderer.info` counts a whole frame. With one prop kit loaded a frame is 70 to 140 draw calls with the torch off and up to about 215 with it on, because the shadow pass draws every caster in the beam a second time. About 30 of those are the building, up to 50 are props and usable things, and the rest are mascots and guards.
+Real lights in the scene: the local torch (the only shadow caster, and its shadow pass is skipped while it is off), two point lights that move to the nearest clocks that are due, and whatever `actors.js` gives other guards' torches. With `?debug`, `ts.floor.renderer.info` counts a whole frame. With one prop kit loaded a frame is 70 to 140 draw calls with the torch off and up to about 300 with it on, because the shadow pass draws every caster in the beam a second time. About 30 of those are the building, up to 50 are props and usable things, and the rest are mascots and guards.
 
 `three/post.js` draws the scene into a half-float buffer and finishes it in one full-screen pass: exposure, ACES tone mapping, a vignette, grain, and colour fringing at the edges. Dread (`dreadOf`) drains colour, tightens the vignette, thickens the fog and makes the lamps sag. Threat (`app.threat()`) adds grain, fringing and bands of the picture slipping sideways. The grain goes on after tone mapping with a small lift under it, which keeps black areas from being one flat value on a laptop screen. The CSS grain on `.ts-stage` is off in this mode.
 

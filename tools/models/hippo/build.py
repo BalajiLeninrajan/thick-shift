@@ -15,7 +15,9 @@
 # Coordinates are Blender's: +x is the model's left, the front is -y, z is up,
 # metres. The 2D source is COSTUME.hippo, HEAD.hippo and GORE.hippo in
 # public/src/render/mascot.js. The proportions follow it, with the hips pushed
-# out to the limit of the doorway, because the hips are the joke.
+# out to the limit of the doorway, because the hips are the joke. Stage 2 is
+# the exception: the owner asked for wasted, bony hips there, so it reads as
+# starved rather than comic.
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import *
@@ -33,8 +35,8 @@ STAGE = KEY = FUR_COL = BELLY_COL = HEAD_R = HEAD_T = None     # set per stage b
 def begin(stage):
     global STAGE, KEY, FUR_COL, BELLY_COL, HEAD_R, HEAD_T
     STAGE, KEY = stage, f'hippo_{stage}'
-    FUR_COL = mixc(hexc('#9a7fc4'), SURFACE0, [.02, .25, .45][stage])
-    BELLY_COL = mixc(hexc('#e6c8ee'), SURFACE0, [.0, .2, .34][stage])
+    FUR_COL = mixc(hexc('#9a7fc4'), SURFACE0, [.02, .18, .3][stage])
+    BELLY_COL = mixc(hexc('#e6c8ee'), SURFACE0, [.0, .15, .3][stage])
     # Stage 1 wears the costume head on a neck: it hangs forward and lolls to one side.
     HEAD_R = rotm((9, 7, -5)) if stage == 1 else np.eye(3)
     HEAD_T = V(0, -.10, .18) if stage == 1 else V(0, 0, 0)
@@ -47,6 +49,8 @@ PALE = mixc(hexc('#cdd6f4'), ROSE, .5)
 INK = np.array([.03, .03, .045], dtype=np.float32)
 BLOOD_DRY = np.array([.2, .03, .035], dtype=np.float32)
 BLOOD_WET = np.array([.45, .025, .035], dtype=np.float32)
+# Stage 2's blood is old: dried brown-black. Saturated red on it read as cartoon trim.
+DRIED = np.array([.075, .04, .03], dtype=np.float32)
 SKIN_COL = np.array([.47, .40, .44], dtype=np.float32)      # what is under the fur: grey, a little violet
 V = lambda *a: np.array(a, dtype=np.float64)
 F = lambda *a: np.array(a, dtype=np.float32)
@@ -176,19 +180,28 @@ def eye(side, off):
     return join([ball, g], 'eye_' + side), c, r
 
 
+ARM0_EL = V(.68, -.045, 1.395)     # the stage 0 elbow, for x = +1
+KNEE_Z = .38       # the costume knee: right at the hem of the hips, so the shin is nearly all the leg that shows
+
+
 def costume_legs(dirty):
-    legs = {}
+    """Thigh (leg_*) and shin with the foot (shin_*). Both ends at the knee are
+    round, so the shin turns over the end of the thigh like a ball in a cup."""
+    legs, shins = {}, {}
     for side, sx in (('L', 1), ('R', -1)):
-        l = fuse([tube([(sx * .50, .05, .66), (sx * .52, .04, .36), (sx * .53, .02, .15)], [.30, .285, .275], seg=18),
-                  ell((sx * .54, -.14, .115), (.29, .40, .13))], .014, 4, FUR, 'leg')
-        floor_clip(l)
-        shag(l, .018 if dirty else .006, 5 if dirty else 4, 8, stretch=3 if dirty else 1, droop=.3 if dirty else 0)
-        floor_clip(l)
-        decimate(l, 3400)
+        kn = (sx * .515, .045, KNEE_Z)
+        th = fuse([tube([(sx * .50, .05, .66), kn], [.30, .288], seg=18)], .014, 4, FUR, 'leg')
+        sh = fuse([tube([kn, (sx * .53, .02, .15)], [.286, .275], seg=18), ell((sx * .54, -.14, .115), (.29, .40, .13))], .014, 4, FUR, 'shin')
+        floor_clip(sh)
+        for o, s in ((th, 8), (sh, 9)):
+            shag(o, .018 if dirty else .006, 5 if dirty else 4, s, stretch=3 if dirty else 1, droop=.3 if dirty else 0)
+        floor_clip(sh)
+        decimate(th, 1300)
+        decimate(sh, 2300)
         toes = [ell((sx * .54 + dx, -.50 + abs(dx) * .22, .085), (.07, .05, .065), cls=NAIL, seg=12) for dx in (-.17, 0, .17)]
-        extra = [tufts(l, 110, .06, .014, 15, droop=.7, where=lambda P, N: (P[:, 2] > .2).astype(float))] if dirty else []
-        legs[side] = join([l] + toes + extra, 'leg_' + side)
-    return legs
+        legs[side] = join([th] + ([tufts(th, 30, .06, .014, 15, droop=.7)] if dirty else []), 'leg_' + side)
+        shins[side] = join([sh] + toes + ([tufts(sh, 80, .06, .014, 16, droop=.7, where=lambda P, N: (P[:, 2] > .2).astype(float))] if dirty else []), 'shin_' + side)
+    return legs, shins
 
 
 def rear(z, sag=0.0):
@@ -209,21 +222,25 @@ def stage0():
     decimate(body, 15000)
     body = join([body, zipper(body, 1.70, 1.02), tufts(body, 300, .028, .01, 3, droop=.3)], 'body')
 
-    arms = {}
+    arms, fore = {}, {}
     for side, sx in (('L', 1), ('R', -1)):
-        a = fuse([tube([(sx * .50, 0, 1.56), (sx * .70, -.05, 1.38), (sx * .80, -.12, 1.19)], [.19, .175, .155], seg=16),
-                  ell((sx * .82, -.17, 1.06), (.165, .155, .18)), ell((sx * .73, -.29, 1.08), (.065, .075, .095), (20, 0, 0))], .013, 4, FUR, 'arm')
-        shag(a, .006, 4, 7, stretch=1, droop=0)
-        decimate(a, 3600)
-        arms[side] = join([a, tufts(a, 70, .03, .011, 5, droop=.3)], 'arm_' + side)
-    legs = costume_legs(False)
+        # Upper arm and forearm with the mitten, split at a round elbow (see costume_legs).
+        a = fuse([tube([(sx * .50, 0, 1.56), ARM0_EL * V(sx, 1, 1)], [.19, .174], seg=16)], .013, 4, FUR, 'arm')
+        f = fuse([tube([ARM0_EL * V(sx, 1, 1), (sx * .76, -.09, 1.29), (sx * .80, -.12, 1.19)], [.172, .165, .155], seg=16),
+                  ell((sx * .82, -.17, 1.06), (.165, .155, .18)), ell((sx * .73, -.29, 1.08), (.065, .075, .095), (20, 0, 0))], .013, 4, FUR, 'fore')
+        for o, s in ((a, 7), (f, 8)): shag(o, .006, 4, s, stretch=1, droop=0)
+        decimate(a, 1300)
+        decimate(f, 2500)
+        arms[side] = join([a, tufts(a, 30, .03, .011, 5, droop=.3)], 'arm_' + side)
+        fore[side] = join([f, tufts(f, 45, .03, .011, 6, droop=.3)], 'forearm_' + side)
+    legs, shins = costume_legs(False)
 
     head, jaw, upper, lower, hat, w, drop = costume_head(False)
     head = join([head, hat] + upper + [tufts(head, 120, .03, .01, 9, droop=.2, cls=HFUR, where=lambda P, N: (P[:, 1] > -.2).astype(float))], 'head')
     eyes = {s: eye(s, False) for s in 'LR'}
     S.update(mouth_w=w, mouth_drop=drop, eyes=[(eyes[s][1], eyes[s][2], pupil_dir(s, False), .5) for s in 'LR'])
 
-    objs = [body, head, jaw, eyes['L'][0], eyes['R'][0], arms['L'], arms['R'], legs['L'], legs['R']]
+    objs = [body, head, jaw, eyes['L'][0], eyes['R'][0]] + [d[s] for d in (arms, fore, legs, shins) for s in 'LR']
     finish(objs, S, dense=[(head, 1.5), (jaw, 1.5), (eyes['L'][0], 2), (eyes['R'][0], 2)])
 
     root = empty('root')
@@ -234,8 +251,14 @@ def stage0():
         sx = 1 if s == 'L' else -1
         part(eyes[s][0], 'eye_' + s, head, eyes[s][1])
         part(arms[s], 'arm_' + s, body, (sx * .48, 0, 1.56))
-        part(legs[s], 'leg_' + s, body, (sx * .50, .05, .64))
+        part(fore[s], 'forearm_' + s, arms[s], ARM0_EL * V(sx, 1, 1))
+        legs_part(body, legs, shins, s, sx)
     return root
+
+
+def legs_part(body, legs, shins, s, sx):
+    part(legs[s], 'leg_' + s, body, (sx * .50, .05, .64))
+    part(shins[s], 'shin_' + s, legs[s], (sx * .515, .045, KNEE_Z))
 
 
 def zipper(body, z0, z1):
@@ -261,8 +284,8 @@ def stage1():
                                   ell((0, .14, 1.36), (.40, .28, .24)),
                                   ell((.42, -.14, 1.40), (.2, .2, .16)), ell((-.42, -.14, 1.40), (.2, .2, .16))], .017, 5, FUR, 'body')
     shag(body, .03, 5, 1, droop=.5)
-    decimate(body, 15000)
-    body = join([body, zipper(body, 1.52, 1.0), tufts(body, 800, .075, .016, 3, droop=.75)], 'body')
+    decimate(body, 14000)
+    body = join([body, zipper(body, 1.52, 1.0), tufts(body, 640, .075, .016, 3, droop=.75)], 'body')
 
     neck = fuse([tube([(0, -.10, 1.40), (0, -.17, 1.62), (0, -.22, 1.86)], [.2, .15, .15], seg=14)], .012, 3, SKIN, 'neck')
     decimate(neck, 1200)
@@ -286,7 +309,7 @@ def stage1():
             p = [(x, -.29, .36), (x + (rng.random() - .5) * .03, -.31, .24), (x + (rng.random() - .5) * .04, -.335 - rng.random() * .03, .11 + rng.random() * .05)]
             fingers.append(tube(p, [.02, .016, .008], seg=6, sub=3, cls=SKIN))
         fore[side] = join([f, tufts(f, 80, .06, .013, 6, droop=.8)] + fingers, 'forearm_' + side)
-    legs = costume_legs(True)
+    legs, shins = costume_legs(True)
 
     head, jaw, upper, lower, hat, w, drop = costume_head(True)
     head = join([head, hat] + upper + [tufts(head, 260, .06, .013, 9, droop=.6, cls=HFUR, where=lambda P, N: (P[:, 1] > -.3).astype(float))], 'head')
@@ -306,7 +329,7 @@ def stage1():
     pose_head([head, jaw, eyes['L'][0], eyes['R'][0], sway])
     S.update(mouth_w=w, mouth_drop=drop, eyes=[(wp(eyes[s][1]), eyes[s][2], HEAD_R @ pupil_dir(s, True), .72 if s == 'L' else .24) for s in 'LR'])
 
-    objs = [body, neck, head, jaw, sway, eyes['L'][0], eyes['R'][0], arms['L'], arms['R'], fore['L'], fore['R'], legs['L'], legs['R']]
+    objs = [body, neck, head, jaw, sway, eyes['L'][0], eyes['R'][0]] + [d[s] for d in (arms, fore, legs, shins) for s in 'LR']
     finish(objs, S, dense=[(head, 1.5), (jaw, 1.5), (eyes['L'][0], 2), (eyes['R'][0], 2)])
 
     root = empty('root')
@@ -320,28 +343,55 @@ def stage1():
         part(eyes[s][0], 'eye_' + s, head, wp(eyes[s][1]))
         part(arms[s], 'arm_' + s, body, (sx * .50, -.12, 1.40))
         part(fore[s], 'forearm_' + s, arms[s], (sx * .86, -.06, 1.00))
-        part(legs[s], 'leg_' + s, body, (sx * .50, .05, .64))
+        legs_part(body, legs, shins, s, sx)
     return root
 
 
 # ------------------------------------------------------------ stage 2: what is underneath
 
 HOLE_C, HOLE_R = V(0, -.98, 2.07), V(.2, .30, .30)        # the mouth: a tall hole in the front of the head
-WOUND_C, WOUND_R = V(0, -.52, 1.47), V(.15, .17, .27)     # the chest, torn open
-EYES2 = {'L': V(.31, -.875, 2.575), 'R': V(-.29, -.905, 2.54)}      # set back, so the balls sit in their sockets
+WOUND_C, WOUND_R = V(0, -.52, 1.45), V(.19, .17, .29)     # the chest, torn open
+# The eyes are what is left of the costume's, and worse: big pale balls bulging out of the dome, with no
+# lids. L has swollen and slipped down with its pupil blown; R is smaller, higher, with a pinprick pupil.
+EYES2 = {'L': V(.29, -.915, 2.525), 'R': V(-.265, -.915, 2.6)}
+EYE2_R = {'L': .148, 'R': .115}
+EYE2_PUPIL = {'L': .64, 'R': .085}         # sine of the pupil's angular radius, as in paint_eye
+
+
+def pupil_dir2(side):
+    d = V(.3, -1, -.1) if side == 'L' else V(-.02, -1, -.16)     # L drifts out; R stares down at whoever is at its feet
+    return d / np.linalg.norm(d)
+
+
+def near_eyes2(P, k):
+    """1 farther than k eye radii from both stage 2 eyes, 0 inside: keeps fur off them."""
+    e = np.min([np.linalg.norm(np.asarray(P, dtype=np.float32) - F(*EYES2[s]), axis=1) / EYE2_R[s] for s in 'LR'], axis=0)
+    return (e > k).astype(np.float32)
 MASK_C = V(0, -.865, 1.99)                                # the small face that lives in the hole
 RIB_C, RIB_R, RIB_TILT = V(0, -.18, 1.62), V(.38, .33, .46), -14
+# The hips have wasted to bone: no wider than the shoulders. Two hip bones jut at the sides and the
+# tailbone at the back; the fur hangs off them in mats. Every other stage keeps the big rear.
+HIPBONES = [V(.38, -.04, 1.0), V(-.38, -.04, 1.0), V(0, .35, .99)]
+HIP_Z = .84
+
+
+def bony(P):
+    """1 on the hip bones and tailbone, where the skin is stretched bare."""
+    return np.max([ellmask(np.asarray(P, dtype=np.float32), c, (.13, .13, .11), .35) for c in HIPBONES], axis=0)
 
 
 def stage2():
     S = dict(stage=2, stains=[((0, -.46, 1.5), (.3, .2, .36), 4, .8), ((.74, -.2, .5), (.2, .22, .2), 2, .6), ((-.74, -.2, .5), (.2, .22, .2), 3, .6),
                               ((0, -.6, 1.05), (.3, .25, .2), 5, .7)])
     tilt = rotm((RIB_TILT, 0, 0))
-    # Hunched and starved, except for the hips. The ribcage is a keel hung forward off a thin waist.
-    shapes = rear(.90, .04) + [tube([(0, .12, 1.12), (0, .02, 1.3), (0, -.08, 1.45)], [.3, .23, .22], seg=16),
-                               ell(RIB_C, RIB_R, (RIB_TILT, 0, 0), seg=32),
-                               ell((.40, -.22, 1.98), (.17, .16, .13)), ell((-.40, -.22, 1.98), (.17, .16, .13)),     # shoulder knobs
-                               ell((0, -.02, 2.0), (.3, .2, .16), (20, 0, 0))]                                          # the hump
+    # Hunched and starved. The ribcage is a keel hung forward off a thin waist over a bony pelvis.
+    pelvis = [ell((0, .06, HIP_Z), (.46, .34, .27), seg=32),
+              ell((.19, .25, HIP_Z - .07), (.2, .15, .24)), ell((-.19, .25, HIP_Z - .07), (.2, .15, .24))]      # what is left of the rear: two hanging flaps
+    pelvis += [ell(c, (.085, .15, .075), (-12, 0, 0)) if c[0] else ell(c, (.06, .07, .08)) for c in HIPBONES]     # crests run front to back, the tailbone is a knob
+    shapes = pelvis + [tube([(0, .12, 1.12), (0, .02, 1.3), (0, -.08, 1.45)], [.3, .23, .22], seg=16),
+                       ell(RIB_C, RIB_R, (RIB_TILT, 0, 0), seg=32),
+                       ell((.40, -.22, 1.98), (.17, .16, .13)), ell((-.40, -.22, 1.98), (.17, .16, .13)),     # shoulder knobs
+                       ell((0, -.02, 2.0), (.3, .2, .16), (20, 0, 0))]                                          # the hump
     ribs = []
     for i in range(6):   # rib ridges, each a thin disc a little wider than the chest at its height
         d = -.26 + i * .105
@@ -355,15 +405,15 @@ def stage2():
         dent(body, tuple(loc), (.05, .05, .04), .035, tuple(nrm))      # a knob, pushed out along the normal
     wound = ell(WOUND_C, WOUND_R, seg=24, cls=MEAT)
     shag(wound, .03, 14, 9, stretch=1, droop=0)      # a ragged edge, not a neat oval
-    shag(body, .04, 4.5, 1, droop=.6, mask=lambda P: .35 + .65 * sstep(1.3, 1.0, P[:, 2]))   # shaggiest on the hips
+    shag(body, .04, 4.5, 1, droop=.6, mask=lambda P: .35 + .65 * sstep(1.3, 1.0, P[:, 2]) * (1 - .8 * bony(P)))   # shaggiest on the hips, bare on the bones
     decimate(body, 13500)
     cut(body, wound)
     bones = []
     for i in range(5):   # ribs across the opening
         z = WOUND_C[2] - .2 + i * .1
-        bones.append(tube([(-.17, -.36, z + .03), (-.08, -.445, z), (0, -.47, z - .01), (.08, -.445, z), (.17, -.36, z + .03)], .017, seg=6, sub=3, cls=BONE))
+        bones.append(tube([(-.21, -.34, z + .03), (-.1, -.44, z), (0, -.465, z - .012), (.1, -.44, z), (.21, -.34, z + .03)], .021, seg=6, sub=3, cls=BONE))
     flaps = tufts(body, 60, .09, .03, 17, droop=.7, cls=FLESH, where=lambda P, N: ellmask(P, WOUND_C, WOUND_R * 1.25, .05) * (P[:, 1] < -.3))
-    hipfur = tufts(body, 800, .15, .024, 3, droop=.85, where=lambda P, N: .3 + .7 * sstep(1.4, 1.0, P[:, 2]), segs=2)
+    hipfur = tufts(body, 380, .24, .026, 3, droop=.92, segs=3, where=lambda P, N: (.25 + .75 * sstep(1.4, 1.0, P[:, 2])) * (1 - bony(P)))   # mats hanging off the hips
     body = join([body, hipfur, flaps] + bones, 'body')
 
     # guts: three loops out of the bottom of the wound, down to the knees
@@ -403,7 +453,7 @@ def stage2():
                  [(wr[0] + sx * (k - 1.5) * .076, wr[1] - .15) for k in range(4)]]
         fore[side] = join([f, tufts(f, 80, .12, .014, 6, droop=.9, cls=FUR, where=lambda P, N: sstep(.6, .8, P[:, 2]))] + claws, 'forearm_' + side)
 
-        hp, kn, an = V(sx * .46, 0, .66), V(sx * .80, -.24, .40), V(sx * .68, -.06, .08)
+        hp, kn, an = V(sx * .40, 0, .74), V(sx * .80, -.24, .40), V(sx * .68, -.06, .08)
         l = fuse([tube([hp, (hp + kn) / 2, kn], [.17, .13, .1], seg=12), ell(kn, (.1, .1, .1))], .011, 3, FUR, 'leg')
         shag(l, .02, 8, 9, droop=.5)
         decimate(l, 1400)
@@ -420,9 +470,9 @@ def stage2():
     hole = ell(HOLE_C, HOLE_R, seg=28, cls=DARK)
     dome = fuse([ell((0, -.56, 2.42), (.60, .50, .42), seg=32), ell((0, -.70, 2.14), (.34, .33, .34), seg=24),
                  ell((.47, -.5, 2.74), (.13, .075, .13), (0, 25, 0)), ell((-.47, -.5, 2.74), (.13, .075, .13), (0, -25, 0))], .013, 5, HFUR, 'head')
-    for s in 'LR':   # deep sockets
-        c = EYES2[s]
-        dent(dome, c + V(0, -.12, 0), (.14, .14, .12), .1, (0, 1, .1))
+    for s in 'LR':   # shallow sockets the balls bulge out of
+        c, r = EYES2[s], EYE2_R[s]
+        dent(dome, c + V(0, -.04, 0), (r * 1.3, r * 1.1, r * 1.25), .05, (0, 1, .1))
     shag(dome, .035, 6, 5, droop=.6)
     decimate(dome, 8500)
     cut(dome, hole, keep=True)
@@ -437,19 +487,21 @@ def stage2():
         zt = HOLE_C[2] + HOLE_R[2] * math.sqrt(1 - (x / HOLE_R[0]) ** 2 * .8) - .02
         hgt = .085 * (.8 + rng.random() * .35)
         teeth.append(box((x, -1.01 + abs(x) * .25, zt - hgt * .4), (.046, .028, hgt), (rng.random() * 8, 0, (rng.random() - .5) * 10 - x * 80), TOOTH))
-    hat = tube([(-.06, -.52, 2.78), (.0, -.5, 2.88), (.12, -.5, 2.93), (.24, -.54, 2.9)], [.17, .12, .07, .012], seg=14, sub=4, cls=HAT, flat=((.2, 1, .2), .45))
+    hat = tube([(-.1, -.56, 2.76), (-.04, -.56, 2.9), (.08, -.58, 3.0), (.26, -.62, 3.02)], [.2, .14, .075, .012], seg=14, sub=4, cls=HAT, flat=((.2, 1, .1), .6))
+    shag(hat, .03, 9, 14, stretch=1, droop=0)      # crumpled card
     fringe = tufts(dome, 330, .3, .034, 9, droop=.95, cls=HFUR, segs=3, jitter=.2,
-                   where=lambda P, N: sstep(2.5, 2.3, P[:, 2]) * (np.linalg.norm((P - F(*HOLE_C)) / F(*HOLE_R), axis=1) > 1.15))
-    crown = tufts(dome, 250, .12, .02, 10, droop=.7, cls=HFUR, where=lambda P, N: (np.linalg.norm((P - F(*HOLE_C)) / F(*HOLE_R), axis=1) > 1.2).astype(float))
+                   where=lambda P, N: sstep(2.5, 2.3, P[:, 2]) * (np.linalg.norm((P - F(*HOLE_C)) / F(*HOLE_R), axis=1) > 1.15) * near_eyes2(P, 1.5))
+    crown = tufts(dome, 250, .12, .02, 10, droop=.7, cls=HFUR,
+                  where=lambda P, N: (np.linalg.norm((P - F(*HOLE_C)) / F(*HOLE_R), axis=1) > 1.2) * near_eyes2(P, 1.7))
     head = join([dome, hat, fringe, crown] + teeth, 'head')
-    jaw = join([jaw, tufts(jaw, 120, .22, .03, 13, droop=.95, cls=JFUR, segs=3, where=lambda P, N: (np.linalg.norm((P - F(*HOLE_C)) / F(*HOLE_R), axis=1) > 1.15).astype(float))], 'jaw')
+    jaw = join([jaw, tufts(jaw, 110, .16, .028, 13, droop=.95, cls=JFUR, segs=3, where=lambda P, N: (np.linalg.norm((P - F(*HOLE_C)) / F(*HOLE_R), axis=1) > 1.15) * (.25 + .75 * sstep(.08, .2, np.abs(P[:, 0]))))], 'jaw')
 
     eyes = {}
-    for s in 'LR':   # black balls far back in the sockets, one pale point each
-        c = EYES2[s]; r = .07 if s == 'L' else .062
-        d = V(.0, -1, -.25); d /= np.linalg.norm(d)
-        eyes[s] = (join([ell(c, r, seg=16, cls=BALL), ell(c + d * r * .96, .017 if s == 'L' else .012, seg=8, cls=GLOW)], 'eye_' + s), c, r)
-    S['eyes'] = [(eyes[s][1], eyes[s][2]) for s in 'LR']
+    for s in 'LR':   # wet plastic balls; the catchlight sits up and to one side of the pupil, as a wet eye's does
+        c, r, d = EYES2[s], EYE2_R[s], pupil_dir2(s)
+        g = c + (d + V(.18, 0, .2)) / np.linalg.norm(d + V(.18, 0, .2)) * r * .985
+        eyes[s] = (join([ell(c, r, seg=24, cls=EYE), ell(g, (.012, .006, .012), seg=8, cls=GLOW)], 'eye_' + s), c, r)
+    S['eyes'] = [(eyes[s][1], eyes[s][2], pupil_dir2(s), EYE2_PUPIL[s]) for s in 'LR']
 
     # The mask: a small pale face on a stalk, deep in the mouth. The game bobs it and leans it out.
     m = fuse([ell(MASK_C, (.105, .055, .135), seg=28)], .006, 3, MASK, 'mask')
@@ -467,7 +519,8 @@ def stage2():
         bloody = i % 3 == 2
         x = (rng.random() - .5) * .34
         zr = HOLE_C[2] - HOLE_R[2] * math.sqrt(max(.1, 1 - (x / HOLE_R[0]) ** 2)) + .03
-        L = (.35 if bloody else .45) + rng.random() * (.4 if bloody else .65)
+        # short in the middle, long at the corners of the mouth, so the open chest shows between them
+        L = ((.2 if bloody else .25) + rng.random() * (.25 if bloody else .3)) * (1 + 1.6 * min(1, abs(x) / .15) ** 2)
         pts = [V(x, -.9, zr + .02), V(x, -1.0, zr + .035), V(x + (rng.random() - .5) * .03, -1.035, zr - .08), V(x + (rng.random() - .5) * .06, -1.04, zr - L)]
         locks.append(tube(pts, [.009, .009, .008, .002], seg=4, sub=3, cls=BSTRAND if bloody else STRAND, caps=False))
     sway = join(locks, 'sway_1')
@@ -488,7 +541,7 @@ def stage2():
         part(eyes[s][0], 'eye_' + s, head, eyes[s][1])
         part(arms[s], 'arm_' + s, body, (sx * .50, -.22, 1.98))
         part(fore[s], 'forearm_' + s, arms[s], (sx * .98, -.14, 1.20))
-        part(legs[s], 'leg_' + s, body, (sx * .46, 0, .66))
+        part(legs[s], 'leg_' + s, body, (sx * .40, 0, .74))
         part(shins[s], 'shin_' + s, legs[s], (sx * .80, -.24, .40))
     return root
 
@@ -532,6 +585,11 @@ def stain(T, c, r, seed, wet):
     under = (P[:, 2] < c[2]) * sstep(c[2] - r[2] * 3.5, c[2] - r[2] * .5, P[:, 2]) * (np.hypot((P[:, 0] - c[0]) / r[0], (P[:, 1] - c[1]) / r[1]) < .95)
     k = np.clip(blot + sstep(.62, .7, cols) * under, 0, 1)
     shade = fbm(P * 26, 2, seed + 2)
+    if STAGE == 2:   # old and dried: only the darkest part of the blotch stays, and it is brown-black
+        k = k * sstep(.4, .6, shade)
+        T.put(k * .85, col=DRIED[None] * (.7 + .6 * shade)[:, None], rough=.6)
+        T.h *= (1 - .6 * k)
+        return
     col = BLOOD_DRY[None] * (.55 + .7 * shade)[:, None]
     fresh_ = sstep(.45, .9, blot * (.6 + shade)) * wet
     col = col + (BLOOD_WET - col) * fresh_[:, None]
@@ -597,17 +655,19 @@ def paint_fur(T, S):
         near = np.linalg.norm((P - F(*RIB_C)) / F(*(RIB_R * 1.25)), axis=1) < 1
         for c, nn in S['ribs']: rib = np.maximum(rib, np.exp(-(((P - F(*c)) @ F(*nn)) / .02) ** 2))
         spine = np.exp(-(P[:, 0] / .035) ** 2) * (N[:, 1] > .2) * (P[:, 2] > 1.25) * (P[:, 2] < 2.1)
-        skin(T, np.clip(np.maximum(thin, np.maximum(rib * near, spine)), 0, 1) * body)
-        # the rim of the mouth is raw and wet, and the fur round it is stiff with blood
+        skin(T, np.clip(np.maximum(np.maximum(thin, bony(P)), np.maximum(rib * near, spine)), 0, 1) * body)
+        # Old blood dried black in clots round the mouth: patches, never a ring, or it reads as an outline.
         hole_e = np.linalg.norm((P - F(*HOLE_C)) / F(*HOLE_R), axis=1)
-        T.put(is_head * sstep(1.5, 1.05, hole_e) * (.45 + .55 * fbm(P * 12, 3, 70)), col=BLOOD_DRY * .9, rough=.4)
-        for c, r in S['eyes']:   # sockets: shadowed, with a raw rim
-            d = np.linalg.norm(P - F(*c), axis=1)
-            hf = cls == HFUR
-            T.put(hf * sstep(r * 2.7, r * 1.4, d) * .85, col=INK, rough=.7)
-            T.put(hf * sstep(r * 2.1, r * 1.6, d) * sstep(r * 1.0, r * 1.35, d) * .9, col=mixc(RED, INK, .55), rough=.25)
+        T.put(is_head * sstep(1.4, 1.05, hole_e) * sstep(.48, .62, fbm(P * 11, 3, 70)) * .9, col=DRIED, rough=.55)
+        hf = (cls == HFUR).astype(np.float32)
+        for c, r, d, frac in S['eyes']:
+            # No lids: the fur has pulled back off the ball, and the bare skin round it is bruised dark and
+            # wet in the crease. The edge is ragged so nothing reads as a drawn ring.
+            e = np.linalg.norm(P - F(*c), axis=1) / r + (fbm(P * 18, 3, 66) - .5) * .9
+            skin(T, hf * sstep(1.75, 1.45, e))
+            T.put(hf * sstep(1.25, 1.02, e) * .8, col=F(.06, .045, .055), rough=.15)
         wound_e = np.linalg.norm((P - F(*WOUND_C)) / F(*WOUND_R), axis=1)
-        T.put(body * sstep(1.55, 1.0, wound_e) * (P[:, 1] < -.2), col=BLOOD_DRY * 1.1, rough=.4)
+        T.put(body * sstep(1.45, 1.0, wound_e) * (P[:, 1] < -.2) * sstep(.45, .6, fbm(P * 10, 3, 69)), col=DRIED, rough=.55)
 
     if st < 2:
         # The costume face, in head space. The mouth is a slot: its roof, back wall and the cut top of
@@ -639,12 +699,23 @@ def paint_eye(T, S):
         v = P - F(*c); dist = np.linalg.norm(v, axis=1)
         mine = dist < r * 1.3
         cosang = (v @ F(*d)) / (dist + 1e-9)
-        T.put(mine, col=mixc(ROSE, (1, 1, .98), .6) if st == 0 else mixc(ROSE, YELLOW, .6) * .9, rough=.12 if st == 0 else .3)
-        T.put(mine * scr * .5, col=(.55, .55, .6), rough=.6)
+        if st < 2:
+            T.put(mine, col=mixc(ROSE, (1, 1, .98), .6) if st == 0 else mixc(ROSE, YELLOW, .6) * .9, rough=.12 if st == 0 else .3)
+        else:         # pale and glossy as a peeled egg, the only clean thing left on it
+            T.put(mine, col=mixc(PALE, (1, .98, .92), .5) * (.9 + .12 * fbm(P * 25, 2, 82))[:, None], rough=.04)
+        T.put(mine * scr * (.5 if st < 2 else .25), col=(.55, .55, .6), rough=.6)
         if st == 1:   # yellowed, with a brown tide mark creeping in from the rim
             T.put(mine * sstep(.6, .0, cosang) * np.clip(fbm(P * 40, 3, 8) * 1.5, 0, 1), col=(.42, .26, .14), rough=.5)
         ca = math.cos(math.asin(frac))
-        T.put(mine * sstep(ca - .012, ca + .012, cosang), col=INK * .6, rough=.08)
+        if st == 2:
+            # Thin dark veins creep in from where the ball meets the head, fading before the pupil.
+            vein = np.exp(-((fbm(P * 55, 3, 83) - .5) / .022) ** 2) * sstep(.8, .15, cosang)
+            T.put(mine * vein * .85, col=(.16, .08, .09), rough=.1)
+            # a grey iris round the pupil, so it reads as a real eye staring, not a painted dot
+            # (narrow round the blown pupil, wide and clouded round the pinprick).
+            ci = math.cos(math.asin(frac + .08 + .2 * (1 - frac) ** 2))
+            T.put(mine * sstep(ci - .01, ci + .01, cosang) * .8, col=(.5, .52, .5), rough=.05)
+        T.put(mine * sstep(ca - .012, ca + .012, cosang), col=INK * .6, rough=.08 if st < 2 else .03)
     T.h[:] = 0
 
 
@@ -675,8 +746,8 @@ def paint_tooth(T, S):
         dirt = fbm(P * F(60, 60, 25), 3, 37)
         T.col[:] = BONE_COL[None] * (1 - .5 * sstep(.4, .75, dirt))[:, None]; T.rough[:] = .3
         T.h[:] = 0
-        if st == 2:   # it has been eating
-            T.put(sstep(.38, .6, fbm(P * F(40, 40, 12), 2, 39)) * .9, col=BLOOD_WET * .8, rough=.2)
+        if st == 2:   # it has been eating: old brown crust at the gums
+            T.put(sstep(.5, .7, fbm(P * F(40, 40, 12), 2, 39)) * .85, col=DRIED, rough=.5)
 
 
 def paint_nail(T, S):
@@ -694,7 +765,7 @@ def paint_zip(T, S):
 def paint_skin(T, S):
     skin(T, np.ones(len(T.P), dtype=np.float32))
     if S['stage'] == 2:   # hands and feet are dark with it to the wrist
-        T.put(sstep(.5, .12, T.P[:, 2]) * (.5 + .5 * fbm(T.P * 20, 2, 64)), col=BLOOD_DRY * .9, rough=.35)
+        T.put(sstep(.5, .12, T.P[:, 2]) * (.5 + .5 * fbm(T.P * 20, 2, 64)), col=DRIED, rough=.5)
 
 
 def paint_strand(T, S):
@@ -702,8 +773,8 @@ def paint_strand(T, S):
     T.h[:] = 0
 
 
-def paint_bstrand(T, S):
-    T.col[:] = BLOOD_WET[None] * (.4 + .6 * vnoise(T.P * 60, 81))[:, None]; T.rough[:] = .15
+def paint_bstrand(T, S):     # ropes of old blood and drool, nearly black
+    T.col[:] = DRIED[None] * (.6 + .8 * vnoise(T.P * 60, 81))[:, None]; T.rough[:] = .2
     T.h[:] = 0
 
 
@@ -712,12 +783,8 @@ def paint_dark(T, S):
     P = T.P
     hole_e = np.linalg.norm((P - F(*HOLE_C)) / F(*HOLE_R), axis=1)
     T.col[:] = F(.035, .012, .018)[None] * (.5 + fbm(P * 30, 2, 71))[:, None]; T.rough[:] = .3
-    T.put(sstep(.8, 1.05, hole_e) * .8, col=BLOOD_WET * .5, rough=.25)
+    T.put(sstep(.8, 1.05, hole_e) * .6, col=DRIED * .8, rough=.25)
     T.h = fbm(P * 50, 2, 72) * .002
-
-
-def paint_ball(T, S):
-    T.col[:] = F(.012, .01, .014); T.rough[:] = .06; T.h[:] = 0
 
 
 def paint_mask(T, S):
@@ -741,30 +808,30 @@ def paint_mask(T, S):
 
 def paint_meat(T, S):
     fib = fbm(T.P * F(30, 30, 90), 3, 75)
-    T.col[:] = F(.3, .03, .04)[None] * (.35 + 1.1 * fib)[:, None]; T.rough[:] = .22
+    T.col[:] = F(.17, .055, .05)[None] * (.35 + 1.1 * fib)[:, None]; T.rough[:] = .22     # dark and going off, not fresh red
     T.h = fib * .004
 
 
 def paint_flesh(T, S):
-    T.col[:] = F(.4, .1, .1)[None] * (.5 + fbm(T.P * 40, 2, 76))[:, None]; T.rough[:] = .3
+    T.col[:] = F(.2, .13, .13)[None] * (.5 + fbm(T.P * 40, 2, 76))[:, None]; T.rough[:] = .3     # torn skin, grey-brown
 
 
 def paint_bone(T, S):
     T.col[:] = BONE_COL[None] * (.75 + .3 * vnoise(T.P * 50, 77))[:, None]; T.rough[:] = .4
-    T.put(sstep(.42, .6, fbm(T.P * 22, 3, 78)), col=BLOOD_WET * .7, rough=.2)
+    T.put(sstep(.5, .66, fbm(T.P * 22, 3, 78)) * .85, col=DRIED, rough=.5)
     T.h[:] = 0
 
 
 def paint_gut(T, S):
     P = T.P
     lump = fbm(P * 24, 3, 79); vein = np.exp(-((fbm(P * 40, 3, 80) - .5) / .015) ** 2)
-    col = F(.56, .2, .2)[None] * (.6 + .7 * lump)[:, None]
-    T.col[:] = col + (F(.25, .06, .12) - col) * vein[:, None] * .7; T.rough[:] = .18
+    col = F(.3, .2, .2)[None] * (.6 + .7 * lump)[:, None]      # grey, dead gut: bright red rings read as cartoon
+    T.col[:] = col + (F(.12, .06, .08) - col) * vein[:, None] * .7; T.rough[:] = .18
     T.h = lump * .003
 
 
 PAINTERS = {EYE: paint_eye, HAT: paint_hat, POM: paint_pom, TOOTH: paint_tooth, NAIL: paint_nail, ZIP: paint_zip, SKIN: paint_skin, STRAND: paint_strand,
-            BSTRAND: paint_bstrand, DARK: paint_dark, BALL: paint_ball, MASK: paint_mask, MEAT: paint_meat, FLESH: paint_flesh, BONE: paint_bone, GUT: paint_gut}
+            BSTRAND: paint_bstrand, DARK: paint_dark, MASK: paint_mask, MEAT: paint_meat, FLESH: paint_flesh, BONE: paint_bone, GUT: paint_gut}
 
 
 def paint(T, S):
@@ -777,8 +844,10 @@ def paint(T, S):
         near = (np.hypot((T.P[:, 0] - c[0]) / r[0], (T.P[:, 1] - c[1]) / r[1]) < 1.6) & (T.P[:, 2] < c[2] + r[2] * 1.6) & (T.P[:, 2] > c[2] - r[2] * 3.6)
         t = T.sub(near & np.isin(T.cls, (FUR, HFUR, JFUR, SKIN)))
         if len(t.P): stain(t, c, r, seed, wet); T.merge(t)
-    # occlusion goes into the colour: the game has one light and no ambient
-    T.col *= (.3 + .7 * np.clip(T.ao, 0, 1) ** 1.2)[:, None]
+    # Occlusion goes into the colour: the game has one light and no ambient. Not on the eyeballs:
+    # the game turns them, and the shadowed half buried in the head would roll into view as a lid.
+    ao = np.where(T.cls == EYE, 1, np.clip(T.ao, 0, 1))
+    T.col *= (.3 + .7 * ao ** 1.2)[:, None]
 
 
 def finish(objs, S, dense):

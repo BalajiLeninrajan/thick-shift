@@ -6,7 +6,7 @@ from kit import prop, mixc, spline, D
 BLACK = (.1, .1, .11)
 SS = dict(t='steel', c=(.82, .83, .85))        # stainless
 DULL = dict(t='steel', c=(.5, .5, .52))
-IRON = dict(t='rust', c=(.45, .42, .42))
+IRON = dict(t='rust', c=(.72, .68, .66))
 
 
 def legs(p, w, d, h, r=.02, inset=.04):
@@ -61,7 +61,7 @@ def counter_steel(p):
     p.tube([(.56, .02, .43), (.6, -.12, .36), (.7, -.16, .33), (.8, -.12, .36), (.84, .02, .43)], .004, segs=4, **DULL)
 
 
-@prop('fridge', notes='Two-door commercial fridge. The right door is the child node "door", hinged on its right edge (vertical axis). Its rest pose is already 14 degrees open: turn it -0.244 rad about Y in three.js to shut it, positive to open further. The left door is fixed. The cabinet is dark inside, with something on the floor of it.')
+@prop('fridge', notes='Two-door commercial fridge. The right door is the child node "door", hinged on its right edge (vertical axis). Its rest pose is already 14 degrees open: turn it -0.244 rad about Y in three.js to shut it, positive to open further. The left door is fixed. With the door at rest the front corner stands 0.15 m proud of the 0.8 m depth. The cabinet is dark inside, with something on the floor of it.')
 def fridge(p):
     W, Dp, H = 1.2, .74, 2.1          # the doors and handle bring the depth to 0.8
     y0 = -Dp / 2                      # front plane of the carcass

@@ -1,8 +1,11 @@
 #!/bin/sh
 # Runs Blender headless: tools/models/bl script.py [-- args]
-# At most two Blender processes run at once (this machine has 8 GB of RAM);
-# a third call waits for a slot.
+# At most two Blender processes run at once (this machine has 8 GB of RAM).
+# A third call waits, trying both slots in turn so neither sits idle.
 BL="${BLENDER:-$HOME/.local/opt/blender-5.3.0-linux-x64/blender}"
-exec 9>/tmp/ts-blender-1.lock
-if ! flock -n 9; then exec 9>/tmp/ts-blender-2.lock; flock 9; fi
+while :; do
+  exec 9>/tmp/ts-blender-1.lock; flock -n 9 && break
+  exec 9>/tmp/ts-blender-2.lock; flock -n 9 && break
+  sleep 2
+done
 exec nice -n 10 "$BL" -b -t 3 --python-exit-code 1 -P "$@"

@@ -6,12 +6,11 @@ from kit import Mesh, prop, torch
 
 GREEN = '#566f5e'      # institutional machine green
 GREY = '#7b8686'
-RED = '#a52a1e'
 BLACK = '#26272a'
 BRASS = '#b59a55'
 
 
-def dome(m, c, r, mat='status_glow', n=(0, -1, 0)):
+def dome(m, c, r, mat='status_glow'):
     """A pilot lamp: a glowing dome in a metal collar, facing -Y."""
     with m.at(c, r=(90, 0, 0)):
         m.lathe([(r * 1.35, 0), (r * 1.35, r * .35), (r * 1.05, r * .5)], 'chrome', n=14, caps=(False, False))

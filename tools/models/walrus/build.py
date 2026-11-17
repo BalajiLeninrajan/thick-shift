@@ -6,12 +6,15 @@
 # After the stage number come optional previews, `view[:light[:focus]]`, where
 # view is one from common.VIEWS, light is flashlight or studio, and focus is
 # a key of the stage's FOCUS table below (face, hips, ...). `--only` skips
-# the build and renders the GLB already on disk. `--pose` writes a second,
+# the build and renders the GLB already on disk; with `--json` as well it also
+# rewrites this stage's entry in walrus.json from that GLB. `--pose` writes a second,
 # throwaway GLB with the joints turned, to check that no seam opens.
 #
 # Stage 0 is the costume as built, 1 is the costume going wrong, 2 is what is
-# underneath. All three stand on the same enormous hips: the rear is wider
-# than tall at every stage, which is the joke of the game.
+# underneath. Stages 0 and 1 stand on enormous hips, the rear wider than tall,
+# which is the joke of the game. Stage 2 drops the joke on purpose: a starved
+# frame with small hips under a narrow drape, so the long neck and the four
+# harvestman legs make the silhouette.
 import sys, os, json, math
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE); sys.path.insert(0, os.path.dirname(HERE))
@@ -43,11 +46,19 @@ SURFACE = [dict(matting=0, bald=0, grime=0), dict(matting=.8, bald=.22, grime=.2
 
 # ---------------------------------------------------------------- layout (metres, Blender axes: front is -y)
 PELVIS = V((0, 0, .95))
-HEAD_C = [V((0, -.05, 2.12)), V((0, -.07, 2.23)), V((0, -.12, 2.47))][ST]   # centre of the skull
-HEAD_S = [1, .97, .70][ST]                                                # the head is smaller on the long neck
-HEAD_PIVOT = [V((0, 0, 1.86)), V((0, -.02, 2.0)), V((0, -.06, 2.30))][ST]
-NECK_PIVOT = [None, V((0, 0, 1.80)), V((0, .02, 1.64))][ST]
+HEAD_C = [V((0, -.05, 2.12)), V((0, -.07, 2.23)), V((0, -.18, 2.72))][ST]   # centre of the skull
+HEAD_S = [1, .97, .66][ST]                                                # the head is smaller on the long neck
+HEAD_PIVOT = [V((0, 0, 1.86)), V((0, -.02, 2.0)), V((0, -.12, 2.55))][ST]
+NECK_PIVOT = [None, V((0, 0, 1.80)), V((0, .03, 1.93))][ST]
 def hd(x, y, z): return HEAD_C + V((x, y, z)) * HEAD_S    # a point given in stage 0 head coordinates
+
+# Clean pile at stage 0 is broad leaves with bright tips. Once it rots the
+# locks are matted into thin greasy points, darker at the tip, which also
+# keeps them from reading as scales under the torch.
+LOCK_W, LOCK_TIP = [1, .55, .6][ST], [1.12, .8, .75][ST]
+def fur(src, n, seed, width=.02, **kw):
+    return tufts(src, n, seed, width=width * LOCK_W, tip=LOCK_TIP, **kw)
+
 
 parts = {}   # name -> dict(parent, pivot, tex=[], fib=[], glow=[])
 def P(name, parent, pivot):
@@ -56,14 +67,15 @@ def P(name, parent, pivot):
 
 
 # ---------------------------------------------------------------- body
-DRAPE_TOP = 1.74
+DRAPE_TOP = 2.0
+SHOULDER = 1.86   # the cross-bar of the frame the drape hangs from
 def hem_base(th):
-    """Where the drape ends. It hangs low in front of the belly and lies on
-    the hip shelf at the sides and back."""
-    return 1.34 - .58 * max(0, math.cos(th)) ** 1.2
+    """Where the drape ends: a little above the floor, so thin shins and
+    feet show under it. The back trails a little lower."""
+    return .5 - .05 * max(0, -math.cos(th))
 def hem_z(th):
     tat = .1 * abs(math.sin(11 * th + 1)) + .07 * abs(math.sin(23 * th + 2.2)) - .06
-    for a, d in ((.5, .2), (-.9, .16), (2.4, .12), (-.25, .1)):     # a few long rips
+    for a, d in ((.5, .26), (-.9, .2), (2.4, .16), (-.25, .12)):     # a few long rips
         tat += d * math.exp(-((math.atan2(math.sin(th - a), math.cos(th - a))) / .07) ** 2)
     return hem_base(th) + tat
 def lerp_tab(tab, s):
@@ -71,17 +83,43 @@ def lerp_tab(tab, s):
         if s <= b: return va + (vb - va) * (s - a) / (b - a)
     return tab[-1][1]
 def drape_xy(s, th):
-    """Cross-section of the drape at s (0 at the collar, 1 at the hem)."""
-    rx = lerp_tab([(0, .085), (.1, .2), (.22, .27), (1, .62)], s)
-    ry = lerp_tab([(0, .085), (.1, .15), (.22, .24), (1, .68 if math.cos(th) > 0 else .56)], s)
-    fold = (math.cos(9 * th + .4) + .6 * math.cos(14 * th + 2) + .4 * math.cos(5 * th + 1)) * .09 * s ** 1.3
+    """Cross-section of the drape at s (0 at the collar, 1 at the hem).
+    Narrow all the way down: it falls straight from the shoulder bar, the
+    bar's ends poke it into two bony points, and it only flares a little
+    over the small rear before the hem."""
+    back = math.cos(th) < 0
+    rx = lerp_tab([(0, .075), (.05, .2), (.1, .27), (.4, .29), (.65, .34), (1, .4)], s)
+    ry = lerp_tab([(0, .075), (.05, .12), (.1, .16), (.4, .22), (.65, .33 if back else .27), (1, .38 if back else .33)], s)
+    rx *= 1 + .16 * abs(math.sin(th)) ** 10 * math.exp(-((s - .09) / .04) ** 2)   # shoulder points
+    fold = (math.cos(9 * th + .4) + .6 * math.cos(14 * th + 2) + .4 * math.cos(5 * th + 1)) * .11 * max(0, s - .08) ** 1.1
     return rx * math.sin(th) * (1 + fold), -ry * math.cos(th) * (1 + fold)
 
 
+# Stage 2's four extra legs: hip, knee, ankle, foot, in metres. They leave the
+# drape high, rise above the shoulders and come down far out to the floor.
+EXTRA_LEGS = {1: [(-.18, 0, 1.62), (-.86, -.28, 2.36), (-1.18, -.46, 1.2), (-1.25, -.55, .0)],     # upper right
+              2: [(.18, 0, 1.62), (.82, -.24, 2.3), (1.16, -.42, 1.15), (1.23, -.52, .0)],       # upper left
+              3: [(-.2, .1, 1.3), (-.66, .38, 1.7), (-.88, .54, 1.44), (-.63, .48, 1.27)],      # lower right, dead
+              4: [(.2, .1, 1.3), (.88, .48, 1.98), (1.18, .66, .95), (1.24, .74, .0)]}         # lower left
+
+
+def pierce(a, b):
+    """Where the segment a-b first leaves the drape (roughly: by the drape's
+    mean radius at that height), for the torn holes the legs come out of."""
+    a, b = V(a), V(b)
+    for t in np.linspace(0, 1, 200):
+        p = a + (b - a) * t
+        s = min(1, max(0, (DRAPE_TOP - p.z) / (DRAPE_TOP - .5)))
+        th = math.atan2(p.x, -p.y)
+        x, y = drape_xy(s, th)
+        if math.hypot(p.x, p.y) > math.hypot(x, y): return p
+    return b
+
+
 def make_drape():
-    """Stage 2: the costume skin hangs off the neck as a cloak. Folds deepen
+    """Stage 2: the costume skin hangs off the frame as a cloak. Folds deepen
     toward a torn hem. It has thickness so the tatters have a back."""
-    nth, nr = 96, 22
+    nth, nr = 96, 30
     verts, faces = [], []
     for j in range(nr + 1):
         s = j / nr
@@ -105,18 +143,35 @@ def make_drape():
         rad = np.stack([np.sin(th), -np.cos(th), np.zeros(len(th))], 1)
         inner = (N * rad).sum(1) < -.15
         col = np.tile(FUR * .8 + .02, (len(Pt), 1)) * (.8 + .4 * fbm(Pt * [1, 1, .2], 9, 3))[:, None]
-        # soaked from the hem up, and a stain under the collar
-        blood = (1 - sstep(.0, .5, Pt[:, 2] - hb + .1 * (fbm(Pt, 6, 5) - .5))) * .95
-        chest = 1 - sstep(.08, .3, np.hypot(Pt[:, 0], Pt[:, 2] - 1.52))
-        blood = np.maximum(blood, chest * (Pt[:, 1] < 0) * .8)
+        # dried dark from the hem up in patches (not a band), and a stain under the collar
+        blood = (1 - sstep(.0, .3, Pt[:, 2] - hb + .14 * (fbm(Pt, 6, 5) - .5))) * sstep(.4, .6, fbm(Pt, 4, 9)) * .6
+        # under the collar, and run down the front in streaks
+        chest = 1 - sstep(.04, .16, np.hypot(Pt[:, 0] * 1.4, Pt[:, 2] - (DRAPE_TOP - .16)) + (fbm(Pt, 9, 11) - .5) * .2)
+        streak = sstep(.66, .78, fbm(Pt * [1, 1, .08], 13, 7)) * sstep(DRAPE_TOP - .9, DRAPE_TOP - .3, Pt[:, 2]) * (np.abs(Pt[:, 0]) < .14)
+        blood = np.maximum(blood, np.maximum(chest, streak * .8) * (Pt[:, 1] < 0) * .5)
         prm = np.stack([np.ones(len(Pt)), np.full(len(Pt), .9), blood], 1)
+        # torn, soaked holes where the legs come out
+        for pts in EXTRA_LEGS.values():
+            h = np.array(pierce(pts[0], pts[1]))
+            d = np.linalg.norm(Pt - h, axis=1) + (fbm(Pt, 30, 3) - .5) * .04
+            hole = 1 - sstep(.05, .1, d)
+            col = col * (1 - hole[:, None]) + INK * 2 * hole[:, None]
+            prm[:, 0] *= 1 - hole
+            prm[:, 2] = np.maximum(prm[:, 2], (1 - sstep(.06, .14, d)) * .5)
         col[inner] = INK * .6; prm[inner] = (0, .9, 0)
         return col, prm
     return paint(o, fn)
 
 
 def hip_forms():
-    """The shelf. Wider than tall, with the rear standing out behind."""
+    """Stages 0 and 1: the shelf, wider than tall, with the rear standing
+    out behind. Stage 2: a starved pelvis, bony points at the hips and a
+    small slack rear, all of it inside the drape."""
+    if ST == 2:
+        f = [ell((0, .05, .97), (.24, .2, .2)), ell((0, -.04, 1.12), (.17, .14, .14))]
+        for sx in (-1, 1):
+            f += [ell((sx * .12, .15, .9), (.15, .14, .16)), ell((sx * .21, .0, 1.04), (.08, .1, .07))]
+        return f
     f = [ell((0, .05, .95), (.8, .55, .42)), ell((0, .45, 1.1), (.62, .4, .22)), ell((0, -.15, .85), (.6, .42, .35))]
     for sx in (-1, 1):
         f += [ell((sx * .6, .1, .92), (.45, .5, .4)), ell((sx * .36, .52, .9), (.42, .4, .41))]
@@ -133,10 +188,12 @@ def make_body():
         f += [ell((0, -.02, 1.48), (.41, .37, .5)), ell((0, -.25, 1.2), (.44, .34, .34)), ell((0, 0, 1.74), (.31, .27, .22)),
               tube([(0, 0, 1.7), (0, 0, 1.9)], [.19, .17], 12)]
         lumps = [(.03, 5, .3), (.012, 14, .3)]
-    else:           # nothing but a post for the drape to hang on
-        f += [tube([(0, 0, 1.0), (0, 0, 1.68)], [.13, .09], 10)]
-        lumps = [(.03, 5, .35), (.012, 14, .3)]
-    o = sculpt(f, voxel=.017, smooth=7, lumps=lumps, seed=1)
+    else:           # a spine and a shoulder bar for the drape to hang on
+        f += [tube([(0, 0, 1.05), (0, .04, 1.5), (0, .03, NECK_PIVOT.z)], [.09, .07, .06], 10),
+              tube([(-.25, .02, SHOULDER - .02), (0, .03, SHOULDER + .02), (.25, .02, SHOULDER - .02)], [.045, .055, .045], 8),
+              ell(NECK_PIVOT, .09)]
+        lumps = [(.012, 9, .5), (.005, 20, .5)]
+    o = sculpt(f, voxel=[.017, .017, .012][ST], smooth=[7, 7, 4][ST], lumps=lumps, seed=1)
     if ST == 1:     # hanging folds down the torso
         Pt = coords(o.data); N = normals(o.data)
         th = np.arctan2(Pt[:, 0], -Pt[:, 1])
@@ -157,17 +214,16 @@ def make_body():
             for xi, zl in ((-.13, 1.36), (-.02, 1.2), (.07, 1.44), (.16, 1.52)):
                 b = np.maximum(b, (1 - sstep(.012, .035, np.abs(Pt[:, 0] - xi))) * sstep(zl, zl + .06, Pt[:, 2]) * (Pt[:, 2] < 1.74) * (Pt[:, 1] < 0) * .75)
             prm[:, 2] = b * .9
-        if ST == 2:  # where the soaked hem lies on the hips, and what ran down from it
-            rho = np.hypot(Pt[:, 0] / .75, Pt[:, 1] / .7)
-            b = (1 - sstep(.75, 1.15, rho + (fbm(Pt, 5, 8) - .5) * .5)) * sstep(.55, .95, Pt[:, 2])
-            run = sstep(.62, .75, fbm(Pt * [1, 1, .12], 14, 4)) * sstep(.45, .8, Pt[:, 2]) * (rho < 1.5)
-            prm[:, 2] = np.maximum(b * .8, run * .6)
+        if ST == 2:  # hidden under the drape and seen only from below: skin worn to the backing, blood run down
+            col = col * .7
+            prm[:, 0] = 1 - sstep(.45, .6, fbm(Pt, 7, 8))
+            prm[:, 2] = sstep(.6, .72, fbm(Pt * [1, 1, .12], 14, 4)) * .55
         return col, prm
     paint(o, fn)
-    decimate(o, [15000, 15000, 11000][ST])
+    decimate(o, [15000, 13000, 5000][ST])
     body['tex'].append(o)
     lap(' bodypaint')
-    body['fib'].append(tufts(o, [2200, 2400, 1700][ST], 11, length=[(.03, .055), (.05, .12), (.06, .16)][ST],
+    body['fib'].append(fur(o, [2200, 2200, 300][ST], 11, length=[(.03, .055), (.05, .12), (.06, .16)][ST],
                              width=[.02, .024, .026][ST], droop=[.5, 1.0, 1.2][ST], shade=[1.05, .9, .8][ST]))
     tree = bvh(o); lap(' tufts')
 
@@ -221,31 +277,41 @@ def make_body():
         d = make_drape()
         body['tex'].append(d)
         hemmy = lambda M: sstep(.5, .0, M[:, 2] - np.array([hem_base(t) for t in np.arctan2(M[:, 0], -M[:, 1])])) + .12
-        body['fib'].append(tufts(d, 520, 12, length=(.1, .3), width=.03, droop=2.5, where=hemmy, shade=.75, lift=.2))
+        body['fib'].append(fur(d, 900, 12, length=(.1, .3), width=.03, droop=2.5, where=hemmy, shade=.75, lift=.2))
     return tree
 
 
 def make_legs():
-    """Thick short legs under the hips, the same at every stage."""
-    k = [1, 1, .86][ST]
+    """Thick short legs under the hips at stages 0 and 1. At stage 2 they are
+    starved sticks with big knees, the shins showing under the hem."""
     for sx, side in ((1, 'L'), (-1, 'R')):
-        H, K, A = V((sx * .42, .05, .8)), V((sx * .45, -.02, .42)), V((sx * .45, 0, .14))
+        if ST < 2:
+            H, K, A = V((sx * .42, .05, .8)), V((sx * .45, -.02, .42)), V((sx * .45, 0, .14))
+            th_f = [ell(H, .3), tube([H, K], [.28, .22], 12), ell(K, .22)]
+            sh_f = [ell(K, .21), tube([K, A], [.21, .17], 12), ell(A, .17), ell((sx * .46, -.13, .085), (.21, .31, .085))]
+            vox = (.016, .014)
+        else:
+            H, K, A = V((sx * .15, .08, .86)), V((sx * .18, -.03, .47)), V((sx * .18, .01, .1))
+            th_f = [ell(H, .1), tube([H, K], [.085, .055], 10), ell(K, .075)]
+            sh_f = [ell(K, .072), tube([K, A], [.05, .035], 10), ell(A, .045), ell((sx * .19, -.08, .045), (.065, .15, .045))]
+            vox = (.009, .008)
         leg = P('leg_' + side, 'body', H); shin = P('shin_' + side, 'leg_' + side, K)
-        o = sculpt([ell(H, .3 * k), tube([H, K], [.28 * k, .22 * k], 12), ell(K, .22 * k)], .016, 5, [(.01, 9, .5)], 3)
-        s = sculpt([ell(K, .21 * k), tube([K, A], [.21 * k, .17 * k], 12), ell(A, .17 * k),
-                    ell((sx * .46, -.13, .085), (.21, .31, .085))], .014, 5, [(.008, 10, .5)], 4)
+        o = sculpt(th_f, vox[0], 5, [(.01 if ST < 2 else .005, 9, .5)], 3)
+        s = sculpt(sh_f, vox[1], 5, [(.008 if ST < 2 else .004, 10, .5)], 4)
         def fn(Pt, N):
             n = len(Pt)
             col = np.tile(FUR, (n, 1)); prm = np.tile(np.array(P_FUR, float), (n, 1))
-            sole = Pt[:, 2] < .035
+            sole = Pt[:, 2] < [.035, .035, .02][ST]
             col[sole] = INK * 3; prm[sole] = (.5, .9, 0)
-            if ST == 2: prm[:, 2] = sstep(.6, .78, fbm(Pt * [1, 1, .15], 12, 6)) * .7 * ~sole
+            if ST == 2:   # mostly bald, blood run down from the hem
+                prm[:, 0] = np.where(sole, .5, 1 - sstep(.4, .55, fbm(Pt, 14, 6)))
+                prm[:, 2] = sstep(.58, .72, fbm(Pt * [1, 1, .15], 12, 6)) * .55 * ~sole
             return col, prm
         for x, nt, part_ in ((o, 1700, leg), (s, 2200, shin)):
-            paint(x, fn); decimate(x, nt)
+            paint(x, fn); decimate(x, [nt, int(nt * .75), nt // 2][ST])
             part_['tex'].append(x)
-            part_['fib'].append(tufts(x, [260, 320, 320][ST], 20 + sx, length=[(.03, .05), (.05, .1), (.05, .12)][ST],
-                                      width=.02, droop=[.5, 1, 1.2][ST], shade=[1.05, .9, .8][ST], where=lambda M: M[:, 2] > .06))
+            part_['fib'].append(fur(x, [260, 320, 90][ST], 20 + sx, length=[(.03, .05), (.05, .1), (.04, .1)][ST],
+                                      width=[.02, .02, .012][ST], droop=[.5, 1, 1.2][ST], shade=[1.05, .9, .8][ST], where=lambda M: M[:, 2] > .06))
 
 
 def make_arms():
@@ -261,9 +327,9 @@ def make_arms():
         def fn(Pt, N):
             return np.tile(FUR, (len(Pt), 1)), np.tile(np.array(P_FUR, float), (len(Pt), 1))
         for x, nt, part_ in ((o, 1400, arm), (f, 1700, fore)):
-            paint(x, fn); decimate(x, nt)
+            paint(x, fn); decimate(x, [nt, int(nt * .8)][ST])
             part_['tex'].append(x)
-            part_['fib'].append(tufts(x, [200, 260][ST], 30 + sx, length=[(.03, .05), (.05, .11)][ST], width=.018,
+            part_['fib'].append(fur(x, [200, 260][ST], 30 + sx, length=[(.03, .05), (.05, .11)][ST], width=.018,
                                       droop=[.5, 1][ST], shade=[1.05, .9][ST]))
 
 
@@ -271,33 +337,34 @@ def make_neck():
     neck = P('neck', 'body', NECK_PIVOT)
     if ST == 1:   # the costume neck pulled out of the collar, rings of slack fur
         o = sculpt([ell(NECK_PIVOT, (.2, .19, .12)), tube([NECK_PIVOT, HEAD_PIVOT + V((0, 0, .05))], [.19, .165], 14)], .012, 4, [(.006, 12, .6)], 7)
-        ringf, amp, fur = 60, .012, P_FUR
+        ringf, amp, pile = 60, .012, P_FUR
     else:         # a long thin stalk with a spine down the back
-        path = curve_pts([NECK_PIVOT, (0, -.05, 1.86), (0, .03, 2.1), HEAD_PIVOT + V((0, 0, .03))], 8)
-        f = [tube(path, [.085 - .03 * min(1, i / 8) + .012 * (i / len(path)) for i in range(len(path))], 12), ell(NECK_PIVOT, .1)]
+        # a slight S, back then forward under the head, like something craning
+        path = curve_pts([NECK_PIVOT, (0, .05, 2.12), (0, .0, 2.36), HEAD_PIVOT + V((0, 0, .03))], 8)
+        f = [tube(path, [.08 - .03 * min(1, i / 6) + .012 * (i / len(path)) for i in range(len(path))], 12), ell(NECK_PIVOT, .09)]
         for i in range(2, len(path) - 1, 2):   # vertebrae
             f.append(ell(path[i] + V((0, .05, 0)), (.022, .03, .024), seg=8))
         for sx in (-1, 1):                     # cords at the front
             f.append(tube([p + V((sx * .028, -.045, 0)) for p in path[1:-1]], .014, 6))
         o = sculpt(f, .0075, 3, [(.003, 30, .6)], 8)
-        ringf, amp, fur = 95, .0035, (1, .8, 0)
+        ringf, amp, pile = 95, .0035, (1, .8, 0)
     Pt = coords(o.data); N = normals(o.data)
     Pt += N * (amp * np.sin(Pt[:, 2] * ringf + 3 * fbm(Pt, 6, 2)))[:, None]   # stretch rings
     o.data.vertices.foreach_set('co', Pt.ravel()); o.data.update()
     def fn(Pt, N):
         n = len(Pt)
-        col = np.tile(FUR * (.9 if ST == 1 else .75), (n, 1)); prm = np.tile(np.array(fur, float), (n, 1))
+        col = np.tile(FUR * (.9 if ST == 1 else .75), (n, 1)); prm = np.tile(np.array(pile, float), (n, 1))
         if ST == 2:   # the pile is worn off the stretched skin, most at the front
             thin = sstep(.4, .65, fbm(Pt * [1, 1, .4], 16, 9) + .15 * (N[:, 1] < 0))
             col = col * (1 - thin[:, None]) + (BELLY * .55) * thin[:, None]
             prm[:, 0] = 1 - thin; prm[:, 1] = .9 - .4 * thin
-            prm[:, 2] = (1 - sstep(.0, .22, Pt[:, 2] - 1.72)) * .8 + (1 - sstep(.0, .1, HEAD_PIVOT.z - Pt[:, 2])) * .5
+            prm[:, 2] = (1 - sstep(.0, .22, Pt[:, 2] - DRAPE_TOP + .02)) * .8 + (1 - sstep(.0, .1, HEAD_PIVOT.z - Pt[:, 2])) * .5
         else:
             prm[:, 2] = (1 - sstep(.0, .1, Pt[:, 2] - 1.78)) * (Pt[:, 1] < 0) * .7
         return col, prm
     paint(o, fn); decimate(o, [0, 1800, 3000][ST])
     neck['tex'].append(o)
-    neck['fib'].append(tufts(o, [0, 80, 90][ST], 14, length=(.04, .1), width=.014, droop=1.4, shade=.8))
+    neck['fib'].append(fur(o, [0, 80, 90][ST], 14, length=(.04, .1), width=.014, droop=1.4, shade=.8))
 
 
 # ---------------------------------------------------------------- head
@@ -336,6 +403,28 @@ def tooth(c, w, h, t, rng, lower=False):
     return o
 
 
+def cap(c, look, R, rad, rings=6, seg=20):
+    """A spherical cap of radius R about c, facing along look, rad wide at
+    its rim: an iris or pupil lying on the eyeball."""
+    look = V(look).normalized(); u = look.orthogonal().normalized(); v = look.cross(u)
+    a = math.asin(min(.999, rad / R))
+    verts = [V(c) + look * R]
+    for j in range(1, rings + 1):
+        t = a * j / rings
+        for k in range(seg):
+            p = math.tau * k / seg
+            verts.append(V(c) + (look * math.cos(t) + (u * math.cos(p) + v * math.sin(p)) * math.sin(t)) * R)
+    faces = [(0, 1 + k, 1 + (k + 1) % seg) for k in range(seg)]
+    for j in range(rings - 1):
+        b0, b1 = 1 + j * seg, 1 + (j + 1) * seg
+        faces += [(b0 + k, b1 + k, b1 + (k + 1) % seg, b0 + (k + 1) % seg) for k in range(seg)]
+    o = mesh_obj('cap', [tuple(p) for p in verts], faces)
+    o.data.update()
+    if sum((p.normal.dot(look) for p in o.data.polygons)) < 0:
+        bm = bmesh.new(); bm.from_mesh(o.data); bmesh.ops.reverse_faces(bm, faces=bm.faces); bm.to_mesh(o.data); bm.free()
+    return o
+
+
 def make_head(collide):
     s = HEAD_S
     head = P('head', 'neck' if ST else 'body', HEAD_PIVOT)
@@ -353,9 +442,9 @@ def make_head(collide):
     # eyes: where, how big, and how far the socket sinks
     if ST == 0: eyes = {'L': (hd(.14, -.275, .1), .082), 'R': (hd(-.14, -.275, .1), .082)}
     elif ST == 1: eyes = {'L': (hd(.15, -.27, .12), .07), 'R': (hd(-.135, -.285, .065), .097)}   # one shrunk, one swollen and slipping
-    else: eyes = {'L': (hd(.15, -.25, .11), .046), 'R': (hd(-.14, -.255, .08), .052)}
+    else: eyes = {'L': (hd(.17, -.24, .12), .066), 'R': (hd(-.155, -.235, .075), .078)}   # bare balls, bulging, too big for the face
     if ST == 2:
-        for c, r in eyes.values(): dent(solid, c + V((0, -.03, 0)), r * 2.6, .045, (0, 1, 0))
+        for c, r in eyes.values(): dent(solid, c + V((0, -.02, 0)), r * 1.9, .03, (0, 1, 0))
     tree = bvh(solid)
 
     # mouth: cut the jaw off along a smile and hollow both halves
@@ -385,26 +474,36 @@ def make_head(collide):
                 w = (1 - sstep(.98, 1.1, e))[:, None]
                 col = col * (1 - w) + BELLY * w
             if ST == 2:
-                for c, r in eyes.values():   # raw rims
-                    d = np.linalg.norm(Pt - np.array(c), axis=1)
-                    w = (1 - sstep(r * 1.15, r * 1.9, d))
-                    col = col * (1 - w[:, None]) + np.array([.25, .02, .02]) * w[:, None]
-                    prm[:, 0] *= 1 - w; prm[:, 1] = prm[:, 1] * (1 - w) + .25 * w; prm[:, 2] = np.maximum(prm[:, 2], w * .9)
+                for c, r in eyes.values():   # deep sockets, the pile worn off: shadow, so the pale balls stand out
+                    d = np.linalg.norm(Pt - np.array(c), axis=1) + (fbm(Pt, 20, 6) - .5) * r * .5
+                    w = (1 - sstep(r * .9, r * 2.1, d)) ** 1.5
+                    col = col * (1 - w[:, None] * .85)
+                    prm[:, 0] *= 1 - w; prm[:, 1] = prm[:, 1] * (1 - w) + .7 * w
                 # the tusks tore out through the cheeks
                 for sx in (-1, 1):
                     d = np.linalg.norm(Pt - np.array(hd(sx * .2, -.3, -.12)), axis=1)
-                    prm[:, 2] = np.maximum(prm[:, 2], (1 - sstep(.03, .09, d)) * .9)
+                    prm[:, 2] = np.maximum(prm[:, 2], (1 - sstep(.03, .08, d)) * .5)
             if ST:   # blood round the mouth
                 d = np.abs(Pt[:, 2] - z0 - gap / 2) / (.06 * s) + np.abs(Pt[:, 0]) / (W * .6)
-                prm[:, 2] = np.maximum(prm[:, 2], (1 - sstep(.7, 1.5, d)) * (Pt[:, 1] < HEAD_C.y - .1 * s) * [0, .55, .8][ST])
+                prm[:, 2] = np.maximum(prm[:, 2], (1 - sstep(.7, 1.5, d)) * (Pt[:, 1] < HEAD_C.y - .1 * s) * [0, .55, .5][ST])
                 m = lining_mask(o) > 0
                 col[m] = LINING; prm[m] = P_WET
             return col, prm
         return inner
     paint(solid, fn(solid)); decimate(solid, [9000, 9500, 8500][ST])
     head['tex'].append(solid)
-    head['fib'].append(tufts(solid, [800, 900, 800][ST], 40, length=[(.025, .045), (.04, .1), (.03, .09)][ST],
-                             width=[.018, .02, .014][ST], droop=[.4, 1, 1.2][ST], shade=[1.05, .9, .8][ST]))
+    def clear_mouth(M):
+        # no long locks on the pads or along the lips once there is a mouth:
+        # they would hang over the teeth, which are the point of the face
+        w = np.ones(len(M))
+        if ST:
+            for c in pad_c: w *= sstep(.85, 1.15, np.linalg.norm((M - c) / (np.array([.15, .13, .115]) * s), axis=1))
+            w *= 1 - (1 - sstep(.05 * s, .1 * s, np.abs(M[:, 2] - z0))) * (M[:, 1] < HEAD_C.y - .1 * s)
+        if ST == 2:   # nothing hangs over the eyes
+            for c, r in eyes.values(): w *= sstep(r * 1.4, r * 2.2, np.linalg.norm(M - np.array(c), axis=1))
+        return w
+    head['fib'].append(fur(solid, [800, 900, 800][ST], 40, length=[(.025, .045), (.04, .1), (.03, .09)][ST], where=clear_mouth,
+                           width=[.018, .02, .014][ST], droop=[.4, 1, 1.2][ST], shade=[1.05, .9, .8][ST]))
     if jaw_obj:
         paint(jaw_obj, fn(jaw_obj)); decimate(jaw_obj, 2600)
         jaw['tex'].append(jaw_obj)
@@ -463,22 +562,24 @@ def make_head(collide):
             k = 1 if sx > 0 else .88
             head['tex'].append(horn([base, hd(sx * .13, -.44, -.36 * k), hd(sx * .17, -.47, -.6 * k), hd(sx * (.13 if sx > 0 else .2), -.44, -.74 * k)], .045, .008, blood0=.5))
         else:
-            # the wrong way: out through the cheek, up, and branching. These are
-            # in metres from the head centre, not scaled with the head.
-            c = HEAD_C; a = 1 if sx > 0 else .92
+            # the wrong way: out through the cheek, up, and branching wide.
+            # These are in metres from the head centre, not scaled with the
+            # head. Kept under .55 above it so the whole thing stays under 3.3 m.
+            c = HEAD_C; a = 1 if sx > 0 else .9
             def q(x, y, z): return c + V((sx * x, y, z * a))
-            root = [hd(sx * .13, -.3, -.15), q(.25, -.3, -.05), q(.3, -.22, .2), q(.25, -.13, .47)]
-            head['tex'].append(horn(root, .036, .022, blood0=1))
-            head['tex'].append(horn([q(.25, -.13, .47), q(.27, -.08, .64), q(.32, -.1, .8)], .022, .003))
-            head['tex'].append(horn([q(.25, -.13, .47), q(.18, -.17, .62), q(.12, -.14, .77)], .019, .003))
-            head['tex'].append(horn([q(.3, -.22, .2), q(.4, -.27, .3), q(.47, -.25, .45), q(.46, -.18, .7)], .02, .003))
-            head['tex'].append(horn([q(.25, -.3, -.05), q(.34, -.38, -.02), q(.39, -.45, .06)], .017, .003))
-            head['tex'].append(horn([q(.47, -.25, .45), q(.53, -.3, .5), q(.56, -.31, .58)], .012, .003, n=4))
+            F = q(.33, -.12, .32)   # where the trunk forks
+            head['tex'].append(horn([hd(sx * .13, -.3, -.15), q(.27, -.28, -.04), q(.35, -.2, .14), F], .034, .02, blood0=.6))
+            head['tex'].append(horn([F, q(.38, -.08, .44), q(.47, -.1, .53)], .02, .003))
+            head['tex'].append(horn([F, q(.25, -.16, .44), q(.17, -.14, .52)], .018, .003))
+            head['tex'].append(horn([q(.35, -.2, .14), q(.48, -.26, .2), q(.6, -.24, .31), q(.65, -.17, .47)], .02, .003))
+            head['tex'].append(horn([q(.27, -.28, -.04), q(.38, -.38, -.02), q(.44, -.45, .05)], .016, .003))
+            head['tex'].append(horn([q(.6, -.24, .31), q(.7, -.3, .36), q(.75, -.31, .43)], .011, .003, n=4))
 
     # the bow
     bs = s ** .6
-    bc = hd(0, -.04, .33) + V(([0, .03, .02][ST], 0, 0))
-    tilt = [0, 24, -14][ST]
+    # at stage 1 it has slid down the side of the head
+    bc = [hd(0, -.04, .33), hd(.2, -.04, .24), hd(.02, -.04, .33)][ST]
+    tilt = [0, 40, -14][ST]
     def bpt(x, y, z):
         a = math.radians(tilt)
         return bc + V((x * math.cos(a) + z * math.sin(a), y, -x * math.sin(a) + z * math.cos(a))) * bs
@@ -509,19 +610,38 @@ def make_head(collide):
             eye['tex'].append(tint(ell(c + V((0, -r * .88, -r * .12)), (pr, r * .2, pr), seg=12), INK, P_PLASTIC))
             eye['glow'].append(ell(c + V((-pr * .3, -r * 1.06, -r * .12 + pr * .3)), r * .11, seg=8))
         else:
-            # dead: a black ball sunk in a raw socket, one pale point fixed on you
-            eye['tex'].append(tint(ell(c, r, seg=14), INK * .5, (0, .08, 0)))
-            eye['glow'].append(ell(c + V((0, -r * .97, 0)), r * .2, seg=8))
+            # lidless: a big wet pale ball bulging out of a dark pit, so it
+            # cannot blink. They do not match: the left a pinprick in a
+            # clouded iris, wandering up and out; the right blown nearly to
+            # the rim and turned down, onto whoever stands in front of it.
+            look = V((.32, -1, .22) if side == 'L' else (-.04, -1, -.4)).normalized()
+            ball = ell(c, r, seg=24)
+            def sclera(Pt, N, c=c, r=r, look=look):
+                u = ((Pt - np.array(c)) / r) @ np.array(look)          # 1 at the front of the gaze
+                yel = 1 - sstep(-.2, .7, u)                             # yellowed toward the back
+                col = srgb('#e4dccb') * (1 - .35 * yel[:, None]) * np.array([1, .97, .86]) ** yel[:, None]
+                col = col * (.92 + .1 * fbm(Pt, 90, 4))[:, None]
+                return col, np.tile(np.array((0, .06, 0)), (len(Pt), 1))
+            paint(ball, sclera); smooth_shade(ball)
+            eye['tex'].append(ball)
+            ir, pr = (r * .46, r * .1) if side == 'L' else (r * .7, r * .6)
+            iris_col = srgb('#8a8c82') if side == 'L' else srgb('#4a3b26')   # left milky with cataract, right a thin muddy ring
+            eye['tex'].append(tint(cap(c, look, r * 1.006, ir), iris_col, (0, .06, 0)))
+            eye['tex'].append(tint(cap(c, look, r * 1.014, pr), INK * .6, (0, .04, 0)))
+            # one small wet catchlight, the same place on both, as if from the torch
+            eye['glow'].append(ell(c + V((-.35, -1, .4)).normalized() * r * 1.0, r * .085, seg=8))
 
-    # pearls stay with the head once the neck is long
+    # the pearls rode up the neck as it grew and sit at the top of it, just
+    # under the chin, where the torch finds them. They belong to neck so they
+    # stay on it when the head turns.
     if ST == 2:
-        n = 13; ring = []
+        n = 12; ring = []; C = HEAD_PIVOT + V((0, .07, -.13))
         for i in range(n + 1):
             a = math.tau * i / n; fr = max(0, math.cos(a))
-            ring.append(HEAD_PIVOT + V((.105 * math.sin(a), .01 - .1 * math.cos(a) - .03 * fr, -.02 - .07 * fr ** 2)))
+            ring.append(C + V((.088 * math.sin(a), -.085 * math.cos(a) - .02 * fr, -.06 * fr ** 2)))
         for i in range(n):
-            if i not in (3, 8): head['tex'].append(tint(ell(ring[i], .027, seg=10), PEARL, P_PEARL))
-        head['tex'].append(tint(tube(ring, .004, 4), PEARL * .4, P_CLOTH))
+            if i not in (3, 8): parts['neck']['tex'].append(tint(ell(ring[i], .026, seg=10), PEARL, P_PEARL))
+        parts['neck']['tex'].append(tint(tube(ring, .004, 4), PEARL * .4, P_CLOTH))
 
     # black strands. Each one hangs straight down but is pushed outside
     # whatever it would pass through, so it lies on the drape and the hips.
@@ -550,8 +670,10 @@ def make_head(collide):
                 h = hit(tree, (x, -3, z0 + gap * .4), (0, 1, 0))
                 y = h[0].y if h[0] is not None else hd(0, -.36, 0).y
                 sw['fib'].append(hang((x, y - .005, z0 + gap * .5), .3 + .5 * ((i * 7 + k * 3) % 5) / 4, 60 + i + 10 * k, r=.005))
-    if ST == 2:   # from under the scalp all round, two metres of it, and red ones from the mouth
-        groups = [(-150, -95), (-95, -40), (40, 95), (95, 150), (150, 210), (-22, 22)]   # degrees round the head, 0 = front
+    if ST == 2:   # from under the scalp all round, two metres of it, and dark wet ones from the mouth
+        # degrees round the head, 0 = front. None in front: the neck is the
+        # thing to see, so the hair frames it from the sides and back.
+        groups = [(-160, -115), (-115, -72), (72, 115), (115, 160), (160, 200), (-22, 22)]
         for k, (a0, a1) in enumerate(groups):
             mid = math.radians((a0 + a1) / 2)
             mouth = k == 5
@@ -560,7 +682,7 @@ def make_head(collide):
                 a = math.radians(a0 + (a1 - a0) * (i + .5) / (5 if mouth else 6))
                 if mouth:
                     st_ = hd(.19 * math.sin(a) * 2.2, -.37, -.225)
-                    sw['fib'].append(hang(st_, .4 + .7 * ((i * 3) % 5) / 4, 80 + i, col=np.array([.11, .008, .008]), r=.0045))
+                    sw['fib'].append(hang(st_, .4 + .7 * ((i * 3) % 5) / 4, 80 + i, col=np.array([.03, .011, .008]), r=.0045))
                 else:
                     h = hit(tree, HEAD_C + V((math.sin(a), -math.cos(a), -.25)) * 2, V((-math.sin(a), math.cos(a), .2)))
                     st_ = h[0] if h[0] is not None else HEAD_C + V((.2 * math.sin(a), -.2 * math.cos(a), -.1))
@@ -572,11 +694,7 @@ def make_extras():
     harvestman's. Each is three stiff segments with a knuckle at every joint.
     extra_3 is dead and stays curled above the hip."""
     dark = FUR * .55
-    legs = {1: [(-.2, 0, 1.47), (-.8, -.26, 2.2), (-1.12, -.44, 1.15), (-1.2, -.52, .0)],       # upper right
-            2: [(.2, 0, 1.47), (.76, -.22, 2.12), (1.1, -.4, 1.1), (1.19, -.5, .0)],            # upper left
-            3: [(-.24, .1, 1.3), (-.72, .38, 1.72), (-.97, .56, 1.46), (-.74, .5, 1.27)],       # lower right, dead
-            4: [(.24, .1, 1.3), (.84, .46, 1.82), (1.13, .62, .95), (1.2, .72, .0)]}            # lower left
-    for n, pts in legs.items():
+    for n, pts in EXTRA_LEGS.items():
         pts = [V(p) for p in pts]
         for j in range(3):
             name = 'extra_%d' % n if j == 0 else 'extra_%d_%d' % (n, j + 1)
@@ -600,14 +718,14 @@ def make_extras():
                 return col, prm
             paint(o, fn); decimate(o, 620)
             pt['tex'].append(o)
-            pt['fib'].append(tufts(o, 26, 90 + n * 3 + j, length=(.03, .09), width=.007, droop=.6, lift=1, shade=.6))
+            pt['fib'].append(fur(o, 26, 90 + n * 3 + j, length=(.03, .09), width=.007, droop=.6, lift=1, shade=.6))
 
 
 # ---------------------------------------------------------------- assemble
 FOCUS = {'face': ((HEAD_C.x, HEAD_C.y - .25 * HEAD_S, HEAD_C.z - .03), .55 * HEAD_S ** .5),
          'head': ((0, HEAD_C.y, HEAD_C.z + (.2 if ST == 2 else 0)), .9),
-         'hips': ((0, 0, .9), 1.3), 'back': ((0, .3, 1.4), 1.0), 'hem': ((0, -.4, 1.0), .7),
-         'leg': ((1.0, -.3, 1.2), 1.1), 'chest': ((0, -.4, 1.6), .6)}
+         'hips': ((0, 0, .9), 1.3), 'back': ((0, .3, 1.4), 1.0), 'hem': ((0, -.4, 1.0), .7) if ST < 2 else ((0, -.3, .55), .7),
+         'leg': ((1.0, -.3, 1.2), 1.1), 'chest': ((0, -.4, 1.6), .6), 'neck': ((0, -.1, 2.3), .7)}
 
 
 def assemble(name, pose=None):
@@ -618,7 +736,7 @@ def assemble(name, pose=None):
         if p['tex']: tex[k] = join(p['tex'])
     lap('join')
     unwrap(list(tex.values())); lap('unwrap')
-    bake(list(tex.values()), bake_material(**SURFACE)); lap('bake')
+    bake(list(tex.values()), bake_material(**SURFACE, blood_tone=DRIED_BLOOD if ST == 2 else FRESH_BLOOD)); lap('bake')
     root = empty('root')
     objs = {'root': root}
     for k, p in parts.items():
@@ -642,21 +760,24 @@ def assemble(name, pose=None):
     export_glb(name, [root]); lap('export')
 
 
-def notes():
+def notes(height, foot):
     common = ('Walk: a slow heavy waddle, hips rolling side to side (roll body about 4 degrees), legs short-stepping; swing leg_* at the hip up to 30 degrees and bend shin_* back up to 40. '
-              'The leg and arm joints are balls buried in fur, safe to 40 degrees about any axis. ')
+              'The leg joints are balls buried in fur, safe to 40 degrees about any axis. ')
     if ST == 0:
         return (common + 'Idle: dead still, then a small head tilt (head roll or yaw 10 to 15 degrees). Head joint is hidden in the shoulders and by the pearls, which belong to body: keep head pitch within 15 degrees down, 25 up, yaw 40, or the tusks and chin meet the pearls. '
-                'Arms hang; arm_* can lift 40 forward for the hug, forearm_* bend up to 40. No jaw at this stage. Eyes are googly balls, any angle. Attack: arms open wide then close, head tips back.')
+                'Arms hang; arm_* can lift 90 forward for the hug or 75 out to the side (pose-tested: the shoulder is a ball under the fur and opens no gap; the underside of a raised arm is a little darker), forearm_* bend up to 40. With the arm above 60, keep the forearm bend under 20 or the flipper reaches the face. No jaw at this stage. Eyes are googly balls, any angle. Attack: arms open wide then close, head tips back.')
     if ST == 1:
         return (common + 'neck is a short stretched stump between collar and head; neck pitch or roll 15, head on top of it another 25, yaw 40. Tusks are long and hang in front of the chest: head plus neck pitch down more than about 12 degrees puts them into the fur. '
                 'jaw is a ventriloquist block under the whisker pads with human teeth; it opens downward (positive x) up to 45 degrees, do not turn it negative. sway_1 (its left) and sway_2 (its right) are black strands hanging from the mouth, pivots at the lip; swing them a few degrees, more when the head moves. '
-                'The eyes do not match (left pinned, right swollen and low); letting them track at different speeds suits it. Idle: head lolling to one side, jaw dropping open slowly and snapping shut. Attack: jaw 45, neck stretched forward, arms up to 40.')
-    return (common + 'Arms are gone. The drape is part of body and does not move. neck is a long stalk (pivot at the collar inside the drape): pitch and roll up to 25, yaw 30; head on top of it another 35 any way. The antlers are part of head and reach 3.27 m, so tip the neck forward to pass a 3 m doorway. '
+                'The eyes do not match (left pinned, right swollen and low); letting them track at different speeds suits it. arm_* lift 90 forward or 75 to the side, forearm_* bend 40, but above 60 keep the forearm under 20 or the flipper meets the tusks. Idle: head lolling to one side, jaw dropping open slowly and snapping shut. Attack: jaw 45, neck stretched forward, arms up to 90.')
+    return ('No big hips at this stage: a narrow drape, %.1f m across, hangs from a thin frame, and the long neck and four extra legs make the silhouette (see footprint). ' % foot['body'][0] +
+            'leg_* and shin_* are thin sticks under the hem; walk with small quick steps, leg_* swing up to 25 and shin_* bend back up to 40, and keep body nearly level (roll 2 degrees at most). '
+            'Arms are gone. The drape is part of body and does not move. neck is a long stalk (pivot at the collar inside the drape): pitch and roll up to 25, yaw 30; head on top of it another 35 any way. The antlers are part of head and reach %.2f m, so tip the neck forward to pass a 3 m doorway. ' % height +
+            'eye_L and eye_R are bare lidless eyeballs bulging from dark sockets: the left pupil is a pinprick looking up and out, the right is blown and looks down at whoever stands in front. Each can turn 25 degrees any way before the back of the ball shows; never blink them (there are no lids) and never move them together: hold one fixed on the player while the other drifts slowly. '
             'jaw is the whole underside of the face; open it 70 to 80 degrees for the jumpscare (positive x), there are two rows of teeth and a black cavity behind. '
-            'sway_1..sway_5 are bundles of black hair hanging up to two metres from the scalp: 1 right-back, 2 right, 3 left, 4 left-back, 5 back. sway_6 is the red strands from the mouth. They are stiff rods hinged at the head, so keep swings under 10 degrees or they pass through the drape. '
+            'sway_1..sway_5 are bundles of black hair hanging up to two metres from the scalp: 1 right-back, 2 right, 3 left, 4 left-back, 5 back. sway_6 is the dark wet strands from the mouth. They are stiff rods hinged at the head: when the neck and head tilt, turn the sway_N nodes back by the same amount so the hair keeps hanging down rather than standing out like a broom, and keep extra swing under 10 degrees or it passes through the drape. '
             'extra_1 (upper right), extra_2 (upper left), extra_4 (lower left) are live harvestman legs, each a chain extra_N > extra_N_2 > extra_N_3 with ball knuckles: hip, knee, ankle. Any joint can turn 40 degrees; spasm them in held steps. Feet rest on the floor at rest. '
-            'extra_3 (lower right) is the dead one: it is modelled curled above the hip and should only tremble, 2 or 3 degrees. Walk: the body glides on the hidden legs while the three live extras tap ahead of it out of time. Idle: perfectly still, then one extra leg jerks. '
+            'extra_3 (lower right) is the dead one: it is modelled curled above the hip and should only tremble, 2 or 3 degrees. Walk: small quick steps of the thin legs while the three live extras tap ahead of it out of time. Idle: perfectly still, then one extra leg jerks. '
             'Attack: neck swings the head down to face height, jaw drops to 75, the upper extras reach forward (rotate extra_1 and extra_2 about z toward the front).')
 
 
@@ -664,11 +785,18 @@ def write_json(info):
     path = os.path.join(MODELS, 'walrus.json')
     data = json.load(open(path)) if os.path.exists(path) else {'key': 'walrus', 'stages': [None, None, None]}
     lo, hi = info['min'], info['max']
+    # footprint, three.js axes (x across, z front to back): `body` is what
+    # stands on the floor and blocks (hips, or the drape at stage 2), `reach`
+    # is the widest anything gets, the stage 2 legs included
+    b = bpy.data.objects['body']
+    blo, bhi = bounds([b])
+    foot = {'body': [round(bhi.x - blo.x, 2), round(bhi.y - blo.y, 2)],
+            'reach': [round(hi[0] - lo[0], 2), round(hi[1] - lo[1], 2)]}
     data['stages'][ST] = {
         'file': info['file'], 'height': round(hi[2], 2),
         'radius': round(max(abs(lo[0]), abs(hi[0]), abs(lo[1]), abs(hi[1])), 2),
         'face': [0, round(HEAD_C.z - .03, 2), round(-(HEAD_C.y - .33 * HEAD_S), 2)],   # three.js axes
-        'floats': False, 'nodes': info['nodes'], 'notes': notes()}
+        'floats': False, 'footprint': foot, 'nodes': info['nodes'], 'notes': notes(round(hi[2], 2), foot)}
     json.dump(data, open(path, 'w'), indent=1)
 
 
@@ -694,6 +822,8 @@ if '--only' not in ARGS:
     else:
         assemble(name)
         write_json(report(name))
+elif '--json' in ARGS:
+    write_json(report(name))
 for spec in ARGS[1:]:
     if spec.startswith('--'): continue
     v, light, focus = (spec.split(':') + ['', ''])[:3]

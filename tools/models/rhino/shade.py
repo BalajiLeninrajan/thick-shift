@@ -168,7 +168,7 @@ def finish(m, color, rough, height=None, ao=.75):
         b = node('ShaderNodeBump'); b.inputs['Strength'].default_value = 1.0; b.inputs['Distance'].default_value = 1.0
         _set(b.inputs['Height'], height)
         NT.links.new(b.outputs[0], bsdf.inputs['Normal'])
-    occ = node('ShaderNodeAmbientOcclusion', samples=8, only_local=True)
+    occ = node('ShaderNodeAmbientOcclusion', samples=6, only_local=True)
     occ.inputs['Distance'].default_value = .12
     shade = math_('ADD', math_('MULTIPLY', math_('POWER', V(occ.outputs['AO']), 1.5), ao), 1 - ao)
     em = node('ShaderNodeEmission'); em.name = 'EMIT'
@@ -183,7 +183,10 @@ def finish(m, color, rough, height=None, ao=.75):
 HIDE, BELLY = '#7d8299', '#a6adc8'
 INK, SURFACE0, SURFACE1 = '#08080e', '#313244', '#45475a'
 CREAM, PEACH = '#f5e0dc', '#fab387'
-DRIED, WETBLOOD = '#3a0b10', '#74101a'
+DRIED = '#3a0b10'
+# Stage 2 blood is old: brown-black crust, never bright. Saturated red
+# rims read as a cartoon outline, not as gore.
+CRUST, CRUST_HI = '#150c08', '#33200f'
 WORM = blend('#f2cdcd', SURFACE1, .45)   # the 2D art's worm skin
 SICK = blend('#f9e2af', '#585b70', .55)
 
@@ -205,11 +208,14 @@ def _blood(p, mid, big, stains, off=0.0):
     return total
 
 
-def hide(name, stage, pale=(), blood=(), meat=(), seam_x=True, bald=None):
+def hide(name, stage, pale=(), blood=(), meat=(), tears=(), sockets=(), seam_x=True, bald=None):
     """The costume's plush. stage 0: clean short pile. 1 and 2: dull, matted
     into clumps, bald where the pile has worn off the backing cloth.
     pale: [(centre, radii)] ellipsoids that are belly-coloured, with a sewn edge.
-    blood: [(centre, radius)] stains. meat: [(centre, radii)] raw openings."""
+    blood: [(centre, radius)] stains. meat: [(centre, radii)] raw openings.
+    tears: [(top, length)] thin dried runs straight down from a point.
+    sockets: [(centre, radius)] sooted dark round an eye, so a pale eye
+    stands out of the face the way it does in the dark."""
     m = begin(name)
     p = P()
     x, y, z = xyz(p)
@@ -255,18 +261,36 @@ def hide(name, stage, pale=(), blood=(), meat=(), seam_x=True, bald=None):
     col = mix(grime, col, '#17140f')
     if blood:
         b = _blood(p, mid, big, blood)
-        wet = stage == 2
-        col = mix(b, col, mix(fine, DRIED, WETBLOOD if wet else '#4f1016'))
-        rough = rough - b * (.62 if wet else .35)
+        if stage == 2:   # long dried into the pile
+            col = mix(b * .9, col, mix(fine, CRUST, CRUST_HI))
+            rough = rough - b * .15
+        else:
+            col = mix(b, col, mix(fine, DRIED, '#4f1016'))
+            rough = rough - b * .35
         height = height - b * .0012
+    for (c, L) in tears:   # one wavering line each, a little wider where it pooled at the bottom
+        dx = absf(x - c[0] + (noise(vscale(p, (1, 1, 9)), 1, 2, off=c[0] * 7) - .5) * .03)
+        down = smooth(z, c[2] + .01, c[2] - .015) * smooth(z, c[2] - L, c[2] - L * .7) * smooth(y, c[1] + .1, c[1] + .02)
+        w = .006 + smooth(z, c[2] - L * .5, c[2] - L) * .006
+        t = smooth(dx - w, .004, .0) * down
+        col = mix(t * .92, col, mix(fine, CRUST, CRUST_HI))
+        rough = rough - t * .45
+        height = height + t * .0008
+    for (c, r) in sockets:
+        k = smooth(region(p, c, (r, r, r), mid, .25), 1.0, .55)
+        col = mix(k * .85, col, '#060507')
     for (c, r) in meat:
         d = region(p, c, r, mid, .3)
         halo = smooth(d, 1.7, 1.0)
-        col = mix(halo, col, DRIED)
-        rough = rough - halo * .5
+        col = mix(halo, col, CRUST if stage == 2 else DRIED)
+        rough = rough - halo * (.15 if stage == 2 else .5)
         raw = smooth(d, 1.0, .86)
-        flesh = mix(noise(p, 30, 3), '#22050a', '#8a1f24')
-        flesh = mix(smooth(noise(vscale(p, (20, 90, 20)), 1, 2), .6, .7), flesh, '#b9987f')   # strings of fat
+        if stage == 2:   # the hole the worm came out of: dark, dry, gone grey-brown, no bright edge
+            flesh = mix(noise(p, 30, 3), '#0b0605', '#3b2a24')
+            flesh = mix(smooth(noise(vscale(p, (20, 90, 20)), 1, 2), .62, .72) * .7, flesh, '#857462')
+        else:
+            flesh = mix(noise(p, 30, 3), '#22050a', '#8a1f24')
+            flesh = mix(smooth(noise(vscale(p, (20, 90, 20)), 1, 2), .6, .7), flesh, '#b9987f')   # strings of fat
         col = mix(raw, col, flesh)
         height = height + raw * noise(p, 70, 2) * .006
         rough = rough - raw * .25
@@ -312,7 +336,7 @@ def horn(name, stage):
     crack = smooth(absf(noise(vscale(p, (26, 26, 2.2)), 1, 3, .6, off=1) - .5), .02 if stage == 1 else .028, .0)
     crack = maxf(crack, smooth(absf(noise(vscale(p, (9, 9, 30)), 1, 2, off=9) - .5), .008, .0) * .7)
     col = mix(crack, col, '#0c0706')
-    if stage == 2: col = mix(smooth(noise(p, 7, 3, off=6), .5, .62) * .8, col, DRIED)
+    if stage == 2: col = mix(smooth(noise(p, 7, 3, off=6), .55, .65) * .7, col, CRUST)
     h = rings * .0012 - crack * .005 + noise(p, 90, 2) * .0015
     return finish(m, col, sat(.5 + n * .2 - crack * .1), h, ao=.7)
 
@@ -329,26 +353,62 @@ def terry(name, stage):
     col = tint(col, rib * .25 + .75)
     if stage:
         stain = smooth(noise(p, 8, 4, off=3), .42, .6)
-        col = mix(stain * .75, col, '#2b1b14' if stage == 1 else DRIED)
+        col = mix(stain * .75, col, '#2b1b14' if stage == 1 else CRUST)
     return finish(m, col, .95, (1 - loops) * .0016 + rib * .0012, ao=.7)
 
 
 def eyeball(name):
-    """Stage 2 eye: a wet black ball with a red haze of burst vessels."""
+    """The bead eyes round the worm's mouth: wet black, a milky film."""
     m = begin(name)
     p = P()
-    col = mix(smooth(noise(p, 60, 3), .55, .8) * .5, '#050305', '#3a0a10')
+    col = mix(smooth(noise(p, 60, 3), .55, .8) * .5, '#050405', '#2b2a27')
     return finish(m, col, .06, ao=.3)
 
 
+def stare(name, pupil, iris=.4, seed=0):
+    """Stage 2's own eyes, the scariest thing on it. rest is the ball at unit
+    radius with the gaze along +z. A pale sclera yellowing toward the back,
+    a few thin dark veins that stop short of the iris, a washed-out grey iris
+    with a dark limbal ring, and a pupil of radius `pupil` (in the same units
+    as `iris`): all pupil, or a pinprick. Glassy all over."""
+    m = begin(name)
+    p = P()
+    x, y, z = xyz(p)
+    rho = length(vec(x, y, 0.0))
+    front = smooth(z, .3, .5)
+    n = noise(p, 7, 3, off=seed)
+    col = mix(smooth(n, .3, .7), '#ddd6c6', '#f4f0e6')
+    col = mix(smooth(z, .3, -.7) * .75, col, '#b8a57a')                      # yellow toward the back
+    reach = smooth(z, .62, .1)                                             # veins fade out before the iris
+    v1 = smooth(absf(noise(vscale(p, (2.5, 2.5, 1)), 3.5, 3, .6, off=seed + 1) - .5), .03, .0)
+    v2 = smooth(absf(noise(p, 9, 3, .55, off=seed + 2) - .5), .022, .0)
+    v3 = smooth(absf(noise(p, 21, 2, .5, off=seed + 4) - .5), .02, .0) * smooth(z, .2, -.3)
+    col = mix(v1 * reach * .9, col, '#3a1c1c')
+    col = mix(maxf(v2 * reach, v3) * .7, col, '#5a3530')
+    ang = math_('ARCTAN2', y, x)
+    fib = noise(vec(ang * 4.0, rho * 14, 0.0), 3, 2, off=seed + 3)
+    irisc = mix(smooth(fib, .3, .7), '#7d867c', '#c4cabd')
+    irisc = mix(smooth(rho, iris * .55, iris * .95) * .6, irisc, '#5d665e')
+    inner = smooth(rho, iris + .006, iris - .012) * front
+    col = mix(inner, col, irisc)
+    limbal = smooth(absf(rho - iris), .045, .0) * front
+    col = mix(limbal * .85, col, '#1b1d1b')
+    pup = smooth(rho, pupil + .008, pupil - .006) * front
+    col = mix(pup, col, '#030304')
+    h = -limbal * .0006 - pup * .0004
+    return finish(m, col, sat(.035 + v1 * reach * .05), h, ao=.15)
+
+
 def meat(name, wet=.16):
-    """Raw flesh for wound rims, eye sockets and torn edges."""
+    """Torn flesh for wound flaps, the worm's gums and the lids of its bead
+    eyes (stage 2 only). Old and dark, grey-brown with pale strings of fat:
+    a bright red edge reads as a cartoon outline."""
     m = begin(name)
     p = P()
     n = noise(p, 34, 3)
-    col = mix(smooth(n, .3, .7), '#2a060b', '#8f2026')
-    col = mix(smooth(noise(vscale(p, (25, 25, 110)), 1, 2, off=2), .6, .72), col, '#c2a58c')
-    col = mix(smooth(noise(p, 8, 2, off=5), .5, .7) * .7, col, '#12030a')
+    col = mix(smooth(n, .3, .7), '#150b09', '#4a332c')
+    col = mix(smooth(noise(vscale(p, (25, 25, 110)), 1, 2, off=2), .6, .72) * .8, col, '#9a8a74')
+    col = mix(smooth(noise(p, 8, 2, off=5), .5, .7) * .7, col, '#0a0606')
     return finish(m, col, sat(wet + n * .25), noise(p, 80, 3) * .005 + n * .003, ao=.85)
 
 
@@ -388,15 +448,16 @@ def boil(name):
     p = P()
     x, y, z = xyz(p)
     col = mix(smooth(z, .2, .85), '#4a1226', blend(SICK, '#f6e7a8', .5))
-    col = mix(smooth(z, .0, .3) * smooth(z, .6, .3), col, '#a3323f')
+    col = mix(smooth(z, .0, .3) * smooth(z, .6, .3) * .7, col, '#4f3036')
     col = mix(smooth(noise(p, 6, 2), .55, .7) * .5, col, '#2a0914')
     return finish(m, col, sat(.1 + noise(p, 4, 2) * .2), noise(p, 9, 2) * .002, ao=.8)
 
 
 def mouth(name):
     """The worm's head. rest: the mouth faces -y, the lip plane is y = 0, the
-    throat runs toward +y. Outside it is worm skin gone red; the lips are raw
-    and wrinkled; inside, wet folds spiral down into the dark."""
+    throat runs toward +y. Outside and on the wrinkled lips it is the worm's
+    own grey-pink skin, with no red rim; inside, wet folds spiral down into
+    the dark."""
     m = begin(name)
     p = P()
     x, y, z = xyz(p)
@@ -404,17 +465,17 @@ def mouth(name):
     ang = math_('ARCTAN2', z, x)
     mid = noise(p, 18, 4)
     inside = smooth(r + y * .55, .245, .2)                # 1 on the throat side of the lips
-    skin = mix(smooth(mid, .25, .75), blend(WORM, '#40141f', .5), blend(WORM, '#c9566a', .5))
+    skin = mix(smooth(mid, .25, .75), blend(WORM, '#2a1a1e', .5), blend(WORM, '#d8c0bc', .35))
     vein = smooth(absf(noise(p, 9, 3, .6, off=3) - .5), .022, .0)
     skin = mix(vein * .9, skin, '#3b0d24')
     lipw = sinf(ang * 60 + mid * 6)
-    lips = mix(smooth(mid, .3, .7), '#6d1f2c', '#c86a74')
+    lips = mix(smooth(mid, .3, .7), blend(WORM, '#2a1a1e', .45), blend(WORM, '#e2d0c8', .25))   # the worm's own skin, no red edge
     lips = tint(lips, lipw * .16 + .84)
     lipzone = smooth(y, .13, .03) * smooth(r, .2, .26)
     col = mix(lipzone, skin, lips)
     fold = sinf(ang * 22 + y * 34 + mid * 3)
     depth = smooth(y, .0, .34)
-    gullet = mix(depth, mix(smooth(mid, .3, .7), '#8e2430', '#c9606a'), '#070103')
+    gullet = mix(depth, mix(smooth(mid, .3, .7), blend(WORM, '#3a1a20', .55), blend(WORM, '#8a5a5e', .3)), '#070103')
     gullet = tint(gullet, fold * .28 + .72)
     gullet = mix(smooth(noise(p, 40, 2, off=2), .6, .7) * .6, gullet, '#d7b9a6')   # flecks of something pale
     col = mix(inside, col, gullet)
@@ -431,9 +492,9 @@ def tooth(name):
     x, y, z = xyz(p)
     n = noise(p, 50, 3)
     col = mix(smooth(z, .0, .09), blend('#e8d9a8', '#7a5a2a', .55), '#efe6c8')
-    col = mix(smooth(z, .03, .0), col, '#3b100f')
+    col = mix(smooth(z, .03, .0), col, '#2a1a10')
     col = mix(smooth(absf(noise(vscale(p, (160, 160, 9)), 1, 2) - .5), .02, .0) * .6, col, '#4a3317')   # lengthwise cracks
-    col = mix(smooth(n, .55, .7) * .55, col, WETBLOOD)
+    col = mix(smooth(n, .55, .7) * .55, col, CRUST)
     return finish(m, col, sat(.22 + n * .2), noise(p, 200, 2) * .0005, ao=.7)
 
 
@@ -443,7 +504,7 @@ def slime(name):
     m = begin(name)
     p = P()
     col = mix(smooth(noise(p, 30, 2), .3, .7), blend('#94e2d5', '#45475a', .5), '#cfe6d6')
-    col = mix(smooth(noise(p, 12, 2, off=3), .55, .7) * .5, col, '#6d1a22')
+    col = mix(smooth(noise(p, 12, 2, off=3), .55, .7) * .5, col, '#3a2c1e')
     return finish(m, col, .05, ao=.3)
 
 
@@ -459,28 +520,48 @@ def _edit(objs, fn):
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
+def _areas(o):
+    """Surface area and UV area of an object, from its triangles."""
+    me = o.data
+    me.calc_loop_triangles()
+    n = len(me.loop_triangles)
+    tv = np.empty(n * 3, 'i'); me.loop_triangles.foreach_get('vertices', tv)
+    tl = np.empty(n * 3, 'i'); me.loop_triangles.foreach_get('loops', tl)
+    co = np.empty(len(me.vertices) * 3); me.vertices.foreach_get('co', co); co = co.reshape(-1, 3)[tv].reshape(-1, 3, 3)
+    uv = np.empty(len(me.loops) * 2); me.uv_layers.active.data.foreach_get('uv', uv); uv = uv.reshape(-1, 2)[tl].reshape(-1, 3, 2)
+    a3 = np.linalg.norm(np.cross(co[:, 1] - co[:, 0], co[:, 2] - co[:, 0]), axis=1).sum() / 2
+    e1, e2 = uv[:, 1] - uv[:, 0], uv[:, 2] - uv[:, 0]
+    a2 = np.abs(e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]).sum() / 2
+    return a3, a2
+
+
 def unwrap(objs, boost=None):
-    """One shared atlas for every part. Islands get the same texel density,
-    except objects named in boost {name: factor}, which get more: the faces
-    the player ends up nose to nose with."""
+    """One shared atlas for every part. Every object gets the same texel
+    density, except those named in boost {name: factor}, which get more: the
+    faces the player ends up nose to nose with. The density is set here in
+    numpy, not with Blender's average-islands operator, because that one
+    turns the whole atlas into NaN when it meets a zero-area island."""
     for o in objs:
         _edit([o], lambda: bpy.ops.uv.smart_project(angle_limit=math.radians(72), island_margin=0.0))
-    def avg():
-        bpy.ops.uv.select_all(action='SELECT')
-        bpy.ops.uv.average_islands_scale()
-    _edit(objs, avg)
-    for o in objs:
-        k = (boost or {}).get(o.name)
-        if not k: continue
+        a3, a2 = _areas(o)
+        k = math.sqrt(a3 / max(a2, 1e-12)) * (boost or {}).get(o.name, 1.0)
         uv = o.data.uv_layers.active.data
-        a = np.empty(len(uv) * 2); uv.foreach_get('uv', a); uv.foreach_set('uv', a * k)
+        a = np.empty(len(uv) * 2); uv.foreach_get('uv', a)
+        uv.foreach_set('uv', np.nan_to_num(a) * k)
     def pack():
         bpy.ops.uv.select_all(action='SELECT')
         bpy.ops.uv.pack_islands(margin=.0015, rotate=True, shape_method='AABB')
     _edit(objs, pack)
+    lo, hi, bad = 9, -9, 0
+    for o in objs:
+        uv = o.data.uv_layers.active.data
+        a = np.empty(len(uv) * 2); uv.foreach_get('uv', a)
+        bad += int(np.isnan(a).sum()); lo = min(lo, np.nanmin(a)); hi = max(hi, np.nanmax(a))
+    print(f'[uv] range {lo:.3f} to {hi:.3f}, {bad} NaN', flush=True)
+    assert bad == 0 and lo > -.01 and hi < 1.01, 'the atlas did not pack'
 
 
-def bake(objs, key, size=2048, small=1024, samples=12):
+def bake(objs, key, size=2048, small=1024, samples=6):
     """Bake colour (with AO), normal and roughness for all objs into three
     images and return the one material that replaces everything."""
     sc = bpy.context.scene
@@ -498,13 +579,26 @@ def bake(objs, key, size=2048, small=1024, samples=12):
         fill = {'col': (.05, .05, .05, 1), 'nrm': (.5, .5, 1, 1), 'orm': (.8, .8, .8, 1)}[kind]
         im.pixels.foreach_set(np.tile(np.array(fill, 'f'), s * s))
         imgs[kind] = im
-    mats = {s.material for o in objs for s in o.material_slots if s.material}
+    # Bake one joined copy of everything, not forty objects one by one: each
+    # bake call rebuilds the scene, and that was most of the time. The copy
+    # shares the UVs, so the textures fit the real parts.
+    copies = []
+    for o in objs:
+        d = o.copy(); d.data = o.data.copy()
+        sc.collection.objects.link(d); copies.append(d)
+    bpy.ops.object.select_all(action='DESELECT')
+    for d in copies: d.select_set(True)
+    bpy.context.view_layer.objects.active = copies[0]
+    bpy.ops.object.join()
+    proxy = bpy.context.view_layer.objects.active
+    for o in objs: o.hide_render = True
+    mats = {s.material for s in proxy.material_slots if s.material}
     for mt in mats:
         tn = mt.node_tree.nodes.new('ShaderNodeTexImage'); tn.name = 'TARGET'
         mt.node_tree.nodes.active = tn
     bpy.ops.object.select_all(action='DESELECT')
-    for o in objs: o.select_set(True)
-    bpy.context.view_layer.objects.active = objs[0]
+    proxy.select_set(True)
+    bpy.context.view_layer.objects.active = proxy
 
     def run(kind, pass_, emit):
         for mt in mats:
@@ -523,6 +617,8 @@ def bake(objs, key, size=2048, small=1024, samples=12):
     px = px.reshape(-1, 4); px[:, 1] = px[:, 0]; px[:, 0] = 1; px[:, 2] = 0
     im.pixels.foreach_set(px.ravel())
     for im in imgs.values(): im.pack()
+    bpy.data.objects.remove(proxy)
+    for o in objs: o.hide_render = False
 
     global NT
     m = bpy.data.materials.new(f'{key}_skin'); m.use_nodes = True

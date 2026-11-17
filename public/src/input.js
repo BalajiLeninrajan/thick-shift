@@ -12,7 +12,13 @@ const playing = () => !!game.S && game.S.phase === 'play' && game.S.mode !== 'fl
 const clampPan = x => Math.max(0, Math.min(WORLD - W, x));
 const inZone = (z, x, y) => x > z.x && x < z.x + z.w && y > z.y && y < z.y + z.h;
 
-function toggleDoor(k) { unlockAudio(); if (playing()) send({ t: 'door', k }); }
+function toggleDoor(k) {
+  unlockAudio();
+  if (!playing()) return;
+  // Reaching a door button from the generator means letting go of the handle (see act in sim.js).
+  if (client.view === 'crank') { client.view = 'office'; send({ t: 'view', v: 'office', cam: client.cam }); }
+  send({ t: 'door', k });
+}
 
 function toggleView(v) {
   if (!playing()) return;

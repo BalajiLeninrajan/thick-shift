@@ -158,6 +158,8 @@ export function createPlayer(camera, canvas) {
     update(S, dt, now) {
       const mine = S.players.find(p => p.id === game.myId);
       if (!mine || mine.x == null) return;
+      // Peeled up: stand looking ahead, not at the ceiling the catch left the camera facing.
+      if (me.flat && !mine.flat) me.pitch = 0;
       me.flat = !!mine.flat;
       pollPad(dt);
       // The screens between nights need the mouse back.

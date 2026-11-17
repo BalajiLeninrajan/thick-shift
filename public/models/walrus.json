@@ -11,6 +11,16 @@
     0.38
    ],
    "floats": false,
+   "footprint": {
+    "body": [
+     2.13,
+     1.54
+    ],
+    "reach": [
+     2.12,
+     1.55
+    ]
+   },
    "nodes": [
     "arm_L",
     "arm_R",
@@ -26,9 +36,101 @@
     "shin_L",
     "shin_R"
    ],
-   "notes": "Walk: a slow heavy waddle, hips rolling side to side (roll body about 4 degrees), legs short-stepping; swing leg_* at the hip up to 30 degrees and bend shin_* back up to 40. The leg and arm joints are balls buried in fur, safe to 40 degrees about any axis. Idle: dead still, then a small head tilt (head roll or yaw 10 to 15 degrees). Head joint is hidden in the shoulders and by the pearls, which belong to body: keep head pitch within 15 degrees down, 25 up, yaw 40, or the tusks and chin meet the pearls. Arms hang; arm_* can lift 40 forward for the hug, forearm_* bend up to 40. No jaw at this stage. Eyes are googly balls, any angle. Attack: arms open wide then close, head tips back."
+   "notes": "Walk: a slow heavy waddle, hips rolling side to side (roll body about 4 degrees), legs short-stepping; swing leg_* at the hip up to 30 degrees and bend shin_* back up to 40. The leg joints are balls buried in fur, safe to 40 degrees about any axis. Idle: dead still, then a small head tilt (head roll or yaw 10 to 15 degrees). Head joint is hidden in the shoulders and by the pearls, which belong to body: keep head pitch within 15 degrees down, 25 up, yaw 40, or the tusks and chin meet the pearls. Arms hang; arm_* can lift 90 forward for the hug or 75 out to the side (pose-tested: the shoulder is a ball under the fur and opens no gap; the underside of a raised arm is a little darker), forearm_* bend up to 40. With the arm above 60, keep the forearm bend under 20 or the flipper reaches the face. No jaw at this stage. Eyes are googly balls, any angle. Attack: arms open wide then close, head tips back."
   },
-  null,
-  null
+  {
+   "file": "walrus_1.glb",
+   "height": 2.67,
+   "radius": 1.08,
+   "face": [
+    0,
+    2.2,
+    0.39
+   ],
+   "floats": false,
+   "footprint": {
+    "body": [
+     2.15,
+     1.59
+    ],
+    "reach": [
+     2.16,
+     1.59
+    ]
+   },
+   "nodes": [
+    "arm_L",
+    "arm_R",
+    "body",
+    "eye_L",
+    "eye_R",
+    "forearm_L",
+    "forearm_R",
+    "head",
+    "jaw",
+    "leg_L",
+    "leg_R",
+    "neck",
+    "root",
+    "shin_L",
+    "shin_R",
+    "sway_1",
+    "sway_2"
+   ],
+   "notes": "Walk: a slow heavy waddle, hips rolling side to side (roll body about 4 degrees), legs short-stepping; swing leg_* at the hip up to 30 degrees and bend shin_* back up to 40. The leg joints are balls buried in fur, safe to 40 degrees about any axis. neck is a short stretched stump between collar and head; neck pitch or roll 15, head on top of it another 25, yaw 40. Tusks are long and hang in front of the chest: head plus neck pitch down more than about 12 degrees puts them into the fur. jaw is a ventriloquist block under the whisker pads with human teeth; it opens downward (positive x) up to 45 degrees, do not turn it negative. sway_1 (its left) and sway_2 (its right) are black strands hanging from the mouth, pivots at the lip; swing them a few degrees, more when the head moves. The eyes do not match (left pinned, right swollen and low); letting them track at different speeds suits it. arm_* lift 90 forward or 75 to the side, forearm_* bend 40, but above 60 keep the forearm under 20 or the flipper meets the tusks. Idle: head lolling to one side, jaw dropping open slowly and snapping shut. Attack: jaw 45, neck stretched forward, arms up to 90."
+  },
+  {
+   "file": "walrus_2.glb",
+   "height": 3.25,
+   "radius": 1.29,
+   "face": [
+    0,
+    2.69,
+    0.4
+   ],
+   "floats": false,
+   "footprint": {
+    "body": [
+     1.0,
+     0.9
+    ],
+    "reach": [
+     2.55,
+     1.41
+    ]
+   },
+   "nodes": [
+    "body",
+    "extra_1",
+    "extra_1_2",
+    "extra_1_3",
+    "extra_2",
+    "extra_2_2",
+    "extra_2_3",
+    "extra_3",
+    "extra_3_2",
+    "extra_3_3",
+    "extra_4",
+    "extra_4_2",
+    "extra_4_3",
+    "eye_L",
+    "eye_R",
+    "head",
+    "jaw",
+    "leg_L",
+    "leg_R",
+    "neck",
+    "root",
+    "shin_L",
+    "shin_R",
+    "sway_1",
+    "sway_2",
+    "sway_3",
+    "sway_4",
+    "sway_5",
+    "sway_6"
+   ],
+   "notes": "No big hips at this stage: a narrow drape, 1.0 m across, hangs from a thin frame, and the long neck and four extra legs make the silhouette (see footprint). leg_* and shin_* are thin sticks under the hem; walk with small quick steps, leg_* swing up to 25 and shin_* bend back up to 40, and keep body nearly level (roll 2 degrees at most). Arms are gone. The drape is part of body and does not move. neck is a long stalk (pivot at the collar inside the drape): pitch and roll up to 25, yaw 30; head on top of it another 35 any way. The antlers are part of head and reach 3.25 m, so tip the neck forward to pass a 3 m doorway. eye_L and eye_R are bare lidless eyeballs bulging from dark sockets: the left pupil is a pinprick looking up and out, the right is blown and looks down at whoever stands in front. Each can turn 25 degrees any way before the back of the ball shows; never blink them (there are no lids) and never move them together: hold one fixed on the player while the other drifts slowly. jaw is the whole underside of the face; open it 70 to 80 degrees for the jumpscare (positive x), there are two rows of teeth and a black cavity behind. sway_1..sway_5 are bundles of black hair hanging up to two metres from the scalp: 1 right-back, 2 right, 3 left, 4 left-back, 5 back. sway_6 is the dark wet strands from the mouth. They are stiff rods hinged at the head: when the neck and head tilt, turn the sway_N nodes back by the same amount so the hair keeps hanging down rather than standing out like a broom, and keep extra swing under 10 degrees or it passes through the drape. extra_1 (upper right), extra_2 (upper left), extra_4 (lower left) are live harvestman legs, each a chain extra_N > extra_N_2 > extra_N_3 with ball knuckles: hip, knee, ankle. Any joint can turn 40 degrees; spasm them in held steps. Feet rest on the floor at rest. extra_3 (lower right) is the dead one: it is modelled curled above the hip and should only tremble, 2 or 3 degrees. Walk: small quick steps of the thin legs while the three live extras tap ahead of it out of time. Idle: perfectly still, then one extra leg jerks. Attack: neck swings the head down to face height, jaw drops to 75, the upper extras reach forward (rotate extra_1 and extra_2 about z toward the front)."
+  }
  ]
 }

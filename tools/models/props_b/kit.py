@@ -45,33 +45,35 @@ def xf(at=(0, 0, 0), rot=(0, 0, 0), scale=1):
 
 # ------------------------------------------------------------ materials
 
-def _atlases():
-    """The atlas arrays, cached in the temp dir against the source of atlas.py
-    because painting them takes about a minute."""
+TEXTURES = (('props_b_a', True, None), ('props_b_a_n', False, None), ('props_b_a_orm', False, 1024), ('props_b_art', True, None))
+
+
+def _atlas_files():
+    """The four atlas images as PNG files in the temp dir, named for the
+    source of atlas.py, because painting them takes minutes. The exporter
+    reads images from files: a generated image filled with pixels in memory
+    and packed comes out black."""
     with open(os.path.join(HERE, 'atlas.py'), 'rb') as f: key = hashlib.md5(f.read()).hexdigest()[:12]
-    path = os.path.join(tempfile.gettempdir(), f'props_b_atlas_{key}.npz')
-    if os.path.exists(path):
-        z = np.load(path)
-        return [z[k].astype(np.float32) / 255 for k in ('col', 'nrm', 'orm', 'art')]
+    paths = [os.path.join(tempfile.gettempdir(), f'{name}_{key}.png') for name, _, _ in TEXTURES]
+    if all(os.path.exists(p) for p in paths): return paths
     arrs = [*atlas.build_a(), atlas.build_b()]
-    np.savez_compressed(path, **{k: (a * 255 + .5).astype(np.uint8) for k, a in zip(('col', 'nrm', 'orm', 'art'), arrs)})
-    return arrs
-
-
-def _image(name, arr, colour, size=None):
-    h, w = arr.shape[:2]
-    img = bpy.data.images.new(name, w, h, alpha=False)
-    img.pixels.foreach_set(np.concatenate([arr, np.ones((h, w, 1), np.float32)], -1).ravel())
-    if size and size != w: img.scale(size, size)
-    img.colorspace_settings.name = 'sRGB' if colour else 'Non-Color'
-    img.pack()
-    return img
+    for (name, colour, size), arr, path in zip(TEXTURES, arrs, paths):
+        h, w = arr.shape[:2]
+        img = bpy.data.images.new(name + '_paint', w, h, alpha=False)
+        img.pixels.foreach_set(np.concatenate([arr, np.ones((h, w, 1), np.float32)], -1).ravel())
+        if size and size != w: img.scale(size, size)
+        img.filepath_raw = path; img.file_format = 'PNG'; img.save()
+        bpy.data.images.remove(img)
+    return paths
 
 
 def make_materials():
-    col, nrm, orm, art = _atlases()
-    ia, ino = _image('props_b_a', col, True), _image('props_b_a_n', nrm, False)
-    iorm, ib = _image('props_b_a_orm', orm, False, 1024), _image('props_b_art', art, True)
+    imgs = []
+    for (name, colour, _), path in zip(TEXTURES, _atlas_files()):
+        img = bpy.data.images.load(path); img.name = name
+        img.colorspace_settings.name = 'sRGB' if colour else 'Non-Color'
+        imgs.append(img)
+    ia, ino, iorm, ib = imgs
     out = {}
     for name in MATS:
         m = bpy.data.materials.new(name); m.use_nodes = True
@@ -219,18 +221,24 @@ class Prop:
         of lumpiness. disc: map art onto it looking down the axis (for eyes, dials).
         wrap: wind art once round it (for labels)."""
         vs, uv, fs = [], [], []
+        # The profile is in its own units and `scale` stretches it (ball() spins
+        # a unit circle), so tile UVs and bumps are measured after scaling:
+        # otherwise a small ball gets a texture repeat per centimetre, and
+        # finish() cuts it into hundreds of pieces.
+        sx, sy, sz = (scale,) * 3 if isinstance(scale, (int, float)) else scale
+        sr = (abs(sx) + abs(sy)) / 2
         rmax = max(r for r, z in prof) or 1
         length = [0]
-        for (r0, z0), (r1, z1) in zip(prof, prof[1:]): length.append(length[-1] + math.hypot(r1 - r0, z1 - z0))
+        for (r0, z0), (r1, z1) in zip(prof, prof[1:]): length.append(length[-1] + math.hypot((r1 - r0) * sr, (z1 - z0) * sz))
         for j, (r, z) in enumerate(prof):
             for i in range(segs + 1):
                 a = D(arc) * i / segs
                 p = Vector((math.cos(a) * r, math.sin(a) * r, z))
                 if bump and r > 0:
-                    q = Vector((math.cos(D(arc) * (i % segs) / segs) * r, math.sin(D(arc) * (i % segs) / segs) * r, z))
-                    k = 1 + bump[0] * noise.noise(q * bump[1] + Vector((3.1, 7.7, 1.3) if len(bump) < 3 else bump[2])) / max(r, 1e-3)
+                    q = Vector((math.cos(D(arc) * (i % segs) / segs) * r * sx, math.sin(D(arc) * (i % segs) / segs) * r * sy, z * sz))
+                    k = 1 + bump[0] * noise.noise(q * bump[1] + Vector((3.1, 7.7, 1.3) if len(bump) < 3 else bump[2])) / max(r * sr, 1e-3)
                     p.x *= k; p.y *= k
-                vs.append(p); uv.append((.5 + p.x / (2 * rmax), .5 + p.y / (2 * rmax)) if disc else (i / segs, length[j] / length[-1]) if wrap else (D(arc) * rmax * i / segs, length[j]))
+                vs.append(p); uv.append((.5 + p.x / (2 * rmax), .5 + p.y / (2 * rmax)) if disc else (i / segs, length[j] / length[-1]) if wrap else (D(arc) * rmax * sr * i / segs, length[j]))
         for j in range(len(prof) - 1):
             for i in range(segs):
                 a, b = j * (segs + 1) + i, (j + 1) * (segs + 1) + i

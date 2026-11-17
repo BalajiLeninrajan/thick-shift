@@ -38,18 +38,18 @@ def lin(c):
     return tuple(c[:3])
 
 
-# Tiling surfaces: name -> (texture set, metres per repeat, roughness factor, default tint)
+# Tiling surfaces: name -> (texture set, metres per repeat, default tint)
 SURF = {
-    'paint': ('paint', .6, 1, '#8a9a8a'),
-    'steel': ('steel', .6, 1, '#ffffff'),
-    'rust': ('rust', .5, 1, '#ffffff'),
-    'wood': ('wood', .5, 1, '#ffffff'),
-    'cardboard': ('cardboard', .5, 1, '#ffffff'),
-    'fabric': ('fabric', .25, 1, '#ffffff'),
-    'plastic': ('plastic', .3, 1, '#ffffff'),
-    'rubber': ('rubber', .2, 1, '#555555'),
-    'knurl': ('knurl', .03, 1, '#ffffff'),
-    'bag': ('plastic', .3, .55, '#1a1a1c'),       # bin-liner sheen
+    'paint': ('paint', .6, '#8a9a8a'),
+    'steel': ('steel', .6, '#ffffff'),
+    'rust': ('rust', .5, '#ffffff'),
+    'wood': ('wood', .5, '#ffffff'),
+    'cardboard': ('cardboard', .5, '#ffffff'),
+    'fabric': ('fabric', .25, '#ffffff'),
+    'plastic': ('plastic', .3, '#ffffff'),
+    'rubber': ('rubber', .2, '#555555'),
+    'knurl': ('knurl', .03, '#ffffff'),
+    'bag': ('bag', .35, '#1c1c1f'),               # bin-liner film
 }
 # Untextured: name -> (roughness, metallic, default tint)
 PLAIN = {'flat': (.7, 0, '#ffffff'), 'skin': (.62, 0, '#d9a688'), 'glass': (.08, 0, '#20262a'), 'chrome': (.25, .6, '#c8c8cc'),
@@ -93,15 +93,11 @@ def material(name):
         L.new(mx.outputs[2], bsdf.inputs['Base Color'])
 
     if name in SURF:
-        ts, _, rough, _ = SURF[name]
+        ts = SURF[name][0]
         tinted(tex(ts + '_c.png').outputs['Color'])
         nm = N.new('ShaderNodeNormalMap'); L.new(tex(ts + '_n.png', False).outputs['Color'], nm.inputs['Color']); L.new(nm.outputs['Normal'], bsdf.inputs['Normal'])
         sep = N.new('ShaderNodeSeparateColor'); L.new(tex(ts + '_orm.png', False).outputs['Color'], sep.inputs[0])
-        if rough == 1:
-            L.new(sep.outputs[1], bsdf.inputs['Roughness'])
-        else:
-            bsdf.inputs['Roughness'].default_value = rough
-        L.new(sep.outputs[2], bsdf.inputs['Metallic'])
+        L.new(sep.outputs[1], bsdf.inputs['Roughness']); L.new(sep.outputs[2], bsdf.inputs['Metallic'])
     elif name == 'decal':
         tinted(tex('decals.png').outputs['Color']); bsdf.inputs['Roughness'].default_value = .62
     elif name == 'cutout':
@@ -128,7 +124,7 @@ def material(name):
 
 
 def default_tint(mat):
-    if mat in SURF: return SURF[mat][3]
+    if mat in SURF: return SURF[mat][2]
     if mat in PLAIN: return PLAIN[mat][2]
     return '#ffffff'
 

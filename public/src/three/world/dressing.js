@@ -11,16 +11,22 @@
 //   s      scale
 // A prop is solid when FOOT has its footprint and it is not marked soft.
 
-// [width, depth] of each solid prop's footprint in metres, before it is turned.
+// [width, depth] of each solid prop's footprint in metres, before it is turned,
+// and where the middle of it sits from the prop's origin if not on it: [w, d, x, z],
+// z toward the prop's front. It covers what a body cannot pass through, so a
+// prop's walk-through litter (skee-ball tickets, the soda machine's lead and
+// puddle) and anything overhead (the top spare head) are left out.
 // Anything not listed here is never solid: chairs, boxes, bags, things on walls and ceilings.
 export const FOOT = {
   generator: [1.5, 1.05], desk: [2.4, 1], locker: [.9, .6], crate: [1.05, 1.05], barrel: [.6, .6],
-  speaker: [.6, .6], costume_rack: [1.8, .6], spare_heads: [2, .6], mannequin: [.6, .6], vanity: [1.2, .5], trunk: [1, .6],
-  arcade_cabinet: [.75, .85], claw_machine: [.9, .9], skee_ball: [.8, 2.8], prize_counter: [2, .65],
-  table_round: [1.3, 1.3], table_long: [2.4, .75], standee: [1.5, .4],
-  counter_steel: [2, .7], fridge: [1.2, .75], range: [1, .8], sink_unit: [1.5, .7], wire_shelf: [1.2, .5],
-  snack_counter: [3, .8], soda_machine: [1, .76], popcorn_cart: [1, .6],
+  speaker: [.84, .78, 0, -.14], costume_rack: [1.8, .6], spare_heads: [2, .6], mannequin: [.6, .6], vanity: [1.2, .57, 0, .035], trunk: [1.12, .85, 0, .025],
+  arcade_cabinet: [.75, .85], claw_machine: [1.05, 1.07, .065, .025], skee_ball: [.8, 2.8], prize_counter: [2, .65],
+  table_round: [1.48, 1.48], table_long: [2.4, .75], standee: [1.8, .4],
+  counter_steel: [2, .7], fridge: [1.21, .98, 0, .12], range: [1, .83], sink_unit: [1.5, .77, 0, .035], wire_shelf: [1.2, .5],
+  snack_counter: [3, .8], soda_machine: [1, .76], popcorn_cart: [1.06, .68, .14, 0],
 };
+// Round props cover the same floor whichever way they are turned.
+const ROUND = new Set(['table_round', 'barrel']);
 // The generator stands this far behind the point guards crank it from (GENERATOR in map.js).
 export const GEN_BACK = 1.05;
 
@@ -105,8 +111,9 @@ export const DRESSING = [
 // The floor a prop covers as [x0, z0, x1, z1]. Turned by anything but a
 // quarter turn, it is the box round the turned footprint.
 export function footprint(name, x, z, yaw = 0, s = 1) {
-  const [w, d] = FOOT[name], a = yaw * Math.PI / 180, c = Math.abs(Math.cos(a)), sn = Math.abs(Math.sin(a));
-  const hx = (w * c + d * sn) / 2 * s, hz = (w * sn + d * c) / 2 * s;
+  const [w, d, ox = 0, oz = 0] = FOOT[name], a = ROUND.has(name) ? 0 : yaw * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
+  const hx = (w * Math.abs(c) + d * Math.abs(sn)) / 2 * s, hz = (w * Math.abs(sn) + d * Math.abs(c)) / 2 * s;
+  x += (ox * c + oz * sn) * s; z += (oz * c - ox * sn) * s;
   return [x - hx, z - hz, x + hx, z + hz];
 }
 // Every solid thing in the building. generator: GENERATOR from map.js.

@@ -58,6 +58,7 @@ const ACTIONS = {
   'dv-low'(S) { S.power = 5; },
   'dv-sane'(S) { for (const id in game.players) game.players[id].sanity = .15; },
   // These set the heat and leave the tripping and seizing to sim.js, so the events and sounds are the real ones.
+  // sim.js tests for a trip or a seize before it heats or cools, so they work with Cold motors on and nobody turning.
   'dv-hot'(S) { for (const k of DOORS) S.heat[k] = Math.max(S.heat[k], .85); },
   'dv-trip'(S) { S.doors.L = true; S.heat.L = 1; },
   'dv-seize'(S) { S.gen = 1; },
@@ -106,7 +107,7 @@ function sync(el) {
       <span class="cn-cluster">${['door', 'home', 'scare'].map(a => `<button class="btn btn-ghost is-sm" data-act="${a}" data-i="${m.i}"${on ? '' : ' disabled'}>${{ door: 'To door', home: 'Send home', scare: 'Jumpscare' }[a]}</button>`).join('')}</span></div>`;
   }).join('');
   const row = (k, v) => `<dt>${k}</dt><dd class="cn-tabular">${v}</dd>`;
-  $('dv-read').innerHTML = row('Phase', S.phase) + row('Night time', (S.t / HOUR).toFixed(2) + ' h') + row('Threat', threatOf(S).toFixed(2)) + row('Quiet for', Math.max(0, (S.calmUntil || 0) - S.t).toFixed(0) + ' s' + (S.pair ? ', then a pair' : '')) + row('Camera signal', Math.round(client.signal * 100) + '%') + row('Sanity', S.players.map(p => Math.round((p.sanity ?? 1) * 100) + '%').join(', '))  + row('Guards', S.players.length)
+  $('dv-read').innerHTML = row('Phase', S.phase) + row('Night time', (S.t / HOUR).toFixed(2) + ' h') + row('Threat', threatOf(S).toFixed(2)) + row('Quiet for', Math.max(0, (S.calmUntil || 0) - S.t).toFixed(0) + ' s' + (S.pair ? ', then a pair' : '')) + row('Camera signal', Math.round(client.signal * 100) + '%') + row('Sanity', S.players.map(p => Math.round((p.sanity ?? 1) * 100) + '%').join(', ')) + row('Guards', S.players.length)
     + row('Attacks', `${S.attacks} of ${maxAttacks(S)}`)
     + row('Door heat', DOORS.map(k => `${k} ${Math.round((S.heat?.[k] || 0) * 100)}%${S.trip?.[k] ? ' tripped' : ''}`).join(', '))
     + row('Generator heat', Math.round((S.gen || 0) * 100) + '%' + (S.seized ? ' seized' : '') + (crankerOf(S) ? ', handle taken' : ''));

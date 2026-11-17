@@ -79,7 +79,7 @@ def snack_counter(p):
     for i in range(3): p.lathe([(0, 0), (.1, 0), (.1, .3), (.04, .36), (.04, .4), (0, .4)], (1.0 + i * .22 - .22, .1, .13), segs=10, t='plastic', c=((.2, .3, .6), (.75, .75, .7), (.6, .2, .15))[i])
 
 
-@prop('soda_machine', notes='Vending machine. The whole lit front is sign_glow and takes its picture from the art atlas; parts of it are dead. A power lead trails 0.3 m out of the back.')
+@prop('soda_machine', notes='Vending machine, 1.0 x 0.76 m. The whole lit front is sign_glow and takes its picture from the art atlas; parts of it are dead. A power lead trails 0.3 m out of the back and a dried puddle of syrup reaches 0.2 m out in front.')
 def soda_machine(p):
     W, Dp, H = 1.0, .76, 1.9
     body = dict(t='paint', c=(.2, .25, .5))
