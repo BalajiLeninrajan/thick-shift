@@ -219,8 +219,7 @@ function fittings(scene, trim, artTex) {
 // and a shadow where the bulb holder sits.
 export function torchCookie() {
   const s = 256, c = canvas(s), g = c.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-  // The centre is well short of white: at arm's length a full-strength beam bleaches a pale wall and nothing on it can be read.
-  for (const [at, v] of [[0, 205], [.22, 200], [.34, 165], [.4, 145], [.46, 160], [.56, 120], [.66, 128], [.74, 95], [.9, 56], [1, 32]]) g.addColorStop(at, `rgb(${v},${v},${v})`);
+  for (const [at, v] of [[0, 230], [.22, 224], [.34, 185], [.4, 162], [.46, 180], [.56, 135], [.66, 143], [.74, 106], [.9, 63], [1, 36]]) g.addColorStop(at, `rgb(${v},${v},${v})`);
   c.fillStyle = g; c.fillRect(0, 0, s, s);
   c.globalCompositeOperation = 'multiply';
   const dent = c.createRadialGradient(s * .56, s * .47, 0, s * .56, s * .47, s * .1); dent.addColorStop(0, '#666'); dent.addColorStop(1, '#fff');

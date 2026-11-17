@@ -14,7 +14,7 @@ import { createPost } from './post.js';
 import { dreadOf } from '../rules.js';
 
 let app = null;
-const FOG = .042, FOG_DREAD = .03;   // fog density on a quiet night, and what a bad one adds
+const FOG = .037, FOG_DREAD = .03;   // fog density on a quiet night, and what a bad one adds
 const TORCH_FULL = 60;                // the torch's intensity on a full battery (player.js)
 
 function create() {

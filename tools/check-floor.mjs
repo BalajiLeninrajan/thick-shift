@@ -38,9 +38,10 @@ for (const [x0, z0, x1, z1] of M.OBSTACLES) {
 }
 // The footprints here are typed in by hand; compare them with what the kits measured.
 const sizes = {};
-for (const kit of ['props_a', 'props_b']) { const f = new URL(`../public/models/${kit}.json`, import.meta.url); if (existsSync(f)) Object.assign(sizes, JSON.parse(readFileSync(f)).props); else warn.push(`${kit}.json is not built yet`); }
+let built = 0;
+for (const kit of ['props_a', 'props_b']) { const f = new URL(`../public/models/${kit}.json`, import.meta.url); if (existsSync(f)) { built++; Object.assign(sizes, JSON.parse(readFileSync(f)).props); } else warn.push(`${kit}.json is not built yet, so its props are unchecked`); }
 for (const name in FOOT) if (sizes[name]) { const [w, , d] = sizes[name].size; if (Math.abs(w - FOOT[name][0]) > .2 || Math.abs(d - FOOT[name][1]) > .2) warn.push(`${name}: FOOT says ${FOOT[name]}, the kit says ${[w, d]}`); }
-for (const rows of DRESSING) for (const [name] of rows) if (Object.keys(sizes).length && !sizes[name]) warn.push(`${name} is placed but is in neither kit`);
+if (built === 2) for (const name of new Set(DRESSING.flat().map(row => row[0]))) if (!sizes[name]) warn.push(`${name} is placed but is in neither kit`);
 
 for (const w of warn) console.log('warning:', w);
 for (const b of bad) console.log('BLOCKED:', b);

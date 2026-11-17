@@ -206,29 +206,52 @@ function setDoor(S, bot, k, shut) {
 const SKILL = {
   careless: { react: .9, fov: .9, torch: 'always', map: false, plans: false, doors: false, cranks: false, peelRange: 12, dodges: false, alert: 7, beam: 1.2, reserve: 0, waits: false },
   competent: { react: .5, fov: 1.5, torch: 'thrifty', map: true, plans: true, doors: true, cranks: true, peelRange: 99, dodges: true, alert: 15, beam: 2.5, reserve: .25, waits: false },
-  expert: { react: .25, fov: 2.2, torch: 'needed', map: true, plans: true, doors: true, cranks: true, peelRange: 99, dodges: true, alert: 15, beam: 2.5, reserve: .35, waits: true },
+  expert: { react: .25, fov: 2.2, torch: 'needed', map: true, plans: true, doors: true, cranks: true, peelRange: 99, dodges: true, alert: 15, beam: 2.5, reserve: .35, waits: false },
 };
 // alert: how near something coming has to be before they do anything about it. beam: seconds away it is when the torch goes on it.
 
-// Somewhere to back off to: a point further from the thing than we are, reached by a way that keeps clear of it,
-// which in a big room can mean round it and out of the door behind it. Cornered, it is the far end of the room.
-// Thought about twice a second, and kept to while it still makes sense.
-function awayFrom(S, bot, h) {
-  const st = bot.state;
-  if (st.away && S.t - st.awayAt < 2.5 && dist(bot, st.away) > 1 && dist(st.away, h) > dist(bot, h) && !(S.t - st.awayAt > .5 && wayTo(S, bot, st.away).risk)) return st.away;
-  const scored = [], room = M.roomAt(bot.x, bot.z);
-  for (const n of M.nav().nodes) {
-    const d = dist(n, bot);
-    if (d < 3 || d > 18 || n.room === M.DUCTS || dist(n, h) < dist(bot, h) + 1) continue;
-    // Out of the room is better than across it.
-    scored.push([dist(n, h) - d * .3 + (n.room !== room ? 6 : 0) + Math.random(), n]);
+// How far it is by foot from a point to every waypoint. avoid: berths to keep clear of, as in plan().
+function field(S, from, avoid) {
+  const { nodes, links } = M.nav(), n = nodes.length, best = new Float64Array(n).fill(1e9), done = new Uint8Array(n);
+  const cost = avoid?.length ? (a, b, d) => d + (avoid.some(h => segDist(a, b, h) < h.r) ? 70 : 0) : (a, b, d) => d;
+  const room = M.roomAt(from.x, from.z);
+  for (let i = 0; i < n; i++) { const nd = nodes[i], d = dist(nd, from); if (nd.room !== M.DUCTS && (nd.room === room || d < 5) && M.clear(from.x, from.z, nd.x, nd.z, M.PLAYER_R, S.doors)) best[i] = cost(from, nd, d); }
+  for (;;) {
+    let u = -1, ud = 1e9;
+    for (let i = 0; i < n; i++) if (!done[i] && best[i] < ud) { ud = best[i]; u = i; }
+    if (u < 0) break;
+    done[u] = 1;
+    for (const l of links[u]) { if (done[l.to] || l.duct || (l.key && S.doors[l.key])) continue; const c = ud + cost(nodes[u], nodes[l.to], l.d); if (c < best[l.to]) best[l.to] = c; }
   }
-  scored.sort((a, b) => b[0] - a[0]);
-  const safe = n => { const p = bot.skill.plans ? plan(S, bot, n) : { risk: false, path: M.route(bot.x, bot.z, n.x, n.z, { doors: S.doors, r: M.PLAYER_R }).path }; return p && p.path.length && !p.risk; };
-  st.away = scored.slice(0, 6).map(s => s[1]).find(safe)
-    || scored.map(s => s[1]).filter(n => n.room === room && M.clear(bot.x, bot.z, n.x, n.z, M.PLAYER_R, S.doors)).sort((a, b) => dist(b, h) - dist(a, h))[0] || bot;
-  st.awayAt = S.t;
-  return st.away;
+  return best;
+}
+// The same distance to a point that is not a waypoint.
+function fieldAt(S, f, p) {
+  const { nodes } = M.nav(), room = M.roomAt(p.x, p.z);
+  let best = 1e9;
+  for (let i = 0; i < nodes.length; i++) { const d = dist(nodes[i], p); if (f[i] + d < best && (nodes[i].room === room || d < 5) && M.clear(p.x, p.z, nodes[i].x, nodes[i].z, M.PLAYER_R, S.doors)) best = f[i] + d; }
+  return best;
+}
+
+// Where everyone could be and when: seconds for this guard to walk to each waypoint keeping clear of what it knows
+// about, and seconds for the nearest of the things after it to get there. Worked out twice a second.
+function race(S, bot, hs, pace) {
+  const st = bot.state;
+  if (st.race && S.t - st.race.at < .5) return st.race;
+  const mine = field(S, bot, berths(S, bot)), n = mine.length, theirs = new Float64Array(n).fill(1e9);
+  for (const h of hs) { const f = field(S, h); for (let i = 0; i < n; i++) theirs[i] = Math.min(theirs[i], f[i] / pace(h)); }
+  for (let i = 0; i < n; i++) mine[i] /= F.WALK;
+  return st.race = { mine, theirs, at: S.t };
+}
+// The waypoint this guard can be at longest before anything after them is. Kept to unless another is clearly better.
+function fleeTo(S, bot, r) {
+  const { nodes } = M.nav(), st = bot.state, lead = i => Math.min(r.theirs[i], 20) - r.mine[i];
+  let best = -1;
+  for (let i = 0; i < nodes.length; i++) if (nodes[i].room !== M.DUCTS && r.mine[i] < 12 && (best < 0 || lead(i) > lead(best))) best = i;
+  if (best < 0) return bot;
+  if (st.fleeNode >= 0 && dist(bot, nodes[st.fleeNode]) > 1.5 && lead(st.fleeNode) > lead(best) - 2 && r.mine[st.fleeNode] < 20) best = st.fleeNode;
+  st.fleeNode = best;
+  return nodes[best];
 }
 
 // Share out the due clocks: each to whoever would get there soonest after what they already have.
@@ -274,33 +297,37 @@ function defend(S, bot, objective) {
   const h = hs[0], d = dist(bot, h), sight = M.sees(bot.x, bot.z, h.x, h.z, S.doors);
   // Tank winding up or already coming: get out of its line.
   if (sk.dodges && h.i === 3 && (h.st === 'windup' || h.st === 'charge') && sight) {
-    const line = ang(h, bot), side = [1, -1].map(s => ({ x: bot.x + Math.sin(line + s * 1.57) * 4, z: bot.z + Math.cos(line + s * 1.57) * 4 })).filter(p => M.clear(bot.x, bot.z, p.x, p.z, M.PLAYER_R, S.doors));
-    if (!side.includes(st.dodge)) st.dodge = side[0];
-    if (st.dodge) { w.goal = st.dodge; w.sprint = true; w.use = null; w.face = ang(bot, st.dodge); return true; }
+    // Sideways, whichever side has room, and the same side until it has gone past.
+    const line = ang(h, bot), to = s => ({ x: bot.x + Math.sin(line + s * 1.57) * 3, z: bot.z + Math.cos(line + s * 1.57) * 3 }), room = s => M.clear(bot.x, bot.z, to(s).x, to(s).z, M.PLAYER_R, S.doors);
+    if (!(S.t - st.dodgeAt < 3)) { st.dodge = [1, -1].find(room) || 1; st.dodgeAt = S.t; }
+    w.goal = to(st.dodge); w.sprint = true; w.use = null; w.face = ang(bot, w.goal);
+    return true;
   }
-  // How long until it has us if we stand still, with the torch on it and without.
-  const lit = [.1, 1, 2.2][h.rot], unlit = h.i === 0 ? 2.8 : h.i === 1 && sight ? 2.6 : 4;
-  // Light on it once it is close enough to matter (every second of light rots it), eyes on it either way: Flan slows for that alone.
+  // How fast it comes with the torch on it and without. Light on it once it is close enough to matter (every second
+  // of light rots it), eyes on it either way: Flan slows for that alone.
+  const speed = k => { const base = k.i === 0 ? 2.8 : k.i === 1 ? 2.6 : 3.8; return bot.bat > 0 && k === hs[0] ? Math.max(.3, base * [.05, .3, .5][k.rot]) : base; };
+  const unlit = h.i === 0 ? 2.8 : h.i === 1 && sight ? 2.6 : 3.8;
   const beam = bot.bat > 0 && sight && COMING.includes(h.st) && d < F.BEAM_RANGE - .5 && (d - F.CATCH) / unlit < sk.beam;
   if (beam) w.on = true;
   if (sight && d < 16) w.face = ang(bot, h);
-  const eta = (d - F.CATCH) / (beam ? lit : unlit);
+  const eta = (d - F.CATCH) / (beam ? speed(h) : unlit);
   const booth = inBooth(bot), canHole = sk.doors && sim.lightsF(S);
   // In the booth with it outside: the doors are the answer. With it inside: out by another door.
   if (booth && canHole && !hs.some(inBooth)) { st.holed = S.t + 3; return false; }
-  // Too many, no light, or it has been on us long enough: run for the booth and shut it out.
+  const r = race(S, bot, hs, speed);
+  // Carry on with the job if we can get there and do it before anything gets there. Once running, keep running a while.
   const pressed = hs.length > 1 || (bot.bat <= 0 && h.i !== 0) || S.t - st.chased > 10;
-  const boothOpen = canHole && !booth && dist(bot, BOOTH_MID) < 34 && !wayTo(S, bot, BOOTH_MID).risk;
-  // Carry on with the job if there is a way to it that is not past the thing, and time to do it. Once backing off, keep backing off a while.
   const u = objective?.use, target = u ? u.stand || front(u.at) : objective?.goal;
-  const crowding = !COMING.includes(h.st) && d < 5;   // not after us, but about to walk into us
-  if (target && S.t > (st.retreat || 0) && !(pressed && boothOpen) && !crowding) {
-    const noTime = u && dist(bot, target) < F.REACH + 1 && eta < Math.max(0, u.hold) + .8;
-    if (!noTime && !wayTo(S, bot, target).risk) { w.goal = objective.goal; w.use = objective.use; w.sprint = eta < 2.5 && !beam; return true; }
-    st.retreat = S.t + 3;
+  if (target && S.t > (st.retreat || 0) && !pressed) {
+    const need = fieldAt(S, r.mine, target) + (u ? Math.max(0, u.hold) + .8 : 0), have = Math.min(...hs.map(k => dist(k, target) / speed(k)));
+    if (need < have) { w.goal = objective.goal; w.use = objective.use; w.sprint = eta < 2.5 && !beam; return true; }
+    st.retreat = S.t + 2;
   }
-  if (boothOpen) { w.goal = BOOTH_MID; w.use = null; w.sprint = eta < 3 && !beam; return true; }
-  w.goal = awayFrom(S, bot, h); w.use = null; w.sprint = eta < 2 && !beam;
+  // Otherwise the booth, if we can be in it with time to shut a door, or wherever gives the longest lead.
+  const home = canHole && !booth ? fieldAt(S, r.mine, BOOTH_MID) : 1e9;
+  const goal = home + 2.5 < Math.min(...hs.map(k => dist(k, BOOTH_MID) / speed(k))) ? BOOTH_MID : fleeTo(S, bot, r);
+  w.goal = goal; w.use = null; w.sprint = eta < 3 && (!beam || speed(h) > 2.4);
+  if (w.sprint && bot.stam > .1) w.face = null;   // running means turning your back on it
   return true;
 }
 
@@ -363,7 +390,7 @@ const honest = (skill, opts = {}) => ({
     const to = obj.use ? obj.use.stand || front(obj.use.at) : obj.goal;
     if (sk.plans && to && dist(bot, to) > 2 && wayTo(S, bot, to).risk && !obj.urgent && F.HOUR - S.t % F.HOUR > dist(bot, to) / F.WALK * 1.4 + 8) {
       const nearest = known(S, bot, 4).filter(h => MOVING.includes(h.st)).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
-      w.goal = booth ? BOOTH_MID : nearest && dist(bot, nearest) < 8 ? awayFrom(S, bot, nearest) : null; w.use = null;
+      w.goal = booth ? BOOTH_MID : nearest && dist(bot, nearest) < 8 ? fleeTo(S, bot, race(S, bot, [nearest], () => 3)) : null; w.use = null;
       return;
     }
     // Running late for a clock or a friend.

@@ -178,7 +178,7 @@ def wall_fan():
 @prop('floor', 'Wooden shipping crate, 1 m cube, lid slightly lifted. Stencils and a shipping label on the three.js +Z face.', dist=.25, ground=.2)
 def crate():
     m = Mesh(37)
-    P = '#a08a6c'; Bt = '#8a7458'
+    P = '#d6c6a6'; Bt = '#b9a684'
     m.box((0, 0, .49), (.94, .94, .94), 'wood', P, grain='x', cell=.3)
     for k in range(4):
         with m.at(r=(0, 0, k * 90)):
@@ -238,7 +238,7 @@ def barrel():
 @prop('floor', 'Timber pallet, 1.2 x 1.0 x 0.15, one deck board broken.', dist=.12, ground=.1, dirt=.3)
 def pallet():
     m = Mesh(40)
-    tones = ('#9a8468', '#8a7458', '#a8926f', '#7d6a52')
+    tones = ('#cdbb9a', '#b5a282', '#d8c8a8', '#a8967a')
     for i, y in enumerate((-.45, 0, .45)):
         m.box((0, y, .01), (1.2, .1, .02), 'wood', tones[i % 4], grain='x', cell=.4)
         m.box((0, y, .12), (1.2, .1, .02), 'wood', tones[(i + 1) % 4], grain='x', cell=.4)

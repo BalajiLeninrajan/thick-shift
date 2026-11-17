@@ -18,7 +18,7 @@ def dome(m, c, r, mat='status_glow', n=(0, -1, 0)):
         m.ball((0, 0, r * .3), r, mat, n=14, m=5, zrange=(0, 1))
 
 
-@prop('held', 'First-person torch, 0.24 m. Points along three.js -Z from the origin, which is the middle of the grip. Lens material is lamp_glow.', dist=.03, dirt=.1)
+@prop('held', 'First-person torch, 0.24 m, built pointing at Blender -Y as the brief asks, so in three.js the beam leaves along +Z: turn it half a turn about Y to aim it down the camera. Origin is the middle of the grip. Lens and bulb are lamp_glow. Not a placed prop, so mount is "held".', dist=.03, dirt=.1)
 def flashlight():
     m = Mesh(11)
     torch(m)

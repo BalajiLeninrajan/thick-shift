@@ -10,8 +10,8 @@
 # `only=` rebuilds a few props for a quick look; it overwrites props_a.glb
 # with just those, so finish with a full build. `prev=` builds everything but
 # renders previews of the named props only. `studio` lights the previews
-# evenly instead of by flashlight, `noprev` skips them, `eevee` rasterises
-# them (quick and rough).
+# evenly instead of by flashlight, `noprev` skips them. `pose` also renders
+# the guard with every joint turned, to show that no gap opens.
 #
 # Files here: textures.py draws the textures (run automatically when ./tex is
 # missing), kit.py is the mesh and material toolkit, gameplay.py, booth.py
@@ -57,7 +57,7 @@ def assemble(name, spec, at):
     return ob, lo - Vector(at), hi - Vector(at), sorted(kids)
 
 
-def shots(name, spots, res=400, samples=12):
+def shots(name, spots, res=400, samples=12, pose=None):
     """Render tools/models/previews/<name>_<key>.png for each entry of
     spots = {key: (centre, radius, azimuth in degrees)}.
 
@@ -65,14 +65,14 @@ def shots(name, spots, res=400, samples=12):
     takes minutes per frame when the machine is short of memory. This calls
     it once with no views (so the scene, floor, camera and lamp are set up
     exactly as it does it), then moves the camera from spot to spot with the
-    scene kept in memory and the denoiser off. With `eevee` on the command
-    line it rasterises instead, which is faster still but only a rough guide
-    to the look."""
+    scene kept in memory and the denoiser off. `pose` = {node: (x, y, z)
+    degrees} turns parts first, for checking joints."""
     preview(name, views=(), res=res, samples=samples, light=LIGHT)
     sc = bpy.context.scene
     sc.render.use_persistent_data = True
     sc.cycles.use_denoising = False
-    if 'eevee' in ARGS: sc.render.engine = 'BLENDER_EEVEE'
+    for node, r in (pose or {}).items():
+        o = bpy.data.objects[node]; o.rotation_mode = 'XYZ'; o.rotation_euler = [math.radians(v) for v in r]
     cam = sc.camera; lamp = next(o for o in sc.objects if o.type == 'LIGHT')
     for key, (c, r, az) in spots.items():
         a = math.radians(az); c = Vector(c)
@@ -85,12 +85,7 @@ def shots(name, spots, res=400, samples=12):
         else:
             lamp.rotation_euler = (math.radians(50), 0, a + math.radians(30))
         sc.render.filepath = os.path.join(PREVIEWS, f'{name}_{key}.png')
-        try:
-            bpy.ops.render.render(write_still=True)
-        except RuntimeError as e:                                      # no GPU context for the rasteriser: go back to Cycles
-            print('[preview] falling back to Cycles:', e)
-            sc.render.engine = 'CYCLES'
-            bpy.ops.render.render(write_still=True)
+        bpy.ops.render.render(write_still=True)
         print('[preview]', sc.render.filepath)
 
 
@@ -125,6 +120,9 @@ def build_guard():
         whole = ((0, 0, .95), 1.0)
         shots('guard', {'front': (*whole, 0), 'three_quarter': (*whole, 35), 'side': (*whole, 90), 'back': (*whole, 180),
                         'face': ((0, -.1, 1.6), .2, 0), 'face_side': ((0, -.1, 1.6), .2, 60), 'hand': ((-.25, -.35, 1.12), .2, -50)})
+        if 'pose' in ARGS:
+            shots('guard', {'pose_front': (*whole, 20), 'pose_side': (*whole, 100), 'pose_back': (*whole, 200)},
+                  pose={'head': (20, 0, 40), 'arm_L': (-40, 0, 0), 'arm_R': (35, 0, -25), 'leg_L': (-38, 0, 0), 'leg_R': (38, 0, 0)})
     return rep
 
 

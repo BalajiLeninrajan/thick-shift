@@ -354,10 +354,11 @@ class Mesh:
             rings.append([c + Vector((math.cos(j * math.tau / n) * rr * r[0], math.sin(j * math.tau / n) * rr * r[1], math.sin(ph) * r[2])) for j in range(n)])
         return self.skin(rings, mat, tint)
 
-    def loft(self, sections, mat, tint=None, n=14, steps=3, ends=(True, True), hint=None, power=2, caps=(True, True), vscale=1):
+    def loft(self, sections, mat, tint=None, n=14, steps=3, ends=(True, True), hint=None, power=2, caps=(True, True), vscale=1, bulge=1):
         """A smooth organic tube through sections [(centre, rx, ry), ...]:
         limbs, torsos, cables with changing girth. `ends` rounds off each end
-        instead of leaving a flat cap. `power` > 2 squares the cross-section."""
+        instead of leaving a flat cap; `bulge` < 1 flattens that rounding (a
+        cushion, not a sausage). `power` > 2 squares the cross-section."""
         S = catmull([(*c, rx, ry) for c, rx, ry in sections], steps)
         C = [Vector(s[:3]) for s in S]
         rings = []; a = None
@@ -380,13 +381,13 @@ class Mesh:
         if ends[0]:
             c, a, b, rx, ry, t = rings[0]
             for ph in (80, 55, 28):
-                k = math.cos(math.radians(ph)); d = math.sin(math.radians(ph)) * min(rx, ry)
+                k = math.cos(math.radians(ph)); d = math.sin(math.radians(ph)) * min(rx, ry) * bulge
                 R.append(ring(c - t * d, a, b, rx * k, ry * k))
         R += [ring(c, a, b, rx, ry) for c, a, b, rx, ry, t in rings]
         if ends[1]:
             c, a, b, rx, ry, t = rings[-1]
             for ph in (28, 55, 80):
-                k = math.cos(math.radians(ph)); d = math.sin(math.radians(ph)) * min(rx, ry)
+                k = math.cos(math.radians(ph)); d = math.sin(math.radians(ph)) * min(rx, ry) * bulge
                 R.append(ring(c + t * d, a, b, rx * k, ry * k))
         return self.skin(R, mat, tint, caps, vscale=vscale)
 

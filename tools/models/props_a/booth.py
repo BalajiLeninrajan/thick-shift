@@ -59,6 +59,16 @@ def desk():
     mug(m, (.93, -.22, top), 30, '#e0dccf', art=True)
     mug(m, (-1.04, -.2, top), 200, '#4f6a58', pens=True)
     with m.at((.82, -.33, top + .001)): m.torus(.036, .0012, 'glass', '#3a2412', n=16, m=4)   # a ring where a mug stood
+    # telephone on the right end, off the hook just enough to notice
+    with m.at((1.04, .14, top), r=(0, 0, -12)):
+        m.box((0, 0, .022), (.19, .22, .044), 'plastic', '#2c2c2f', bevel=.01, cell=1)
+        with m.at((0, -.03, .05), r=(12, 0, 0)):
+            m.box((0, 0, 0), (.17, .13, .012), 'plastic', '#2c2c2f', bevel=.004, cell=1)
+            for i in range(12): m.box((-.028 + (i % 3) * .028, .04 - (i // 3) * .026, .008), (.018, .016, .006), 'plastic', '#cfc9b6', bevel=.002, cell=1)
+        for sx in (-1, 1): m.box((sx * .07, .075, .055), (.035, .05, .03), 'plastic', '#2c2c2f', bevel=.006, cell=1)
+        with m.at((.012, .08, .082), r=(0, -7, 9)):
+            m.loft([((-.095, 0, -.004), .03, .024), ((-.055, 0, .012), .017, .015), ((.055, 0, .012), .017, .015), ((.095, 0, -.004), .03, .024)], 'plastic', '#2c2c2f', n=10, steps=3, bulge=.5)
+        m.tube([(-.1 + .012 * math.sin(i * 1.9), .1 + i * .006, .03 + .012 * math.cos(i * 1.9) - .028 * math.sin(i / 24 * math.pi)) for i in range(25)], .003, 'rubber', '#1c1c1e', n=4, steps=1)
     # desk fan on the far left corner
     with m.at((-1.04, .2, top), r=(0, 0, 24)):
         m.lathe([(.085, 0), (.095, .008), (.095, .022), (.035, .04), (.02, .05)], 'plastic', '#3c5a66', n=18)
@@ -93,13 +103,13 @@ def office_chair():
         m.tube([(.1, 0, .4), (.2, -.02, .39), (.27, -.03, .385)], .007, 'chrome', n=6)             # height lever
         m.ball((.28, -.03, .385), .014, 'plastic', BLACK, n=8, m=4)
         n0 = len(m.bm.verts)
-        m.loft([((0, 0, .425), .2, .2), ((0, 0, .45), .245, .235), ((0, 0, .485), .235, .225)], 'fabric', '#5d322c', n=24, steps=2, power=3.4)
-        m.dent((.05, -.02, .53), .2, .028, d=(0, 0, -1))               # years of the same guard
-        m.box((-.1, -.14, .498), (.12, .06, .002), 'plastic', '#8d9093', cell=1)                   # tape over a split
-        m.ball((.16, -.19, .47), (.035, .025, .02), 'fabric', '#c8b056', n=8, m=4)                 # foam coming out of the corner
+        m.loft([((0, 0, .43), .225, .215), ((0, 0, .455), .245, .235), ((0, 0, .49), .235, .225)], 'fabric', '#5d322c', n=24, steps=2, power=3.4, bulge=.12)
+        m.dent((.03, -.02, .53), .2, .022, d=(0, 0, -1))               # years of the same guard
+        with m.at((-.1, -.15, .515), r=(8, 0, 20)): m.box((0, 0, 0), (.13, .06, .002), 'plastic', '#8d9093', cell=1)                   # tape over a split
+        m.ball((.17, -.2, .49), (.04, .028, .02), 'fabric', '#c8b056', n=8, m=4)                 # foam coming out of the corner
         m.loft([((0, .2, .4), .03, .007), ((0, .29, .42), .03, .007), ((0, .31, .6), .03, .007), ((0, .29, .78), .03, .007)], 'steel', '#2a2b2e', n=8, steps=3, ends=(False, False), hint=(1, 0, 0))
         with m.at((0, .26, .82), r=(-9, 0, 0)):
-            m.loft([((0, -.035, 0), .19, .13), ((0, 0, 0), .215, .155), ((0, .03, 0), .2, .14)], 'fabric', '#5d322c', n=24, steps=2, power=3.4, hint=(1, 0, 0))
+            m.loft([((0, -.03, 0), .2, .14), ((0, 0, 0), .215, .155), ((0, .03, 0), .205, .145)], 'fabric', '#5d322c', n=24, steps=2, power=3.4, hint=(1, 0, 0), bulge=.12)
             m.box((0, .047, 0), (.3, .012, .2), 'plastic', BLACK, bevel=.004, cell=1)
         m.crumple(.004, .08, 2, since=n0)
         for s in (-1, 1):
@@ -183,7 +193,7 @@ def locker():
     m.box((0, .01, .98), (.9, .48, 1.8), 'paint', C, bevel=.008, cell=.2)
     for sx in (-1, 1):
         for sy in (-1, 1): m.box((sx * .41, sy * .2 + .01, .04), (.05, .05, .08), 'steel', '#3a3d40', cell=1)
-    m.poly([(-.43, -.2315, .1), (.43, -.2315, .1), (.43, -.2315, 1.86), (-.43, -.2315, 1.86)], 'flat', '#030303')
+    m.poly([(-.43, -.2315, .1), (-.01, -.2315, .1), (-.01, -.2315, 1.86), (-.43, -.2315, 1.86)], 'flat', '#030303')   # the dark behind the open door
     m.box((0, -.235, .98), (.02, .012, 1.78), 'paint', C, cell=.3)                           # centre post
 
     def door():
