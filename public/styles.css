@@ -147,6 +147,7 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-mark.is-flat i { width: 16px; height: 7px; margin: 2px 0; border-radius: 4px; background: currentColor; }
 .ts-f-mark.is-ping i { animation: ts-ping .8s ease-out infinite; }
 .ts-f-mark.is-dock { color: var(--sapphire); }
+.ts-f-mark.is-gen { color: var(--peach); }
 .ts-f-mark.is-dock i { border-radius: 2px; }
 /* Past the end of the strip: an arrow says keep turning. */
 .ts-f-mark[data-side="left"] { transform: none; justify-items: start; }
@@ -251,6 +252,9 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-t-use { right: 24px; bottom: 26px; width: 84px; height: 84px; }
 .ts-t-torch { right: 124px; bottom: 18px; width: 66px; height: 66px; }
 .ts-t-run { right: 34px; bottom: 126px; width: 62px; height: 62px; }
+.ts-t-phone { right: 204px; bottom: 14px; width: 58px; height: 58px; }
+.ts-t-zoom { right: 116px; bottom: 102px; width: 56px; height: 56px; }
+.ts-t-zoom[hidden] { display: none; }
 .ts-t-btn[aria-pressed="true"] { border-color: var(--yellow); color: var(--yellow); }
 .ts-t-use.is-ready { border-color: var(--yellow); }
 .ts-t-use.is-held { background: color-mix(in srgb, var(--yellow) 30%, var(--neu-ink)); }

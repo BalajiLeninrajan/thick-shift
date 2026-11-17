@@ -32,6 +32,12 @@ export const F = {
   // night 5 under a quarter of a torch and runs dry about once every three nights, and a tenth to a third of
   // all flattenings happen with the torch dead.
   BAT_LIFE: 65,
+  // The phone's minimap is meant for a glance. It draws on the torch's battery at PHONE times the torch's rate:
+  // a full battery lasts 16 seconds with only the phone up and 13 with the torch on too, so a two-second look
+  // costs an eighth of a battery. While it is up the guard walks at PHONE_WALK of their pace and cannot run
+  // (player.js), and the torch hangs at the floor and holds nothing (beamOn). Not tuned in the balance harness,
+  // whose guards never use it.
+  PHONE: 4, PHONE_WALK: .6,
   BAT_PICKUP: .5,
   CHARGE: 1 / 60,
   REACH: 2.2,          // how close you must be to use something
@@ -60,7 +66,10 @@ const KEEN = [.8, .04];   // the share of those speeds they manage on night 1, a
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
 const LIT_SPEED = [0, .2, .4];
 const ROT = { night: .12, hour: .066, ire: .25 };
-const BANG_IRE = .1, GLARE_PER_IRE = 40;   // what a bang on a shut door adds to m.ire, and the seconds in a torch beam that add 1
+// What a bang on a shut door adds to m.ire, and the seconds in a torch beam that add 1. Tuned so torchlight is what
+// rots them: on night 1, about 25 s of beam on one mascot brings out stage 1 and 35 to 50 s stage 2, so a guard who
+// lights up everything sees two of them at stage 2 before 6 AM (and the torch holds those two less well).
+const BANG_IRE = .1, GLARE_PER_IRE = 18;
 const FLAT_BAT = .5;         // what is left of a torch its guard was flattened on top of
 // Seconds one sits on the guard it caught. It then looks round for whoever comes to peel them up rather than going
 // home, so a catch is no breather for the rest of a crew: when it went home, four guards won most of night 5.
@@ -148,7 +157,7 @@ const guards = () => Object.values(game.players);
 const standing = S => S.players.filter(p => !p.flat);
 
 function placeGuard(p, i) {
-  Object.assign(p, spawnPoint(i), { pitch: 0, on: false, bat: 1, flat: false, flatBy: -1, sp: false, act: '', safe: 0, callAt: 0 });
+  Object.assign(p, spawnPoint(i), { pitch: 0, on: false, ph: false, bat: 1, flat: false, flatBy: -1, sp: false, act: '', safe: 0, callAt: 0 });
 }
 
 export function startFloorNight(n) {
@@ -214,7 +223,10 @@ function drainPower(S, dt) {
     if (S.power > 0) S.power = Math.max(0, Math.min(S.cap, S.power + ((S.crank ? CRANK : 0) - drain) * dt));
     if (S.power <= 0) { S.out = true; S.restart = 0; S.doors = OPEN(); emit('out'); }
   }
-  for (const p of S.players) if (p.on) { p.bat = Math.max(0, p.bat - dt / F.BAT_LIFE); if (p.bat <= 0) p.on = false; }
+  for (const p of S.players) {
+    const draw = (p.on ? 1 : 0) + (p.ph ? F.PHONE : 0);
+    if (draw) { p.bat = Math.max(0, p.bat - draw * dt / F.BAT_LIFE); if (p.bat <= 0) p.on = p.ph = false; }
+  }
 }
 
 function respawnBatteries(S, dt) {
@@ -240,7 +252,7 @@ function turnWave(S, dt) {
 
 // Is this guard's torch on this mascot?
 function beamOn(S, p, m) {
-  if (!p.on || p.bat <= 0 || p.flat || Math.abs(p.pitch) > .7) return false;
+  if (!p.on || p.bat <= 0 || p.flat || p.ph || Math.abs(p.pitch) > .7) return false;
   const d = dist(p, m);
   if (d > F.BEAM_RANGE) return false;
   // Close up the beam is wider than the thing in it.
@@ -326,7 +338,7 @@ function goTo(S, m, b, goal, speed, dt, eager) {
 
 function flatten(S, p, m, b) {
   if (S.dev?.god) return;
-  Object.assign(p, { flat: true, on: false, flatBy: m.i, act: '' });
+  Object.assign(p, { flat: true, on: false, ph: false, flatBy: m.i, act: '' });
   S.flats = (S.flats || 0) + 1; record(S, 'flats', [p.name, m.i]);
   emit('flat', { id: p.id, by: m.i, x: p.x, z: p.z });
   p.bat *= FLAT_BAT;
@@ -524,7 +536,8 @@ export function actFloor(pid, a) {
     if (!p.flat && Number.isFinite(a.x) && Number.isFinite(a.z) && walkable(a.x, a.z, .2, S.doors)) { p.x = a.x; p.z = a.z; }
     p.yaw = num(a.yaw, -1e3, 1e3, p.yaw); p.pitch = num(a.pitch, -1.6, 1.6, p.pitch);
     p.on = !!a.on && p.bat > 0 && !p.flat;
-    p.sp = !!a.sp && !p.flat;
+    p.ph = !!a.ph && p.bat > 0 && !p.flat;   // the phone up, reading the map
+    p.sp = !!a.sp && !p.flat && !p.ph;
     p.act = p.flat ? '' : a.act === 'crank' || a.act === 'charge' ? a.act : '';
     return true;
   }

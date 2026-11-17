@@ -1,7 +1,7 @@
 // Another guard: guard.glb (or a stand-in with the same parts) walking where
-// the host says they are, looking where they look, with their torch, a name
-// tag, and the two things that happen to guards: being flattened and being
-// peeled back up.
+// the host says they are, looking where they look, with their torch, their
+// phone when they have it up, a name tag, and the two things that happen to
+// guards: being flattened and being peeled back up.
 import * as THREE from 'three';
 import { loadActor, instance } from '../assets.js';
 import { sees } from '../map.js';
@@ -15,10 +15,12 @@ const THIN = .035;                    // how much of a guard is left, front to b
 // A leg's angle through the walk cycle: the first half on the ground, the foot going back at ground speed; the second half swinging forward.
 const legAt = (q, A, S) => q < .5 ? Math.asin(S * (q * 4 - 1)) : A * Math.cos(Math.PI * (q * 2 - 1));
 const LOWERED = .9;                   // radians the torch arm drops when the torch is off
+const PHONE_UP = 1.15;                // radians the left arm comes forward to hold the phone up
 
 const GEO = {
   body: new THREE.CapsuleGeometry(.24, .5, 4, 10).translate(0, .32, 0), head: new THREE.SphereGeometry(.15, 12, 10).translate(0, .14, 0), cap: new THREE.CylinderGeometry(.16, .16, .07, 12).translate(0, .27, 0),
   limb: new THREE.CapsuleGeometry(.075, .5, 4, 8).translate(0, -.3, 0), reach: new THREE.CapsuleGeometry(.075, .4, 4, 8).rotateX(Math.PI / 2).translate(0, 0, .25), leg: new THREE.CapsuleGeometry(.1, .65, 4, 8).translate(0, -.42, 0), torch: new THREE.CylinderGeometry(.03, .04, .22, 8).rotateX(Math.PI / 2).translate(0, .05, .5),
+  phone: new THREE.BoxGeometry(.06, .13, .025),
 };
 const MAT = { cloth: new THREE.MeshStandardMaterial({ color: 0x2d3a5c, roughness: .9 }), skin: new THREE.MeshStandardMaterial({ color: 0xd9a98a, roughness: .8 }), dark: new THREE.MeshStandardMaterial({ color: 0x15151c, roughness: .6 }) };
 
@@ -34,6 +36,24 @@ function standIn() {
   node('arm_L', body, .31, .52, 0, [GEO.limb, MAT.cloth]); node('arm_R', body, -.31, .52, 0, [GEO.reach, MAT.cloth], [GEO.torch, MAT.dark]);   // held out, like the model's
   node('leg_L', body, .13, 0, 0, [GEO.leg, MAT.dark]); node('leg_R', body, -.13, 0, 0, [GEO.leg, MAT.dark]);
   return root;
+}
+
+// Where the left hand is: just above the lowest point of arm_L, where the phone goes.
+function handOn(model) {
+  const arm = model.getObjectByName('arm_L'), box = new THREE.Box3(), part = new THREE.Box3();
+  if (!arm) return null;
+  model.updateWorldMatrix(true, true);
+  const back = arm.matrixWorld.clone().invert();
+  arm.traverse(m => {
+    if (!m.isMesh) return;
+    m.geometry.computeBoundingBox();
+    box.union(part.copy(m.geometry.boundingBox).applyMatrix4(back.clone().multiply(m.matrixWorld)));
+  });
+  const at = new THREE.Object3D();
+  if (box.isEmpty()) at.position.set(0, -.55, .05);
+  else { box.getCenter(at.position); at.position.y = box.min.y + .07; at.position.z = box.max.z + .02; }
+  arm.add(at);
+  return at;
 }
 
 // A point on arm_R at the front of the torch (the middle of guard.glb's
@@ -82,18 +102,23 @@ export class Guard {
     this.group = new THREE.Group(); this.pivot = new THREE.Group(); this.group.add(this.pivot); scene.add(this.group);
     this.track = new Track();
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: lens(), blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); this.glow.scale.setScalar(.12);
+    // The phone in the left hand, and the green of its screen, which shows across a room.
+    this.phone = new THREE.Group(); this.phone.add(new THREE.Mesh(GEO.phone, MAT.dark)); this.phone.rotation.x = PHONE_UP - .25;
+    this.screen = new THREE.Sprite(new THREE.SpriteMaterial({ map: lens(), color: 0x8cffb0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    this.screen.scale.setScalar(.16); this.screen.position.set(0, .02, -.03); this.phone.add(this.screen);   // on the side facing its guard
     this.wear(standIn());
     loadActor('guard').then(src => { if (src) { this.pivot.remove(this.model); this.wear(instance(src)); } });
     this.tag = nameTag(p.name); this.group.add(this.tag);
     this.phase = 0; this.walk = 0; this.t = 0; this.raise = 0; this.busy = 0;
     this.flat = 0; this.flatV = 0; this.isFlat = false; this.seen = true; this.lookT = 0;
-    this.on = false; this.dist = 0; this.aim = new THREE.Vector3(); this.hand = new THREE.Vector3();
+    this.on = false; this.ph = false; this.phRaise = 0; this.dist = 0; this.aim = new THREE.Vector3(); this.hand = new THREE.Vector3();
   }
   wear(model) {
     this.model = model; this.rig = buildRig(model); this.pivot.add(model);
     this.lens = lensOn(model) || this.pivot; this.lens.add(this.glow);
+    (handOn(model) || this.pivot).add(this.phone);
   }
-  dispose(scene) { scene.remove(this.group); this.tag.material.map.dispose(); this.tag.material.dispose(); this.glow.material.dispose(); }
+  dispose(scene) { scene.remove(this.group); this.tag.material.map.dispose(); this.tag.material.dispose(); this.glow.material.dispose(); this.screen.material.dispose(); }
 
   sync(p, S, dt, view) {
     const tr = this.track, rig = this.rig, flat = !!p.flat;
@@ -104,6 +129,7 @@ export class Guard {
     this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
     if ((this.lookT -= dt) <= 0) { this.lookT = .25; this.seen = this.dist < 2 || sees(view.x, view.z, tr.x, tr.z, S.doors); }
     this.on = !!p.on && p.bat > 0 && !flat;
+    this.ph = !!p.ph && p.bat > 0 && !flat;
 
     // Flattened: over onto their back and squashed to a few centimetres, fast,
     // with a wobble as it settles. Peeled: the same spring the other way, and
@@ -130,13 +156,16 @@ export class Guard {
     const lL = legAt(p0, A, S1) * wk, lR = legAt((p0 + .5) % 1, A, S1) * wk, lean = run * .22 * wk, body = rig.body, c2 = Math.cos(TAU * p0);
     body.rx += lean; body.py += h * (Math.cos(p0 < .5 ? lL : lR) - 1) + run * Math.abs(Math.sin(TAU * p0)) * .04 * wk; body.ry -= .12 * c2 * wk;
     rig.leg_L.rx += lL - lean; rig.leg_R.rx += lR - lean; rig.leg_L.ry += .12 * c2 * wk; rig.leg_R.ry += .12 * c2 * wk;
-    rig.arm_L.rx += (.35 + run * .5) * c2 * wk;
+    this.phRaise += ((this.ph ? 1 : 0) - this.phRaise) * Math.min(1, dt * 8);
+    rig.arm_L.rx += (.35 + run * .5) * c2 * wk * (1 - this.phRaise) - PHONE_UP * this.phRaise * up;
+    this.phone.visible = this.phRaise > .05;
+    this.screen.visible = this.ph && !inside;
     body.s *= 1 + .01 * Math.sin(this.t * 1.9);
 
     /* head and torch arm follow where they look */
     const pitch = clamp(tr.pitch, -1.1, 1.1), act = p.act || '';
     rig.head.rx -= pitch * .8 * up; body.rx -= pitch * .12 * up;
-    this.raise += ((this.on ? 1 : 0) - this.raise) * Math.min(1, dt * 9);
+    this.raise += ((this.on && !this.ph ? 1 : 0) - this.raise) * Math.min(1, dt * 9);
     this.busy += ((act ? 1 : 0) - this.busy) * Math.min(1, dt * 8);
     const b = this.busy * up, idle = (1 - b) * up;
     rig.arm_R.rx += (-pitch * this.raise + (LOWERED - .3 * c2 * wk) * (1 - this.raise)) * idle;   // aimed when on, hanging and swinging when off
@@ -154,9 +183,10 @@ export class Guard {
     rig.apply();
 
     // Where the torch is and where it points, for the light (actors.js lends it one) and the lens glow.
-    const cp = Math.cos(pitch);
+    // With the phone up the torch hangs at the floor.
+    const aimP = pitch + (-.9 - pitch) * this.phRaise, cp = Math.cos(aimP);
     this.lens.getWorldPosition(this.hand);
-    this.aim.set(Math.sin(tr.yaw) * cp, Math.sin(pitch), Math.cos(tr.yaw) * cp);
+    this.aim.set(Math.sin(tr.yaw) * cp, Math.sin(aimP), Math.cos(tr.yaw) * cp);
     this.glow.visible = this.on && !inside;
   }
 }

@@ -2,7 +2,7 @@
 // owns its own position and tells the host about twelve times a second
 // (a 'p' action); everything else about the guard comes back in S.
 // Keyboard (WASD to walk, and arrow keys to look for anyone without a mouse), mouse and gamepad are read here. Touch is in touch.js, which
-// drives the same guard through pad, look() and toggleTorch().
+// drives the same guard through pad, look(), toggleTorch(), togglePhone() and toggleZoom().
 import * as THREE from 'three';
 import { game } from '../state.js';
 import { send } from '../net.js';
@@ -14,9 +14,9 @@ const SENS = .0022, SEND_MS = 80;   // radians per pixel of mouse travel at sens
 const PITCH_MAX = 1.45;
 // The arrow keys look: radians per second at sensitivity 1, reached after ARROW_RAMP seconds of holding (a tap nudges).
 const ARROW = { turn: 2.2, tilt: 1.4 }, ARROW_RAMP = .35;
-const GAME_KEYS = /^(Key[WASDEFQ]|Arrow|Shift|Space)/;
+const GAME_KEYS = /^(Key[WASDEFQCR]|Arrow|Shift|Space)/;
 // A standard-mapping gamepad: left stick walks, right stick looks.
-const GP = { use: 0, torch: 2, call: 3, sprint: 4, watch: 5, pause: 9, dead: .18, look: 2.8 };   // look: radians per second at full tilt
+const GP = { use: 0, phone: 1, torch: 2, call: 3, sprint: 4, watch: 5, pause: 9, zoom: 12, dead: .18, look: 2.8 };   // look: radians per second at full tilt
 
 // Look settings, kept between visits. sens multiplies SENS.
 export const prefs = { sens: 1, invert: false };
@@ -31,12 +31,14 @@ export function createPlayer(camera, canvas) {
   const me = { x: 0, z: 0, yaw: Math.PI, pitch: 0, on: false, stam: 1, sp: false, act: '', bob: 0, target: null, hold: 0, moving: 0, locked: false, flat: false,
     paused: false,   // the pause panel is up: nothing here moves the guard
     touch: false,    // a finger is driving (set by touch.js), so there is no pointer to lock
-    watch: null };   // id of the teammate a flat guard is watching through, or null
+    watch: null,     // id of the teammate a flat guard is watching through, or null
+    ph: false,       // the phone is up, showing the minimap
+    zoom: false };   // the minimap shows the whole building, not what is round the guard
   const keys = new Set();
   // Touch and gamepad code can drive the guard through these instead of keys.
   const pad = { fwd: 0, strafe: 0, sprint: false, use: false };
   const gp = { fwd: 0, strafe: 0, sprint: false, use: false };
-  let sinceSprint = 0, lastSend = 0, usedTap = false, lastCall = -1e9;
+  let sinceSprint = 0, lastSend = 0, usedTap = false, lastCall = -1e9, drop = 0;
   let mouseLocked = false, gpLive = false, gpWas = [];
   let keysLive = false, arrowHeld = 0;   // keysLive: playing on the keyboard alone, so there is no pointer to lock
 
@@ -47,6 +49,11 @@ export function createPlayer(camera, canvas) {
 
   const playing = () => game.S?.phase === 'play';
   function toggleTorch() { if (playing() && !me.flat) { me.on = !me.on; unlockAudio(); } }
+  // The phone runs on the torch's battery, so a dead battery will not raise it.
+  const charged = () => (game.S.players.find(p => p.id === game.myId)?.bat ?? 1) > 0;
+  function togglePhone() { if (playing() && !me.flat && !me.paused && (me.ph || charged())) me.ph = !me.ph; }
+  // The minimap between what is round the guard and the whole building. Only with the phone up.
+  function toggleZoom() { if (me.ph) me.zoom = !me.zoom; }
 
   // Turn the view by a mouse's worth of pixels.
   function look(dx, dy) {
@@ -77,7 +84,7 @@ export function createPlayer(camera, canvas) {
     if (me.paused) { if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); keysLive = true; resume(); } return; }
     if (e.code === 'Escape' && !mouseLocked) { pause(); return; }
     if (GAME_KEYS.test(e.code)) keysLive = true;
-    if (!e.repeat) ({ KeyF: toggleTorch, KeyQ: call, Space: watchNext })[e.code]?.();
+    if (!e.repeat) ({ KeyF: toggleTorch, KeyQ: call, Space: watchNext, KeyC: togglePhone, KeyR: toggleZoom })[e.code]?.();
     if (e.code === 'Space' || e.code === 'Tab' || e.code.startsWith('Arrow')) e.preventDefault();
     keys.add(e.code);
   });
@@ -118,6 +125,8 @@ export function createPlayer(camera, canvas) {
       if (hit(GP.torch)) toggleTorch();
       if (hit(GP.call)) call();
       if (hit(GP.watch)) watchNext();
+      if (hit(GP.phone)) togglePhone();
+      if (hit(GP.zoom)) toggleZoom();
     }
     gpWas = g.buttons.map(b => b.pressed);
   }
@@ -155,13 +164,14 @@ export function createPlayer(camera, canvas) {
     const f = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0) + pad.fwd + gp.fwd;
     const s = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + pad.strafe + gp.strafe;
     const len = Math.hypot(f, s);
-    const wantSprint = (keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.sprint || gp.sprint) && f > 0 && me.act === '';
+    // With the phone up: no running, and a slower walk (F.PHONE_WALK).
+    const wantSprint = (keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.sprint || gp.sprint) && f > 0 && me.act === '' && !me.ph;
     me.sp = wantSprint && me.stam > 0 && len > 0;
     if (me.sp) { me.stam = Math.max(0, me.stam - STAMINA.drain * dt); sinceSprint = 0; }
     else { sinceSprint += dt; if (sinceSprint > STAMINA.rest) me.stam = Math.min(1, me.stam + STAMINA.gain * dt); }
     me.moving = 0;
     if (!len || me.act === 'crank') return;
-    const speed = (me.sp ? F.SPRINT : F.WALK) * Math.min(1, len) * dt / len;
+    const speed = (me.sp ? F.SPRINT : F.WALK * (me.ph ? F.PHONE_WALK : 1)) * Math.min(1, len) * dt / len;
     const sin = Math.sin(me.yaw), cos = Math.cos(me.yaw);
     // right of forward (sin, cos) is (-cos, sin)
     me.moving = slide(me, (f * sin - s * cos) * speed, (f * cos + s * sin) * speed, PLAYER_R, S.doors);
@@ -169,9 +179,9 @@ export function createPlayer(camera, canvas) {
   }
 
   return {
-    me, pad, torch, toggleTorch, look, pause, resume, call, watchNext,
+    me, pad, torch, toggleTorch, togglePhone, toggleZoom, look, pause, resume, call, watchNext,
     // Put the guard where the host says they are: the start of a night, or after joining.
-    reset(mine) { Object.assign(me, { x: mine.x, z: mine.z, yaw: mine.yaw ?? Math.PI, pitch: 0, on: false, stam: 1, bob: 0, hold: 0, paused: false, watch: null }); },
+    reset(mine) { Object.assign(me, { x: mine.x, z: mine.z, yaw: mine.yaw ?? Math.PI, pitch: 0, on: false, ph: false, stam: 1, bob: 0, hold: 0, paused: false, watch: null }); },
     update(S, dt, now) {
       const mine = S.players.find(p => p.id === game.myId);
       if (!mine || mine.x == null) return;
@@ -184,19 +194,22 @@ export function createPlayer(camera, canvas) {
       me.locked = (mouseLocked || me.touch || gpLive || keysLive) && !me.paused;
       if (!S.players.some(p => p.id === me.watch && !p.flat) || !me.flat) me.watch = null;
       if (S.phase === 'play') {
-        if (me.flat || me.paused) { me.act = ''; me.target = null; me.sp = false; me.hold = 0; me.moving = 0; if (me.flat) me.on = false; }
+        if (me.flat || me.paused) { me.act = ''; me.target = null; me.sp = false; me.hold = 0; me.moving = 0; if (me.flat) me.on = me.ph = false; }
         else {
           // A door shut on top of us, or the host put us somewhere else.
           if (!walkable(me.x, me.z, PLAYER_R * .5, S.doors)) { me.x = mine.x; me.z = mine.z; }
           me.target = findTarget(S, mine);
           use(S, dt); walk(S, dt);
-          if (mine.bat <= 0) me.on = false;
+          if (mine.bat <= 0) me.on = me.ph = false;
         }
-        if (now - lastSend > SEND_MS) { lastSend = now; send({ t: 'p', x: me.x, z: me.z, yaw: me.yaw, pitch: me.pitch, on: me.on, sp: me.sp, act: me.act }); }
+        if (now - lastSend > SEND_MS) { lastSend = now; send({ t: 'p', x: me.x, z: me.z, yaw: me.yaw, pitch: me.pitch, on: me.on, ph: me.ph, sp: me.sp, act: me.act }); }
       }
       // Low battery: the beam dims and stutters.
       const bat = mine.bat ?? 1, weak = bat < .15 ? (Math.sin(now * .05) > -.2 ? .5 : .1) : 1;
       torch.intensity = me.on && bat > 0 ? 60 * weak * (.55 + .45 * Math.min(1, bat * 3)) : 0;
+      // With the phone up the torch hangs in the other hand, lighting the floor a step ahead (and holding nothing: sim3d.js beamOn).
+      drop += ((me.ph ? 1 : 0) - drop) * Math.min(1, dt * 8);
+      torch.target.position.set(.05, -.05 - 2.4 * drop, -3 + 1.2 * drop);
       const y = me.flat ? .22 : EYE + Math.sin(me.bob) * .045;
       camera.position.set(me.x, y, me.z);
       camera.rotation.set(me.flat ? Math.max(.3, me.pitch) : me.pitch, me.yaw + Math.PI, 0, 'YXZ');

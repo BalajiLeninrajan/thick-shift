@@ -7,7 +7,7 @@ import { loadPart } from '../assets.js';
 const HELD = { x: .2, y: -.2, z: -.42 }, LOWERED = .1;   // metres from the eye; how far it sinks when off
 
 export function createHands(camera) {
-  let torch = null, lens = null, up = 0, away = 0;
+  let torch = null, lens = null, up = 0, away = 0, drop = 0;
   loadPart('props_a', 'flashlight').then(o => {
     if (!o) return;
     torch = o; torch.position.set(HELD.x, HELD.y - LOWERED, HELD.z);
@@ -16,15 +16,16 @@ export function createHands(camera) {
     camera.add(torch);
   });
   return {
-    // me: player.js's guard (on, bob, moving, flat). busy: the catch has the camera.
+    // me: player.js's guard (on, ph, bob, moving, flat). busy: the catch has the camera.
     update(me, dt, busy) {
       if (!torch) return;
       up += ((me.on ? 1 : 0) - up) * Math.min(1, dt * 10);
+      drop += ((me.ph ? 1 : 0) - drop) * Math.min(1, dt * 8);   // the phone is up: the torch hangs, pointing at the floor
       away += ((me.flat || busy ? 1 : 0) - away) * Math.min(1, dt * 8);
       torch.visible = away < .98;
       const sway = Math.sin(me.bob) * .012, dip = Math.abs(Math.cos(me.bob)) * .012;
-      torch.position.set(HELD.x + sway, HELD.y - LOWERED * (1 - up) - dip - away * .5, HELD.z);
-      torch.rotation.set(-.35 * (1 - up) + sway * 2, .06 - sway * 3, 0);
+      torch.position.set(HELD.x + sway, HELD.y - LOWERED * (1 - up) - .06 * drop - dip - away * .5, HELD.z);
+      torch.rotation.set(-.35 * (1 - up) - .55 * drop + sway * 2, .06 - sway * 3, 0);
       if (lens) lens.emissiveIntensity = up * 3;
     },
   };

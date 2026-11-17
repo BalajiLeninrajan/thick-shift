@@ -55,15 +55,17 @@ function messageScreen(key, title, detail, back) {
 // The two ways to play. The host picks one in the lobby; S.mode carries it to the guests.
 const MODES = {
   booth: ['The booth', 'Sit in the security booth. Watch the cameras, shut the doors, keep the power on.'],
-  floor: ['The floor (3D)', 'Walk the building with a torch and do the watchman\'s rounds. This is all there is to it:'],
+  floor: ['The floor (3D)', 'Walk the building with a torch and do the watchman\'s rounds. It plays nothing like the booth:'],
 };
 // The floor's whole loop. Everyone reads it in the lobby while the others join.
 const FLOOR_RULES = [
-  'Every hour a few clocks come due. Find them and punch them, or the building loses power.',
-  'Your torch stops a mascot while the beam is on it. The torch runs down.',
-  'Spare batteries lie around the building, and the booth has a charger.',
-  'Touch a mascot and you are flat on the floor until a friend peels you up.',
-  'Everyone flat at once ends the night.',
+  '<b>The job.</b> Every hour a few clocks around the building come due. Yellow marks on the compass lead to them. Hold E at each one to punch it before the hour is up. A missed clock costs power.',
+  '<b>Power.</b> Doors, lights and the torch charger run on it. Hold E at the generator crank in the booth to put some back. At zero every door opens and the lights go out.',
+  '<b>Your torch.</b> The beam holds a mascot back while it is on it. A full battery lasts about a minute: charge it at the dock in the booth, or pick up spare batteries.',
+  '<b>Your phone.</b> C holds up a map of the building, R zooms it. It eats the torch battery four times as fast as the torch, and while it is up you walk slowly and the torch points at the floor. Glance, then put it away.',
+  '<b>The mascots.</b> They stand still, then wander in waves. Touch one and you are flat until a friend stands over you and holds E. While flat, Q calls for help and Space watches a friend. Everyone flat at once ends the night.',
+  '<b>The booth</b> is where you start: the generator, the charger, a wall map of what is due, and three doors you can shut. Shut doors drain power fast and the clocks do not wait, so it is no place to hide.',
+  '<b>Controls.</b> W A S D walk, mouse or arrow keys look, Shift runs, F is the torch, C is the phone, E uses things, Esc pauses.',
 ];
 function modePicker(S) {
   const mode = S.mode || 'booth';

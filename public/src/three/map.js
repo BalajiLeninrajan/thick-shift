@@ -80,8 +80,8 @@ export const CLOCKS = [
   { room: 3, x: 23.5, z: 24.95, face: Math.PI },
   { room: 4, x: 31.7, z: 24.95, face: Math.PI },
 ];
-// The generator is the point a guard cranks it from; the machine stands behind that, against the north wall.
-export const GENERATOR = { room: 1, x: 40.4, z: 1.6, face: 0 };
+// The generator is the point a guard cranks it from; the machine stands behind that, in the booth's south-west corner beside the charger.
+export const GENERATOR = { room: 9, x: 16, z: 42.4, face: Math.PI };
 export const CHARGER = { room: 9, x: 21, z: 43.95, face: Math.PI };
 export const WALL_MAP = { room: 9, x: 18.5, z: 36.55, face: 0 };
 // The button for each booth door, on the wall inside the booth beside it.

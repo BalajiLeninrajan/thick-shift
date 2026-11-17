@@ -11,6 +11,7 @@ import { EYE } from './map.js';
 import { hourF } from './sim3d.js';
 import { createSound } from './sound.js';
 import { createPost } from './post.js';
+import { createPhone } from './actors/phone.js';
 import { dreadOf } from '../rules.js';
 
 let app = null;
@@ -32,6 +33,7 @@ function create() {
   // post.js draws the frame and owns its resolution and the torch's shadow map; the torch gets a cheap torch's beam pattern.
   const post = createPost(renderer, player.torch);
   player.torch.map = world.torchCookie();
+  const phone = createPhone(camera);   // in the left hand, with the minimap on its screen
   let last = performance.now(), lastT = 1e9, lastEv = 0, shown = false, seat = null;
 
   function show(on) {
@@ -113,12 +115,13 @@ function create() {
       scene.fog.density = FOG + FOG_DREAD * dread;
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch);   // also runs the catch, which takes the camera
+      phone.update(S, player.me, dt, now, actors.scare.active);
       sound.update(S, player.me, dt);
       hud.update(S, player.me, actors.scare.active);
       post.render(scene, camera, now, fear, dread, world.stop);
       actors.after();
     },
-    threat, player, actors, world, scene, camera, renderer, sound, post,
+    threat, player, actors, world, scene, camera, renderer, sound, post, phone,
   };
 }
 

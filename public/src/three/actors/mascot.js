@@ -22,8 +22,6 @@ const footAt = q => q < .5 ? q * 4 - 1 : Math.cos(Math.PI * (q * 2 - 1));
 
 const SEEN_RANGE = 46;     // metres: past this the fog has it anyway
 const LOOK_EVERY = .2;     // seconds between checks of whether the camera can see it
-const SWAP_WAIT = 5;       // seconds a rot change waits for a moment nobody can see
-const LURCH = .7;          // seconds the convulsion lasts that covers a swap in plain view
 const STEP_HZ = 14;        // shudders and spasms change this often and hold in between, like the 2D art
 const SEAT_LOCAL = .8, SEAT_OTHER = .3;   // metres from a flattened guard's middle to where it sits: on them, but in view of the one underneath
 
@@ -51,7 +49,7 @@ export class Mascot {
     this.ch = new Float32Array(NCH); this.cv = new Float32Array(NCH);
     this.fits = [null, null, null]; this.asked = [false, false, false];
     this.cur = this.fit(standIn(this.def), 0, null, false); this.pivot.add(this.cur.model);
-    this.rot = 0; this.swapT = 0; this.lurch = 0;
+    this.rot = 0; this.onScreen = new THREE.Sphere();
     this.t = i * 7.3; this.gt = i * 3.1;   // its own clock, and one that stops when a beam freezes it
     this.phase = i * .37; this.walk = 0; this.live = 1; this.hop = 0;
     this.st = 'rest'; this.lit = false; this.seen = true; this.lookT = i * .05; this.dist = 0;
@@ -102,23 +100,14 @@ export class Mascot {
   show(fit) {
     this.pivot.remove(this.cur.model); this.pivot.add(fit.model);
     for (const p of fit.rig.list) { p.ax = p.az = p.vx = p.vz = 0; }
-    this.cur = fit; this.swapT = 0;
+    this.cur = fit;
     this.load(fit.stage + 1);
   }
 
-  // Follow m.rot to the next model. A swap nobody can see is done at once;
-  // otherwise it waits a few seconds for one, and then covers it with a lurch.
-  stage(rot, hidden, dt) {
-    if (this.lurch > 0) {
-      const before = this.lurch; this.lurch -= dt / LURCH;
-      if (before > .5 && this.lurch <= .5 && this.fits[rot]) this.show(this.fits[rot]);
-      return;
-    }
+  // Follow m.rot to the next model, but only while this screen cannot see it: it changes behind your back.
+  stage(rot, hidden) {
     const want = this.fits[rot];
-    if (!want || want === this.cur) return;
-    this.swapT += dt;
-    if (hidden || !this.cur.real) this.show(want);
-    else if (this.swapT > SWAP_WAIT) this.lurch = 1;
+    if (want && want !== this.cur && (hidden || !this.cur.real)) this.show(want);
   }
 
   /* ---------- events ---------- */
@@ -131,7 +120,7 @@ export class Mascot {
   bang() { this.kSlam = 1; }
   crash() { this.kRecoil = 1; }
   spotted() { this.kSpot = 1; }
-  reset() { this.track.n = 0; this.seat.on = false; this.seat.w = this.seat.turn = 0; this.scareOn = false; this.scareW = 0; this.scareBite = 0; this.lurch = 0; this.ch.fill(0); this.cv.fill(0); }
+  reset() { this.track.n = 0; this.seat.on = false; this.seat.w = this.seat.turn = 0; this.scareOn = false; this.scareW = 0; this.scareBite = 0; this.ch.fill(0); this.cv.fill(0); }
 
   /* ---------- the frame ---------- */
 
@@ -150,8 +139,10 @@ export class Mascot {
       const d = this.dist, px = -(tr.z - view.z) / (d || 1) * 1.1, pz = (tr.x - view.x) / (d || 1) * 1.1;
       this.seen = d < SEEN_RANGE && (d < 3 || this.scareOn || sees(view.x, view.z, tr.x, tr.z, S.doors) || sees(view.x, view.z, tr.x + px, tr.z + pz, S.doors) || sees(view.x, view.z, tr.x - px, tr.z - pz, S.doors));
     }
-    // In the dark with no beam on it, it is a black shape: as good as unseen for a swap.
-    this.stage(this.rot, !this.seen || (!lit && !lightsF(S) && !(view.torch && this.dist < 14)), dt);
+    // Hidden for a swap: a wall is in the way, or it is off the edge of the picture (a generous sphere round it, so
+    // nothing changes at the edge of the screen). Dark does not count: its eyes still show.
+    const sph = this.onScreen; sph.center.set(tr.x, this.cur.height / 2, tr.z); sph.radius = this.cur.height * .6 + .6;
+    this.stage(this.rot, !this.seen || !view.frustum.intersectsSphere(sph));
     const fit = this.cur, rig = fit.rig, style = fit.style, ch = this.ch, cv = this.cv;
 
     // What changed since the last frame.
@@ -231,23 +222,22 @@ export class Mascot {
 
     /* the pose */
     const slam = this.kSlam, recoil = this.kRecoil, land = this.kLand, lunge = this.kLunge;
-    const fold = this.lurch > 0 ? Math.sin(Math.PI * (1 - this.lurch)) : 0;   // the convulsion over a swap
-    body.rx += ch[C.lean] + slam * .45 - recoil * .5 + lunge * .22 + fold * .6;
+    body.rx += ch[C.lean] + slam * .45 - recoil * .5 + lunge * .22;
     root.pz += slam * .3 - recoil * .25 + lunge * .25 + this.scareBite * .15;
     const jawMove = ch[C.jaw] + lunge * .6 + slam * .5;
     rig.jaw.rx += clamp(jawMove, 0, 1.15) * style.jaw;
-    const armUp = slam * 1.3 - fold * .8;   // the arms come down with the hit
+    const armUp = slam * 1.3;   // the arms come down with the hit
     rig.arm_L.rx += ch[C.armL] + armUp; rig.arm_R.rx += ch[C.armR] + armUp; rig.arm_L.rz += ch[C.out]; rig.arm_R.rz -= ch[C.out];
     rig.forearm_L.rx += ch[C.fore]; rig.forearm_R.rx += ch[C.fore];
     // Sitting: the rear comes down hard and the legs go out in front.
     const sit = ch[C.sit];
     // It settles its weight, and bounces a little. A floater comes down to hover on them.
-    const drop = style.floats ? sit * (fit.height * .3 + Math.sin(this.t * 2.2) * .04) : sit * (h * style.sit - Math.abs(Math.sin(this.t * 2.2)) * .04) + fold * h * .25;
+    const drop = style.floats ? sit * (fit.height * .3 + Math.sin(this.t * 2.2) * .04) : sit * (h * style.sit - Math.abs(Math.sin(this.t * 2.2)) * .04);
     // A crouch needs knees. Without shins the legs cannot shorten, so it stays up.
-    const crouch = rig.has.shin_L ? clamp(ch[C.drop] + fold * .1, 0, h * .4) : 0, bend = Math.acos(1 - crouch / h);
+    const crouch = rig.has.shin_L ? clamp(ch[C.drop], 0, h * .4) : 0, bend = Math.acos(1 - crouch / h);
     root.py -= drop + crouch;
     // The shudder: stepped noise, held between steps.
-    const tick = Math.floor(this.t * STEP_HZ) + this.i * 50, shake = ch[C.shake] + fold * 1.5 + lunge * .6 + this.kSpot * .5;
+    const tick = Math.floor(this.t * STEP_HZ) + this.i * 50, shake = ch[C.shake] + lunge * .6 + this.kSpot * .5;
     if (shake > .01) {
       body.rz += shake * .035 * (hash(tick) - .5); body.rx += shake * .03 * (hash(tick + .3) - .5); body.ry += shake * .04 * (hash(tick + .6) - .5);
       rig.arm_L.rx += shake * .16 * (hash(tick + 1) - .5); rig.arm_R.rx += shake * .16 * (hash(tick + 2) - .5); rig.head.rz += shake * .1 * (hash(tick + 3) - .5);
@@ -335,8 +325,7 @@ export class Mascot {
     const lim = style.limit;
     rig.arm_L.rx = clamp(rig.arm_L.rx, -lim.arm, lim.arm); rig.arm_R.rx = clamp(rig.arm_R.rx, -lim.arm, lim.arm); rig.arm_L.rz = clamp(rig.arm_L.rz, -lim.out, lim.out); rig.arm_R.rz = clamp(rig.arm_R.rz, -lim.out, lim.out);
     rig.forearm_L.rx = clamp(rig.forearm_L.rx, -lim.fore, lim.fore); rig.forearm_R.rx = clamp(rig.forearm_R.rx, -lim.fore, lim.fore);
-    // The lurch that covers a swap: it folds down into itself and comes up as something else.
-    this.pivot.scale.set(1 + fold * .12, 1 - fold * .3 - land * .06, 1 + fold * .12);
+    this.pivot.scale.set(1, 1 - land * .06, 1);
     rig.apply();
 
     /* eyes in the dark */

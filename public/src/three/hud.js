@@ -7,7 +7,7 @@
 // states).
 import { MASC } from '../config.js';
 import { game } from '../state.js';
-import { ROOMS3, CLOCKS, CHARGER, roomAt, route } from './map.js';
+import { ROOMS3, CLOCKS, CHARGER, GENERATOR, roomAt, route } from './map.js';
 import { F, clockF } from './sim3d.js';
 import { prefs, savePrefs } from './player.js';
 import { createTouch, toggleFullscreen, canFullscreen } from './touch.js';
@@ -16,6 +16,7 @@ const HALF_SPAN = 1.3;    // radians either side of straight ahead that fit on t
 const LABEL_GAP = 6;      // pixels kept between two compass labels
 const NAV_MS = 150;       // one compass mark has its walking route refreshed this often, in turn
 const LOW_BAT = .25, LOW_POWER = 25, CRIT_POWER = 10;
+const GEN_MARK = 40;   // power, in percent, under which the compass points to the generator
 const HURRY = 15;         // seconds left in the hour when unpunched clocks turn red
 const CELLS = 5;          // bars in the torch battery
 // What each mascot did to you, by MASC index. The booth game's lines are about doors.
@@ -41,8 +42,8 @@ const TOAST_ICON = { info: 'info', tip: 'info', clock: 'clock', missed: 'clock',
 const MAX_TOASTS = 3;
 
 const CONTROLS = {
-  keys: [['Walk', 'W A S D'], ['Run', 'Shift'], ['Look', 'Mouse, or the arrow keys'], ['Torch', 'F or click'], ['Use, punch, peel', 'E (hold)'], ['Call out while flat', 'Q'], ['Watch a teammate while flat', 'Space'], ['Pause', 'Esc'], ['Back from pause', 'Enter']],
-  touch: [['Walk', 'Left thumb, anywhere'], ['Look', 'Drag the right side'], ['Use, punch, peel', 'Hold Use'], ['Run', 'Tap Run, lift to stop']],
+  keys: [['Walk', 'W A S D'], ['Run', 'Shift'], ['Look', 'Mouse, or the arrow keys'], ['Torch', 'F or click'], ['Phone map (drains the battery fast)', 'C'], ['Zoom the phone map', 'R'], ['Use, punch, peel', 'E (hold)'], ['Call out while flat', 'Q'], ['Watch a teammate while flat', 'Space'], ['Pause', 'Esc'], ['Back from pause', 'Enter']],
+  touch: [['Walk', 'Left thumb, anywhere'], ['Look', 'Drag the right side'], ['Use, punch, peel', 'Hold Use'], ['Run', 'Tap Run, lift to stop'], ['Phone map (drains the battery fast)', 'The phone button, then Map to zoom']],
 };
 
 const el = (tag, cls, parent) => { const e = document.createElement(tag); e.className = cls; parent.append(e); return e; };
@@ -82,7 +83,7 @@ export function createHud(stage, player) {
       <div class="ts-f-stam"><i></i></div>
       <div class="ts-f-torch-row">${icon('torch')}<div class="ts-f-cells">${'<i></i>'.repeat(CELLS)}</div><span></span></div>
     </div>
-    <div class="ts-f-start"><b>Click, or press a key, to play</b><span><kbd class="ts-key">W A S D</kbd> walk <kbd class="ts-key">← → ↑ ↓</kbd> look <kbd class="ts-key">Shift</kbd> run <kbd class="ts-key">F</kbd> torch <kbd class="ts-key">E</kbd> use <kbd class="ts-key">Esc</kbd> pause</span></div>
+    <div class="ts-f-start"><b>Click, or press a key, to play</b><span><kbd class="ts-key">W A S D</kbd> walk <kbd class="ts-key">← → ↑ ↓</kbd> look <kbd class="ts-key">Shift</kbd> run <kbd class="ts-key">F</kbd> torch <kbd class="ts-key">E</kbd> use <kbd class="ts-key">C</kbd> phone <kbd class="ts-key">Esc</kbd> pause</span></div>
     <div class="ts-f-flat">
       <span class="tag cn-tone-danger">Flat</span>
       <b></b>
@@ -104,7 +105,7 @@ export function createHud(stage, player) {
           <div class="cn-stack cn-gap-16">
             <div class="field"><label for="ts-sens">Look sensitivity</label><input class="slider" id="ts-sens" type="range" min=".3" max="2.5" step=".1"><small></small></div>
             <label class="choice"><input class="switch" type="checkbox" id="ts-invert">Invert looking up and down</label>
-            <p class="cn-meta cn-m-0">A gamepad works too: sticks to walk and look, A to use, X for the torch, LB to run, Start to pause.</p>
+            <p class="cn-meta cn-m-0">A gamepad works too: sticks to walk and look, A to use, X for the torch, B for the phone map and d-pad up to zoom it, LB to run, Start to pause.</p>
           </div>
         </div>
         <div class="panel-footer cn-cluster">
@@ -177,6 +178,7 @@ export function createHud(stage, player) {
     S.clocks?.forEach((c, i) => { if (c === 1) list.push({ key: 'c' + i, kind: 'clock', x: CLOCKS[i].x + Math.sin(CLOCKS[i].face) * .9, z: CLOCKS[i].z + Math.cos(CLOCKS[i].face) * .9 }); });
     for (const p of S.players) if (p.flat && p.id !== game.myId && p.x != null) list.push({ key: 'p' + p.id, kind: 'flat', x: p.x, z: p.z, name: p.name, ping: pings.get(p.id) > now });
     if ((mine.bat ?? 1) < LOW_BAT && S.power > 0) list.push({ key: 'dock', kind: 'dock', x: CHARGER.x, z: CHARGER.z - .9, name: 'charger' });
+    if (S.power < GEN_MARK) list.push({ key: 'gen', kind: 'gen', x: GENERATOR.x + Math.sin(GENERATOR.face) * .9, z: GENERATOR.z + Math.cos(GENERATOR.face) * .9, name: 'crank' });
     if (now - navAt > NAV_MS && list.length) { navAt = now; findRoute(S, me, list[navTurn++ % list.length]); }
 
     for (const t of ticks) {
@@ -259,7 +261,7 @@ export function createHud(stage, player) {
       powerBar.style.width = S.power + '%';
       set(powerText, S.power > 0 ? Math.ceil(S.power) + '%' : 'Power out');
       data(power, 'level', S.power <= 0 ? 'out' : S.power < CRIT_POWER ? 'crit' : S.power < LOW_POWER ? 'low' : S.crank ? 'crank' : 'ok');
-      if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say('Power under a quarter. Someone crank the generator backstage.', 'power', 7);
+      if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say('Power under a quarter. Someone crank the generator in the booth.', 'power', 7);
       was.power = S.power;
 
       // This hour's clocks: a pip each, filled once punched, and the time left to punch the rest.
@@ -279,11 +281,12 @@ export function createHud(stage, player) {
       const lit = Math.ceil(bat * CELLS - .001), state = bat <= 0 ? 'dead' : me.act === 'charge' ? 'charging' : bat < LOW_BAT ? 'low' : 'ok';
       torch.hidden = me.flat;
       cells.forEach((c, i) => c.classList.toggle('is-full', i < lit));
-      data(torch, 'state', state); data(torch, 'on', me.on);
-      set(torchText, state === 'dead' ? 'Torch dead' : state === 'charging' ? 'Charging' : state === 'low' ? (me.on ? 'Torch low' : 'Torch low, off') : me.on ? '' : 'Off');
+      // The phone draws on the same battery, four times as fast, so the bars count as on while it is up.
+      data(torch, 'state', state); data(torch, 'on', me.on || me.ph);
+      set(torchText, state === 'dead' ? 'Torch dead' : state === 'charging' ? 'Charging' : me.ph ? (me.on ? 'Torch and phone' : 'Phone') : state === 'low' ? (me.on ? 'Torch low' : 'Torch low, off') : me.on ? '' : 'Off');
       if (bat < LOW_BAT && was.bat >= LOW_BAT) say('Torch nearly out. Find a battery, or follow the blue mark to the booth charger.', 'torch', 7);
       if (bat <= 0 && was.bat > 0) say('The torch is dead.', 'torch', 6);
-      if (bat < .5 && was.bat >= .5) tip('bat', 'The torch runs down while it is on. Batteries turn up on the floor. The booth has a charger.');
+      if (bat < .5 && was.bat >= .5) tip('bat', me.ph ? 'The phone eats the battery four times as fast as the torch. Batteries turn up on the floor. The booth has a charger.' : 'The torch runs down while it is on. Batteries turn up on the floor. The booth has a charger.');
       was.bat = bat;
       stam.hidden = me.stam >= 1;
       stam.firstChild.style.width = me.stam * 100 + '%';

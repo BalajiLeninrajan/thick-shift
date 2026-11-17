@@ -7,6 +7,7 @@
 //   guard.js   another guard: walking, torch, name, being flattened and peeled
 //   scare.js   the catch, seen by the guard who was caught
 //   hands.js   your own torch, held in view
+//   phone.js   your own phone, held in view, with the minimap (app.js makes it)
 import * as THREE from 'three';
 import { MASC } from '../config.js';
 import { game } from '../state.js';
@@ -25,7 +26,8 @@ const nearest = (a, b) => a.dist - b.dist;
 export function createActors(scene, camera, renderer) {
   const mascots = MASC.map((_, i) => new Mascot(scene, i, renderer));
   const guards = new Map(), scare = createScare(camera, renderer.domElement), hands = createHands(camera);
-  const view = { x: 0, y: 0, z: 0, id: '', flat: false, torch: false, watch: null };   // watch: the guard a flat guard is watching through
+  // watch: the guard a flat guard is watching through. frustum: what this screen shows, so a mascot only changes model off it.
+  const view = { x: 0, y: 0, z: 0, id: '', flat: false, torch: false, watch: null, frustum: new THREE.Frustum() }, viewProj = new THREE.Matrix4();
   let lights = null;   // made when the first other guard turns up, so a guard alone pays for none
   const lit = [], list = [];   // list: the guards in the scene, as an array to walk without garbage
 
@@ -61,6 +63,7 @@ export function createActors(scene, camera, renderer) {
     // me, torch: player.js's guard and its light. Call after player.update, which has put the camera where the guard is.
     sync(S, dt, me, torch) {
       hostClock.see(S.t, performance.now() / 1000);
+      camera.updateMatrixWorld(); view.frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
       view.x = camera.position.x; view.y = camera.position.y; view.z = camera.position.z; view.id = game.myId; view.flat = me.flat; view.torch = me.on; view.watch = me.watch;
       for (const m of S.m) mascots[m.i].sync(m, S, dt, view);
       for (const g of list) g.here = false;

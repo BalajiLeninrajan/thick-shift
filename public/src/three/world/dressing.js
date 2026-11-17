@@ -103,7 +103,7 @@ export const DRESSING = [
   [['wall_fan', 26, 34.75, 270, wall(1.15)], ['trash_bag', 25.4, 35.6, 0], ['cardboard_box', 18.2, 35.6, 30]],
   // 9 Security Booth. The desk under the wall map, lockers, a coat in the corner.
   [
-    ['desk', 20.35, 37.15, 0], ['monitor_bank', 20.35, 36.95, 0, { y: .75 }], ['office_chair', 20.5, 38.3, 20], ['locker', 16.2, 43.65, 180], ['locker', 17.15, 43.65, 180],
+    ['desk', 20.35, 37.15, 0], ['monitor_bank', 20.35, 36.95, 0, { y: .75 }], ['office_chair', 20.5, 38.3, 20], ['locker', 15.6, 36.85, 0], ['locker', 16.55, 36.85, 0],
     ['coat_rack', 26.4, 43.4, 200], ['cardboard_box', 25.7, 43.5, 15], ['fire_extinguisher', 24.9, 44, 180, wall(1.2)], ['fuse_box', 22.6, 44, 180, wall(1.5)],
   ],
 ];
