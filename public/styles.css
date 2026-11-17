@@ -80,7 +80,8 @@ body {
 .ts-logo-bad { color: var(--red); }
 
 /* Dev menu (?dev). Scrolls inside itself and stays narrow enough to play beside. */
-.ts-dev { width: min(380px, 92vw); }
+.ts-dev { width: min(380px, 92vw); z-index: 50; }
+.ts-dev[data-mode="floor"] .ts-dev-booth, .ts-dev:not([data-mode="floor"]) .ts-dev-floor, .ts-dev[data-mode="floor"] .cn-stack:has(> label > #dv-dread-on), .ts-dev[data-mode="floor"] label:has(#dv-cold) { display: none; }
 .ts-dev-body { overflow-y: auto; touch-action: pan-y; }
 
 /* ---------- 3D mode ---------- */

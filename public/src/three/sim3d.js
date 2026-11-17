@@ -27,10 +27,9 @@ import { CLOCKS, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, REST, BOOTH, DUCTS, 
 export const F = {
   HOUR: 70,            // seconds per in-game hour: a night is seven minutes
   WALK: 3, SPRINT: 5.2,
-  // Seconds of light in a full torch, what a spare battery adds, and charge per second at the booth dock. Tuned
-  // so the dock cannot keep up with a torch left on outside: a competent guard spends a quarter to a third of
-  // night 5 under a quarter of a torch and runs dry about once every three nights, and a tenth to a third of
-  // all flattenings happen with the torch dead.
+  // Seconds of light in a full torch, what a spare battery adds, and charge per second at the booth dock. The
+  // battery numbers were tuned with a one-minute dock (a competent guard spent a quarter to a third of night 5
+  // under a quarter of a torch); the dock is now four times faster at the same power per torch, untuned.
   BAT_LIFE: 65,
   // The phone's minimap is meant for a glance. It draws on the torch's battery at PHONE times the torch's rate:
   // a full battery lasts 16 seconds with only the phone up and 13 with the torch on too, so a two-second look
@@ -39,7 +38,7 @@ export const F = {
   // whose guards never use it.
   PHONE: 4, PHONE_WALK: .6,
   BAT_PICKUP: .5,
-  CHARGE: 1 / 60,
+  CHARGE: 1 / 15,     // a full torch in 15 s at the dock (it was a minute, which felt like standing still for nothing)
   REACH: 2.2,          // how close you must be to use something
   PUNCH_HOLD: 1.2, PEEL_HOLD: 3,   // seconds of holding the use key (timed by the client)
   BEAM_RANGE: 12, BEAM_HALF: .3,   // how far and how wide (radians) a torch holds a mascot
@@ -51,7 +50,7 @@ export const F = {
 // Percent of building power per second, and per event. Tuned so a competent guard alone ends night 5 near half
 // power and a crew of four near 15%, losing the power on half its nights and winning under half as often if
 // nobody cranks, and so a crew that shuts the doors and stays in is dead soon after 2 AM.
-const DRAIN = { base: .02, lights: .03, door: .18, charge: .12 };
+const DRAIN = { base: .02, lights: .03, door: .18, charge: .48 };   // charge: four times the old rate, to match the dock's 4x speed, so a full torch still costs the same power
 const WEAR = .07;   // everything draws this much more for each night after the first
 const CRANK = .7, BANG_COST = 2.5;
 // What missing every clock of one hour costs: power now, and ceiling for the rest of the night. Tuned so ignoring
