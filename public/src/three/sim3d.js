@@ -10,7 +10,8 @@
 // still, less so the more it has rotted, and the torch runs down. Touch a
 // mascot and you are flattened, and stay on the floor until another guard
 // peels you up. Everyone flat at once ends the night. A guard can step into a
-// locker to get out of sight, and a mascot that saw them go in pulls them out.
+// locker to get out of sight. A mascot that saw them go in pulls them out, one
+// that lost them nearby checks the lockers, and one that lingers sniffs them out.
 //
 // The numbers here were tuned against scripted guards in tools/balance/floor.mjs
 // (`node tools/balance/floor.mjs`), which plays every night with careless,
@@ -97,6 +98,10 @@ const RAMP = [0, 1, 2, 3.15, 4.3];
 // [metres, chance], as for noise(). Not tuned: the balance harness's `hides`
 // scenarios only show that a guard who uses lockers does about as well as one who does not, and sitting in one loses.
 const SNIFF = { near: 1.6, time: 3 };
+// One that loses the guard it was hunting checks the lockers near where it last knew they were: each within
+// CHECK.near metres of that spot, nearest first, with CHECK.chance, at most CHECK.most of them. It walks to the
+// doors and opens them, empty or not. The way to beat it is to get further than that, or to outlast its wind.
+const CHECK = { near: 8, chance: .5, most: 2 };
 const LOCKER_NOISE = [6, .5];
 
 const OPEN = () => ({ L: false, V: false, R: false });
@@ -178,7 +183,7 @@ export function startFloorNight(n) {
   // Nothing moves for the first half minute of night 1, and a quarter minute after that.
   const quiet = n === 1 ? 34 : Math.max(12, 26 - n * 3);
   wave = quiet + rnd(0, 6);
-  brains = MASC.map((d, i) => ({ path: [], repath: 0, dest: null, tgt: null, last: null, lost: 0, timer: rnd(0, 8), bangs: 0, cool: 0, dir: null, stuck: 0, key: null, home: false, spent: false, woke: false, notice: 0, wind: 0, stared: 0, reach: null, knows: -1, sniff: 0 }));
+  brains = MASC.map((d, i) => ({ path: [], repath: 0, dest: null, tgt: null, last: null, lost: 0, timer: rnd(0, 8), bangs: 0, cool: 0, dir: null, stuck: 0, key: null, home: false, spent: false, woke: false, notice: 0, wind: 0, stared: 0, reach: null, knows: -1, sniff: 0, checks: [] }));
   S.clocks = CLOCKS.map(() => 0);   // 0 idle, 1 due, 2 punched this hour
   S.tally = newTally(); S.total ||= newTally();
   const all = guards();
@@ -385,6 +390,13 @@ function openLockers(S, m, b, dt) {
   return true;
 }
 
+// The lockers a mascot looks in after losing a guard near here (CHECK).
+function lockersNear(at) {
+  if (!at) return [];
+  return HIDES.map((h, i) => ({ i, d: dist(h.at, at) })).filter(c => c.d < CHECK.near && Math.random() < CHECK.chance)
+    .sort((a, b) => a.d - b.d).slice(0, CHECK.most).map(c => c.i);
+}
+
 // A guard stepped into a locker. Whatever could see them do it knows where they are; whatever was hunting them and
 // still knew where they were (b.lost under its keeping time) does too.
 function seenHiding(S, p) {
@@ -410,7 +422,11 @@ function runMascot(S, m, b, dt) {
   m.lit = !!lighter;
   if (lighter) m.ire += dt / GLARE_PER_IRE;
   b.cool -= dt;
-  if (m.st !== b.was) { b.was = m.st; b.since = S.t; }
+  if (m.st !== b.was) {
+    // It has just lost the guard it was after: which lockers it will look in.
+    b.checks = m.st === 'search' && b.was === 'hunt' ? lockersNear(b.last) : m.st === 'search' ? b.checks : [];
+    b.was = m.st; b.since = S.t;
+  }
   const ductGuest = m.i === 2 ? up.find(p => inDucts(p) && S.t >= p.safe) : null;
 
   // Standing where it stands. A wave gets it moving, or (Squish) someone in the ducts.
@@ -475,6 +491,13 @@ function runMascot(S, m, b, dt) {
     return;
   }
 
+  // At the doors of a locker it meant to check: it opens them. Whoever is inside is found (openLockers, below).
+  const check = m.st === 'search' && b.checks.length ? HIDES[b.checks[0]] : null;
+  if (check && dist(m, check.at) < SNIFF.near) {
+    const i = b.checks.shift();
+    if (S.players.some(p => p.hid === i && !p.flat)) b.knows = i;
+    else { emit('check', { i: m.i, h: i, x: check.x, z: check.z }); b.timer = Math.max(b.timer, 1.5); }
+  }
   if (looking && openLockers(S, m, b, dt)) return;
 
   // Out of puff: it has had its turn.
@@ -506,7 +529,7 @@ function runMascot(S, m, b, dt) {
       if (m.i === 2 && roomAt(m.x, m.z) === DUCTS) speed *= SPEED.ducts;
     }
   } else if (m.st === 'search' && S.t - b.since > SEARCH_MAX) { m.st = 'roam'; b.dest = null; return; }
-  else if (m.st === 'search') { speed = SPEED.search * angry; goal = b.last; }
+  else if (m.st === 'search') { speed = SPEED.search * angry; goal = b.checks.length ? HIDES[b.checks[0]].at : b.last; }
   else {
     // Between waves they walk back to where they stand. So does one that has run out of puff or been
     // turned away at a door, and it stays there a while. With the power out nothing goes home.
@@ -532,7 +555,7 @@ function runMascot(S, m, b, dt) {
   if (res === 'blocked') { m.st = 'siege'; b.timer = 1.2; b.bangs = 0; emit('arrive', b.key); return; }
   if (res === 'nowhere') { m.st = 'roam'; b.tgt = null; b.dest = b.home ? REST[m.i] : null; return; }
   // Wedged short of somewhere it was only looking: look somewhere else.
-  if (res === 'jammed' && !seen) { if (m.st === 'hunt') { m.st = 'search'; b.timer = rnd(3, 5); b.last = { x: m.x, z: m.z }; } else if (m.st === 'search') { m.st = 'roam'; b.dest = null; } else if (!b.home) b.dest = null; return; }
+  if (res === 'jammed' && !seen) { if (m.st === 'hunt') { m.st = 'search'; b.timer = rnd(3, 5); b.last = { x: m.x, z: m.z }; } else if (m.st === 'search' && b.checks.length) b.checks.shift(); else if (m.st === 'search') { m.st = 'roam'; b.dest = null; } else if (!b.home) b.dest = null; return; }
   if (res === 'there') {
     if (m.st === 'roam') { b.timer -= dt; if (b.timer <= 0) { b.dest = null; b.timer = rnd(2, 7); } }
     else if (m.st === 'search') { m.yaw += dt * 1.5; b.timer -= dt; if (b.timer <= 0) { m.st = 'roam'; b.dest = null; b.timer = rnd(1, 3); } }

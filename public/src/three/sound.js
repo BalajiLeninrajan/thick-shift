@@ -232,6 +232,8 @@ export function createSound() {
       const clank = () => { sample('sheet3', { rate: x.in ? 1.7 : 1.5, gain: .45 }) || noise(.18, .35, { band: 2400, q: 3 }); tone(x.in ? 1400 : 1200, .03, 'square', .05, 0, .12); };
       if (mine(x.id)) clank(); else at(S, x, clank);
     },
+    // A mascot yanking open a locker that turned out empty.
+    check(x, S) { at(S, x, () => { sample('sheet3', { rate: 1.2, gain: .6 }) || noise(.25, .45, { band: 1800, q: 2 }); sample('knock1', { rate: .9, gain: .4, at: .35 }); }); },
     found(x, S) { at(S, x, () => { sample('slam2', { rate: 1.3, gain: .8 }) || noise(.3, .6, { band: 1500 }); sample('sheet3', { rate: 1.1, gain: .7, at: .02 }); }); },
     peel(x, S) {
       const rip = () => { noise(.5, .6, { band: 600, band2: 3600, q: 2.5, attack: .3 }); tone(300, .08, 'sine', .4, 900, .46); };
