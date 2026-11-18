@@ -4,7 +4,7 @@
 // guards: being flattened and being peeled back up.
 import * as THREE from 'three';
 import { loadActor, instance } from '../assets.js';
-import { sees } from '../map.js';
+import { glimpses, PLAYER_R } from '../map.js';
 import { F } from '../sim3d.js';
 import { Track, hostClock } from './track.js';
 import { buildRig } from './rig.js';
@@ -127,7 +127,8 @@ export class Guard {
     this.t += dt;
     this.group.position.set(tr.x, 0, tr.z); this.group.rotation.y = tr.yaw;
     this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
-    if ((this.lookT -= dt) <= 0) { this.lookT = .25; this.seen = this.dist < 2 || sees(view.x, view.z, tr.x, tr.z, S.doors); }
+    // Any of them in view past walls and shut doors (see mascot.js): a shoulder past a door jamb keeps them, and their torch.
+    if ((this.lookT -= dt) <= 0) { this.lookT = .25; this.seen = this.dist < 2 || glimpses(view.x, view.z, tr.x, tr.z, PLAYER_R, S.doors); }
     this.on = !!p.on && p.bat > 0 && !flat;
     this.ph = !!p.ph && p.bat > 0 && !flat;
 

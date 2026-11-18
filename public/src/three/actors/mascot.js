@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { MASC } from '../../config.js';
 import { loadActor, loadJSON, instance, EYE_PALE } from '../assets.js';
-import { sees, EYE } from '../map.js';
+import { glimpses, MASCOT_R, EYE } from '../map.js';
 import { lightsF } from '../sim3d.js';
 import { Track, hostClock, wrap } from './track.js';
 import { buildRig, lag } from './rig.js';
@@ -120,7 +120,8 @@ export class Mascot {
   bang() { this.kSlam = 1; }
   crash() { this.kRecoil = 1; }
   spotted() { this.kSpot = 1; }
-  reset() { this.track.n = 0; this.seat.on = false; this.seat.w = this.seat.turn = 0; this.scareOn = false; this.scareW = 0; this.scareBite = 0; this.ch.fill(0); this.cv.fill(0); }
+  // lookT = 0: it may have jumped home, so ask again next frame whether it can be seen.
+  reset() { this.track.n = 0; this.lookT = 0; this.seat.on = false; this.seat.w = this.seat.turn = 0; this.scareOn = false; this.scareW = 0; this.scareBite = 0; this.ch.fill(0); this.cv.fill(0); }
 
   /* ---------- the frame ---------- */
 
@@ -132,12 +133,14 @@ export class Mascot {
     this.rot = m.rot || 0; this.load(this.rot);
     const lit = !!m.lit && (st === 'roam' || st === 'search' || st === 'hunt');
 
-    // Can the camera see it? Three sight lines, to its middle and to either side of it.
+    // Can the camera see any of it? Only walls and shut doors count: sees() also stops at furniture, which is the
+    // host's rule for hiding, but a table hides none of a mascot from the eye. Lines across its whole width, close
+    // enough together that one half in view past a door jamb is not hidden with the rest.
     this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
     if ((this.lookT -= dt) <= 0) {
       this.lookT = LOOK_EVERY;
-      const d = this.dist, px = -(tr.z - view.z) / (d || 1) * 1.1, pz = (tr.x - view.x) / (d || 1) * 1.1;
-      this.seen = d < SEEN_RANGE && (d < 3 || this.scareOn || sees(view.x, view.z, tr.x, tr.z, S.doors) || sees(view.x, view.z, tr.x + px, tr.z + pz, S.doors) || sees(view.x, view.z, tr.x - px, tr.z - pz, S.doors));
+      const d = this.dist;
+      this.seen = d < SEEN_RANGE && (d < 3 || this.scareOn || glimpses(view.x, view.z, tr.x, tr.z, MASCOT_R, S.doors));
     }
     // Hidden for a swap: a wall is in the way, or it is off the edge of the picture (a generous sphere round it, so
     // nothing changes at the edge of the screen). Dark does not count: its eyes still show.

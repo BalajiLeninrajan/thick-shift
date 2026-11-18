@@ -164,6 +164,23 @@ export function clear(ax, az, bx, bz, r, doors, over) {
 export const sees = (ax, az, bx, bz, doors) => clear(ax, az, bx, bz, .04, doors);
 // Could an arm get from here to there? Walls and shut doors stop it. Furniture does not.
 export const reaches = (ax, az, bx, bz, doors) => clear(ax, az, bx, bz, .04, doors, true);
+// Can any of a body of radius r standing at b be seen from a? Lines to its middle and out to its edges across the
+// view, GLIMPSE apart, so a slice of it showing past a door jamb still counts. An edge point inside a wall is pulled
+// back toward the middle until it is out: the part in the wall is hidden anyway, but the part just short of it may not be.
+// Walls and shut doors block it, furniture does not: a table hides none of a body from the eye.
+const GLIMPSE = .25;   // metres: closer gave no fewer misses in testing
+export function glimpses(ax, az, bx, bz, r, doors) {
+  if (reaches(ax, az, bx, bz, doors)) return true;
+  const d = Math.hypot(bx - ax, bz - az) || 1, ux = -(bz - az) / d, uz = (bx - ax) / d, n = Math.ceil(r / GLIMPSE);
+  for (const side of [1, -1]) for (let k = 1; k <= n; k++) {
+    let o = Math.min(k * GLIMPSE, r) * side;
+    const lo = (k - 1) * GLIMPSE;
+    while (Math.abs(o) > lo && !walkable(bx + ux * o, bz + uz * o, .04, doors, true)) o -= .1 * side;
+    if (Math.abs(o) <= lo) break;   // the wall starts before this point: nothing further out on this side shows
+    if (clear(ax, az, bx + ux * o, bz + uz * o, .04, doors, true)) return true;
+  }
+  return false;
+}
 
 // Which room a point is in, or -1. A doorway counts as the room on its `a` side.
 export function roomAt(x, z) {
