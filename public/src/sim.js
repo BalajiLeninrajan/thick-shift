@@ -227,6 +227,8 @@ function moveMascot(S, m, dt, hour) {
 }
 
 let lastStep = performance.now();
+// A guest who takes over as host counts from now, not from when its page loaded.
+export function resumeStep() { lastStep = performance.now(); }
 export function step() {
   const S = game.S, now = performance.now();
   const dt = Math.min(1.5, (now - lastStep) / 1000) * (S.dev?.speed || 1);   // S.dev: cheats from the dev menu (dev.js)

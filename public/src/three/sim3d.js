@@ -141,7 +141,6 @@ function emit(type, x) {
 // What each mascot is thinking. Host only: guests get the result (m.st, m.x, m.z, m.yaw).
 let brains = [];
 let batTimers = [];   // seconds until a taken battery turns up somewhere else
-let wave = 0;         // seconds until the mascots stir or settle
 let crankNoise = 0;   // seconds until the turning crank is heard again
 // The balance harness reads what a mascot is after. Nothing in the game does.
 export const brainOf = i => brains[i];
@@ -164,8 +163,9 @@ export function startFloorNight(n) {
   Object.assign(S, { mode: 'floor', phase: 'play', night: n, t: 0, power: 100, cap: 100, out: false, restart: 0, stir: false, doors: OPEN(), killer: -1, killDoor: null, missed: 0, crank: false, round: -1 });
   S.m = MASC.map((d, i) => ({ i, x: REST[i].x, z: REST[i].z, yaw: REST[i].yaw, st: 'rest', rot: 0, lit: false, ire: 0 }));
   // Nothing moves for the first half minute of night 1, and a quarter minute after that.
+  // S.waveAt is when the mascots next stir or settle, on S.t, kept in S so a guest who takes over as host has it.
   const quiet = n === 1 ? 34 : Math.max(12, 26 - n * 3);
-  wave = quiet + rnd(0, 6);
+  S.waveAt = quiet + rnd(0, 6);
   brains = MASC.map((d, i) => ({ path: [], repath: 0, dest: null, tgt: null, last: null, lost: 0, timer: rnd(0, 8), bangs: 0, cool: 0, dir: null, stuck: 0, key: null, home: false, spent: false, woke: false, notice: 0, wind: 0, stared: 0, reach: null }));
   S.clocks = CLOCKS.map(() => 0);   // 0 idle, 1 due, 2 punched this hour
   S.tally = newTally(); S.total ||= newTally();
@@ -173,8 +173,34 @@ export function startFloorNight(n) {
   all.forEach(placeGuard);
   S.players = all;
   const spots = BATTERY_SPOTS.map((_, i) => i).sort(() => Math.random() - .5);
-  S.bats = spots.slice(0, Math.min(spots.length, 3 + all.length));
+  S.batN = Math.min(spots.length, 3 + all.length);   // the night's batteries, lying about or due back
+  S.bats = spots.slice(0, S.batN);
   batTimers = []; crankNoise = 0;
+}
+
+// A guest taking over from a host who left has S but none of the host's thinking, so make it up from S.
+// Each mascot keeps its place and state, except the ones that need what the old host knew (a charge's
+// heading, a besieged door): those look round where they stand. One on a hunt goes after the nearest guard.
+// What is lost errs toward the crew: Tank waits out a full gap before it charges, and one standing where it
+// stands stays put as long as one that has given up would.
+export function adoptFloor() {
+  const S = game.S, up = standing(S), h = heat(S);
+  lastStep = performance.now();
+  brains = S.m.map(m => {
+    const b = { path: [], repath: 0, dest: null, tgt: null, last: { x: m.x, z: m.z }, lost: 0, timer: rnd(0, 8), bangs: 0, cool: m.i === 3 ? CHARGE_GAP : 0, dir: null, stuck: 0, key: null, home: false, spent: false, woke: m.st !== 'rest', notice: 0, wind: 0, stared: 0, reach: null };
+    if (m.st === 'rest') b.timer = rnd(...SPENT) * (1 - .5 * h);
+    const prey = up.reduce((a, p) => !a || dist(m, p) < dist(m, a) ? p : a, null);
+    if (m.st === 'hunt' && prey) Object.assign(b, { tgt: prey.id, last: { x: prey.x, z: prey.z }, wind: (WIND[0] + WIND[1] * S.night) * (m.i ? 1 : 1.5) });
+    else if (['hunt', 'windup', 'charge', 'siege'].includes(m.st)) { m.st = 'search'; b.timer = rnd(3, 6); }
+    else if (m.st === 'feast' || m.st === 'stun') b.timer = rnd(1, 3);
+    return b;
+  });
+  // Batteries taken are back in 30 to 50 s. How long ago these went is lost, so they come back any time in that.
+  // A host from before S.batN and S.waveAt existed did not send them, so guess those from the crew and the wave.
+  const missing = (S.batN ?? Math.min(BATTERY_SPOTS.length, 3 + S.players.length)) - (S.bats || []).length;
+  batTimers = Array.from({ length: Math.max(0, missing) }, () => rnd(5, 50)).sort((a, b) => a - b);
+  S.waveAt ??= S.t + rnd(.2, 1) * (S.stir ? rnd(...STIR) * (1 + h) : rnd(...CALM) * (1 - .7 * h));
+  crankNoise = 0;
 }
 
 export function restartFloor() {
@@ -238,12 +264,12 @@ function respawnBatteries(S, dt) {
 }
 
 // The mascots stir, then settle, then stir again. With the power out they do not settle.
-function turnWave(S, dt) {
-  if (S.out) { if (!S.stir) { S.stir = true; emit('stir'); } wave = 0; return; }
-  if ((wave -= dt) > 0) return;
+function turnWave(S) {
+  if (S.out) { if (!S.stir) { S.stir = true; emit('stir'); } S.waveAt = S.t; return; }
+  if (S.t < S.waveAt) return;
   S.stir = !S.stir;
   const h = heat(S);
-  wave = S.stir ? rnd(...STIR) * (1 + h) : rnd(...CALM) * (1 - .7 * h);
+  S.waveAt = S.t + (S.stir ? rnd(...STIR) * (1 + h) : rnd(...CALM) * (1 - .7 * h));
   emit(S.stir ? 'stir' : 'calm');
 }
 
@@ -517,7 +543,7 @@ export function stepFloor() {
   }
   drainPower(S, dt);
   respawnBatteries(S, dt);
-  turnWave(S, dt);
+  turnWave(S);
   if (S.crank && (crankNoise -= dt) <= 0) { crankNoise = 2; noise(S, GENERATOR.x, GENERATOR.z, 24, .35); }
   if (S.dev?.freeze) return;
   for (let i = 0; i < S.m.length && S.phase === 'play'; i++) runMascot(S, S.m[i], brains[i], dt);
