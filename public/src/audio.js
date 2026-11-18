@@ -161,9 +161,9 @@ export function noise(d, v = .3, { at = 0, band = 0, band2 = 0, q = 1, attack = 
 // A piercing scream: two voices a semitone apart (so they beat against each
 // other), sweeping from about 2.6 kHz up past 6 kHz and cracking on the way
 // down. Everything below 2.8 kHz is cut, so there is no body to it, only edge.
-function shriek(level = .7) {
+export function shriek(level = .7, at = 0) {
   if (!ac) return;
-  const t0 = ac.currentTime + .06, dur = 1.5, t1 = t0 + dur, mix = ac.createGain();
+  const t0 = ac.currentTime + .06 + at, dur = 1.5, t1 = t0 + dur, mix = ac.createGain();
   for (const ratio of [1, 1.06]) {
     const voice = ac.createOscillator(), rough = ac.createOscillator(), depth = ac.createGain();
     voice.type = rough.type = 'sawtooth';
@@ -187,7 +187,7 @@ function shriek(level = .7) {
   const cut1 = ac.createBiquadFilter(), cut2 = ac.createBiquadFilter(), bite = ac.createBiquadFilter();
   cut1.type = cut2.type = 'highpass'; cut1.frequency.value = cut2.frequency.value = 2800;
   bite.type = 'peaking'; bite.frequency.value = 4200; bite.Q.value = 1.2; bite.gain.value = 9;
-  mix.connect(cut1).connect(cut2).connect(bite).connect(chop).connect(amp).connect(master);
+  mix.connect(cut1).connect(cut2).connect(bite).connect(chop).connect(amp).connect(out());
 }
 
 // The part of a heavy impact you feel more than hear.

@@ -9,7 +9,7 @@
 // that happen before then are dropped, not queued.
 import { MASC, DOORS } from '../config.js';
 import { game, rnd } from '../state.js';
-import { SFX, ctx, bus, room, into, muffle, voices, sample, tone, noise, boom, pick, whiteNoise } from '../audio.js';
+import { SFX, ctx, bus, room, into, muffle, voices, sample, tone, noise, boom, pick, whiteNoise, shriek } from '../audio.js';
 import { ROOMS3, DOORWAYS, PANELS, GENERATOR, CHARGER, DUCTS, EYE, sees, roomAt } from './map.js';
 import { lightsF } from './sim3d.js';
 import { CUES } from './actors/scare.js';
@@ -81,7 +81,7 @@ function doorwaysBetween(a, b, doors) {
 const SIZE = ROOMS3.map(r => { const [x0, z0, x1, z1] = r.rects[0]; return Math.max(0, Math.min(1, Math.log((x1 - x0) * (z1 - z0) * r.h / 69) / Math.log(14))); });
 
 export function createSound() {
-  let ac = null, now = 0, rig = null, lastEv = -1, stingAt = -9, under = false, echo = 1;
+  let ac = null, now = 0, rig = null, lastEv = -1, stingAt = -9, sting = null, wasPlay = false, under = false, echo = 1;
   let head = { x: 0, z: 0, fx: 0, fz: 1 }, doors = null, torchOn = false, sources = 0, steps = 0, pant = 0, gasp = false, crank = 0, holdTick = 0, dim = false;
 
   /* ---------- the graph ---------- */
@@ -163,6 +163,14 @@ export function createSound() {
     into(e.in, fn);
   }
   const mine = id => id === game.myId;
+  // Stop this guard's stinger, sounding or still to come. Its parts are
+  // scheduled ahead and cannot be stopped one by one, so it plays through one gain.
+  function cut(over = .04) {
+    if (!sting) return;
+    const g = sting; sting = null;
+    g.gain.cancelScheduledValues(now); g.gain.setTargetAtTime(0, now, over);
+    setTimeout(() => g.disconnect(), 500);
+  }
 
   /* ---------- events ---------- */
 
@@ -205,15 +213,23 @@ export function createSound() {
         at(S, x, () => { boom({ from: 90, to: 28, level: .7 }); sample('thud', { rate: .6, gain: .7 }); noise(.4, .45, { band: 2600, band2: 260, q: 1.2 }); tone(620, .38, 'sine', .14, 80); for (let k = 0; k < 3; k++) tone(240 - k * 40, .07, 'sine', .12, 120, .45 + k * .11); });
         return;
       }
-      // The stinger, hung on the catch's own timings (actors/scare.js): a hit as
-      // the camera is taken, its voice as the face arrives, lower at the bite, then the floor.
+      // The booth game's jumpscare at the booth's levels, hung on the catch's own
+      // timings (actors/scare.js): a hit as the camera is taken, its voice and the
+      // shriek as the face arrives, lower at the bite, then the floor. It has to
+      // be louder than everything else on the floor, so the limiter ducks the rest.
       const rate = GROWL_RATE[x.by], c = CUES;
-      stingAt = now;
-      // The levels look small. The limiter adds gain of its own, and the growl is a hot recording.
-      sample('hit_low', { gain: .32, at: c.grab }); boom({ level: .3, at: c.grab });
-      sample('scare_growl', { gain: .45, rate, at: c.face }) || noise(1.2, .4, { at: c.face });
-      sample('scare_growl', { gain: .25, rate: rate * .5, lowpass: 900, at: c.bite }); boom({ from: 110, to: 40, level: .25, at: c.bite });
-      boom({ from: 90, to: 26, level: .32, at: c.floor }); sample('thud', { rate: .5, gain: .32, at: c.floor }); noise(.35, .2, { band: 2200, band2: 240, at: c.floor });
+      cut(); stingAt = now; sting = gain(1); sting.connect(bus());
+      into(sting, () => {
+        sample('hit_low', { gain: .8, at: c.grab }); boom({ level: .6, at: c.grab });
+        sample('scare_growl', { gain: 1.7, rate, at: c.face }) || noise(1.2, .6, { at: c.face });
+        shriek(.42, c.face);
+        sample('scare_growl', { gain: .9, rate: rate * .5, lowpass: 900, at: c.bite }); boom({ from: 110, to: 40, level: .5, at: c.bite });
+        boom({ from: 90, to: 26, level: .6, at: c.floor }); sample('thud', { rate: .5, gain: .6, at: c.floor }); noise(.35, .3, { band: 2200, band2: 240, at: c.floor });
+      });
+      // The growls run on for seconds after the catch. A guard still in the
+      // night lets them go, or their tail holds the limiter down over the
+      // teammates and the peel this guard is waiting to hear.
+      if (S.phase === 'play') sting.gain.setTargetAtTime(0, now + c.end, .3);
     },
     // A flat guard calling for help: two notes from where they lie.
     call(x, S) {
@@ -333,7 +349,8 @@ export function createSound() {
   }
 
   return {
-    quiet,
+    // The floor is put away: nothing of it goes on sounding.
+    quiet() { quiet(); cut(); },
     // Call once per frame while a night on the floor is drawn. me: player.me.
     update(S, me, dt) {
       ac = ctx();
@@ -345,12 +362,18 @@ export function createSound() {
       now = ac.currentTime;
       rig ||= build();
       if (S.phase !== 'play') {
-        // The night is over and the screens take it from here. Everyone flat is
-        // the booth game's jumpscare, heard in full.
-        quiet();
-        if (fresh.some(e => e.type === 'scare')) SFX.scare();
+        // The night is over and the screens take it from here. A guard caught
+        // last gets the night's end in the same tick as their catch, so their
+        // stinger is played here, still on the catch's timings. A guard already
+        // flat hears the booth game's jumpscare, unless their own is still sounding.
+        quiet(); wasPlay = false;
+        const caught = fresh.find(e => e.type === 'flat' && mine(e.x.id));
+        if (caught) ON.flat(caught.x, S);
+        else if (fresh.some(e => e.type === 'scare') && now - stingAt > CUES.end) { cut(); SFX.scare(); }
         return;
       }
+      // A night began: what is left of the last one's stinger does not carry into it.
+      if (!wasPlay) { wasPlay = true; cut(); }
       const mate = S.players.find(p => mine(p.id)) || {}, l = ac.listener;
       if (Number.isFinite(me.x + me.z + me.yaw)) head = { x: me.x, z: me.z, fx: Math.sin(me.yaw), fz: Math.cos(me.yaw) };
       if (l.positionX) { l.positionX.value = head.x; l.positionY.value = EYE; l.positionZ.value = head.z; l.forwardX.value = head.fx; l.forwardY.value = 0; l.forwardZ.value = head.fz; }
