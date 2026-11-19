@@ -3,6 +3,7 @@
 // it is switched on, and its lens lights with the beam. If the model is
 // missing there are simply no hands.
 import { loadPart } from '../assets.js';
+import { HANDS_ORDER } from '../slats.js';
 
 const HELD = { x: .2, y: -.2, z: -.42 }, LOWERED = .1;   // metres from the eye; how far it sinks when off
 
@@ -12,7 +13,8 @@ export function createHands(camera) {
     if (!o) return;
     torch = o; torch.position.set(HELD.x, HELD.y - LOWERED, HELD.z);
     // It sits a hand's width in front of the beam's own origin; a shadow from it would black out the beam.
-    torch.traverse(m => { if (!m.isMesh) return; m.castShadow = false; if (m.material.name === 'lamp_glow') { m.material = m.material.clone(); lens = m.material; } });
+    // In a locker it is held inside the doors, so it goes in front of their slats (slats.js).
+    torch.traverse(m => { if (!m.isMesh) return; m.castShadow = false; m.renderOrder = HANDS_ORDER; if (m.material.name === 'lamp_glow') { m.material = m.material.clone(); lens = m.material; } });
     camera.add(torch);
   });
   return {

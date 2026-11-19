@@ -163,7 +163,7 @@ Where the rules stand, over 40 nights a row:
 - Top right: the other guards and the room each is in. A flat one is red and tagged, and one in a locker is tagged `locker`.
 - Bottom left: the torch as a five-bar battery. Grey is off, yellow is on (the torch or the phone), red and blinking with a red glow in the corner is under 25%. Stamina is a thin bar above it that shows only while it is not full.
 - Centre: the prompt for whatever is in reach, with a bar for the ones that need holding.
-- In a locker, the picture is seen between dark slats with the edges closed in (`.ts-f-locker`), and the dot is gone.
+- In a locker, the picture is seen between dark slats with the edges closed in, and the dot is gone. The slats are drawn in the scene (`three/slats.js`), after the world and before the held phone and torch, so the hands stay in front of the doors.
 
 A flattened guard gets a panel saying who did it and how far the nearest standing guard is, and two things to do. Q (or the button) sends a `call` action. The host emits a `call` event at most every `F.CALL_GAP` seconds, and everyone else hears two notes, reads a toast and sees that guard's compass mark pulse. Space steps through the standing guards' views (`player.me.watch`, drawn by `spectate` in `app.js`) and back to your own. The watched guard's body, name tag and lens glow are not drawn while you look out through their eyes. With "Watch teammates from behind" on in the pause panel (`prefs.third`), the camera follows 3 m behind and above them instead, drawn in front of walls and shut doors and kept under the ceiling, and they are drawn as usual. A guard in a locker is not drawn on anyone's screen (`guard.js`), and their own camera stands just inside the doors (`LOCKER_LOOK` in `player.js`).
 

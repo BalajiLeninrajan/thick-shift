@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { game } from '../../state.js';
 import { canvas } from '../world/tex.js';
 import { createMinimap } from '../minimap.js';
+import { HANDS_ORDER } from '../slats.js';
 
 const HELD = { x: -.15, y: -.088, z: -.235 }, DROP = .2;   // metres from the eye, and how far below that it sits when put away
 const TURN = { x: .14, y: .24, z: .07 };                    // radians: tipped back and turned in, toward the eye
@@ -51,6 +52,7 @@ export function createPhone(camera) {
   for (let i = 0; i < 3; i++) mesh(new THREE.CapsuleGeometry(.0085, .016, 3, 6), skin, -BODY.w / 2 + .002, -.022 - i * .02, .006).rotation.set(0, .5, Math.PI / 2 - .15);
   const thumb = mesh(new THREE.CapsuleGeometry(.009, .036, 3, 6), skin, .034, -.07, BODY.d / 2 + .006); thumb.rotation.set(.1, 0, .9);
   phone.add(hold); hold.rotation.set(TURN.x, TURN.y, TURN.z);
+  hold.traverse(o => { o.renderOrder = HANDS_ORDER; });   // in a locker it is held inside the doors, so in front of their slats
   phone.position.set(HELD.x, HELD.y - DROP, HELD.z); phone.visible = false;
   camera.add(phone);
 

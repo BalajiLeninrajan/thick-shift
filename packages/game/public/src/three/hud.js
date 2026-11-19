@@ -87,7 +87,6 @@ const roomName = p => ROOMS3[roomAt(p.x, p.z)]?.name || '';
 export function createHud(stage, player) {
   const root = el('div', 'ts-fhud', stage);
   root.innerHTML = `
-    <div class="ts-f-locker"></div>
     <div class="ts-f-vignette"></div>
     <div class="ts-f-status">
       <div class="ts-f-time"><b></b><span></span></div>
