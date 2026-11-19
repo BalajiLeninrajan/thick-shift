@@ -122,7 +122,7 @@ export function mountDev() {
   btn.onclick = flip;
   // Once the HUD exists, add Dev buttons to the touch menu and the pause panel.
   const watch = setInterval(() => {
-    const spots = [document.querySelector('.ts-f-menu'), document.querySelector('.ts-f-pause .panel-footer')];
+    const spots = [document.querySelector('.ts-f-menu'), document.querySelector('.ts-f-pause-go')];
     if (!spots[0]) return;
     clearInterval(watch);
     for (const spot of spots) if (spot) { const b2 = btn.cloneNode(true); b2.onclick = flip; spot.append(b2); }

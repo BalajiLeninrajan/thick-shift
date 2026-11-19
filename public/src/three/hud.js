@@ -6,7 +6,7 @@
 // the other guards. Bottom left: the torch. Everything else shows only while
 // it matters (a prompt in reach, stamina while winded, the flat and pause
 // states).
-import { MASC } from '../config.js';
+import { MASC, FINAL_NIGHT } from '../config.js';
 import { game } from '../state.js';
 import { ROOMS3, BOXES, CHARGER, GENERATOR, roomAt, route } from './map.js';
 import { F, clockF, faultLeft } from './sim3d.js';
@@ -46,10 +46,29 @@ const icon = name => `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" strok
 const TOAST_ICON = { info: 'info', tip: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call', hide: 'locker' };
 const MAX_TOASTS = 3;
 
+// The pause screen's lists, in groups. Each row is what, then the keys or buttons as keycaps, then an
+// optional note under the action.
+const DRAINS = 'Drains the battery fast';
 const CONTROLS = {
-  keys: [['Walk', 'W A S D'], ['Run', 'Shift'], ['Look', 'Mouse, or the arrow keys'], ['Torch', 'F or click'], ['Phone map (drains the battery fast)', 'C'], ['Zoom the phone map', 'R'], ['Use, fix, peel, hide', 'E (hold to peel or hide)'], ['In a breaker box: choose, act, let go', 'W A S D or 1–5, E, X'], ['Call out while flat', 'Q'], ['Watch a teammate while flat', 'Space'], ['Pause', 'Esc'], ['Back from pause', 'Enter']],
-  touch: [['Walk', 'Left thumb, anywhere'], ['Look', 'Drag the right side'], ['Use, fix, peel, hide', 'Use (hold to peel or hide)'], ['In a breaker box', 'Tap the parts'], ['Run', 'Tap Run, lift to stop'], ['Phone map (drains the battery fast)', 'The phone button, then Map to zoom']],
+  keys: [
+    ['Moving', [['Walk', ['W A S D']], ['Run', ['Shift']], ['Look', ['Mouse', '← → ↑ ↓']]]],
+    ['Working', [['Use, fix', ['E']], ['Peel a friend up, hide', ['Hold E']], ['Torch', ['F', 'Click']], ['Phone map', ['C'], DRAINS], ['Zoom the map', ['R']]]],
+    ['At a breaker box', [['Choose', ['W A S D', '1–5']], ['Act', ['E']], ['Let go', ['X']]]],
+    ['When you are flat', [['Call out', ['Q']], ['Watch a teammate', ['Space']]]],
+  ],
+  touch: [
+    ['Moving', [['Walk', ['Left thumb'], 'Anywhere on the left'], ['Look', ['Drag right']], ['Run', ['Run'], 'Lift to stop']]],
+    ['Working', [['Use, fix', ['Use']], ['Peel a friend up, hide', ['Hold Use']], ['Torch', ['Torch']], ['Phone map', ['Phone'], DRAINS], ['Zoom the map', ['Map']]]],
+    ['At a breaker box', [['Choose and act', ['Tap the parts']]]],
+  ],
+  pad: [
+    ['Moving', [['Walk', ['Left stick']], ['Look', ['Right stick']], ['Run', ['LB']]]],
+    ['Working', [['Use, fix', ['A']], ['Torch', ['X']], ['Phone map', ['B'], DRAINS], ['Zoom the map', ['D-pad up']], ['Pause', ['Start']]]],
+    ['When you are flat', [['Call out', ['Y']], ['Watch a teammate', ['RB']]]],
+  ],
 };
+const controlGroups = groups => groups.map(([title, rows]) => `<section><h3 class="ts-f-group">${title}</h3><dl class="kv ts-f-keys">${rows.map(([what, how, note]) =>
+  `<dt>${what}${note ? `<span class="cn-meta">${note}</span>` : ''}</dt><dd>${how.map(k => `<kbd class="ts-key">${k}</kbd>`).join('')}</dd>`).join('')}</dl></section>`).join('');
 
 const el = (tag, cls, parent) => { const e = document.createElement(tag); e.className = cls; parent.append(e); return e; };
 const set = (e, text) => { if (e.textContent !== text) e.textContent = text; };
@@ -104,21 +123,35 @@ export function createHud(stage, player) {
       ${canFullscreen ? `<button class="btn btn-ghost is-icon" data-do="full" aria-label="Fullscreen">${icon('full')}</button>` : ''}
     </div>
     <div class="ts-f-pause">
-      <div class="panel ts-f-panel" data-density="compact">
-        <div class="panel-header"><h2>Paused</h2><span class="cn-meta">The night is not.</span></div>
-        <div class="panel-body ts-f-panel-body">
-          <dl class="kv"></dl>
-          <div class="cn-stack cn-gap-16">
+      <div class="ts-f-pause-in">
+        <div class="ts-f-pause-side">
+          <div class="ts-f-pause-head">
+            <h2 class="ts-logo">Paused</h2>
+            <p class="ts-f-pause-sub">The night is not.</p>
+            <p class="cn-meta cn-m-0 ts-f-pause-when"></p>
+          </div>
+          <div class="ts-f-pause-go">
+            <button class="btn btn-primary is-lg" data-do="resume">Back to work</button>
+            ${canFullscreen ? '<button class="btn btn-ghost" data-do="full">Fullscreen</button>' : ''}
+          </div>
+          <p class="cn-meta cn-m-0 ts-f-pause-keys"><kbd class="ts-key">Enter</kbd> back to work <kbd class="ts-key">Esc</kbd> pause</p>
+        </div>
+        <div class="panel ts-f-pause-main" data-density="compact">
+          <div class="segmented ts-f-tabs" role="tablist" aria-label="Pause menu">
+            <button role="tab" data-tab="controls"><b>Controls</b></button>
+            <button role="tab" data-tab="settings"><b>Settings</b></button>
+            <button role="tab" data-tab="pad"><b>Gamepad</b></button>
+          </div>
+          <div class="ts-f-panes">
+          <div class="ts-f-pane ts-f-groups" role="tabpanel" data-pane="controls"></div>
+          <div class="ts-f-pane cn-stack cn-gap-16" role="tabpanel" data-pane="settings">
             <div class="field"><label for="ts-sens">Look sensitivity</label><input class="slider" id="ts-sens" type="range" min=".3" max="2.5" step=".1"><small></small></div>
             <label class="choice"><input class="switch" type="checkbox" id="ts-invert">Invert looking up and down</label>
             <label class="choice"><input class="switch" type="checkbox" id="ts-outline">Highlight things you can use</label>
             <label class="choice"><input class="switch" type="checkbox" id="ts-third">Watch teammates from behind when you are flat</label>
-            <p class="cn-meta cn-m-0">A gamepad works too: sticks to walk and look, A to use, X for the torch, B for the phone map and d-pad up to zoom it, LB to run, Start to pause.</p>
           </div>
-        </div>
-        <div class="panel-footer cn-cluster">
-          <button class="btn btn-primary" data-do="resume">Back to work</button>
-          ${canFullscreen ? '<button class="btn btn-secondary" data-do="full">Fullscreen</button>' : ''}
+          <div class="ts-f-pane ts-f-groups" role="tabpanel" data-pane="pad">${controlGroups(CONTROLS.pad)}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -130,17 +163,26 @@ export function createHud(stage, player) {
   const prompt = $('.ts-f-prompt'), [promptKey, promptText] = $('.ts-f-prompt-row').children, hold = $('.ts-f-hold'), holdBar = hold.firstChild;
   const torch = $('.ts-f-torch'), stam = $('.ts-f-stam'), cells = [...$('.ts-f-cells').children], torchText = $('.ts-f-torch-row').lastChild;
   const start = $('.ts-f-start'), flat = $('.ts-f-flat'), [, flatHow, flatSub] = flat.children, callText = $('[data-do="call"] span'), watchBtn = $('[data-do="watch"]');
-  const pause = $('.ts-f-pause'), keyList = pause.querySelector('dl'), sens = $('#ts-sens'), sensText = sens.nextElementSibling, invert = $('#ts-invert'), outline = $('#ts-outline'), third = $('#ts-third');
+  const pause = $('.ts-f-pause'), pauseIn = $('.ts-f-pause-in'), pauseWhen = $('.ts-f-pause-when'), keyList = $('[data-pane="controls"]'), sens = $('#ts-sens'), sensText = sens.nextElementSibling, invert = $('#ts-invert'), outline = $('#ts-outline'), third = $('#ts-third');
   const touch = createTouch(root, player);
   // Compass ticks, by bearing. Yaw 0 faces south and grows toward east, as in player.js.
   const ticks = [['S', 0], ['', Math.PI / 4], ['E', Math.PI / 2], ['', Math.PI * .75], ['N', Math.PI], ['', -Math.PI * .75], ['W', -Math.PI / 2], ['', -Math.PI / 4]]
     .map(([letter, b]) => { const e = el('span', 'ts-f-tick', compass); e.textContent = letter; return { e, b }; });
 
   const actions = { resume: player.resume, pause: player.pause, call: player.call, watch: player.watchNext, full: toggleFullscreen };
+  // The pause screen opens on Controls. Touch has no gamepad tab. The panes share one cell and the others are
+  // only made invisible, so the panel keeps the tallest one's size and the tabs stay put.
+  const tabs = [...pause.querySelectorAll('[data-tab]')], panes = [...pause.querySelectorAll('[data-pane]')];
+  const showTab = name => {
+    for (const t of tabs) { const on = t.dataset.tab === name; t.classList.toggle('active', on); t.setAttribute('aria-selected', on); }
+    for (const p of panes) { const off = p.dataset.pane !== name; p.classList.toggle('is-off', off); p.inert = off; }
+  };
+  showTab('controls');
   root.addEventListener('click', e => {
-    const name = e.target.closest('[data-do]')?.dataset.do;
+    const name = e.target.closest('[data-do]')?.dataset.do, tab = e.target.closest('[data-tab]')?.dataset.tab;
     if (name) actions[name]();
-    else if (e.target === pause) player.resume();   // a click beside the panel
+    else if (tab) showTab(tab);
+    else if (e.target === pause || e.target === pauseIn) player.resume();   // a click beside the panel
   });
   const showPrefs = () => { sens.value = prefs.sens; invert.checked = prefs.invert; outline.checked = prefs.outline; third.checked = prefs.third; set(sensText, `${Math.round(prefs.sens * 100)}% of normal`); };
   sens.oninput = () => { prefs.sens = +sens.value; savePrefs(); showPrefs(); };
@@ -337,7 +379,9 @@ export function createHud(stage, player) {
       start.hidden = me.locked || me.paused || me.flat;
       if (pause.hidden === me.paused) {
         pause.hidden = !me.paused;
-        html(keyList, CONTROLS[me.touch ? 'touch' : 'keys'].map(([what, how]) => `<dt>${what}</dt><dd>${how}</dd>`).join(''));
+        html(keyList, controlGroups(CONTROLS[me.touch ? 'touch' : 'keys']));
+        tabs.find(t => t.dataset.tab === 'pad').hidden = me.touch;
+        if (me.paused) set(pauseWhen, `Night ${S.night} of ${FINAL_NIGHT}, ${clockF(S)}`);
         showPrefs();
       }
       touch.sync();

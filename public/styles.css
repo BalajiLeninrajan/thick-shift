@@ -268,11 +268,44 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-flat .btn { gap: 8px; }
 .ts-fhud[data-touch="true"] .ts-f-flat .ts-key { display: none; }
 
-/* Pause and settings. */
-.ts-f-pause { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 12px; background: color-mix(in srgb, var(--crust) 62%, transparent); pointer-events: auto; font-size: 14px; font-weight: 400; text-shadow: none; }
-.ts-f-panel { display: flex; flex-direction: column; width: min(100%, 620px); max-height: 100%; }
-.ts-f-panel-body { display: grid; grid-template-columns: 1.1fr 1fr; gap: var(--space-5); align-items: start; overflow-y: auto; touch-action: pan-y; }
-@media (max-width: 560px) { .ts-f-panel-body { grid-template-columns: 1fr; } }
+/* Pause. The stage dims, the way back sits on the left and the reference on the right, one tab at a time.
+   Sized against the stage (a size container), not the window, since a Discord Activity's frame is short
+   and narrow. The panel caps at the stage's height and its pane scrolls inside it. */
+.ts-f-pause {
+  position: absolute; inset: 0; z-index: 5; container-type: size;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: color-mix(in srgb, var(--crust) 80%, transparent); backdrop-filter: blur(6px) saturate(.6);
+  pointer-events: auto; font-size: 14px; font-weight: 400; text-shadow: none;
+}
+.ts-f-pause-in { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 640px); gap: clamp(20px, 5cqw, 56px); align-items: center; width: 100%; max-width: 940px; }
+.ts-f-pause-side { display: grid; gap: var(--space-6); align-content: center; }
+.ts-f-pause-head { display: grid; gap: var(--space-2); }
+.ts-f-pause .ts-logo { font-size: clamp(2rem, 9cqh, 3.5rem); }
+.ts-f-pause-sub { margin: 0; color: var(--subtext-1); font-size: 16px; font-weight: 500; }
+.ts-f-pause-go { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.ts-f-pause-keys .ts-key { margin: 0 4px; }
+.ts-f-pause-keys .ts-key:first-child { margin-left: 0; }
+.ts-fhud[data-touch="true"] .ts-f-pause-keys { display: none; }
+.ts-f-pause-main { display: flex; flex-direction: column; max-height: calc(100cqh - 32px); min-height: 0; }
+.ts-f-tabs { padding: var(--space-4) var(--space-4) 0; }
+.ts-f-panes { display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); flex: 1 1 auto; min-height: 0; }
+.ts-f-pane { grid-area: 1 / 1; align-content: start; min-height: 0; padding: var(--space-5); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.ts-f-pane.is-off { visibility: hidden; }
+.ts-f-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5) var(--space-6); align-content: start; }
+.ts-f-group { margin: 0 0 var(--space-2); color: var(--subtext-0); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+/* Keycaps sit right, each on one line. */
+.ts-f-keys { grid-template-columns: minmax(0, 1fr) auto; align-items: center; row-gap: var(--space-2); }
+.ts-f-keys dt { color: var(--text); }
+.ts-f-keys dt .cn-meta { display: block; font-size: 12px; }
+.ts-f-keys dd { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 20ch; overflow-wrap: normal; }
+/* Narrow stage: the way back goes on top, beside the title. */
+@container (max-width: 760px) {
+  .ts-f-pause-in { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: var(--space-4); height: 100%; }
+  .ts-f-pause-side { grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-4); }
+  .ts-f-pause-keys, .ts-f-pause-when { display: none; }
+  .ts-f-pause-main { max-height: 100%; align-self: start; }
+}
+@container (max-width: 520px) { .ts-f-groups { grid-template-columns: minmax(0, 1fr); } .ts-f-pause-side { grid-template-columns: minmax(0, 1fr); } }
 
 /* Touch: pause and fullscreen in the corner, the stick and three buttons under the thumbs. */
 .ts-f-menu { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; gap: 6px; pointer-events: auto; text-shadow: none; }
