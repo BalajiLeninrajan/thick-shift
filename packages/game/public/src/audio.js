@@ -220,7 +220,8 @@ function songBuffer(secs) {
       const u = k / n, now = 1 - (beat + b * u) / beats, sag = 7 * (1 - now) ** 2;
       const hz = 392 * 2 ** ((semi - sag) / 12) * (1 + .012 * Math.sin((t + k / sr) * 2 * Math.PI * 6));   // a warble
       phase = (phase + hz / sr) % 1;
-      const pulse = phase < .28 ? 1 : -1, env = Math.min(1, u * 40) * Math.min(1, (1 - u) * 12) * (.4 + .6 * now);
+      const pulse = phase < .28 ? 1.44 : -.56;   // a narrow pulse, centred so it carries no DC
+      const env = Math.min(1, u * 40) * Math.min(1, (1 - u) * 12) * (.4 + .6 * now);
       d[i0 + k] += Math.round(pulse * env * .5 * 8) / 8;   // three bits of voice box
     }
     t += dur; beat += b;
