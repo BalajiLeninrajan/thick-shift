@@ -1,0 +1,6 @@
+# Tools for the Roblox port. `rokit install` in this folder fetches them.
+[tools]
+rojo = "rojo-rbx/rojo@7.7.1"
+selene = "kampfkarren/selene@0.32.0"
+stylua = "johnnymorganz/stylua@2.6.0"
+lune = "lune-org/lune@0.11.1"
