@@ -54,7 +54,7 @@ const MAX_TOASTS = 3, SHORT = 480;   // a stage under SHORT pixels tall shows on
 // The pause screen's lists, in groups. Each row is what, then the keys or buttons as keycaps, then an
 // optional note under the action.
 const DRAINS = 'Drains the battery fast';
-const TOSS = 'Costs a battery bar. Pick it up to reuse it';
+const TOSS = 'Costs a battery bar';
 const CONTROLS = {
   keys: [
     ['Moving', [['Walk', ['W A S D']], ['Run', ['Shift']], ['Look', ['Mouse', '← → ↑ ↓']]]],
@@ -344,7 +344,7 @@ export function createHud(stage, player) {
       powerBar.style.width = S.power + '%';
       set(powerText, S.power > 0 ? Math.ceil(S.power) + '%' : 'Power out');
       data(power, 'level', S.power <= 0 ? 'out' : S.power < CRIT_POWER ? 'crit' : S.power < LOW_POWER ? 'low' : S.crank ? 'crank' : 'ok');
-      if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say('Power below 25%. Crank the generator in the booth.', 'power', 7);
+      if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say('Power below 25%.', 'power', 7);
       was.power = S.power;
 
       drawTasks(S, me);
@@ -362,17 +362,17 @@ export function createHud(stage, player) {
       // The phone draws on the same battery, four times as fast, so the bars count as on while it is up.
       data(torch, 'state', state); data(torch, 'on', me.on || me.ph);
       set(torchText, state === 'dead' ? 'Torch dead' : state === 'charging' ? 'Charging' : me.ph ? (me.on ? 'Torch and phone' : 'Phone') : state === 'low' ? (me.on ? 'Torch low' : 'Torch low, off') : me.on ? '' : 'Off');
-      if (bat < LOW_BAT && was.bat >= LOW_BAT) say('Torch low. Grab a battery or follow the blue mark to the charger.', 'torch', 7);
-      if (bat <= 0 && was.bat > 0) say('The torch is dead.', 'torch', 6);
-      if (bat < .5 && was.bat >= .5) tip('bat', me.ph ? 'The phone drains your battery four times faster than the torch. Grab batteries off the floor or charge in the booth.' : 'Your torch drains while it\'s on. Grab batteries off the floor or charge in the booth.');
+      if (bat < LOW_BAT && was.bat >= LOW_BAT) say('Torch low.', 'torch', 7);
+      if (bat <= 0 && was.bat > 0) say('Torch dead.', 'torch', 6);
+      if (bat < .5 && was.bat >= .5) tip('bat', me.ph ? 'The phone drains battery four times faster than the torch.' : 'The torch drains while it\'s on.');
       was.bat = bat;
       // The Mini Biggs: in hand or on the floor somewhere, greyed out without it or the bar a throw costs, and a word
       // when they try anyway.
       set(toyText, mine.toy ? 'Mini Biggs, 1 bar' : 'Mini Biggs on the floor');
       data(toy, 'ok', !!mine.toy && bat >= TOY.cost);
       toy.classList.toggle('is-fresh', now - me.threw < 600);
-      if (me.dry > was.dry) say('Throwing the Mini Biggs takes a full battery bar.', 'toy', 4);
-      if (me.empty > was.empty) say('You\'re not holding a Mini Biggs. Pick one up first.', 'toy', 4);
+      if (me.dry > was.dry) say('Not enough battery to throw.', 'toy', 4);
+      if (me.empty > was.empty) say('No Mini Biggs in hand.', 'toy', 4);
       was.empty = me.empty;
       was.dry = me.dry;
       stam.hidden = me.stam >= 1;

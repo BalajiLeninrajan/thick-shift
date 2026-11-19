@@ -7,7 +7,7 @@ import { buildWorld } from './world.js';
 import { createPlayer, prefs } from './player.js';
 import { createActors } from './actors.js';
 import { createHud, where } from './hud.js';
-import { createTask, FAULT_NAME } from './task.js';
+import { createTask } from './task.js';
 import { EYE, BOXES, ROOMS3, roomAt, reaches } from './map.js';
 import { createSound } from './sound.js';
 import { createPost } from './post.js';
@@ -81,26 +81,26 @@ function create() {
   // those). hud.say takes the line, its kind (which sets icon and colour) and seconds.
   const guard = id => game.S.players.find(p => p.id === id), isMe = id => id === game.myId;
   const SAY = {
-    // A fault broke out: where, and what it needs.
+    // A fault broke out, and where.
     fault(e) {
       const f = game.S.faults[e.x.i];
       if (!f) return;
-      hud.say(`Fault in the ${ROOMS3[BOXES[e.x.i].room]?.name}: ${FAULT_NAME[f.k].toLowerCase()}.`, 'fault', 4);
-      hud.tip('fault', 'Faults drain power and black out their room. Follow the yellow marks and press {use} at the breaker box.');
+      hud.say(`Fault in the ${ROOMS3[BOXES[e.x.i].room]?.name}.`, 'fault', 4);
+      hud.tip('fault', 'Faults drain power and black out their room.');
     },
     fix(e) {
       const left = game.S.faults.filter(Boolean).length, rest = left ? `${left} still open.` : 'All clear.';
       hud.say(isMe(e.x.by) ? `Fixed. ${rest}` : `${guard(e.x.by)?.name || 'Someone'} fixed the ${ROOMS3[BOXES[e.x.i].room]?.name}. ${rest}`, 'fixed', 3);
     },
-    burn: () => hud.say('A fault is burning and lowering max power. Fix it.', 'burnt', 6),
-    out: () => hud.say('The power is out. Every door is open.', 'out', 7),
-    on: () => hud.say('The power is back.', 'back', 3),
+    burn: () => hud.say('A fault is burning. Max power is dropping.', 'burnt', 6),
+    out: () => hud.say('Power out. Every door is open.', 'out', 7),
+    on: () => hud.say('Power back.', 'back', 3),
     flat(e) {
       const who = guard(e.x.id);
-      if (!isMe(e.x.id) && who) { hud.say(`${MASC[e.x.by].name} flattened ${who.name} ${where(e.x)}.`, 'down', 6); hud.tip('peel', 'Stand over a flattened guard and hold {use} to get them up.'); }
+      if (!isMe(e.x.id) && who) { hud.say(`${MASC[e.x.by].name} flattened ${who.name} ${where(e.x)}.`, 'down', 6); hud.tip('peel', 'Flattened guards stay down until someone peels them up.'); }
     },
     peel(e) {
-      if (isMe(e.x.id)) hud.say('You\'re back up. You have a few seconds before they notice you.', 'up', 4);
+      if (isMe(e.x.id)) hud.say('Back up. They won\'t notice you for a few seconds.', 'up', 4);
       else hud.say(`${isMe(e.x.by) ? 'You' : guard(e.x.by)?.name || 'Someone'} peeled ${guard(e.x.id)?.name || 'someone'} up.`, 'up', 3);
     },
     // A flat guard calling out. sound.js plays its two notes from where the guard lies.
@@ -108,17 +108,17 @@ function create() {
       hud.ping(e.x.id);
       if (!isMe(e.x.id)) hud.say(`${guard(e.x.id)?.name || 'Someone'} is calling from the floor ${where(e.x)}.`, 'call', 4);
     },
-    spot(e) { if (isMe(e.x.id)) hud.tip('spot', 'You\'ve been spotted. Keep your torch on it and back away.'); },
+    spot(e) { if (isMe(e.x.id)) hud.tip('spot', 'Spotted. The torch beam holds them back.'); },
     bat(e) { if (isMe(e.x.by)) hud.say('Fresh battery.', 'torch', 2.5); },
-    locker(e) { if (isMe(e.x.id) && e.x.in) hud.tip('hide', 'You\'re hidden. A mascot that saw you get in, or waits outside long enough, will open the door.'); },
+    locker(e) { if (isMe(e.x.id) && e.x.in) hud.tip('hide', 'Hidden. Anything that saw you get in will check.'); },
     found(e) {
       if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker.`, 'down', 4);
       else hud.say(`${MASC[e.x.i].name} pulled ${guard(e.x.id)?.name || 'someone'} out of a locker ${where(e.x)}.`, 'hide', 6);
     },
-    fumble(e) { if (isMe(e.x.by)) hud.say('The door will not shut. Something is standing in it.', 'info', 3); },
-    // The first time the mascots get up: what the Mini Biggs in your pocket is for.
-    stir() { hud.tip('toy', 'Press {throw} to throw your Mini Biggs. It costs a battery bar and pulls nearby mascots toward it, unless they\'re already chasing you.'); },
-    grab(e) { if (isMe(e.x.by)) hud.say('Mini Biggs back in hand.', 'toy', 2.5); },
+    fumble(e) { if (isMe(e.x.by)) hud.say('Something is blocking the door.', 'info', 3); },
+    // The first time the mascots get up: what a thrown Mini Biggs does.
+    stir() { hud.tip('toy', 'A thrown Mini Biggs draws mascots that aren\'t already chasing you.'); },
+    grab(e) { if (isMe(e.x.by)) hud.say('Mini Biggs in hand.', 'toy', 2.5); },
   };
 
   // How scared this guard should be right now, 0 to 1: something hunting, close.
