@@ -48,7 +48,7 @@ const PATHS = {
 const icon = name => `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
 // Each kind of toast has its own icon and colour (in styles.css), so a low
 // torch, low power, a fault burning and a guard going down do not look alike.
-const TOAST_ICON = { info: 'info', tip: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call', hide: 'locker', toy: 'toy' };
+const TOAST_ICON = { info: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call', hide: 'locker', toy: 'toy' };
 const MAX_TOASTS = 3, SHORT = 480;   // a stage under SHORT pixels tall shows one toast fewer
 
 // The pause screen's lists, in groups. Each row is what, then the keys or buttons as keycaps, then an
@@ -197,10 +197,8 @@ export function createHud(stage, player) {
   outline.onchange = () => { prefs.outline = outline.checked; savePrefs(); };
   third.onchange = () => { prefs.third = third.checked; savePrefs(); };
 
-  /* ---------- toasts and first-time tips ---------- */
+  /* ---------- toasts ---------- */
 
-  let seen = '';
-  try { seen = localStorage.tsFloorTips || ''; } catch (e) { /* storage blocked */ }
   const live = [];
   function drop(t) { t.e.classList.add('is-gone'); setTimeout(() => t.e.remove(), 400); }
   function say(text, kind = 'info', seconds = 4.5) {
@@ -208,13 +206,6 @@ export function createHud(stage, player) {
     e.innerHTML = icon(TOAST_ICON[kind]) + '<span></span>'; e.lastChild.textContent = text;
     live.push({ e, until: performance.now() + seconds * 1000 });
     while (live.length > MAX_TOASTS - (root.clientHeight < SHORT)) drop(live.shift());
-  }
-  // A line of advice the first time something happens, and never again on this browser.
-  function tip(key, text) {
-    if (seen.split(' ').includes(key)) return;
-    seen += ' ' + key;
-    try { localStorage.tsFloorTips = seen; } catch (e) { /* storage blocked */ }
-    say(text, 'tip', 9);
   }
 
   /* ---------- the compass ---------- */
@@ -324,7 +315,7 @@ export function createHud(stage, player) {
 
   let lastT = 1e9, was = { bat: 1, power: 100, dry: 0, empty: 0 }, calledAt = -1e9;
   return {
-    root, say, tip,
+    root, say,
     // Someone flat called out: their compass mark pulses for a few seconds.
     ping(id) { if (id === game.myId) calledAt = performance.now(); else pings.set(id, performance.now() + 4000); },
     // scared: the catch has the camera (actors/scare.js), and the face fills the screen with nothing over it.
@@ -363,7 +354,6 @@ export function createHud(stage, player) {
       set(torchText, state === 'dead' ? 'Torch dead' : state === 'charging' ? 'Charging' : me.ph ? (me.on ? 'Torch and phone' : 'Phone') : state === 'low' ? (me.on ? 'Torch low' : 'Torch low, off') : me.on ? '' : 'Off');
       if (bat < LOW_BAT && was.bat >= LOW_BAT) say('Torch low.', 'torch', 7);
       if (bat <= 0 && was.bat > 0) say('Torch dead.', 'torch', 6);
-      if (bat < .5 && was.bat >= .5) tip('bat', me.ph ? 'The phone drains battery four times faster than the torch.' : 'The torch drains while it\'s on.');
       was.bat = bat;
       // The Mini Biggs: in hand or on the floor somewhere, greyed out without it or the bar a throw costs, and a word
       // when they try anyway.

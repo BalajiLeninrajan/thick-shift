@@ -86,7 +86,6 @@ function create() {
       const f = game.S.faults[e.x.i];
       if (!f) return;
       hud.say(`Fault in the ${ROOMS3[BOXES[e.x.i].room]?.name}.`, 'fault', 4);
-      hud.tip('fault', 'Faults drain power and black out their room.');
     },
     fix(e) {
       const left = game.S.faults.filter(Boolean).length, rest = left ? `${left} still open.` : 'All clear.';
@@ -97,7 +96,7 @@ function create() {
     on: () => hud.say('Power back.', 'back', 3),
     flat(e) {
       const who = guard(e.x.id);
-      if (!isMe(e.x.id) && who) { hud.say(`${MASC[e.x.by].name} flattened ${who.name} ${where(e.x)}.`, 'down', 6); hud.tip('peel', 'Flattened guards stay down until someone peels them up.'); }
+      if (!isMe(e.x.id) && who) { hud.say(`${MASC[e.x.by].name} flattened ${who.name} ${where(e.x)}.`, 'down', 6); }
     },
     peel(e) {
       if (isMe(e.x.id)) hud.say('Back up. They won\'t notice you for a few seconds.', 'up', 4);
@@ -108,16 +107,12 @@ function create() {
       hud.ping(e.x.id);
       if (!isMe(e.x.id)) hud.say(`${guard(e.x.id)?.name || 'Someone'} is calling from the floor ${where(e.x)}.`, 'call', 4);
     },
-    spot(e) { if (isMe(e.x.id)) hud.tip('spot', 'Spotted. The torch beam holds them back.'); },
     bat(e) { if (isMe(e.x.by)) hud.say('Fresh battery.', 'torch', 2.5); },
-    locker(e) { if (isMe(e.x.id) && e.x.in) hud.tip('hide', 'Hidden. Anything that saw you get in will check.'); },
     found(e) {
       if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker.`, 'down', 4);
       else hud.say(`${MASC[e.x.i].name} pulled ${guard(e.x.id)?.name || 'someone'} out of a locker ${where(e.x)}.`, 'hide', 6);
     },
     fumble(e) { if (isMe(e.x.by)) hud.say('Something is blocking the door.', 'info', 3); },
-    // The first time the mascots get up: what a thrown Mini Biggs does.
-    stir() { hud.tip('toy', 'A thrown Mini Biggs draws mascots that aren\'t already chasing you.'); },
     grab(e) { if (isMe(e.x.by)) hud.say('Mini Biggs in hand.', 'toy', 2.5); },
   };
 

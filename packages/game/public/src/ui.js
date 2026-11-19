@@ -50,8 +50,7 @@ export function messageScreen(key, title, detail, back) {
   };
 }
 
-// The whole loop, read in the lobby while the others join. The rest is taught in the night, by a tip the
-// first time each thing happens (hud.tip), and the controls by the click-to-play panel.
+// The whole loop, read in the lobby while the others join. The controls are on the click-to-play panel and the pause screen.
 const RULES = [
   '<b>Fix faults.</b> Follow the yellow marks to the breaker box and press E.',
   '<b>Keep the power up.</b> Crank the generator in the booth. At zero, every door opens.',

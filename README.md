@@ -174,7 +174,7 @@ Input is in `three/player.js`. The mouse is captured on the first click. Esc rel
 
 `three/touch.js` adds touch controls once a finger touches the screen, or from the start on a device with no fine pointer. A touch on the left 45% of the screen puts a stick under that thumb. A drag anywhere else looks. Use is held, the torch and phone buttons toggle, a Map button zooms the phone's map while it is up, the Biggs button throws a Mini Biggs where the view points (drag to look at the floor first for a short throw) and greys out with empty hands or without the battery for a throw, and Run stays on until the stick is released. Pause and fullscreen sit in the top right corner. The layout is landscape, and a phone held upright is asked to turn. The stage fills the window up to 21:9.
 
-Teaching the game is split in two. The lobby lists the rules, where every guard reads them while the others join. In the night, a tip appears the first time each of these happens on a browser: the first fault, the torch dropping under half, a mascot spotting you, a teammate going flat, stepping into a locker, the mascots first getting up, which is when the Mini Biggs is explained (`hud.tip`, remembered in `localStorage.tsFloorTips`).
+The lobby lists the rules, where every guard reads them while the others join. In the night there are no tutorial tips: the toasts only say what just happened, and the controls are on the click-to-play panel and the pause screen.
 
 The end screens are in `ui.js`. They read `S.tally` (this night) and `S.total` (the run), which `sim3d.js` fills: faults fixed and faults left to burn, who was flattened and by which mascot, and who peeled someone up.
 

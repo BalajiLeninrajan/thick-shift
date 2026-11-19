@@ -219,7 +219,6 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-toast.is-torch { --tc: var(--peach); }
 .ts-f-toast.is-back, .ts-f-toast.is-up { --tc: var(--green); }
 .ts-f-toast.is-call { --tc: var(--sky); }
-.ts-f-toast.is-tip { --tc: var(--lavender); }
 
 /* Top right: the other guards and the room each is in. */
 .ts-f-crew { position: absolute; top: var(--ts-pad); right: var(--ts-pad); display: grid; gap: 4px; justify-items: end; }
