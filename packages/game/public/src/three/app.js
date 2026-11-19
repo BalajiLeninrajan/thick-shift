@@ -12,6 +12,7 @@ import { EYE, BOXES, ROOMS3, roomAt, reaches } from './map.js';
 import { createSound } from './sound.js';
 import { createPost } from './post.js';
 import { createPhone } from './actors/phone.js';
+import { createSlats } from './slats.js';
 import { createOutlines } from './outline.js';
 import { dreadF } from './sim3d.js';
 
@@ -37,6 +38,7 @@ function create() {
   const post = createPost(renderer, player.torch);
   player.torch.map = world.torchCookie();
   const phone = createPhone(camera);   // in the left hand, with the minimap on its screen
+  const slats = createSlats(scene);    // the locker doors, drawn behind the hands
   let last = performance.now(), lastT = 1e9, lastEv = 0, shown = false, seat = null;
 
   function show(on) {
@@ -143,6 +145,7 @@ function create() {
       // The end card (ui.js) waits until LINGER after the catch is over, however long a slow machine takes over it.
       if (actors.scare.active) client.holdUntil = Math.max(client.holdUntil, now + LINGER * 1000);
       phone.update(S, player.me, dt, now, actors.scare.active);
+      slats.update(S, player.me, dt, actors.scare.active);
       sound.update(S, player.me, dt);
       hud.update(S, player.me, actors.scare.active);
       post.render(scene, camera, now, fear, dread, world.stop, outlines.pick(S, player.me, t));
