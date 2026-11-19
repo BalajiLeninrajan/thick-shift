@@ -24,9 +24,9 @@ function titleScreen() {
     html: card(`
       <h1 class="ts-logo">Thick Shift 3D</h1>
       <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
-      <p class="cn-meta cn-m-0">The retired theme-park mascots are enormous, and at night they wander. Walk the building with a torch whose battery runs down, fix the wiring before it burns out, and keep the power on until 6 AM. Touch a mascot and you are flat until a teammate peels you up. Last five nights and you can go home. Works on a phone held sideways. Share a room code to play together.</p>
+      <p class="cn-meta cn-m-0">Keep the power on until 6 AM. The retired mascots are enormous, and at night they wander.</p>
       <div class="field"><label for="nm">Your name</label><input id="nm" maxlength="12" placeholder="Guard" value="${esc(savedName)}"></div>
-      <div class="field"><label for="rc">Room code</label><input id="rc" maxlength="4" placeholder="ABCD" autocapitalize="characters" value="${esc((q.get('room') || '').slice(0, 4))}"><small>Only needed to join a friend's night.</small></div>`,
+      <div class="field"><label for="rc">Room code</label><input id="rc" maxlength="4" placeholder="To join a friend" autocapitalize="characters" value="${esc((q.get('room') || '').slice(0, 4))}"></div>`,
       '<button class="btn btn-primary" id="hb">Host a night</button><button class="btn btn-secondary" id="jb">Join room</button>'),
     wire() {
       const begin = then => () => {
@@ -49,16 +49,13 @@ function messageScreen(key, title, detail, back) {
   };
 }
 
-// The whole loop. Everyone reads it in the lobby while the others join.
+// The whole loop, read in the lobby while the others join. The rest is taught in the night, by a tip the
+// first time each thing happens (hud.tip), and the controls by the click-to-play panel.
 const RULES = [
-  '<b>The job.</b> Faults keep breaking out in the breaker boxes around the building. Each one leaks power, more the longer it is left, and after a while puts its room\'s lights out; left too long it burns out the wiring, and the building holds less charge for the rest of the night. The list under the power and the yellow marks on the compass lead to them. Press E at the box and do the job: flip the breakers, join the wires or bleed the valve. Your hands are busy and your torch points at the floor while you do.',
-  '<b>Power.</b> Doors, lights and the torch charger run on it. Hold E at the generator crank in the booth to put some back. At zero every door opens and the lights go out.',
-  '<b>Your torch.</b> The beam holds a mascot back while it is on it. A full battery lasts about a minute: charge it at the dock in the booth, or pick up spare batteries.',
-  '<b>Your phone.</b> C holds up a map of the building, R zooms in on where you are. It eats the torch battery four times as fast as the torch, and while it is up you walk slowly and the torch points at the floor. Glance, then put it away.',
-  '<b>The mascots.</b> They stand still, then wander in waves. Touch one and you are flat until a friend stands over you and holds E. While flat, Q calls for help and Space watches a friend. Everyone flat at once ends the night.',
-  '<b>Lockers.</b> Hold E at a locker out on the floor to step inside and out of sight. Get out of sight first: one that sees you get in, or was right behind you, opens the door. One that has lost you checks the lockers nearby, and one that stands outside too long sniffs you out. The doors clank, so mind who is near.',
-  '<b>The booth</b> is where you start: the generator, the charger, a wall map of the faults, and three doors you can shut. Shut doors drain power fast and faults do not fix themselves, so it is no place to hide. Something banging on a shut door can short the box outside it.',
-  '<b>Controls.</b> W A S D walk, mouse or arrow keys look, Shift runs, F is the torch, C is the phone, E uses things, Esc pauses.',
+  '<b>Fix faults.</b> Follow the yellow marks to the breaker box and press E.',
+  '<b>Keep the power up.</b> Crank the generator in the booth. At zero, every door opens.',
+  '<b>Torch the mascots.</b> The beam holds them back while the battery lasts.',
+  '<b>Don\'t get touched.</b> A friend can peel you up. Everyone flat ends the night.',
 ];
 // The night's tallies as a list: S.tally for one night, S.total for the run (see three/sim3d.js).
 // Flats are grouped by guard, with who did it for a night and a count for the run.
