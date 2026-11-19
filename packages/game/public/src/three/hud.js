@@ -234,8 +234,6 @@ export function createHud(stage, player) {
     S.faults?.forEach((f, i) => { if (f) list.push({ key: 'f' + i + '@' + f.at, kind: 'fault', x: BOXES[i].x + Math.sin(BOXES[i].face) * .9, z: BOXES[i].z + Math.cos(BOXES[i].face) * .9, hot: faultLeft(S, f) < HURRY }); });
     for (const p of S.players) if (p.flat && p.id !== game.myId && p.x != null) list.push({ key: 'p' + p.id, kind: 'flat', x: p.x, z: p.z, name: p.name, ping: pings.get(p.id) > now });
     if ((mine.bat ?? 1) < LOW_BAT && S.power > 0) list.push({ key: 'dock', kind: 'dock', x: CHARGER.x, z: CHARGER.z - .9, name: 'charger' });
-    // Your own Mini Biggs, while your hands are empty: lost in the dark it is no use to anyone.
-    if (!mine.toy) for (const t of S.toys || []) if (t.by === game.myId) list.push({ key: 'toy' + t.id, kind: 'toy', x: t.x, z: t.z, name: 'Biggs' });
     if (S.power < GEN_MARK) list.push({ key: 'gen', kind: 'gen', x: GENERATOR.x + Math.sin(GENERATOR.face) * .9, z: GENERATOR.z + Math.cos(GENERATOR.face) * .9, name: 'crank' });
     if (now - navAt > NAV_MS && list.length) { navAt = now; findRoute(S, me, list[navTurn++ % list.length]); }
 

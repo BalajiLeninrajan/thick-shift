@@ -184,7 +184,6 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-mark.is-ping i { animation: ts-ping .8s ease-out infinite; }
 .ts-f-mark.is-dock { color: var(--sapphire); }
 .ts-f-mark.is-gen { color: var(--peach); }
-.ts-f-mark.is-toy { color: var(--mauve); }
 .ts-f-mark.is-dock i { border-radius: 2px; }
 /* Past the end of the strip: an arrow says keep turning. */
 .ts-f-mark[data-side="left"] { transform: none; justify-items: start; }

@@ -70,6 +70,8 @@ const SPOT = [
 
 // A Mini Biggs squeezed and thrown: the squeak of its belly, then the swish of it leaving the hand.
 const squeeze = level => { tone(900, .12, 'triangle', .06 * level, 1500); tone(1400, .08, 'triangle', .04 * level, 1100, .1); noise(.22, .12 * level, { band: 900, band2: 2400, q: 1, at: .18 }); };
+// Picked up again: the squeak of its belly in a hand.
+const squeak = level => tone(1100, .1, 'triangle', .07 * level, 1500);
 
 const doorAt = key => { const [x0, z0, x1, z1] = DOORWAYS.find(d => d.key === key).rect; return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 }; };
 // Doorways between two rooms by the shortest way, a shut door counting double. 9 is "a long way".
@@ -258,8 +260,7 @@ export function createSound() {
     found(x, S) { at(S, x, () => { sample('slam2', { rate: 1.3, gain: .8 }) || noise(.3, .6, { band: 1500 }); sample('sheet3', { rate: 1.1, gain: .7, at: .02 }); }); },
     // A Mini Biggs coming down and singing, from where it landed, so it can be found by ear as the mascots find it.
     toy(x, S) { at(S, x, () => song(.5, 0, TOY.sing)); },
-    // Picked up again: the squeak of its belly in a hand.
-    grab(x, S) { const squeak = () => tone(1100, .1, 'triangle', .07, 1500); if (mine(x.by)) squeak(); else at(S, x, squeak); },
+    grab(x, S) { if (mine(x.by)) squeak(1); else at(S, x, () => squeak(1)); },
     peel(x, S) {
       const rip = () => { noise(.5, .6, { band: 600, band2: 3600, q: 2.5, attack: .3 }); tone(300, .08, 'sine', .4, 900, .46); };
       if (mine(x.id)) rip(); else at(S, x, rip);
@@ -439,6 +440,6 @@ export function createSound() {
     },
     // For ?debug and tests: what is sounding, and the recipes by name.
     stats: () => ({ voices: voices(), loops: sources, emitters: rig ? rig.mascots.length + POOL + 2 + rig.guards.size : 0 }),
-    cue: { ON, MASCOT_STEP, SPOT, footfall, squelch },
+    cue: { ON, MASCOT_STEP, SPOT, footfall, squelch, squeeze, squeak },
   };
 }
