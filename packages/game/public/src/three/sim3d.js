@@ -15,6 +15,9 @@
 // peels you up. Everyone flat at once ends the night. A guard can step into a
 // locker to get out of sight. A mascot that saw them go in pulls them out, one
 // that lost them nearby checks the lockers, and one that lingers sniffs them out.
+// A guard can also throw a Mini Biggs, a plush keyring with a voice box, which
+// sings on a bar of the torch's battery where it lands, and a mascot wandering
+// nearby goes to see whose birthday it is.
 //
 // The numbers here were tuned against scripted guards in tools/balance/floor.mjs
 // (`node tools/balance/floor.mjs`), which plays every night with careless,
@@ -123,6 +126,17 @@ const SNIFF = { near: 1.6, time: 3 };
 // doors and opens them, empty or not. The way to beat it is to get further than that, or to outlast its wind.
 const CHECK = { near: 8, chance: .5, most: 2 };
 const LOCKER_NOISE = [6, .5];
+// Mini Biggs: a palm-sized plush of Big Biggs on a keyring, from the gift shop, with a voice box that sings "Happy
+// Birthday from Big Biggs!". Each guard clocks in holding one (p.toy) and holds one at most. Its own cell died years
+// ago, so a guard tops it up from the torch: a throw costs `cost` of the battery (one of the five bars on the HUD)
+// and needs that much left. It is thrown along the guard's view, no further than `range` metres, and flies at `speed`
+// metres a second over the furniture until a wall or a shut door stops it. Where it lands it sings for `sing`
+// seconds, which is a noise() of `hear` metres at `chance`: whatever is wandering or searching nearby goes to look,
+// and whatever is already after a guard does not, so it buys a way past, not a way out. Then it lies there (S.toys)
+// until a guard with empty hands picks it up, which means walking to where the mascots were sent. The cost was set
+// against the harness, whose competent and expert guards throw theirs at a wanderer in their way while they have the
+// battery to spare and go back for it once things are quiet. Light spent on a song is light not holding a mascot off.
+export const TOY = { cost: .2, range: 14, speed: 11, hear: 12, chance: .9, sing: 3 };
 
 const OPEN = () => ({ L: false, V: false, R: false });
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -198,7 +212,7 @@ const standing = S => S.players.filter(p => !p.flat);
 const outside = S => S.players.filter(p => !p.flat && !hidden(p));
 
 function placeGuard(p, i) {
-  Object.assign(p, spawnPoint(i), { pitch: 0, on: false, ph: false, bat: 1, flat: false, flatBy: -1, sp: false, act: '', safe: 0, callAt: 0, hid: -1 });
+  Object.assign(p, spawnPoint(i), { pitch: 0, on: false, ph: false, bat: 1, flat: false, flatBy: -1, sp: false, act: '', safe: 0, callAt: 0, hid: -1, toy: true });
 }
 
 // A room's state before its first night. evs is the event list (emit); deaths and slams count the whole run.
@@ -228,6 +242,9 @@ export function startFloorNight(n) {
   const spots = BATTERY_SPOTS.map((_, i) => i).sort(() => Math.random() - .5);
   S.batN = Math.min(spots.length, 3 + all.length);   // the night's batteries, lying about or due back
   S.bats = spots.slice(0, S.batN);
+  // The Mini Biggses thrown and not picked up again: { id, by, x0, z0: where it left the hand, x, z: where it lands,
+  // at: when it was thrown, land: when it lands, heard: whether it has sung }.
+  S.toys = []; S.toyId = 0;
   batTimers = []; crankNoise = 0;
 }
 
@@ -253,6 +270,9 @@ export function adoptFloor() {
   const missing = (S.batN ?? Math.min(BATTERY_SPOTS.length, 3 + S.players.length)) - (S.bats || []).length;
   batTimers = Array.from({ length: Math.max(0, missing) }, () => rnd(5, 50)).sort((a, b) => a - b);
   S.waveAt ??= S.t + rnd(.2, 1) * (S.stir ? rnd(...STIR) * (1 + h) : rnd(...CALM) * (1 - .7 * h));
+  // A host from before the toys sent none: everyone has theirs in hand.
+  S.toys ||= []; S.toyId ||= 0;
+  for (const p of S.players) p.toy ??= true;
   // When the next fault was due is lost too, so it comes any time in a usual gap.
   nextFault = faultGap(S) * rnd(.2, 1);
   crankNoise = 0;
@@ -377,6 +397,25 @@ function noise(S, x, z, radius, chance) {
     if (!['roam', 'search'].includes(m.st) || b.home || Math.hypot(m.x - x, m.z - z) > radius || Math.random() > chance) return;
     m.st = 'search'; b.last = { x, z }; b.timer = rnd(3, 6); b.repath = 0;
   });
+}
+
+// Where a thrown thing comes down: along `yaw` from (x, z), as far as d, but short of a wall or a shut door. It goes
+// over the furniture, not onto it: one that would come down on a table drops back toward the thrower.
+export function landing(S, x, z, yaw, d) {
+  const sx = Math.sin(yaw), sz = Math.cos(yaw), step = .25;
+  let k = 0;
+  while (k + step <= d && walkable(x + sx * (k + step), z + sz * (k + step), .1, S.doors, true)) k += step;
+  while (k > 0 && !walkable(x + sx * k, z + sz * k, .1, S.doors)) k -= step;
+  return { x: x + sx * k, z: z + sz * k };
+}
+
+// A thrown Mini Biggs that has just come down sings where it lands, and whatever hears it comes to look.
+function landToys(S) {
+  for (const s of S.toys) if (!s.heard && S.t >= s.land) {
+    s.heard = true;
+    emit('toy', { by: s.by, x: s.x, z: s.z });
+    noise(S, s.x, s.z, TOY.hear, TOY.chance);
+  }
 }
 
 // Where to walk next.
@@ -673,6 +712,7 @@ export function stepFloor() {
   respawnBatteries(S, dt);
   turnWave(S);
   if (S.crank && (crankNoise -= dt) <= 0) { crankNoise = 2; noise(S, GENERATOR.x, GENERATOR.z, 24, .35); }
+  landToys(S);
   if (S.dev?.freeze) return;
   for (let i = 0; i < S.m.length && S.phase === 'play'; i++) runMascot(S, S.m[i], brains[i], dt);
 }
@@ -702,6 +742,16 @@ export function actFloor(pid, a) {
     if (p.flat && S.t >= (p.callAt || 0)) { p.callAt = S.t + F.CALL_GAP; emit('call', { id: p.id, x: p.x, z: p.z }); }
     return;
   }
+  if (a.t === 'throw') {
+    // Their Mini Biggs, along the way the guard is looking (yaw) and as far as they aimed (d), sung on the torch's
+    // battery. Not from a locker, and not on less than it costs.
+    if (p.flat || hidden(p) || !p.toy || p.bat < TOY.cost) return;
+    const to = landing(S, p.x, p.z, num(a.yaw, -1e3, 1e3, p.yaw), num(a.d, 0, TOY.range, TOY.range));
+    p.bat = Math.max(0, p.bat - TOY.cost); p.toy = false;
+    if (p.bat <= 0) p.on = p.ph = false;
+    S.toys.push({ id: ++S.toyId, by: p.id, x0: p.x, z0: p.z, x: to.x, z: to.z, at: S.t, land: S.t + Math.max(.3, dist(p, to) / TOY.speed), heard: false });
+    return;
+  }
   if (a.t !== 'use' || p.flat) return;
   const near = thing => thing && dist(p, thing) < F.REACH;
   if (a.what === 'fix' && S.faults[a.i] && near(BOXES[a.i])) {
@@ -720,6 +770,12 @@ export function actFloor(pid, a) {
     batTimers.push(rnd(30, 50));
     p.bat = Math.min(1, p.bat + F.BAT_PICKUP);
     emit('bat', { by: p.id });
+  } else if (a.what === 'toy' && !p.toy && !hidden(p)) {
+    // A Mini Biggs on the floor, anyone's, into empty hands. Not one still in the air.
+    const t = S.toys.find(t => t.id === a.id);
+    if (!t || S.t < t.land || !near(t)) return;
+    S.toys = S.toys.filter(o => o !== t); p.toy = true;
+    emit('grab', { by: p.id, x: t.x, z: t.z });
   } else if (a.what === 'hide' && HIDES[a.i]) {
     const h = HIDES[a.i];
     if (p.hid === a.i) {

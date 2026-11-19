@@ -2,22 +2,22 @@
 // owns its own position and tells the host about twelve times a second
 // (a 'p' action); everything else about the guard comes back in S.
 // Keyboard (WASD to walk, and arrow keys to look for anyone without a mouse), mouse and gamepad are read here. Touch is in touch.js, which
-// drives the same guard through pad, look(), toggleTorch(), togglePhone() and toggleZoom().
+// drives the same guard through pad, look(), toggleTorch(), togglePhone(), toggleZoom() and throwToy().
 import * as THREE from 'three';
 import { game } from '../state.js';
 import { send } from '../net.js';
 import { unlockAudio } from '../audio.js';
 import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, slide, walkable } from './map.js';
-import { F } from './sim3d.js';
+import { F, TOY } from './sim3d.js';
 import { FAULT_NAME } from './task.js';
 
 const SENS = .0022, SEND_MS = 80;   // radians per pixel of mouse travel at sensitivity 1
 const PITCH_MAX = 1.45;
 // The arrow keys look: radians per second at sensitivity 1, reached after ARROW_RAMP seconds of holding (a tap nudges).
 const ARROW = { turn: 2.2, tilt: 1.4 }, ARROW_RAMP = .35;
-const GAME_KEYS = /^(Key[WASDEFQCR]|Arrow|Shift|Space)/;
+const GAME_KEYS = /^(Key[WASDEFQCRG]|Arrow|Shift|Space)/;
 // A standard-mapping gamepad: left stick walks, right stick looks.
-const GP = { use: 0, phone: 1, torch: 2, call: 3, sprint: 4, watch: 5, pause: 9, zoom: 12, dead: .18, look: 2.8 };   // look: radians per second at full tilt
+const GP = { use: 0, phone: 1, torch: 2, call: 3, sprint: 4, watch: 5, toss: 7, pause: 9, zoom: 12, dead: .18, look: 2.8 };   // look: radians per second at full tilt
 
 // Look settings, kept between visits. sens multiplies SENS. outline: a gold edge round usable things (outline.js).
 // third: a flat guard watches teammates from behind them, not through their eyes (app.js spectate).
@@ -30,6 +30,7 @@ const DOOR_NAME = { L: 'left door', R: 'right door', V: 'vent' };
 // In a locker: how far the view turns either side of straight out through the doors, and up or down (radians),
 // and how far in front of the locker's middle the eye is: just past the doors, so their insides are behind it.
 const LOCKER_LOOK = { yaw: .85, pitch: .5, eye: .34 };
+const THROW_MS = 1000;   // a second throw is not sent before the host has had time to take the first
 const angDiff = (a, b) => { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
 
 export function createPlayer(camera, canvas) {
@@ -41,12 +42,15 @@ export function createPlayer(camera, canvas) {
     ph: false,       // the phone is up, showing the minimap
     task: null,      // hands in a breaker box: { i } of the box, while the minigame panel (task.js) is up
     zoom: true,      // the minimap shows the whole building, not what is round the guard. The phone starts on this.
+    threw: 0,        // performance.now() of the last Mini Biggs thrown, of the last try without the battery for it (dry),
+    dry: 0,          // and of the last try with empty hands (empty)
+    empty: 0,
     hid: -1 };       // the locker (HIDES index) this guard is standing in, as the host has it, or -1
   const keys = new Set();
   // Touch and gamepad code can drive the guard through these instead of keys.
   const pad = { fwd: 0, strafe: 0, sprint: false, use: false };
   const gp = { fwd: 0, strafe: 0, sprint: false, use: false };
-  let sinceSprint = 0, lastSend = 0, usedTap = false, lastCall = -1e9, drop = 0;
+  let lastThrow = -1e9, sinceSprint = 0, lastSend = 0, usedTap = false, lastCall = -1e9, drop = 0;
   let mouseLocked = false, gpLive = false, gpWas = [];
   let keysLive = false, arrowHeld = 0;   // keysLive: playing on the keyboard alone, so there is no pointer to lock
   let task = null;   // the minigame panel (task.js), handed over by app.js once the HUD exists
@@ -64,6 +68,20 @@ export function createPlayer(camera, canvas) {
   function togglePhone() { if (playing() && !me.flat && !me.paused && (me.ph || charged())) me.ph = !me.ph; }
   // The minimap between what is round the guard and the whole building. Only with the phone up.
   function toggleZoom() { if (me.ph) me.zoom = !me.zoom; }
+  // The guard's Mini Biggs, thrown where they are looking: as far as the floor the view meets, or as far as one goes
+  // when looking level or up. It sings on a bar of the torch's battery, so it needs that much, and it has to be picked
+  // up again before the next throw. The host works out where it comes down (landing in sim3d.js) and takes the
+  // battery. Not from a locker, and not with both hands in a breaker box.
+  function throwToy() {
+    if (!playing() || me.flat || me.paused || me.hid >= 0 || me.task) return;
+    const now = performance.now(), mine = game.S.players.find(p => p.id === game.myId);
+    if (!mine?.toy) { me.empty = now; return; }
+    if (mine.bat < TOY.cost) { me.dry = now; return; }
+    if (now - lastThrow < THROW_MS) return;   // the host has not said it has gone yet
+    lastThrow = me.threw = now;
+    const d = me.pitch < -.05 ? Math.min(TOY.range, (EYE - .2) / Math.tan(-me.pitch)) : TOY.range;
+    send({ t: 'throw', yaw: me.yaw, d });
+  }
 
   // Turn the view by a mouse's worth of pixels.
   function look(dx, dy) {
@@ -94,7 +112,7 @@ export function createPlayer(camera, canvas) {
     if (me.paused) { if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); keysLive = true; resume(); } return; }
     if (e.code === 'Escape' && !mouseLocked) { pause(); return; }
     if (GAME_KEYS.test(e.code)) keysLive = true;
-    if (!e.repeat) ({ KeyF: toggleTorch, KeyQ: call, Space: watchNext, KeyC: togglePhone, KeyR: toggleZoom })[e.code]?.();
+    if (!e.repeat) ({ KeyF: toggleTorch, KeyQ: call, Space: watchNext, KeyC: togglePhone, KeyR: toggleZoom, KeyG: throwToy })[e.code]?.();
     if (e.code === 'Space' || e.code === 'Tab' || e.code.startsWith('Arrow')) e.preventDefault();
     keys.add(e.code);
   });
@@ -104,6 +122,9 @@ export function createPlayer(camera, canvas) {
     unlockAudio();
     if (!mouseLocked) resume(); else toggleTorch();
   });
+  // The right button throws a Mini Biggs, and must not open the browser's menu.
+  canvas.addEventListener('mousedown', e => { if (e.button === 2 && mouseLocked) throwToy(); });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('pointerlockchange', () => {
     const was = mouseLocked;
     mouseLocked = document.pointerLockElement === canvas;
@@ -146,6 +167,7 @@ export function createPlayer(camera, canvas) {
       if (hit(GP.watch)) watchNext();
       if (hit(GP.phone)) togglePhone();
       if (hit(GP.zoom)) toggleZoom();
+      if (hit(GP.toss)) throwToy();
     }
     gpWas = g.buttons.map(b => b.pressed);
   }
@@ -162,6 +184,8 @@ export function createPlayer(camera, canvas) {
     if (S.power > 0 && mine.bat < 1) list.push({ what: 'charge', at: CHARGER, label: 'Charge the torch', hold: -1 });
     // In a locker the one thing in reach is the way out.
     if (mine.hid >= 0) return { what: 'hide', i: mine.hid, at: HIDES[mine.hid].at, label: 'Step out of the locker', hold: 0 };
+    // Any Mini Biggs on the floor, into empty hands.
+    if (!mine.toy) for (const t of S.toys || []) if (S.t >= t.land) list.push({ what: 'toy', id: t.id, at: t, label: 'Pick up the Mini Biggs', hold: 0 });
     HIDES.forEach((h, i) => { if (!S.players.some(p => p.hid === i)) list.push({ what: 'hide', i, at: h.at, label: 'Hide in the locker', hold: F.HIDE_HOLD }); });
     let best = null, bd = F.REACH - .2;
     for (const t of list) {
@@ -216,7 +240,7 @@ export function createPlayer(camera, canvas) {
   }
 
   return {
-    me, pad, torch, letGo, setTask(t) { task = t; }, toggleTorch, togglePhone, toggleZoom, look, pause, resume, call, watchNext,
+    me, pad, torch, letGo, setTask(t) { task = t; }, toggleTorch, togglePhone, toggleZoom, throwToy, look, pause, resume, call, watchNext,
     // Put the guard where the host says they are: the start of a night, or after joining.
     reset(mine) { letGo(); Object.assign(me, { x: mine.x, z: mine.z, yaw: mine.yaw ?? Math.PI, pitch: 0, on: false, ph: false, stam: 1, bob: 0, hold: 0, paused: false, watch: null, hid: -1 }); },
     update(S, dt, now) {

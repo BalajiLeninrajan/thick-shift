@@ -3,13 +3,14 @@
 // Top left: the hour, the building's power and the task list (the faults to
 // fix, where, and how long before each burns). Top centre: a compass with the
 // faults on it, and the events of the night under it. Top right:
-// the other guards. Bottom left: the torch. Everything else shows only while
+// the other guards. Bottom left: the torch, and whether you have your Mini
+// Biggs in hand. Everything else shows only while
 // it matters (a prompt in reach, stamina while winded, the flat and pause
 // states).
 import { MASC, FINAL_NIGHT } from '../config.js';
 import { game } from '../state.js';
 import { ROOMS3, BOXES, CHARGER, GENERATOR, roomAt, route } from './map.js';
-import { F, clockF, faultLeft } from './sim3d.js';
+import { F, TOY, clockF, faultLeft } from './sim3d.js';
 import { FAULT_NAME } from './task.js';
 import { prefs, savePrefs } from './player.js';
 import { createTouch, toggleFullscreen, canFullscreen } from './touch.js';
@@ -39,31 +40,33 @@ const PATHS = {
   full: '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
   locker: '<rect x="5" y="2" width="14" height="20" rx="1"/><path d="M12 2v20M8 6h2M8 8h2M14 6h2M14 8h2"/>',
   rotate: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 9a10 10 0 0 0 3 9m17-3a10 10 0 0 0-3-9"/>',
+  toy: '<circle cx="12" cy="13.5" r="7"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="6.5" r="2.2"/><path d="M9.5 11v.01M14.5 11v.01M10 16.5h.01M14 16.5h.01"/>',
 };
 const icon = name => `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
 // Each kind of toast has its own icon and colour (in styles.css), so a low
 // torch, low power, a fault burning and a guard going down do not look alike.
-const TOAST_ICON = { info: 'info', tip: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call', hide: 'locker' };
+const TOAST_ICON = { info: 'info', tip: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call', hide: 'locker', toy: 'toy' };
 const MAX_TOASTS = 3;
 
 // The pause screen's lists, in groups. Each row is what, then the keys or buttons as keycaps, then an
 // optional note under the action.
 const DRAINS = 'Drains the battery fast';
+const TOSS = 'Where you look, for a bar of battery. Pick it up to throw it again';
 const CONTROLS = {
   keys: [
     ['Moving', [['Walk', ['W A S D']], ['Run', ['Shift']], ['Look', ['Mouse', '← → ↑ ↓']]]],
-    ['Working', [['Use, fix', ['E']], ['Peel a friend up, hide', ['Hold E']], ['Torch', ['F', 'Click']], ['Phone map', ['C'], DRAINS], ['Zoom the map', ['R']]]],
+    ['Working', [['Use, fix', ['E']], ['Peel a friend up, hide', ['Hold E']], ['Torch', ['F', 'Click']], ['Phone map', ['C'], DRAINS], ['Zoom the map', ['R']], ['Throw a Mini Biggs', ['G', 'Right click'], TOSS]]],
     ['At a breaker box', [['Choose', ['W A S D', '1–5']], ['Act', ['E']], ['Let go', ['X']]]],
     ['When you are flat', [['Call out', ['Q']], ['Watch a teammate', ['Space']]]],
   ],
   touch: [
     ['Moving', [['Walk', ['Left thumb'], 'Anywhere on the left'], ['Look', ['Drag right']], ['Run', ['Run'], 'Lift to stop']]],
-    ['Working', [['Use, fix', ['Use']], ['Peel a friend up, hide', ['Hold Use']], ['Torch', ['Torch']], ['Phone map', ['Phone'], DRAINS], ['Zoom the map', ['Map']]]],
+    ['Working', [['Use, fix', ['Use']], ['Peel a friend up, hide', ['Hold Use']], ['Torch', ['Torch']], ['Phone map', ['Phone'], DRAINS], ['Zoom the map', ['Map']], ['Throw a Mini Biggs', ['Biggs'], TOSS]]],
     ['At a breaker box', [['Choose and act', ['Tap the parts']]]],
   ],
   pad: [
     ['Moving', [['Walk', ['Left stick']], ['Look', ['Right stick']], ['Run', ['LB']]]],
-    ['Working', [['Use, fix', ['A']], ['Torch', ['X']], ['Phone map', ['B'], DRAINS], ['Zoom the map', ['D-pad up']], ['Pause', ['Start']]]],
+    ['Working', [['Use, fix', ['A']], ['Torch', ['X']], ['Phone map', ['B'], DRAINS], ['Zoom the map', ['D-pad up']], ['Throw a Mini Biggs', ['RT'], TOSS], ['Pause', ['Start']]]],
     ['When you are flat', [['Call out', ['Y']], ['Watch a teammate', ['RB']]]],
   ],
 };
@@ -106,8 +109,9 @@ export function createHud(stage, player) {
     <div class="ts-f-torch">
       <div class="ts-f-stam"><i></i></div>
       <div class="ts-f-torch-row">${icon('torch')}<div class="ts-f-cells">${'<i></i>'.repeat(CELLS)}</div><span></span></div>
+      <div class="ts-f-toy" title="Mini Biggs: a throw costs one bar">${icon('toy')}<span></span><kbd class="ts-key">G</kbd></div>
     </div>
-    <div class="ts-f-start"><b>Click, or press a key, to play</b><span><kbd class="ts-key">W A S D</kbd> walk <kbd class="ts-key">← → ↑ ↓</kbd> look <kbd class="ts-key">Shift</kbd> run <kbd class="ts-key">F</kbd> torch <kbd class="ts-key">E</kbd> use <kbd class="ts-key">C</kbd> phone <kbd class="ts-key">Esc</kbd> pause</span></div>
+    <div class="ts-f-start"><b>Click, or press a key, to play</b><span><kbd class="ts-key">W A S D</kbd> walk <kbd class="ts-key">← → ↑ ↓</kbd> look <kbd class="ts-key">Shift</kbd> run <kbd class="ts-key">F</kbd> torch <kbd class="ts-key">E</kbd> use <kbd class="ts-key">C</kbd> phone <kbd class="ts-key">G</kbd> Mini Biggs <kbd class="ts-key">Esc</kbd> pause</span></div>
     <div class="ts-f-flat">
       <span class="tag cn-tone-danger">Flat</span>
       <b></b>
@@ -161,6 +165,7 @@ export function createHud(stage, player) {
   const crew = $('.ts-f-crew'), dot = $('.ts-f-dot');
   const prompt = $('.ts-f-prompt'), [promptKey, promptText] = $('.ts-f-prompt-row').children, hold = $('.ts-f-hold'), holdBar = hold.firstChild;
   const torch = $('.ts-f-torch'), stam = $('.ts-f-stam'), cells = [...$('.ts-f-cells').children], torchText = $('.ts-f-torch-row').lastChild;
+  const toy = $('.ts-f-toy'), toyText = toy.querySelector('span');
   const start = $('.ts-f-start'), flat = $('.ts-f-flat'), [, flatHow, flatSub] = flat.children, callText = $('[data-do="call"] span'), watchBtn = $('[data-do="watch"]');
   const pause = $('.ts-f-pause'), pauseIn = $('.ts-f-pause-in'), pauseWhen = $('.ts-f-pause-when'), keyList = $('[data-pane="controls"]'), sens = $('#ts-sens'), sensText = sens.nextElementSibling, invert = $('#ts-invert'), outline = $('#ts-outline'), third = $('#ts-third');
   const touch = createTouch(root, player);
@@ -207,7 +212,7 @@ export function createHud(stage, player) {
     if (seen.split(' ').includes(key)) return;
     seen += ' ' + key;
     try { localStorage.tsFloorTips = seen; } catch (e) { /* storage blocked */ }
-    say(text.replace('{use}', player.me.touch ? 'Use' : 'E'), 'tip', 9);
+    say(text.replace('{use}', player.me.touch ? 'Use' : 'E').replace('{throw}', player.me.touch ? 'Biggs' : 'G'), 'tip', 9);
   }
 
   /* ---------- the compass ---------- */
@@ -307,7 +312,7 @@ export function createHud(stage, player) {
 
   /* ---------- once a frame ---------- */
 
-  let lastT = 1e9, was = { bat: 1, power: 100 }, calledAt = -1e9;
+  let lastT = 1e9, was = { bat: 1, power: 100, dry: 0, empty: 0 }, calledAt = -1e9;
   return {
     root, say, tip,
     // Someone flat called out: their compass mark pulses for a few seconds.
@@ -317,7 +322,7 @@ export function createHud(stage, player) {
       const now = performance.now(), mine = S.players.find(p => p.id === game.myId) || {}, bat = mine.bat ?? 1;
       const mates = S.players.filter(p => p.id !== game.myId && p.x != null);
       root.hidden = S.phase !== 'play' || !!scared;
-      if (S.t < lastT) was = { bat: 1, power: 100 };   // a night began
+      if (S.t < lastT) was = { bat: 1, power: 100, dry: me.dry, empty: me.empty };   // a night began
       lastT = S.t;
       for (let i = live.length - 1; i >= 0; i--) if (now > live[i].until) drop(live.splice(i, 1)[0]);
       if (root.hidden) return;
@@ -350,6 +355,15 @@ export function createHud(stage, player) {
       if (bat <= 0 && was.bat > 0) say('The torch is dead.', 'torch', 6);
       if (bat < .5 && was.bat >= .5) tip('bat', me.ph ? 'The phone eats the battery four times as fast as the torch. Batteries turn up on the floor. The booth has a charger.' : 'The torch runs down while it is on. Batteries turn up on the floor. The booth has a charger.');
       was.bat = bat;
+      // The Mini Biggs: in hand or on the floor somewhere, greyed out without it or the bar a throw costs, and a word
+      // when they try anyway.
+      set(toyText, mine.toy ? 'Mini Biggs, 1 bar' : 'Mini Biggs on the floor');
+      data(toy, 'ok', !!mine.toy && bat >= TOY.cost);
+      toy.classList.toggle('is-fresh', now - me.threw < 600);
+      if (me.dry > was.dry) say('Not enough battery to make the Mini Biggs sing. It takes a whole bar.', 'toy', 4);
+      if (me.empty > was.empty) say('Your hands are empty. Pick a Mini Biggs up off the floor first.', 'toy', 4);
+      was.empty = me.empty;
+      was.dry = me.dry;
       stam.hidden = me.stam >= 1;
       stam.firstChild.style.width = me.stam * 100 + '%';
 

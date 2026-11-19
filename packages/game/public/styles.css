@@ -241,6 +241,12 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-torch[data-state="low"] .ts-f-cells, .ts-f-torch[data-state="dead"] .ts-f-cells { animation: ts-blink .7s steps(2, jump-none) infinite; }
 /* A red glow in the corner, so a low torch shows without looking at it. */
 .ts-f-torch[data-state="low"]::before, .ts-f-torch[data-state="dead"]::before { content: ""; position: absolute; left: -90px; bottom: -90px; z-index: -1; width: 340px; height: 260px; background: radial-gradient(closest-side, color-mix(in srgb, var(--red) 34%, transparent), transparent); }
+.ts-f-toy { display: flex; align-items: center; gap: 6px; color: var(--overlay-2); font-size: 13px; }
+.ts-f-toy svg { width: 20px; height: 20px; }
+.ts-f-toy .ts-key { margin-left: 2px; }
+.ts-f-toy[data-ok="false"] { opacity: .45; }
+.ts-f-toy.is-fresh { color: var(--mauve); }
+.ts-fhud[data-touch="true"] .ts-f-toy { display: none; }
 .ts-f-stam { width: 112px; height: 3px; border-radius: 2px; background: var(--ts-plate); }
 .ts-f-stam i { display: block; height: 100%; border-radius: inherit; background: var(--sapphire); }
 
@@ -253,6 +259,7 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 /* In a locker the slats are drawn in the scene (src/three/slats.js), behind the phone. */
 .ts-fhud[data-hid="true"] .ts-f-dot { display: none; }
 .ts-f-toast.is-hide { --tc: var(--teal); }
+.ts-f-toast.is-toy { --tc: var(--mauve); }
 
 /* Flat on the floor. */
 .ts-f-vignette { position: absolute; inset: 0; opacity: 0; transition: opacity .6s; background: radial-gradient(ellipse at 50% 55%, transparent 30%, color-mix(in srgb, var(--red) 20%, transparent) 70%, color-mix(in srgb, var(--neu-ink) 90%, transparent)); }
@@ -319,6 +326,8 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-t-run { right: 34px; bottom: 126px; width: 62px; height: 62px; }
 .ts-t-phone { right: 204px; bottom: 14px; width: 58px; height: 58px; }
 .ts-t-zoom { right: 116px; bottom: 102px; width: 56px; height: 56px; }
+.ts-t-toy { right: 188px; bottom: 96px; width: 56px; height: 56px; }
+.ts-t-toy[aria-disabled="true"] { opacity: .45; }
 .ts-t-zoom[hidden] { display: none; }
 .ts-t-btn[aria-pressed="true"] { border-color: var(--yellow); color: var(--yellow); }
 .ts-t-use.is-ready { border-color: var(--yellow); }
