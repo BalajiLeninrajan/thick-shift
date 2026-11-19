@@ -11,11 +11,11 @@ seed=${2:-1}
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/public" "$work/tools"
-cp -r "$root/public/src" "$work/public/src"
+mkdir -p "$work/packages/game/public" "$work/tools"
+cp -r "$root/packages/game/public/src" "$work/packages/game/public/src"
 cp -r "$root/tools/balance" "$work/tools/balance"
 cp "$root/tools/roblox/diff/rec.mjs" "$work/tools/roblox-rec.mjs"
 node "$root/tools/roblox/diff/patch.mjs" "$work"
 REC_OUT="$work/rec.jsonl" node "$work/tools/balance/floor.mjs" --trace "$scenario" --seed "$seed" > "$work/trace.txt"
 tail -n 2 "$work/trace.txt" | head -n 1 | cut -c1-200
-lune run "$root/roblox/test/diff-sim.luau" "$work/rec.jsonl"
+lune run "$root/apps/roblox/test/diff-sim.luau" "$work/rec.jsonl"

@@ -1,4 +1,4 @@
-# Writes public/models/hippo.json from the three exported stages:
+# Writes packages/game/public/models/hippo.json from the three exported stages:
 #
 #   tools/models/bl tools/models/hippo/meta.py
 #

@@ -1,0 +1,13 @@
+{
+  "name": "@thick-shift/game",
+  "private": true,
+  "exports": {
+    "./worker": "./worker/room.js"
+  },
+  "scripts": {
+    "vendor": "sh vendor-three.sh"
+  },
+  "devDependencies": {
+    "three": "^0.187.0"
+  }
+}

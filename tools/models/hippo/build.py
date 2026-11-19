@@ -9,7 +9,7 @@
 # flashlight in the dark: front, low), face and sface (close on the face).
 # With none named, all of them are rendered.
 #
-# Writes public/models/hippo_<stage>.glb. meta.py writes hippo.json
+# Writes packages/game/public/models/hippo_<stage>.glb. meta.py writes hippo.json
 # afterwards. look.py renders other previews and a posed check.
 #
 # Coordinates are Blender's: +x is the model's left, the front is -y, z is up,
@@ -27,7 +27,7 @@ STAGES = [int(a) for a in ARGS if a.isdigit()] or [0, 1, 2]
 QUICK = 'quick' in ARGS
 SHOTS = [a for a in ARGS if a in ('sf', 'sq', 'ss', 'sb', 'df', 'dl', 'face', 'sface')] or ['sf', 'sq', 'ss', 'sb', 'df', 'dl', 'face', 'sface']
 
-# Palette, from public/src/config.js. Fur dulls with each stage as it does in 2D.
+# Palette, from packages/game/public/src/config.js. Fur dulls with each stage as it does in 2D.
 SURFACE0 = hexc('#313244')
 STAGE = KEY = FUR_COL = BELLY_COL = HEAD_R = HEAD_T = None     # set per stage by begin()
 

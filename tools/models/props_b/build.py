@@ -1,4 +1,4 @@
-# Builds the room prop kit: public/models/props_b.glb and props_b.json.
+# Builds the room prop kit: packages/game/public/models/props_b.glb and props_b.json.
 #
 #   tools/models/bl tools/models/props_b/build.py
 #   tools/models/bl tools/models/props_b/build.py -- --only fridge,trunk --prev all

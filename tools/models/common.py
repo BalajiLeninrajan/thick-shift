@@ -3,14 +3,14 @@
 #   import sys, os; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 #   from common import *
 #
-# The game loads GLB files from public/models. A model is a tree of rigid,
+# The game loads GLB files from packages/game/public/models. A model is a tree of rigid,
 # named parts (no armature); the game animates the parts in code. See
 # README.md here for the naming contract.
 import bpy, json, math, os, sys
 from mathutils import Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MODELS = os.path.join(ROOT, 'public', 'models')
+MODELS = os.path.join(ROOT, 'packages', 'game', 'public', 'models')
 PREVIEWS = os.path.join(ROOT, 'tools', 'models', 'previews')
 
 
@@ -69,7 +69,7 @@ def tris(objs=None):
 
 
 def export_glb(name, objs=None, draco=True, jpeg_quality=88):
-    """Write public/models/<name>.glb. `objs`: the root objects to export
+    """Write packages/game/public/models/<name>.glb. `objs`: the root objects to export
     (with their children); default is the whole scene. Blender's -Y is the
     model's front; it comes out facing +Z in three.js, with +Y up."""
     os.makedirs(MODELS, exist_ok=True)
@@ -108,7 +108,7 @@ def bounds(objs):
 
 
 def report(name):
-    """Re-open public/models/<name>.glb and print what the game will see:
+    """Re-open packages/game/public/models/<name>.glb and print what the game will see:
     the node tree, triangle count, size and bounding box. Returns a dict."""
     path = os.path.join(MODELS, name + '.glb')
     objs = load_glb(path)
@@ -132,7 +132,7 @@ VIEWS = {'front': (0, .55, 1), 'three_quarter': (35, .6, 1), 'side': (90, .55, 1
 
 
 def preview(name, views=('front', 'three_quarter', 'side', 'back'), res=640, samples=24, light='flashlight', focus=None, tag=''):
-    """Render public/models/<name>.glb as the game will load it, to
+    """Render packages/game/public/models/<name>.glb as the game will load it, to
     tools/models/previews/<name>_<view><tag>.png. Always look at the result.
 
     light: 'flashlight' is a dark room with one warm spot from beside the

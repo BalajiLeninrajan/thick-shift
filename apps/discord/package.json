@@ -1,0 +1,17 @@
+{
+  "name": "@thick-shift/discord",
+  "private": true,
+  "scripts": {
+    "build": "node ../../packages/game/assemble.mjs public dist",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "vendor": "sh vendor-discord.sh"
+  },
+  "dependencies": {
+    "@thick-shift/game": "workspace:*"
+  },
+  "devDependencies": {
+    "@discord/embedded-app-sdk": "2.5.0",
+    "wrangler": "^4.162.0"
+  }
+}

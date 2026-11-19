@@ -2,14 +2,10 @@
   "name": "thick-shift",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "deploy:discord": "wrangler deploy --env discord",
-    "vendor": "sh tools/vendor-three.sh && sh tools/vendor-discord.sh"
-  },
-  "devDependencies": {
-    "@discord/embedded-app-sdk": "2.5.0",
-    "three": "^0.187.0",
-    "wrangler": "^4.162.0"
+    "dev": "pnpm --filter @thick-shift/web dev",
+    "dev:discord": "pnpm --filter @thick-shift/discord dev",
+    "deploy": "pnpm --filter @thick-shift/web run deploy",
+    "deploy:discord": "pnpm --filter @thick-shift/discord run deploy",
+    "vendor": "pnpm -r run vendor"
   }
 }
