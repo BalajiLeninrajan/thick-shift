@@ -18,10 +18,20 @@ const GLOW = { lamp_glow: 'on', screen_glow: 'screen', sign_glow: 'on', exit_glo
 // Props with a part that keeps moving: [child node, radians per second about its z].
 const SPIN = { wall_fan: ['blades', 1.1] };
 
+// Vertex colours as RGB. three.js builds a different program for RGBA ones, so a material drawn on both would have
+// its program worked out again at every switch, many times a frame. The kits' alphas are all 1.
+function rgb(g) {
+  const c = g.attributes.color;
+  if (!c || c.itemSize === 3) return;
+  const out = new Float32Array(c.count * 3);
+  for (let i = 0; i < c.count; i++) out.set([c.getX(i), c.getY(i), c.getZ(i)], i * 3);
+  g.setAttribute('color', new THREE.BufferAttribute(out, 3));
+}
+
 // Every prop of both kits by name. A node's own position is its place on the kit's contact sheet, not in the game.
 const nodes = Promise.all(KITS.map(loadGLB)).then(scenes => {
   const byName = new Map();
-  for (const scene of scenes) for (const node of scene?.children || []) byName.set(node.name, node);
+  for (const scene of scenes) for (const node of scene?.children || []) { node.traverse(o => { if (o.isMesh) rgb(o.geometry); }); byName.set(node.name, node); }
   return byName;
 });
 
@@ -62,8 +72,8 @@ function plain(geo, names) {
     g.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize));
   }
   const n = g.attributes.position.count;
-  if (names.includes('color') && !g.attributes.color) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 4).fill(1), 4));
-  if (g.attributes.color?.itemSize === 3) { const c = g.attributes.color, out = new Float32Array(n * 4).fill(1); for (let i = 0; i < n; i++) out.set([c.getX(i), c.getY(i), c.getZ(i)], i * 4); g.setAttribute('color', new THREE.BufferAttribute(out, 4)); }
+  if (names.includes('color') && !g.attributes.color) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+  rgb(g);
   if (names.includes('uv') && !g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
   g.morphAttributes = {};
   return g;

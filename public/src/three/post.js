@@ -96,34 +96,38 @@ export function createPost(renderer, torch) {
   let name = QUALITY[asked] ? asked : 'high', frames = 0, spent = 0, last = 0;
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(1, 1) });
   const mask = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
-  const maskMat = new THREE.ShaderMaterial({
-    uniforms: { tDepth: { value: target.depthTexture }, uSize: { value: new THREE.Vector2(1, 1) }, uNear: { value: .1 }, uFar: { value: 100 }, uCol: { value: new THREE.Vector4() } },
-    vertexShader: MASK_VERT, fragmentShader: MASK_FRAG, side: THREE.DoubleSide, blending: THREE.NoBlending, depthTest: false, depthWrite: false,
-  });
-  const marked = new Set(), black = new THREE.Color(0);
-  // Each marked mesh sets the mask's colour and strength for itself as it is drawn.
-  function tint(renderer_, scene_, camera_, geometry, material) {
-    if (material !== maskMat) return;
-    const o = this.userData.outline;
-    maskMat.uniforms.uCol.value.set(o.col[0], o.col[1], o.col[2], o.a); maskMat.uniformsNeedUpdate = true;
-  }
+  // Each marked mesh gets a mask material of its own, sharing these uniforms and keeping its colour in uCol. One
+  // shared override material would flip between skinned and plain meshes, and three.js re-derives a material's
+  // program every time it does.
+  const maskU = { tDepth: { value: target.depthTexture }, uSize: { value: new THREE.Vector2(1, 1) }, uNear: { value: .1 }, uFar: { value: 100 } };
+  const maskMats = new WeakMap();
+  const maskMatOf = o => {
+    let m = maskMats.get(o);
+    if (!m) maskMats.set(o, m = new THREE.ShaderMaterial({ uniforms: { ...maskU, uCol: { value: new THREE.Vector4() } }, vertexShader: MASK_VERT, fragmentShader: MASK_FRAG, side: THREE.DoubleSide, blending: THREE.NoBlending, depthTest: false, depthWrite: false }));
+    return m;
+  };
+  const swapped = [], black = new THREE.Color(0);
   function drawMask(scene, camera, marks) {
-    const now = new Set();
     for (const m of marks) m.obj.traverse(o => {
-      if (!o.isMesh) return;
-      o.userData.outline = m; now.add(o);
-      if (!marked.has(o)) { o.layers.enable(OUTLINE_LAYER); o.userData.tintWas = o.onBeforeRender; o.onBeforeRender = tint; }
+      if (!o.isMesh || o.layers.isEnabled(OUTLINE_LAYER)) return;
+      const mm = maskMatOf(o); mm.uniforms.uCol.value.set(m.col[0], m.col[1], m.col[2], m.a);
+      swapped.push(o, o.material); o.material = mm; o.layers.enable(OUTLINE_LAYER);
     });
-    for (const o of marked) if (!now.has(o)) { o.layers.disable(OUTLINE_LAYER); o.onBeforeRender = o.userData.tintWas || (() => {}); }
-    marked.clear(); for (const o of now) marked.add(o);
-    if (!now.size) return false;
-    const u = maskMat.uniforms, bg = scene.background, layers = camera.layers.mask;
-    u.uSize.value.set(target.width, target.height); u.uNear.value = camera.near; u.uFar.value = camera.far;
-    const shadows = renderer.shadowMap.autoUpdate;   // the torch's shadow was drawn with the scene; not again
-    scene.background = null; scene.overrideMaterial = maskMat; camera.layers.set(OUTLINE_LAYER); renderer.shadowMap.autoUpdate = false;
+    if (!swapped.length) return false;
+    const bg = scene.background, layers = camera.layers.mask;
+    maskU.uSize.value.set(target.width, target.height); maskU.uNear.value = camera.near; maskU.uFar.value = camera.far;
+    // The lights go on the mask's layer too. three.js keeps one light setup per scene, and a pass that saw no lights
+    // would make every lit material in the next frame's scene pass work out its program again (most of a frame's
+    // JavaScript on an Iris 655).
+    scene.traverse(o => { if (o.isLight) o.layers.enable(OUTLINE_LAYER); });
+    // The torch's shadow and every matrix in the scene were brought up to date by the scene pass; not again.
+    const shadows = renderer.shadowMap.autoUpdate, matrices = scene.matrixWorldAutoUpdate;
+    scene.background = null; camera.layers.set(OUTLINE_LAYER); renderer.shadowMap.autoUpdate = false; scene.matrixWorldAutoUpdate = false;
     renderer.setRenderTarget(mask); renderer.setClearColor(black, 0); renderer.clear(true, false, false);
     renderer.render(scene, camera);
-    scene.background = bg; scene.overrideMaterial = null; camera.layers.mask = layers; renderer.shadowMap.autoUpdate = shadows;
+    scene.background = bg; camera.layers.mask = layers; renderer.shadowMap.autoUpdate = shadows; scene.matrixWorldAutoUpdate = matrices;
+    for (let i = 0; i < swapped.length; i += 2) { swapped[i].material = swapped[i + 1]; swapped[i].layers.disable(OUTLINE_LAYER); }
+    swapped.length = 0;
     return true;
   }
   const mat = new THREE.ShaderMaterial({
