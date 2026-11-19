@@ -81,14 +81,14 @@ export function createUsables(scene) {
     slab.position.x = .24; door.add(slab); door.position.set(-.25, 0, .17);
     body.position.z = .08; bulb.position.set(0, .42, .1); g.add(body, bulb, door);
     const sparks = Array.from({ length: 3 }, () => { const s = new THREE.Sprite(sparkMat); s.scale.setScalar(.25); s.position.set(0, 0, .25); s.visible = false; g.add(s); return s; });
-    return { lamp, door, sparks, at: new THREE.Vector3(cl.x + Math.sin(cl.face) * .5, 1.4, cl.z + Math.cos(cl.face) * .5) };
+    return { g, lamp, door, sparks, at: new THREE.Vector3(cl.x + Math.sin(cl.face) * .5, 1.4, cl.z + Math.cos(cl.face) * .5) };
   });
   const faultLights = Array.from({ length: FAULT_LIGHTS }, () => { const l = new THREE.PointLight(SPARK, 0, 9, 1.6); scene.add(l); return l; });
 
   const panels = Object.fromEntries(DOORS.map(k => {
     const g = mount(scene, 'door button', PANELS[k], 1.3), lamp = lampMat(), body = box(.25, .4, .1, 0x3b3f4a), btn = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, .05, 16), lamp);
     body.position.z = .05; btn.rotation.x = Math.PI / 2; btn.position.z = .12; g.add(body, btn);
-    const p = { lamp, button: null, rest: 0 };
+    const p = { g, lamp, button: null, rest: 0 };
     upgrade(g, 'door_panel', lamp).then(model => { p.button = model?.getObjectByName('button') || null; p.rest = p.button?.position.z || 0; });
     return [k, p];
   }));
@@ -127,6 +127,8 @@ export function createUsables(scene) {
 
   const updateMap = wallMap(scene), order = boxes.map((_, i) => i);
   return {
+    // The groups that can be outlined (outline.js), by what a guard would use them for.
+    parts: { boxes: boxes.map(b => b.g), bats: bats.map(b => b.g), gen, dock, panels: Object.fromEntries(DOORS.map(k => [k, panels[k].g])) },
     // inView: the rooms that might be seen from the camera (sight.js).
     update(S, t, dt, camera, inView) {
       updateMap(S, t);

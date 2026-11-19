@@ -19,9 +19,9 @@ const GAME_KEYS = /^(Key[WASDEFQCR]|Arrow|Shift|Space)/;
 // A standard-mapping gamepad: left stick walks, right stick looks.
 const GP = { use: 0, phone: 1, torch: 2, call: 3, sprint: 4, watch: 5, pause: 9, zoom: 12, dead: .18, look: 2.8 };   // look: radians per second at full tilt
 
-// Look settings, kept between visits. sens multiplies SENS.
-export const prefs = { sens: 1, invert: false };
-try { const saved = JSON.parse(localStorage.tsFloor || '{}'); if (saved.sens > 0) prefs.sens = Math.min(2.5, Math.max(.3, +saved.sens)); prefs.invert = !!saved.invert; } catch (e) { /* storage blocked */ }
+// Look settings, kept between visits. sens multiplies SENS. outline: a gold edge round usable things (outline.js).
+export const prefs = { sens: 1, invert: false, outline: true };
+try { const saved = JSON.parse(localStorage.tsFloor || '{}'); if (saved.sens > 0) prefs.sens = Math.min(2.5, Math.max(.3, +saved.sens)); prefs.invert = !!saved.invert; if (saved.outline === false) prefs.outline = false; } catch (e) { /* storage blocked */ }
 export function savePrefs() { try { localStorage.tsFloor = JSON.stringify(prefs); } catch (e) { /* storage blocked */ } }
 const typing = e => !!e.target.closest?.('input, textarea, select, [contenteditable]');
 const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 };   // per second, and seconds before it starts coming back

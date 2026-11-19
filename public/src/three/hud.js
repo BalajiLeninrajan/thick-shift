@@ -109,6 +109,7 @@ export function createHud(stage, player) {
           <div class="cn-stack cn-gap-16">
             <div class="field"><label for="ts-sens">Look sensitivity</label><input class="slider" id="ts-sens" type="range" min=".3" max="2.5" step=".1"><small></small></div>
             <label class="choice"><input class="switch" type="checkbox" id="ts-invert">Invert looking up and down</label>
+            <label class="choice"><input class="switch" type="checkbox" id="ts-outline">Highlight things you can use</label>
             <p class="cn-meta cn-m-0">A gamepad works too: sticks to walk and look, A to use, X for the torch, B for the phone map and d-pad up to zoom it, LB to run, Start to pause.</p>
           </div>
         </div>
@@ -126,7 +127,7 @@ export function createHud(stage, player) {
   const prompt = $('.ts-f-prompt'), [promptKey, promptText] = $('.ts-f-prompt-row').children, hold = $('.ts-f-hold'), holdBar = hold.firstChild;
   const torch = $('.ts-f-torch'), stam = $('.ts-f-stam'), cells = [...$('.ts-f-cells').children], torchText = $('.ts-f-torch-row').lastChild;
   const start = $('.ts-f-start'), flat = $('.ts-f-flat'), [, flatHow, flatSub] = flat.children, callText = $('[data-do="call"] span'), watchBtn = $('[data-do="watch"]');
-  const pause = $('.ts-f-pause'), keyList = pause.querySelector('dl'), sens = $('#ts-sens'), sensText = sens.nextElementSibling, invert = $('#ts-invert');
+  const pause = $('.ts-f-pause'), keyList = pause.querySelector('dl'), sens = $('#ts-sens'), sensText = sens.nextElementSibling, invert = $('#ts-invert'), outline = $('#ts-outline');
   const touch = createTouch(root, player);
   // Compass ticks, by bearing. Yaw 0 faces south and grows toward east, as in player.js.
   const ticks = [['S', 0], ['', Math.PI / 4], ['E', Math.PI / 2], ['', Math.PI * .75], ['N', Math.PI], ['', -Math.PI * .75], ['W', -Math.PI / 2], ['', -Math.PI / 4]]
@@ -138,9 +139,10 @@ export function createHud(stage, player) {
     if (name) actions[name]();
     else if (e.target === pause) player.resume();   // a click beside the panel
   });
-  const showPrefs = () => { sens.value = prefs.sens; invert.checked = prefs.invert; set(sensText, `${Math.round(prefs.sens * 100)}% of normal`); };
+  const showPrefs = () => { sens.value = prefs.sens; invert.checked = prefs.invert; outline.checked = prefs.outline; set(sensText, `${Math.round(prefs.sens * 100)}% of normal`); };
   sens.oninput = () => { prefs.sens = +sens.value; savePrefs(); showPrefs(); };
   invert.onchange = () => { prefs.invert = invert.checked; savePrefs(); };
+  outline.onchange = () => { prefs.outline = outline.checked; savePrefs(); };
 
   /* ---------- toasts and first-time tips ---------- */
 

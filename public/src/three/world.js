@@ -27,6 +27,7 @@ export function buildWorld(scene) {
 
   return {
     torchCookie,
+    parts: usables.parts,   // what outline.js can put a gold edge round
     stop: 1,   // how far to stop the picture down against torch glare this frame (light.js)
     // torch: how bright the local guard's torch is, 0 to 1. dread, threat: 0 to 1.
     update(S, t, dt, camera, torch, dread, threat) {

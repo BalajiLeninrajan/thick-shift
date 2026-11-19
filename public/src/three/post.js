@@ -4,6 +4,12 @@
 // mapping, vignette, grain, colour fringing at the edges, and tearing when
 // something is close. One pass, because every extra one is a whole screen of
 // pixels on a GPU that has none to spare.
+//
+// The one exception is the outline of usable things (outline.js). Only while
+// something is marked, those objects are drawn again, flat, into a mask the
+// size of the scene, each fragment dropped where the scene's depth says a
+// wall is in front. The full-screen pass then edges the mask and lays the
+// edge over the finished picture, so it shows in the dark.
 import * as THREE from 'three';
 
 // width: the most pixels across the scene is drawn at. ratio: the most
@@ -17,9 +23,28 @@ const QUALITY = {
 // over SAMPLE frames once the first WARMUP (shader compiles) are out of the way.
 const SLOW_MS = 26, WARMUP = 40, SAMPLE = 60;
 const EXPOSURE = 1.5;
+const OUTLINE_LAYER = 7;   // marked meshes are put on this layer for the mask pass
+const MASK_VERT = `
+#include <common>
+#include <skinning_pars_vertex>
+void main() {
+  #include <begin_vertex>
+  #include <skinbase_vertex>
+  #include <skinning_vertex>
+  #include <project_vertex>
+}`;
+const MASK_FRAG = `
+#include <packing>
+uniform sampler2D tDepth; uniform vec2 uSize; uniform float uNear, uFar; uniform vec4 uCol;
+void main() {
+  float scene = -perspectiveDepthToViewZ( texture2D( tDepth, gl_FragCoord.xy / uSize ).x, uNear, uFar );
+  float self = -perspectiveDepthToViewZ( gl_FragCoord.z, uNear, uFar );
+  if ( self > scene + .12 ) discard;   // a wall, or something else, is in front
+  gl_FragColor = uCol;
+}`;
 
 const FRAG = `
-uniform sampler2D tScene; uniform float uTime, uThreat, uDread, uExposure; varying vec2 vUv;
+uniform sampler2D tScene, tMask; uniform float uTime, uThreat, uDread, uExposure, uOutline; uniform vec2 uTexel; varying vec2 vUv;
 float hash( vec2 p ) { vec3 q = fract( vec3( p.xyx ) * .1031 ); q += dot( q, q.yzx + 33.33 ); return fract( ( q.x + q.y ) * q.z ); }
 void main() {
   vec2 uv = vUv, c = uv - .5; float r2 = dot( c, c );
@@ -39,6 +64,25 @@ void main() {
   float vig = smoothstep( 1.05, .15, r2 * ( 2.3 + uDread * .9 + uThreat * ( 1.2 + .3 * sin( uTime * 9. ) ) ) );
   col *= mix( .2, 1., vig );
   col.r += ( 1. - vig ) * uThreat * .07;
+  // The outline: the strongest mark next to this pixel, if this pixel is not itself marked. Stronger marks reach
+  // further, for a thicker edge: faults and flat friends twice as far as the faint ones, and what the use key would
+  // act on (alpha 1) three times.
+  if ( uOutline > .5 ) {
+    vec4 here = texture2D( tMask, vUv ), best = vec4( 0. );
+    for ( int k = 0; k < 8; k++ ) {
+      float a = float( k ) * .785398;
+      vec2 d = vec2( cos( a ), sin( a ) ) * uTexel;
+      vec4 s = texture2D( tMask, vUv + d * 1.5 );
+      if ( s.a > best.a ) best = s;
+      s = texture2D( tMask, vUv + d * 3. );
+      if ( s.a > .55 && s.a > best.a ) best = s;
+      s = texture2D( tMask, vUv + d * 4.5 );
+      if ( s.a > .95 && s.a > best.a ) best = s;
+    }
+    float edge = best.a * ( 1. - step( .02, here.a ) );
+    col = mix( col, best.rgb, edge );
+    col += here.rgb * here.a * .06;   // a faint wash inside, so a small thing still reads
+  }
   // Grain goes on last, in display space, so the dark has texture too. With
   // the small lift under it, black areas stay black but never one flat value.
   float grain = hash( gl_FragCoord.xy + fract( uTime ) * vec2( 113., 71. ) ) - .5;
@@ -50,9 +94,40 @@ void main() {
 export function createPost(renderer, torch) {
   const asked = new URLSearchParams(location.search).get('q');
   let name = QUALITY[asked] ? asked : 'high', frames = 0, spent = 0, last = 0;
-  const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+  const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(1, 1) });
+  const mask = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+  const maskMat = new THREE.ShaderMaterial({
+    uniforms: { tDepth: { value: target.depthTexture }, uSize: { value: new THREE.Vector2(1, 1) }, uNear: { value: .1 }, uFar: { value: 100 }, uCol: { value: new THREE.Vector4() } },
+    vertexShader: MASK_VERT, fragmentShader: MASK_FRAG, side: THREE.DoubleSide, blending: THREE.NoBlending, depthTest: false, depthWrite: false,
+  });
+  const marked = new Set(), black = new THREE.Color(0);
+  // Each marked mesh sets the mask's colour and strength for itself as it is drawn.
+  function tint(renderer_, scene_, camera_, geometry, material) {
+    if (material !== maskMat) return;
+    const o = this.userData.outline;
+    maskMat.uniforms.uCol.value.set(o.col[0], o.col[1], o.col[2], o.a); maskMat.uniformsNeedUpdate = true;
+  }
+  function drawMask(scene, camera, marks) {
+    const now = new Set();
+    for (const m of marks) m.obj.traverse(o => {
+      if (!o.isMesh) return;
+      o.userData.outline = m; now.add(o);
+      if (!marked.has(o)) { o.layers.enable(OUTLINE_LAYER); o.userData.tintWas = o.onBeforeRender; o.onBeforeRender = tint; }
+    });
+    for (const o of marked) if (!now.has(o)) { o.layers.disable(OUTLINE_LAYER); o.onBeforeRender = o.userData.tintWas || (() => {}); }
+    marked.clear(); for (const o of now) marked.add(o);
+    if (!now.size) return false;
+    const u = maskMat.uniforms, bg = scene.background, layers = camera.layers.mask;
+    u.uSize.value.set(target.width, target.height); u.uNear.value = camera.near; u.uFar.value = camera.far;
+    const shadows = renderer.shadowMap.autoUpdate;   // the torch's shadow was drawn with the scene; not again
+    scene.background = null; scene.overrideMaterial = maskMat; camera.layers.set(OUTLINE_LAYER); renderer.shadowMap.autoUpdate = false;
+    renderer.setRenderTarget(mask); renderer.setClearColor(black, 0); renderer.clear(true, false, false);
+    renderer.render(scene, camera);
+    scene.background = bg; scene.overrideMaterial = null; camera.layers.mask = layers; renderer.shadowMap.autoUpdate = shadows;
+    return true;
+  }
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tScene: { value: target.texture }, uTime: { value: 0 }, uThreat: { value: 0 }, uDread: { value: 0 }, uExposure: { value: EXPOSURE } },
+    uniforms: { tScene: { value: target.texture }, tMask: { value: mask.texture }, uTime: { value: 0 }, uThreat: { value: 0 }, uDread: { value: 0 }, uExposure: { value: EXPOSURE }, uOutline: { value: 0 }, uTexel: { value: new THREE.Vector2() } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4( position.xy, 0., 1. ); }',
     fragmentShader: FRAG, depthTest: false, depthWrite: false,
   });
@@ -79,11 +154,14 @@ export function createPost(renderer, torch) {
       const w = canvas.clientWidth, h = canvas.clientHeight, q = QUALITY[name], ratio = Math.min(devicePixelRatio || 1, q.width / Math.max(1, w), q.ratio);
       const pw = Math.round(w * ratio), ph = Math.round(h * ratio);
       if (!w || (target.width === pw && target.height === ph)) return;
-      renderer.setPixelRatio(ratio); renderer.setSize(w, h, false); target.setSize(pw, ph);
+      renderer.setPixelRatio(ratio); renderer.setSize(w, h, false); target.setSize(pw, ph); mask.setSize(pw, ph);
+      // Edge width in texels, so the outline is about as thick on any screen.
+      const k = Math.max(1, ph / 720); mat.uniforms.uTexel.value.set(k / pw, k / ph);
       camera.aspect = w / h; camera.updateProjectionMatrix();
     },
     // threat, dread: 0 to 1. stop: exposure multiplier against torch glare. now: milliseconds, for timing frames.
-    render(scene, camera, now, threat, dread, stop) {
+    // marks: what to outline this frame (outline.js), or nothing.
+    render(scene, camera, now, threat, dread, stop, marks = []) {
       if (!asked && name === 'high' && last) {
         if (++frames > WARMUP) spent += now - last;
         if (frames === WARMUP + SAMPLE) { if (spent / SAMPLE > SLOW_MS) { name = 'low'; apply(); } }
@@ -93,6 +171,7 @@ export function createPost(renderer, torch) {
       renderer.info.reset();
       torch.shadow.autoUpdate = torch.intensity > 0;   // no shadow pass for a torch that is off
       renderer.setRenderTarget(target); renderer.render(scene, camera);
+      u.uOutline.value = drawMask(scene, camera, marks) ? 1 : 0;
       renderer.setRenderTarget(null); renderer.render(screen, flat);
     },
   };

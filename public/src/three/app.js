@@ -13,6 +13,7 @@ import { BOXES, ROOMS3 } from './map.js';
 import { createSound } from './sound.js';
 import { createPost } from './post.js';
 import { createPhone } from './actors/phone.js';
+import { createOutlines } from './outline.js';
 import { dreadOf } from '../rules.js';
 
 let app = null;
@@ -32,6 +33,7 @@ function create() {
 
   const world = buildWorld(scene), actors = createActors(scene, camera, renderer), player = createPlayer(camera, canvas), hud = createHud(stage, player), sound = createSound();
   player.setTask(createTask(hud.root));
+  const outlines = createOutlines(world.parts, actors);
   // post.js draws the frame and owns its resolution and the torch's shadow map; the torch gets a cheap torch's beam pattern.
   const post = createPost(renderer, player.torch);
   player.torch.map = world.torchCookie();
@@ -123,7 +125,7 @@ function create() {
       phone.update(S, player.me, dt, now, actors.scare.active);
       sound.update(S, player.me, dt);
       hud.update(S, player.me, actors.scare.active);
-      post.render(scene, camera, now, fear, dread, world.stop);
+      post.render(scene, camera, now, fear, dread, world.stop, outlines.pick(S, player.me, t));
       actors.after();
     },
     threat, player, actors, world, scene, camera, renderer, sound, post, phone,
