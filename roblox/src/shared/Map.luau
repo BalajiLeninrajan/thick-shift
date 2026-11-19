@@ -1,4 +1,4 @@
---!strict
+--!nonstrict
 -- The Depot as geometry, ported from public/src/three/map.js: the questions the simulation and the client ask
 -- about the building (can I stand here, can I see that, how do I walk there) and the wall and floor pieces the
 -- world is built from. Metres; x runs east and z runs south, as on the web. Loop orders match the JS so routes
