@@ -75,7 +75,7 @@ To set it up:
 4. Start the Activity from a voice channel. Until the app is published, only its owner and team members can launch it.
 5. To verify the app, put `https://<worker host>/terms` and `https://<worker host>/privacy` in General Information as the Terms of Service and Privacy Policy URLs (`apps/discord/terms.html`, `privacy.html`). If the game starts collecting anything new, update `privacy.html`.
 
-To test from your own machine, run `pnpm dev:discord` behind a tunnel such as `cloudflared tunnel --url localhost:5173`, and map `/` to the tunnel's host. Vite turns away requests for hosts it does not know, so start it with the tunnel's domain allowed: `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=.trycloudflare.com pnpm dev:discord`. Put `DISCORD_CLIENT_SECRET=...` in `apps/discord/.dev.vars`, which git ignores.
+To test from your own machine, run `pnpm dev:discord` behind a tunnel such as `cloudflared tunnel --url localhost:5173`, and map `/` to the tunnel's host. Vite turns away hosts it does not know, so `apps/discord/vite.config.js` allows `.trycloudflare.com`; add your own tunnel's domain there if it is another. Put `DISCORD_CLIENT_SECRET=...` in `apps/discord/.dev.vars`, which git ignores.
 
 ## How the pieces talk
 
