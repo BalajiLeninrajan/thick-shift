@@ -2,10 +2,11 @@
 // that is missing or fails to load resolves to null, and whoever asked draws a stand-in.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { DRACOLoader, DRACO_GLTF_CONFIG } from 'three/addons/loaders/DRACOLoader.js';
 
-// The Draco decoder is three's own, served at draco/ by packages/game/vite.js.
-const draco = new DRACOLoader().setDecoderPath('draco/');
+// three's own glTF-only Draco decoder. DRACOLoader names its files with import.meta.url,
+// so the bundler serves them in dev and copies them, hashed, into the build.
+const draco = new DRACOLoader().setDecoderPath(DRACO_GLTF_CONFIG);
 const loader = new GLTFLoader().setDRACOLoader(draco);
 const cache = new Map();
 

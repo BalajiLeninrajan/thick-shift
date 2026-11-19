@@ -24,7 +24,7 @@ Add `?dev` to the URL for the dev menu (the backtick key, or the Dev button on t
 ```
 packages/game/          the game, shared by the web and Discord apps (@thick-shift/game)
   package.json          what an app may import: the game itself, state, net, audio, ui, styles.css, worker and vite
-  vite.js               game(), the game's part of each app's Vite config: public/ as the static files, three's Draco decoder at draco/
+  vite.js               game(), the game's part of each app's Vite config: public/ as the static files, served as-is
   worker/room.js        the room relay (one Durable Object per room), which each app's Worker exports
   public/               served as it is, never bundled
     sfx/                recorded sound effects (CC0, see Sound below)
