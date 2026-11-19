@@ -107,6 +107,7 @@ export function createTouch(root, player) {
       if (zoomBtn.hidden === me.ph) zoomBtn.hidden = !me.ph;
       flag(runBtn, 'aria-pressed', pad.sprint);
       useBtn.classList.toggle('is-ready', !!me.target);
+      layer.classList.toggle('is-busy', !!me.task);
       // Greyed out with empty hands, or while the battery has less than a throw costs.
       const mine = game.S?.players.find(p => p.id === game.myId);
       flag(toyBtn, 'aria-disabled', !mine?.toy || mine.bat < TOY.cost);

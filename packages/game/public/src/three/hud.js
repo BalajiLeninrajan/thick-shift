@@ -21,7 +21,10 @@ const NAV_MS = 150;       // one compass mark has its walking route refreshed th
 const LOW_BAT = .25, LOW_POWER = 25, CRIT_POWER = 10;
 const GEN_MARK = 40;   // power, in percent, under which the compass points to the generator
 const HURRY = 15;         // seconds left before a fault burns when its row turns red
-const MAX_TASKS = 6;      // rows in the task list before the rest are counted
+const MAX_TASKS = 6;      // rows in the task list before the rest are counted, on a stage tall enough for them
+const TASK_ROW = 28;      // pixels a task row and its gap take
+const TASK_TOP = 76;      // pixels above the task list: the hour and the power
+const TASK_FOOT = { touch: 160, keys: 100 };   // pixels kept clear under it: the stick, or the torch
 const CELLS = 5;          // bars in the torch battery
 // What each mascot did to you, by MASC index.
 const HOW = ['sat on you', 'hugged you a bit too hard', 'landed on you', 'did not slow down'];
@@ -46,7 +49,7 @@ const icon = name => `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" strok
 // Each kind of toast has its own icon and colour (in styles.css), so a low
 // torch, low power, a fault burning and a guard going down do not look alike.
 const TOAST_ICON = { info: 'info', tip: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call', hide: 'locker', toy: 'toy' };
-const MAX_TOASTS = 3;
+const MAX_TOASTS = 3, SHORT = 480;   // a stage under SHORT pixels tall shows one toast fewer
 
 // The pause screen's lists, in groups. Each row is what, then the keys or buttons as keycaps, then an
 // optional note under the action.
@@ -204,7 +207,7 @@ export function createHud(stage, player) {
     const e = el('div', 'ts-f-toast is-' + kind, toasts);
     e.innerHTML = icon(TOAST_ICON[kind]) + '<span></span>'; e.lastChild.textContent = text;
     live.push({ e, until: performance.now() + seconds * 1000 });
-    while (live.length > MAX_TOASTS) drop(live.shift());
+    while (live.length > MAX_TOASTS - (root.clientHeight < SHORT)) drop(live.shift());
   }
   // A line of advice the first time something happens, and never again on this browser.
   // {use} becomes whatever this player presses to use things.
@@ -270,12 +273,17 @@ export function createHud(stage, player) {
   // where they wanted to be and kept inside the strip, so all stay readable.
   // The marks stay on their bearings. b._dx: how far a label is moved now,
   // so where it would sit unmoved can be measured.
+  // Labels that would not fit in the strip side by side are hidden, furthest first, keeping their dots.
   function spread(list) {
     const strip = compass.getBoundingClientRect(), W = strip.width, runs = [];
     const place = run => Math.max(0, Math.min(W - run.w, run.mid - run.w / 2));
-    const row = list.map(t => {
-      const b = marks.get(t.key).lastChild, r = b.getBoundingClientRect();
-      return { b, x: r.left - (b._dx || 0) - strip.left, w: r.width };
+    const rank = t => t.kind === 'flat' || t.ping ? 0 : t.hot || t.kind === 'gen' || t.kind === 'dock' ? 1 : 2;
+    let room = W + LABEL_GAP;
+    const row = list.slice().sort((a, c) => rank(a) - rank(c) || a.dist - c.dist).flatMap(t => {
+      const m = marks.get(t.key), b = m.lastChild, r = b.getBoundingClientRect();
+      room -= r.width + LABEL_GAP;
+      m.classList.toggle('is-quiet', room < 0);
+      return room < 0 ? [] : [{ b, x: r.left - (b._dx || 0) - strip.left, w: r.width }];
     }).sort((a, c) => a.x - c.x);
     for (const l of row) {
       let run = { ls: [l], mid: l.x + l.w / 2, w: l.w };
@@ -299,13 +307,16 @@ export function createHud(stage, player) {
   /* ---------- the task list ---------- */
 
   // Every open fault, nearest first: the room, the job, and the seconds before it starts to burn the building's ceiling.
+  // A short stage shows fewer rows, so the list stops above the stick and the torch.
   function drawTasks(S, me) {
     const ours = (S.faults || []).map((f, i) => f && { f, i, d: Math.hypot(BOXES[i].x - me.x, BOXES[i].z - me.z) }).filter(Boolean).sort((a, b) => a.d - b.d);
-    const rows = ours.slice(0, MAX_TASKS).map(({ f, i }) => {
+    const fit = Math.max(2, Math.floor((root.clientHeight - TASK_TOP - TASK_FOOT[me.touch ? 'touch' : 'keys']) / TASK_ROW));
+    const max = ours.length <= Math.min(fit, MAX_TASKS) ? ours.length : Math.max(1, Math.min(MAX_TASKS, fit - 1));   // the rest counted on one more row
+    const rows = ours.slice(0, max).map(({ f, i }) => {
       const left = faultLeft(S, f), state = left <= 0 ? 'burn' : left < HURRY ? 'hot' : '';
       return `<li data-state="${state}"${me.task?.i === i ? ' class="is-here"' : ''}>${icon('fault')}<b>${esc(ROOMS3[BOXES[i].room]?.name || '')}</b><span>${FAULT_NAME[f.k]}</span><em class="cn-tabular">${left <= 0 ? 'burning' : Math.ceil(left) + 's'}</em></li>`;
     });
-    if (ours.length > MAX_TASKS) rows.push(`<li class="is-more">${ours.length - MAX_TASKS} more</li>`);
+    if (ours.length > max) rows.push(`<li class="is-more">${ours.length - max} more</li>`);
     if (!ours.length) rows.push(`<li class="is-clear">${icon('fault')}<span>No faults. Listen for the next one.</span></li>`);
     html(tasks, rows.join(''));
   }

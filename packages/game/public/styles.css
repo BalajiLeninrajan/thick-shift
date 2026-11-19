@@ -45,6 +45,14 @@ body {
 @keyframes ts-card-fade { from { opacity: 0; } }
 @keyframes ts-card-rise { from { translate: 0 10px; } }
 @media (prefers-reduced-motion: reduce) { .ts-card-slow { animation: none; } }
+/* A phone on its side: a smaller logo, and the card's buttons held at the bottom of the screen while the rest scrolls. */
+@media (max-height: 500px) {
+  .ts-overlay { padding: var(--space-2) var(--space-4); }
+  .ts-card .panel-body { --body-pad: var(--space-4) var(--space-5); }
+  .ts-card .panel-body.cn-stack { gap: var(--space-3); }
+  .ts-card .panel-footer { position: sticky; bottom: calc(-1 * var(--space-2)); z-index: 1; border-radius: 0 0 var(--cn-radius-panel) var(--cn-radius-panel); background: var(--cn-surface-raised); }
+  .ts-logo { font-size: clamp(2rem, 11vh, 3rem); }
+}
 .ts-selectable, .ts-overlay input { user-select: text; -webkit-user-select: text; }
 
 .ts-logo {
@@ -75,6 +83,7 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-rules li { margin: 0; }
 
 .ts-fhud {
+  container: fhud / size;
   --ts-plate: color-mix(in srgb, var(--neu-ink) 74%, transparent);
   --ts-pad: 16px;
   position: absolute; inset: 0; overflow: hidden; pointer-events: none;
@@ -107,7 +116,7 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-power[data-level="out"] .ts-f-bar { display: none; }
 
 /* Under the power: the faults to fix, nearest first, like a crew's job list. */
-.ts-f-tasks { display: grid; gap: 3px; margin: 4px 0 0; padding: 0; list-style: none; max-width: min(340px, 40vw); }
+.ts-f-tasks { display: grid; gap: 3px; margin: 4px 0 0; padding: 0; list-style: none; max-width: min(340px, 40cqw); }
 .ts-f-tasks li { display: grid; grid-template-columns: 14px auto 1fr auto; align-items: center; gap: 6px; padding: 3px 8px 3px 6px; border-radius: 6px; border-left: 3px solid var(--yellow); background: var(--ts-plate); color: var(--subtext-1); font-weight: 500; text-shadow: none; }
 .ts-f-tasks li svg { width: 14px; height: 14px; color: var(--yellow); }
 .ts-f-tasks li b { color: var(--text); font-weight: 600; white-space: nowrap; }
@@ -124,28 +133,29 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 
 /* Hands in a breaker box: the minigame over the bottom half, the room still in view above. */
 @keyframes ts-shake { 20%, 60% { translate: -6px 0; } 40%, 80% { translate: 6px 0; } }
-.ts-f-task { position: absolute; left: 50%; bottom: 0; z-index: 4; transform: translateX(-50%); display: grid; gap: 8px; width: min(640px, 100%); height: 48%; min-height: 230px; max-height: 340px; padding: 12px 16px 14px; border-radius: 14px 14px 0 0; border: 1px solid var(--surface-1); border-bottom: 0; background: color-mix(in srgb, var(--mantle) 94%, transparent); grid-template-rows: auto 1fr auto; pointer-events: auto; text-shadow: none; box-shadow: 0 -12px 40px color-mix(in srgb, var(--crust) 70%, transparent); }
+.ts-f-task { position: absolute; left: 50%; bottom: 0; z-index: 4; transform: translateX(-50%); display: grid; gap: 8px; width: min(640px, 100%); height: 48%; min-height: min(230px, 72%); max-height: 340px; padding: 12px 16px 14px; border-radius: 14px 14px 0 0; border: 1px solid var(--surface-1); border-bottom: 0; background: color-mix(in srgb, var(--mantle) 94%, transparent); grid-template-rows: auto 1fr auto; pointer-events: auto; text-shadow: none; box-shadow: 0 -12px 40px color-mix(in srgb, var(--crust) 70%, transparent); }
 .ts-f-task.is-wrong { animation: ts-shake .3s; border-color: var(--red); }
 .ts-f-task-head { display: flex; align-items: center; gap: 10px; }
 .ts-f-task-head b { font-size: 16px; }
 .ts-f-task-head > span { flex: 1; color: var(--subtext-0); font-weight: 500; }
 .ts-f-task-head .btn { gap: 6px; }
-.ts-f-task-body { display: grid; place-items: center; min-height: 0; }
+/* One explicit cell, so a minigame's height: 100% is the room left in the panel and not its own content. */
+.ts-f-task-body { display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; min-height: 0; }
 .ts-f-task-help { color: var(--subtext-0); font-weight: 500; font-size: 12px; line-height: 1.8; }
 .ts-f-task-help .ts-key { margin: 0 1px; }
 .ts-fhud[data-touch="true"] .ts-f-task-help, .ts-fhud[data-touch="true"] .ts-f-task .ts-key { display: none; }
 
 .ts-tk-breaker { display: flex; gap: 12px; }
 .ts-tk-switch { all: unset; cursor: pointer; display: grid; justify-items: center; gap: 6px; width: 52px; padding: 8px 0; border-radius: 8px; background: var(--surface-0); border: 2px solid transparent; }
-.ts-tk-switch i { position: relative; width: 22px; height: 56px; border-radius: 4px; background: var(--crust); }
+.ts-tk-switch i { position: relative; width: 22px; height: clamp(40px, 14cqh, 56px); border-radius: 4px; background: var(--crust); }
 .ts-tk-switch i::after { content: ""; position: absolute; left: 2px; right: 2px; bottom: 2px; height: 24px; border-radius: 3px; background: var(--red); transition: bottom .12s; }
-.ts-tk-switch.is-up i::after { bottom: 30px; background: var(--green); }
+.ts-tk-switch.is-up i::after { bottom: calc(100% - 26px); background: var(--green); }
 .ts-tk-switch span { min-width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--yellow); color: var(--crust); font-weight: 700; }
 .ts-tk-switch span:empty { background: none; }
 .ts-tk-switch small { color: var(--overlay-2); }
 .ts-tk-switch.is-sel { border-color: var(--yellow); }
 
-.ts-tk-wires { display: grid; grid-template-columns: 56px 1fr 56px; width: min(440px, 100%); height: 100%; max-height: 210px; }
+.ts-tk-wires { display: grid; grid-template-columns: 56px 1fr 56px; width: min(440px, 100%); height: 100%; max-height: 210px; min-height: 0; }
 .ts-tk-wires > div { display: grid; grid-template-rows: repeat(4, 1fr); align-items: center; justify-items: center; }
 .ts-tk-wires svg { width: 100%; height: 100%; }
 .ts-tk-end { all: unset; display: grid; place-items: center; width: 34px; height: 22px; border-radius: 5px; background: var(--c); opacity: .55; color: var(--crust); font-size: 11px; font-weight: 700; }
@@ -155,7 +165,7 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-tk-end.is-socket.is-sel { border-color: var(--text); opacity: 1; }
 
 .ts-tk-valve { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-items: center; gap: 10px 18px; width: min(420px, 100%); }
-.ts-tk-dial { grid-row: span 2; position: relative; width: 120px; height: 120px; border-radius: 50%; background: var(--crust); border: 4px solid var(--surface-1); }
+.ts-tk-dial { grid-row: span 2; position: relative; width: clamp(84px, 30cqh, 120px); aspect-ratio: 1; border-radius: 50%; background: var(--crust); border: 4px solid var(--surface-1); }
 .ts-tk-band { position: absolute; inset: 6px; border-radius: 50%; background: conic-gradient(from -120deg, transparent calc(var(--a) * 240deg), color-mix(in srgb, var(--green) 55%, transparent) 0 calc(var(--b) * 240deg), transparent 0); }
 .ts-tk-needle { position: absolute; left: calc(50% - 2px); bottom: 50%; width: 4px; height: 44%; border-radius: 2px; background: var(--text); transform-origin: 50% 100%; rotate: -120deg; }
 .ts-tk-dial[data-state="ok"] { border-color: var(--green); }
@@ -173,6 +183,8 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-tick:empty { top: 13px; width: 1px; height: 4px; background: var(--overlay-1); }
 .ts-f-mark { position: absolute; top: 12px; transform: translateX(-50%); display: grid; justify-items: center; gap: 3px; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ts-f-mark b { font-weight: 600; }
+/* More labels than the strip holds: the furthest keep their dot and lose their words (hud.js spread). */
+.ts-f-mark.is-quiet b { visibility: hidden; }
 .ts-f-mark i { box-sizing: border-box; width: 11px; height: 11px; border-radius: 50%; border: 2px solid currentColor; background: var(--neu-ink); }
 .ts-f-mark.is-fault { color: color-mix(in srgb, var(--yellow) 65%, var(--overlay-0)); }
 .ts-f-mark.is-fault.is-near { color: var(--yellow); z-index: 1; }
@@ -194,7 +206,7 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-toasts { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .ts-f-toast {
   --tc: var(--subtext-0);
-  display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(520px, 80vw);
+  display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(520px, 100cqw - 240px);
   padding: 5px 12px 5px 8px; border-radius: 8px; border-left: 3px solid var(--tc); background: var(--ts-plate);
   font-weight: 500; text-shadow: none; animation: ts-toast .25s var(--ease-out); transition: opacity .4s;
 }
@@ -307,6 +319,14 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
   .ts-f-pause-keys, .ts-f-pause-when { display: none; }
   .ts-f-pause-main { max-height: 100%; align-self: start; }
 }
+/* Short stage: less padding, slimmer tabs, and the subtitle goes, so the list has the room. */
+@container (max-height: 420px) {
+  .ts-f-pause { padding: 10px 16px; }
+  .ts-f-pause-sub { display: none; }
+  .ts-f-tabs { padding: var(--space-3) var(--space-3) 0; }
+  .ts-f-tabs > * { min-height: var(--control-h); padding: var(--space-1) var(--space-3); }
+  .ts-f-pane { padding: var(--space-3) var(--space-4); }
+}
 @container (max-width: 520px) { .ts-f-groups { grid-template-columns: minmax(0, 1fr); } .ts-f-pause-side { grid-template-columns: minmax(0, 1fr); } }
 
 /* Touch: pause and fullscreen in the corner, the stick and three buttons under the thumbs. */
@@ -329,6 +349,8 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-t-toy { right: 188px; bottom: 96px; width: 56px; height: 56px; }
 .ts-t-toy[aria-disabled="true"] { opacity: .45; }
 .ts-t-zoom[hidden] { display: none; }
+/* Hands in a breaker box: nothing to walk or press but the panel. Dragging still looks round. */
+.ts-t-layer.is-busy :is(.ts-t-stick, .ts-t-btn) { display: none; }
 .ts-t-btn[aria-pressed="true"] { border-color: var(--yellow); color: var(--yellow); }
 .ts-t-use.is-ready { border-color: var(--yellow); }
 .ts-t-use.is-held { background: color-mix(in srgb, var(--yellow) 30%, var(--neu-ink)); }
