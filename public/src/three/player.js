@@ -39,7 +39,7 @@ export function createPlayer(camera, canvas) {
     watch: null,     // id of the teammate a flat guard is watching through, or null
     ph: false,       // the phone is up, showing the minimap
     task: null,      // hands in a breaker box: { i } of the box, while the minigame panel (task.js) is up
-    zoom: false,     // the minimap shows the whole building, not what is round the guard
+    zoom: true,      // the minimap shows the whole building, not what is round the guard. The phone starts on this.
     hid: -1 };       // the locker (HIDES index) this guard is standing in, as the host has it, or -1
   const keys = new Set();
   // Touch and gamepad code can drive the guard through these instead of keys.
