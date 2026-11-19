@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { game } from '../state.js';
 import { send } from '../net.js';
 import { unlockAudio } from '../audio.js';
-import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, slide, walkable } from './map.js';
+import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, slide, walkable } from './map.js';
 import { F } from './sim3d.js';
 import { FAULT_NAME } from './task.js';
 
@@ -26,6 +26,10 @@ export function savePrefs() { try { localStorage.tsFloor = JSON.stringify(prefs)
 const typing = e => !!e.target.closest?.('input, textarea, select, [contenteditable]');
 const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 };   // per second, and seconds before it starts coming back
 const DOOR_NAME = { L: 'left door', R: 'right door', V: 'vent' };
+// In a locker: how far the view turns either side of straight out through the doors, and up or down (radians),
+// and how far in front of the locker's middle the eye is: just past the doors, so their insides are behind it.
+const LOCKER_LOOK = { yaw: .85, pitch: .5, eye: .34 };
+const angDiff = (a, b) => { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
 
 export function createPlayer(camera, canvas) {
   // Local view of this guard. yaw 0 faces south (+z); forward is (sin yaw, cos yaw).
@@ -35,7 +39,8 @@ export function createPlayer(camera, canvas) {
     watch: null,     // id of the teammate a flat guard is watching through, or null
     ph: false,       // the phone is up, showing the minimap
     task: null,      // hands in a breaker box: { i } of the box, while the minigame panel (task.js) is up
-    zoom: false };   // the minimap shows the whole building, not what is round the guard
+    zoom: false,     // the minimap shows the whole building, not what is round the guard
+    hid: -1 };       // the locker (HIDES index) this guard is standing in, as the host has it, or -1
   const keys = new Set();
   // Touch and gamepad code can drive the guard through these instead of keys.
   const pad = { fwd: 0, strafe: 0, sprint: false, use: false };
@@ -52,7 +57,7 @@ export function createPlayer(camera, canvas) {
   camera.add(torch, torch.target);
 
   const playing = () => game.S?.phase === 'play';
-  function toggleTorch() { if (playing() && !me.flat) { me.on = !me.on; unlockAudio(); } }
+  function toggleTorch() { if (playing() && !me.flat && me.hid < 0) { me.on = !me.on; unlockAudio(); } }
   // The phone runs on the torch's battery, so a dead battery will not raise it.
   const charged = () => (game.S.players.find(p => p.id === game.myId)?.bat ?? 1) > 0;
   function togglePhone() { if (playing() && !me.flat && !me.paused && (me.ph || charged())) me.ph = !me.ph; }
@@ -154,6 +159,9 @@ export function createPlayer(camera, canvas) {
     for (const p of S.players) if (p.flat && p.id !== game.myId) list.push({ what: 'peel', id: p.id, at: p, label: `Peel ${p.name} off the floor`, hold: F.PEEL_HOLD });
     list.push({ what: 'crank', at: GENERATOR, label: S.power >= 100 ? 'The generator is full' : 'Crank the generator', hold: S.power >= 100 ? 0 : -1 });
     if (S.power > 0 && mine.bat < 1) list.push({ what: 'charge', at: CHARGER, label: 'Charge the torch', hold: -1 });
+    // In a locker the one thing in reach is the way out.
+    if (mine.hid >= 0) return { what: 'hide', i: mine.hid, at: HIDES[mine.hid].at, label: 'Step out of the locker', hold: 0 };
+    HIDES.forEach((h, i) => { if (!S.players.some(p => p.hid === i)) list.push({ what: 'hide', i, at: h.at, label: 'Hide in the locker', hold: F.HIDE_HOLD }); });
     let best = null, bd = F.REACH - .2;
     for (const t of list) {
       const dx = t.at.x - me.x, dz = t.at.z - me.z, d = Math.hypot(dx, dz);
@@ -209,14 +217,26 @@ export function createPlayer(camera, canvas) {
   return {
     me, pad, torch, letGo, setTask(t) { task = t; }, toggleTorch, togglePhone, toggleZoom, look, pause, resume, call, watchNext,
     // Put the guard where the host says they are: the start of a night, or after joining.
-    reset(mine) { letGo(); Object.assign(me, { x: mine.x, z: mine.z, yaw: mine.yaw ?? Math.PI, pitch: 0, on: false, ph: false, stam: 1, bob: 0, hold: 0, paused: false, watch: null }); },
+    reset(mine) { letGo(); Object.assign(me, { x: mine.x, z: mine.z, yaw: mine.yaw ?? Math.PI, pitch: 0, on: false, ph: false, stam: 1, bob: 0, hold: 0, paused: false, watch: null, hid: -1 }); },
     update(S, dt, now) {
       const mine = S.players.find(p => p.id === game.myId);
       if (!mine || mine.x == null) return;
       // Peeled up: stand looking ahead, not at the ceiling the catch left the camera facing.
       if (me.flat && !mine.flat) me.pitch = 0;
       me.flat = !!mine.flat;
+      // Into a locker, or out of one: the host has moved us to the floor in front of its doors.
+      const hid = mine.hid ?? -1, locker = HIDES[hid];
+      if (hid !== me.hid) {
+        me.hid = hid;
+        if (locker) Object.assign(me, { x: locker.at.x, z: locker.at.z, yaw: locker.face, pitch: 0, on: false, sp: false, moving: 0 });
+        else if (!me.flat) { me.x = mine.x; me.z = mine.z; }
+      }
       pollPad(dt); arrowLook(dt);
+      if (locker) {
+        // Looking out through the slats: only so far round, up or down.
+        me.yaw = locker.face + Math.max(-LOCKER_LOOK.yaw, Math.min(LOCKER_LOOK.yaw, angDiff(me.yaw, locker.face)));
+        me.pitch = Math.max(-LOCKER_LOOK.pitch, Math.min(LOCKER_LOOK.pitch, me.pitch));
+      }
       // The screens between nights need the mouse back.
       if (S.phase !== 'play') { me.paused = false; letGo(); if (mouseLocked) document.exitPointerLock(); }
       me.locked = (mouseLocked || me.touch || gpLive || keysLive) && !me.paused;
@@ -227,7 +247,12 @@ export function createPlayer(camera, canvas) {
           // A door shut on top of us, or the host put us somewhere else.
           if (!walkable(me.x, me.z, PLAYER_R * .5, S.doors)) { me.x = mine.x; me.z = mine.z; }
           if (!me.task) me.target = findTarget(S, mine);
-          use(S, dt); walk(S, dt);
+          use(S, dt);
+          if (locker) {
+            // Standing still in the dark: the torch is off and the breath comes back.
+            me.on = me.sp = false; me.act = ''; me.moving = 0; me.x = locker.at.x; me.z = locker.at.z;
+            if ((sinceSprint += dt) > STAMINA.rest) me.stam = Math.min(1, me.stam + STAMINA.gain * dt);
+          } else walk(S, dt);
           if (me.task) task?.tick(dt);
           if (mine.bat <= 0) me.on = me.ph = false;
         }
@@ -240,7 +265,8 @@ export function createPlayer(camera, canvas) {
       drop += ((me.ph || me.task ? 1 : 0) - drop) * Math.min(1, dt * 8);
       torch.target.position.set(.05, -.05 - 2.4 * drop, -3 + 1.2 * drop);
       const y = me.flat ? .22 : EYE + Math.sin(me.bob) * .045;
-      camera.position.set(me.x, y, me.z);
+      if (locker && !me.flat) camera.position.set(locker.x + Math.sin(locker.face) * LOCKER_LOOK.eye, EYE - .05, locker.z + Math.cos(locker.face) * LOCKER_LOOK.eye);
+      else camera.position.set(me.x, y, me.z);
       camera.rotation.set(me.flat ? Math.max(.3, me.pitch) : me.pitch, me.yaw + Math.PI, 0, 'YXZ');
     },
   };

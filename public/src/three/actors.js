@@ -59,6 +59,7 @@ export function createActors(scene, camera, renderer) {
         for (const m of S.m) if (m.st === 'siege' && Math.hypot(m.x - cx, m.z - cz) < 4) mascots[m.i].bang();
       } else if (e.type === 'crash') { for (const m of S.m) if (m.st === 'stun') mascots[m.i].crash(); }
       else if (e.type === 'spot') mascots[x.i].spotted();
+      else if (e.type === 'check' || e.type === 'found') mascots[x.i].bang();   // the yank on the locker door
     },
     // me, torch: player.js's guard and its light. Call after player.update, which has put the camera where the guard is.
     sync(S, dt, me, torch) {

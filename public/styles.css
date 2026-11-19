@@ -275,6 +275,15 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-start .ts-key { margin: 0 2px 0 8px; }
 .ts-fhud[data-touch="true"] .ts-f-start { display: none; }
 
+/* In a locker: the view out between the slats of its doors, dark at the edges. */
+.ts-f-locker { position: absolute; inset: 0; opacity: 0; transition: opacity .35s; pointer-events: none;
+  background:
+    radial-gradient(ellipse 75% 65% at 50% 50%, transparent 45%, #000 95%),
+    repeating-linear-gradient(to bottom, rgb(5 5 6 / .95) 0 3.6%, rgb(5 5 6 / .55) 3.6% 4.4%, transparent 4.4% 8.4%, rgb(5 5 6 / .55) 8.4% 9%); }
+.ts-fhud[data-hid="true"] .ts-f-locker { opacity: 1; }
+.ts-fhud[data-hid="true"] .ts-f-dot { display: none; }
+.ts-f-toast.is-hide { --tc: var(--teal); }
+
 /* Flat on the floor. */
 .ts-f-vignette { position: absolute; inset: 0; opacity: 0; transition: opacity .6s; background: radial-gradient(ellipse at 50% 55%, transparent 30%, color-mix(in srgb, var(--red) 20%, transparent) 70%, color-mix(in srgb, var(--neu-ink) 90%, transparent)); }
 .ts-fhud[data-flat="true"] .ts-f-vignette { opacity: 1; }

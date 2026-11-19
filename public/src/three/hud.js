@@ -37,17 +37,18 @@ const PATHS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
   pause: '<path d="M9 5v14M15 5v14"/>',
   full: '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
+  locker: '<rect x="5" y="2" width="14" height="20" rx="1"/><path d="M12 2v20M8 6h2M8 8h2M14 6h2M14 8h2"/>',
   rotate: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 9a10 10 0 0 0 3 9m17-3a10 10 0 0 0-3-9"/>',
 };
 const icon = name => `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
 // Each kind of toast has its own icon and colour (in styles.css), so a low
 // torch, low power, a fault burning and a guard going down do not look alike.
-const TOAST_ICON = { info: 'info', tip: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call' };
+const TOAST_ICON = { info: 'info', tip: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call', hide: 'locker' };
 const MAX_TOASTS = 3;
 
 const CONTROLS = {
-  keys: [['Walk', 'W A S D'], ['Run', 'Shift'], ['Look', 'Mouse, or the arrow keys'], ['Torch', 'F or click'], ['Phone map (drains the battery fast)', 'C'], ['Zoom the phone map', 'R'], ['Use, fix, peel', 'E (hold to peel)'], ['In a breaker box: choose, act, let go', 'W A S D or 1–5, E, X'], ['Call out while flat', 'Q'], ['Watch a teammate while flat', 'Space'], ['Pause', 'Esc'], ['Back from pause', 'Enter']],
-  touch: [['Walk', 'Left thumb, anywhere'], ['Look', 'Drag the right side'], ['Use, fix, peel', 'Use (hold to peel)'], ['In a breaker box', 'Tap the parts'], ['Run', 'Tap Run, lift to stop'], ['Phone map (drains the battery fast)', 'The phone button, then Map to zoom']],
+  keys: [['Walk', 'W A S D'], ['Run', 'Shift'], ['Look', 'Mouse, or the arrow keys'], ['Torch', 'F or click'], ['Phone map (drains the battery fast)', 'C'], ['Zoom the phone map', 'R'], ['Use, fix, peel, hide', 'E (hold to peel or hide)'], ['In a breaker box: choose, act, let go', 'W A S D or 1–5, E, X'], ['Call out while flat', 'Q'], ['Watch a teammate while flat', 'Space'], ['Pause', 'Esc'], ['Back from pause', 'Enter']],
+  touch: [['Walk', 'Left thumb, anywhere'], ['Look', 'Drag the right side'], ['Use, fix, peel, hide', 'Use (hold to peel or hide)'], ['In a breaker box', 'Tap the parts'], ['Run', 'Tap Run, lift to stop'], ['Phone map (drains the battery fast)', 'The phone button, then Map to zoom']],
 };
 
 const el = (tag, cls, parent) => { const e = document.createElement(tag); e.className = cls; parent.append(e); return e; };
@@ -67,6 +68,7 @@ const roomName = p => ROOMS3[roomAt(p.x, p.z)]?.name || '';
 export function createHud(stage, player) {
   const root = el('div', 'ts-fhud', stage);
   root.innerHTML = `
+    <div class="ts-f-locker"></div>
     <div class="ts-f-vignette"></div>
     <div class="ts-f-status">
       <div class="ts-f-time"><b></b><span></span></div>
@@ -277,6 +279,7 @@ export function createHud(stage, player) {
       for (let i = live.length - 1; i >= 0; i--) if (now > live[i].until) drop(live.splice(i, 1)[0]);
       if (root.hidden) return;
       data(root, 'flat', me.flat);
+      data(root, 'hid', me.hid >= 0 && !me.flat);
 
       set(time, clockF(S)); set(night, 'Night ' + S.night);
       powerBar.style.width = S.power + '%';
@@ -291,7 +294,7 @@ export function createHud(stage, player) {
 
       html(crew, mates.map(p => p.flat
         ? `<div class="ts-f-mate is-flat"><span class="tag cn-tone-danger">flat</span><b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`
-        : `<div class="ts-f-mate"><b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`).join(''));
+        : `<div class="ts-f-mate">${p.hid >= 0 ? '<span class="tag">locker</span>' : ''}<b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`).join(''));
 
       // The torch: lit bars for charge, yellow while it is on, red and blinking when nearly out.
       const lit = Math.ceil(bat * CELLS - .001), state = bat <= 0 ? 'dead' : me.act === 'charge' ? 'charging' : bat < LOW_BAT ? 'low' : 'ok';

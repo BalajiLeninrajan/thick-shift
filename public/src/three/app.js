@@ -95,6 +95,11 @@ function create() {
     },
     spot(e) { if (isMe(e.x.id)) hud.tip('spot', 'It has seen you. Keep the torch on it and back away. The beam holds it while the battery lasts.'); },
     bat(e) { if (isMe(e.x.by)) hud.say('Fresh battery.', 'torch', 2.5); },
+    locker(e) { if (isMe(e.x.id) && e.x.in) hud.tip('hide', 'Nothing sees you in here. One that saw you get in will open the door. One that lost you nearby may check, and one that stands outside long enough will sniff you out. The doors are loud.'); },
+    found(e) {
+      if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker.`, 'down', 4);
+      else hud.say(`${MASC[e.x.i].name} pulled ${guard(e.x.id)?.name || 'someone'} out of a locker ${where(e.x)}.`, 'hide', 6);
+    },
     fumble(e) { if (isMe(e.x.by)) hud.say('The door will not shut. Something is standing in it.', 'info', 3); },
   };
 
