@@ -35,7 +35,7 @@ The server works like the web game's host. Clients own their own positions and s
 rojo build default.project.json -o build/ThickShift.rbxl   # the place file
 rojo serve                                                  # live sync into Studio (with the Rojo plugin)
 stylua src test && selene src                               # format and lint
-lune run test/smoke.luau                                    # client code against the sim, no Studio
+(cd ../.. && lune run apps/roblox/test/smoke.luau)          # client code against the sim, no Studio (from the repo root)
 ../../tools/roblox/diff/run.sh "crew of 3 competent n4" 1   # web sim vs Luau sim, one night
 node ../../tools/roblox/gen-data.mjs                        # after changing config.js, map.js, dressing.js or light.js
 ```
