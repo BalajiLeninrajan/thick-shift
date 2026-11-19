@@ -1,5 +1,5 @@
-// The 3D mode's renderer and frame. main.js imports this file the first time
-// a night on the floor is drawn, so the booth game never downloads three.js.
+// The renderer and the frame. main.js imports this file the first time a
+// night is drawn, so the title screen and lobby never wait on three.js.
 import * as THREE from 'three';
 import { MASC } from '../config.js';
 import { game, client } from '../state.js';
@@ -13,14 +13,14 @@ import { createSound } from './sound.js';
 import { createPost } from './post.js';
 import { createPhone } from './actors/phone.js';
 import { createOutlines } from './outline.js';
-import { dreadOf } from '../rules.js';
+import { dreadF } from './sim3d.js';
 
 let app = null;
 const FOG = .037, FOG_DREAD = .03;   // fog density on a quiet night, and what a bad one adds
 const TORCH_FULL = 60;                // the torch's intensity on a full battery (player.js)
 
 function create() {
-  const stage = document.querySelector('.ts-stage'), flat2d = document.getElementById('c'), bar = document.getElementById('hud');
+  const stage = document.querySelector('.ts-stage');
   const canvas = document.createElement('canvas'); canvas.id = 'c3'; stage.append(canvas);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -42,8 +42,8 @@ function create() {
   function show(on) {
     if (on === shown) return;
     shown = on;
-    canvas.hidden = !on; hud.root.hidden = !on; flat2d.hidden = on; bar.hidden = on;
-    stage.classList.toggle('is-floor', on);   // the 3D picture has its own grain
+    canvas.hidden = !on; hud.root.hidden = !on;
+    stage.classList.toggle('is-live', on);   // the picture has its own grain (post.js)
     if (!on && document.pointerLockElement === canvas) document.exitPointerLock();
     if (!on) sound.quiet();
   }
@@ -136,7 +136,7 @@ function create() {
       for (const e of S.evs) if (e.id > lastEv) { lastEv = e.id; SAY[e.type]?.(e); actors.event(e, S, player.me); }
       player.update(S, dt, now);
       spectate(S, dt);
-      const dread = dreadOf(S), fear = threat();
+      const dread = dreadF(S), fear = threat();
       scene.fog.density = FOG + FOG_DREAD * dread;
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch);   // also runs the catch, which takes the camera

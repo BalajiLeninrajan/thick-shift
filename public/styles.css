@@ -9,12 +9,13 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-.ts-shell { height: 100dvh; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; }
+.ts-shell { height: 100dvh; display: grid; }
 
-/* The stage is the largest 16:9 box that fits above the controls. */
+/* The stage fills the window up to 21:9, centred, with ink bars beside it on wider screens. */
 .ts-stage-box { display: grid; place-items: center; container-type: size; min-height: 0; }
-.ts-stage { position: relative; width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9; background: var(--neu-ink); }
+.ts-stage { position: relative; width: min(100cqw, 100cqh * 21 / 9); height: 100cqh; background: var(--neu-ink); }
 .ts-stage canvas { display: block; width: 100%; height: 100%; }
+.ts-stage canvas[hidden], .ts-overlay[hidden] { display: none; }
 
 /* Film grain. Blending it here is far cheaper than drawing it into the canvas every frame. */
 .ts-stage::after {
@@ -28,38 +29,8 @@ body {
   60% { background-position: 31px 140px; } 80% { background-position: 97px 62px; }
 }
 @media (prefers-reduced-motion: reduce) { .ts-stage::after { animation: none; } }
-/* The 3D mode adds its own grain in its last shader pass (three/post.js). */
-.ts-stage.is-floor::after { display: none; }
-
-.ts-bar {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2);
-  width: 100%; max-width: 960px; margin-inline: auto;
-  padding: var(--space-2) var(--space-3) var(--space-3);
-}
-.ts-bar[hidden], .ts-overlay[hidden] { display: none; }
-/* Touch targets: these share the row evenly instead of sizing to their label. */
-.ts-bar .btn { flex: 1 1 124px; white-space: nowrap; }
-
-/* A door button always says its state in words; color only backs it up. */
-.ts-door span { color: var(--green); }
-.ts-door[aria-pressed="true"] { border-color: var(--red); }
-.ts-door[aria-pressed="true"] span { color: var(--red); }
-/* The door motor's heat, as a bar along the bottom of its button (--heat, 0 to
-   1, set by syncControls in ui.js). Red for the last fifth before the breaker
-   trips. A tripped door's button is dimmed and counts down in red ("out 14s"),
-   which is longer than "open", so the door buttons take a wider share of the
-   row than the others. */
-.ts-bar .ts-door { flex: 1.5 1 150px; }
-.ts-bar .btn:not(.ts-door) { flex-basis: 104px; }
-.ts-door { position: relative; overflow: hidden; }
-.ts-door::after {
-  content: ""; position: absolute; left: 0; bottom: 0; height: 4px;
-  width: calc(var(--heat, 0) * 100%);
-  background: var(--yellow); pointer-events: none;
-}
-.ts-door[data-hot="true"]::after, .ts-door[data-tripped="true"]::after { background: var(--red); }
-.ts-door[data-tripped="true"] { opacity: .6; border-color: var(--red); }
-.ts-door[data-tripped="true"] span { color: var(--red); }
+/* While a night is drawn, the grain comes from the last shader pass instead (three/post.js). */
+.ts-stage.is-live::after { display: none; }
 
 .ts-overlay {
   position: fixed; inset: 0; display: grid; justify-items: center; overflow: auto;
@@ -68,7 +39,7 @@ body {
 }
 /* Auto margins centre the card, and let one taller than a phone screen start at the top and scroll. */
 .ts-card { width: min(100%, 520px); margin-block: auto; }
-/* The floor's "Flattened" card, and the dimming behind it, come up slowly over the mascot that is sitting on you. */
+/* The "Flattened" card, and the dimming behind it, come up slowly over the mascot that is sitting on you. */
 .ts-overlay:has(.ts-card-slow) { animation: ts-card-fade 1.2s ease-out both; }
 .ts-card-slow { animation: ts-card-rise 1.2s ease-out both; }
 @keyframes ts-card-fade { from { opacity: 0; } }
@@ -87,21 +58,19 @@ body {
 
 /* Dev menu (?dev). Scrolls inside itself and stays narrow enough to play beside. */
 .ts-dev { width: min(380px, 92vw); z-index: 50; }
-.ts-dev[data-mode="floor"] .ts-dev-booth, .ts-dev:not([data-mode="floor"]) .ts-dev-floor, .ts-dev[data-mode="floor"] .cn-stack:has(> label > #dv-dread-on), .ts-dev[data-mode="floor"] label:has(#dv-cold) { display: none; }
 .ts-dev-body { overflow-y: auto; touch-action: pan-y; }
 
-/* ---------- 3D mode ---------- */
+/* ---------- in the night ---------- */
 /* The HUD (three/hud.js) and touch controls (three/touch.js). The HUD sits on
    a moving picture, so its pieces are bare text and thin marks with an ink
    shadow, or a translucent ink plate where a line has to be read. Recipes are
    used where a real surface appears: the pause panel, tags, buttons. */
 
-/* The floor fills the window, not the 16:9 box, up to 21:9, and takes back the scrollbar's gutter. */
+/* While a night is drawn, take back the scrollbar's gutter. */
 html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
-.ts-shell:has(#c3:not([hidden])) .ts-stage { width: min(100cqw, 100cqh * 21 / 9); height: 100cqh; aspect-ratio: auto; }
-.ts-stage canvas[hidden], .ts-fhud[hidden], .ts-fhud [hidden] { display: none; }
+.ts-fhud[hidden], .ts-fhud [hidden] { display: none; }
 
-/* The floor's rules in the lobby. */
+/* The rules in the lobby. */
 .ts-rules { display: grid; gap: var(--space-1); padding-left: 1.2em; }
 .ts-rules li { margin: 0; }
 

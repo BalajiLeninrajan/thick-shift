@@ -89,7 +89,7 @@ export function createPlayer(camera, canvas) {
   }
 
   addEventListener('keydown', e => {
-    if (typing(e) || !playing() || game.S.mode !== 'floor') return;
+    if (typing(e) || !playing()) return;
     // Without a locked pointer the browser does not turn Esc into a pause, so do it here; Enter comes back.
     if (me.paused) { if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); keysLive = true; resume(); } return; }
     if (e.code === 'Escape' && !mouseLocked) { pause(); return; }

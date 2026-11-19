@@ -3,40 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Thick Shift: Midnight at the Mascot Depot</title>
-<meta name="description" content="A co-op night-shift survival game. Keep the very large retired mascots out of the security booth until 6 AM.">
+<title>Thick Shift 3D: Midnight at the Mascot Depot</title>
+<meta name="description" content="A co-op night-shift survival game. Walk the Mascot Depot with a torch, keep its wiring alive and stay out from under the very large retired mascots until 6 AM.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/BalajiLeninrajan/catppuccin-neu@v2.0.1/css/index.css">
 <link rel="stylesheet" href="styles.css">
-<!-- three.js is only fetched when a 3D night starts (see src/three/). pnpm vendor refreshes the copy. -->
+<!-- three.js is fetched when the first night starts (see src/three/). pnpm vendor refreshes the copy. -->
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
 </head>
 <body>
 <div class="ts-shell">
-  <div class="ts-stage-box"><div class="ts-stage"><canvas id="c" width="800" height="450"></canvas></div></div>
-  <div class="ts-bar" id="hud">
-    <button class="btn btn-secondary ts-door" id="bL" aria-pressed="false">Left door&nbsp;<span>open</span></button>
-    <button class="btn btn-secondary ts-door" id="bV" aria-pressed="false">Vent&nbsp;<span>open</span></button>
-    <button class="btn btn-secondary ts-door" id="bR" aria-pressed="false">Right door&nbsp;<span>open</span></button>
-    <button class="btn btn-ghost" id="bCam" aria-pressed="false">
-      <svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-      Cams
-    </button>
-    <button class="btn btn-ghost" id="bGen" aria-pressed="false">
-      <svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg>
-      Crank
-    </button>
-    <button class="btn btn-ghost" id="bLight" aria-pressed="false">
-      <svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2z"/></svg>
-      Lights
-    </button>
-    <button class="btn btn-ghost" id="bTilt" aria-pressed="false">
-      <svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
-      Tilt
-    </button>
-  </div>
+  <div class="ts-stage-box"><div class="ts-stage"></div></div>
 </div>
 <div class="ts-overlay" id="ui"></div>
 <script type="module" src="src/main.js"></script>

@@ -1,4 +1,4 @@
-// Sound for the 3D mode. On the floor you hear things before you see them, so
+// Sound in the building. On the floor you hear things before you see them, so
 // everything that makes a noise has a place: a mascot, another guard, a door,
 // a breaker box. Each place is an emitter (a panner with a filter in front of it),
 // the listener is this guard's head, and walls dull what is behind them.
@@ -216,7 +216,7 @@ export function createSound() {
         at(S, x, () => { boom({ from: 90, to: 28, level: .7 }); sample('thud', { rate: .6, gain: .7 }); noise(.4, .45, { band: 2600, band2: 260, q: 1.2 }); tone(620, .38, 'sine', .14, 80); for (let k = 0; k < 3; k++) tone(240 - k * 40, .07, 'sine', .12, 120, .45 + k * .11); });
         return;
       }
-      // The booth game's jumpscare at the booth's levels, hung on the catch's own
+      // The jumpscare (SFX.scare in audio.js) and more, hung on the catch's own
       // timings (actors/scare.js): a hit as the camera is taken, its voice and the
       // shriek as the face arrives, lower at the bite, then the floor. It has to
       // be louder than everything else on the floor, so the limiter ducks the rest.
@@ -389,7 +389,7 @@ export function createSound() {
         // The night is over and the screens take it from here. A guard caught
         // last gets the night's end in the same tick as their catch, so their
         // stinger is played here, still on the catch's timings. A guard already
-        // flat hears the booth game's jumpscare, unless their own is still sounding.
+        // flat hears the plain jumpscare, unless their own is still sounding.
         quiet(); wasPlay = false;
         const caught = fresh.find(e => e.type === 'flat' && mine(e.x.id));
         if (caught) ON.flat(caught.x, S);

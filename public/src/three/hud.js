@@ -1,4 +1,4 @@
-// The 3D mode's heads-up display: HTML laid over the canvas. It is kept to
+// The heads-up display: HTML laid over the canvas. It is kept to
 // the edges and kept small, because the thing to look at is the dark room.
 // Top left: the hour, the building's power and the task list (the faults to
 // fix, where, and how long before each burns). Top centre: a compass with the
@@ -22,7 +22,7 @@ const GEN_MARK = 40;   // power, in percent, under which the compass points to t
 const HURRY = 15;         // seconds left before a fault burns when its row turns red
 const MAX_TASKS = 6;      // rows in the task list before the rest are counted
 const CELLS = 5;          // bars in the torch battery
-// What each mascot did to you, by MASC index. The booth game's lines are about doors.
+// What each mascot did to you, by MASC index.
 const HOW = ['sat on you', 'hugged you a bit too hard', 'landed on you', 'did not slow down'];
 
 const PATHS = {

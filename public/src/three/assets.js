@@ -18,7 +18,7 @@ export function loadJSON(name) {
   return cache.get(name + '.json');
 }
 
-// The colour eyes are in the dark: the pale of the 2D art's eye points.
+// The colour eyes are in the dark: a warm off-white (Catppuccin rosewater).
 export const EYE_PALE = 0xf5e0dc;
 
 // A model made ready for the actors, once: materials named eye_glow become

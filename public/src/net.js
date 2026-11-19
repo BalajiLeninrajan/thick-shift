@@ -2,23 +2,18 @@
 // state to every guest ten times a second, through a WebSocket relay on the
 // same origin (worker/index.js). If the host leaves, the relay makes the guest
 // who has been there longest the host, and the night carries on (takeOver).
-import { game, client } from './state.js';
-import { newState, step, act, resumeStep } from './sim.js';
-import { stepFloor, actFloor, adoptFloor } from './three/sim3d.js';
+import { game } from './state.js';
+import { newState, stepFloor, actFloor, adoptFloor } from './three/sim3d.js';
 
 const TICK_MS = 100;
 const NO_HOST = 4404, CODE_TAKEN = 4409;   // close codes from the relay
 const MAX_BACKLOG = 256 * 1024;            // bytes queued before the host skips a state
 let ws = null, loop = 0;
 
-// The 3D mode (S.mode === 'floor') has its own simulation; see three/sim3d.js.
-const tick = () => game.S.mode === 'floor' && game.S.phase !== 'lobby' ? stepFloor() : step();
-const apply = (id, a) => { if (game.S.mode !== 'floor' || !actFloor(id, a)) act(id, a); };
-
 const roomUrl = (code, query) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
 const newCode = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('');
 const parse = text => { try { return JSON.parse(text); } catch (e) { return null; } };
-const guard = (id, name = 'Guard') => ({ id, name, view: 'office', cam: 0, sanity: 1 });
+const guard = (id, name = 'Guard') => ({ id, name });
 
 function broadcast() {
   const guests = Object.keys(game.players).length - 1;
@@ -30,7 +25,7 @@ function broadcast() {
 const showing = () => { if (ws?.readyState === WebSocket.OPEN) ws.send(document.hidden ? 'hidden' : 'shown'); };
 document.addEventListener('visibilitychange', showing);
 
-const run = () => { loop ||= setInterval(() => { tick(); broadcast(); }, TICK_MS); };
+const run = () => { loop ||= setInterval(() => { stepFloor(); broadcast(); }, TICK_MS); };
 
 // The host's end of the socket: one it opened, or a guest's that the relay handed the room to.
 function hostRoom(sock, opened) {
@@ -41,7 +36,7 @@ function hostRoom(sock, opened) {
     if (typeof id !== 'string' || id === game.myId || !d) return;
     if (d.t === 'join') game.players[id] = guard(id);
     else if (d.t === 'leave') delete game.players[id];
-    else apply(id, d);
+    else actFloor(id, d);
   };
   ws.onclose = e => {
     // Someone else is hosting under this code. Nobody has joined yet, so take another.
@@ -75,12 +70,10 @@ function takeOver(guests) {
   const was = Object.fromEntries((game.S.players || []).map(p => [p.id, p]));
   game.players = {};
   for (const id of [game.myId, ...guests.filter(g => typeof g === 'string')]) game.players[id] = was[id] || guard(id);
-  // Our own record is as old as the last state the old host sent. What we are looking at is known here.
-  Object.assign(game.players[game.myId], { name: game.myName, view: client.view, cam: client.cam });
+  game.players[game.myId].name = game.myName;
   game.S.players = Object.values(game.players);
   game.netNote = 'The host left, so you are hosting now.';
-  resumeStep();
-  if (game.S.mode === 'floor') adoptFloor();
+  if (game.S.phase !== 'lobby') adoptFloor();   // rebuild the mascots' thinking, which the old host kept to itself
   hostRoom(ws, true);
   run();
 }
@@ -93,8 +86,8 @@ export function join(code) {
   game.joining = true;
   game.myId = 'g' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
   ws = new WebSocket(roomUrl(code, 'id=' + game.myId));
-  // Who we are and what we are looking at. Sent again to a new host, who may have missed the first time.
-  const hello = () => { send({ t: 'name', n: game.myName }); send({ t: 'view', v: client.view, cam: client.cam }); };
+  // Who we are. Sent again to a new host, who may have missed the first time.
+  const hello = () => send({ t: 'name', n: game.myName });
   ws.onopen = () => { if (document.hidden) showing(); hello(); };
   ws.onmessage = e => {
     const d = parse(e.data);
@@ -114,6 +107,6 @@ export function join(code) {
 
 // Route an action to the simulation, locally if we are the host.
 export function send(a) {
-  if (game.isHost) apply(game.myId, a);
+  if (game.isHost) actFloor(game.myId, a);
   else if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(a));
 }

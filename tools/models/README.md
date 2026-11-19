@@ -53,6 +53,6 @@ What "detailed and scary" means here:
 
 - Surface. Bake procedural materials (colour with AO folded in, normal, roughness) into image textures, or use dense vertex colour. Blender shader nodes do not export to glTF unless baked. Matted fake fur, stitched seams, a zip, foam showing through tears, scratched plastic eyes, yellowed teeth, wet stains.
 - Form. Sculpted masses that flow into each other (metaballs or a voxel remesh, then subdivide, displace and decimate to budget), not primitives parked side by side. Hair and strands are geometry where they show in silhouette.
-- Wrongness before gore. Proportions slightly off, eyes that do not agree, a mouth too wide, human teeth in a plush face. The last stage adds the gore the 2D art in `public/src/render/mascot.js` already has.
+- Wrongness before gore. Proportions slightly off, eyes that do not agree, a mouth too wide, human teeth in a plush face. The last stage adds the gore the old 2D art had (`public/src/render/mascot.js`, removed; see git history).
 - The torch test. The face has to read when lit from beside the camera, and the `eye_glow` eyes have to show as two points in the dark.
 - The hips. At stages 0 and 1 every mascot has enormous hips and a huge rear, wider than tall. It is the joke in the game's title. Stage 2 drops the joke: the rear is small and wasted, no wider than the shoulders, so the nightmare form reads as starved rather than comic.

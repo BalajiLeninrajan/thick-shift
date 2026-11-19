@@ -13,8 +13,8 @@
 # afterwards. look.py renders other previews and a posed check.
 #
 # Coordinates are Blender's: +x is the model's left, the front is -y, z is up,
-# metres. The 2D source is COSTUME.hippo, HEAD.hippo and GORE.hippo in
-# public/src/render/mascot.js. The proportions follow it, with the hips pushed
+# metres. The 2D source was COSTUME.hippo, HEAD.hippo and GORE.hippo in
+# public/src/render/mascot.js, since removed (git log -- that path). The proportions follow it, with the hips pushed
 # out to the limit of the doorway, because the hips are the joke. Stage 2 is
 # the exception: the owner asked for wasted, bony hips there, so it reads as
 # starved rather than comic.

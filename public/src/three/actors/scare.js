@@ -20,7 +20,7 @@ const calm = matchMedia('(prefers-reduced-motion: reduce)');
 const smooth = u => { u = Math.max(0, Math.min(1, u)); return u * u * (3 - 2 * u); };
 
 export function createScare(camera, canvas) {
-  // The strobe and the torn frame are drawn on a 2D canvas laid over the 3D one, the way the booth game's drawScare does it.
+  // The strobe and the torn frame are drawn on a 2D canvas laid over the 3D one.
   const over = document.createElement('canvas'); over.width = 640; over.height = 360; over.hidden = true;
   over.style.cssText = 'position:absolute;inset:0;pointer-events:none;image-rendering:pixelated';
   canvas.after(over);

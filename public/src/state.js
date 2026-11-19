@@ -5,7 +5,7 @@
 export const game = {
   S: null,
   isHost: false,
-  players: {},      // host only: peer id -> { name, view }
+  players: {},      // host only: peer id -> that guard's record in S.players
   code: '',
   myName: '',
   myId: '',         // this player's id in S.players: 'host', or the guest's peer id
@@ -16,21 +16,8 @@ export const game = {
 
 // client: what this browser is looking at. Never sent over the network.
 export const client = {
-  view: 'office',   // 'office' | 'cams' | 'crank'
-  cam: 0,
-  signal: 1,        // camera feed quality, 1 to 0. Drops while watching (see camDrain)
-  pan: 400,
-  panT: 400,        // pan eases toward this
-  tilt: false,
   lastEv: 0,        // id of the last event we reacted to
-  shake: 0,
-  glitch: 0,
-  scareT: 0,        // frames of jumpscare left
-  holdUntil: 0,     // on the floor: performance.now() before which the end card waits, for the catch and a look at what sat on you
-  fumbleT: 0,       // frames left to show that a door did not shut
-  deadT: 0,         // frames left to show that a door's breaker is out
-  deadK: null,      // which door that was
-  door: { L: 0, V: 0, R: 0 },   // animated door positions, 0 open to 1 shut
+  holdUntil: 0,     // performance.now() before which the end card waits, for the catch and a look at what sat on you
 };
 
 export const rnd = (a, b) => a + Math.random() * (b - a);

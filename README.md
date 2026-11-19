@@ -1,6 +1,6 @@
-# Thick Shift
+# Thick Shift 3D
 
-Midnight at the Mascot Depot. A co-op night-shift survival game: keep the very large retired mascots out of the security booth until 6 AM.
+Midnight at the Mascot Depot. A co-op night-shift survival game in first person: walk the building with a torch, keep its wiring alive, and stay out from under the very large retired mascots until 6 AM.
 
 ## Run it
 
@@ -14,7 +14,7 @@ pnpm run deploy # publish to Cloudflare Workers (plain `pnpm deploy` is a pnpm c
 
 Any static server pointed at `public/` runs the game solo. Rooms need the Worker.
 
-Add `?dev` to the URL for the dev menu (the Dev button, or the backtick key): god mode, infinite power, freeze, cold motors (nothing overheats), game speed, forced rot stage and dread, time skips, buttons to heat or trip a door and seize the generator, and per-mascot controls. Only the host's changes reach the simulation. Add `?debug` to get `window.ts` (the live `game` and `client` state) in the console.
+Add `?dev` to the URL for the dev menu (the backtick key, or the Dev button in the pause panel and touch menu): god mode, infinite power, freeze, wake every mascot, game speed, forced rot stage and dread, time skips, power and torch buttons, and per-mascot controls. Only the host's changes reach the simulation. Add `?debug` to get `window.ts` (the live `game` and `client` state) in the console.
 
 ## Layout
 
@@ -22,141 +22,37 @@ Add `?dev` to the URL for the dev menu (the Dev button, or the backtick key): go
 wrangler.jsonc      Cloudflare Workers config
 worker/index.js     the room relay: one Durable Object per room code
 public/
-index.html          markup and the control bar
-styles.css          stage layout; everything else comes from catppuccin-neu
+index.html          markup
+styles.css          stage layout and the HUD; everything else comes from catppuccin-neu
 sfx/                recorded sound effects (CC0, see Sound below)
+models/             the mascots, the guard and the prop kits (built by tools/models/)
 src/
-  config.js         constants, rooms, hit zones, palette, mascot roster
-  state.js          the two shared mutable objects: game (session) and client (this browser's view)
-  rules.js          read-only questions about a state: who is at which door, what time it is
-  sim.js            host-only simulation: power, mascot movement, player actions
+  config.js         the mascot roster, the doors, the number of nights
+  state.js          the two shared mutable objects: game (session) and client (this browser)
   net.js            hosting and joining rooms; the host broadcasts the whole state
-  audio.js          recorded and synthesised sound
-  ui.js             overlay screens and control-bar state
-  input.js          buttons, keyboard, pointer panning, tilt
+  audio.js          recorded and synthesised sound, and the ambience
+  ui.js             overlay screens: title, lobby, and the cards between nights
   dev.js            dev menu, loaded only with ?dev
   main.js           the frame loop
-  render/
-    canvas.js       canvas setup, color helpers, sprite baking
-    mascot.js       mascot art
-    office.js       the booth
-    cams.js         camera rooms and the CCTV treatment
-    cammap.js       the floor plan you tap to switch cameras
-    screens.js      generator, HUD, jumpscare, title backdrop
-    frame.js        picks the scene for the current state
+  three/            the game: simulation, building, actors, HUD, input, sound and picture (below)
 tools/
-  balance/run.mjs   scripted guards played through sim.js, and the targets the booth is tuned to
+  balance/floor.mjs scripted guards played through three/sim3d.js
+  check-floor.mjs   checks nothing in the building is blocked or cut off
 ```
 
 ## How the pieces talk
 
-The host runs `sim.js` ten times a second and sends the full state `S` to every guest. Both sides hold a WebSocket to `/room/CODE` on the same origin, and the `Room` Durable Object in `worker/index.js` passes messages between them. Nothing is peer to peer, so it works on any network that allows WebSockets. The relay keeps no game state, and a room ends when its host disconnects. Guests never change `S`. They send actions (`door`, `view`, `name`) to the host through `net.send`. Rendering reads `S` plus `client` and nothing else, so any scene can be reproduced by setting those two objects.
+The host runs `three/sim3d.js` ten times a second and sends the full state `S` to every guest. Both sides hold a WebSocket to `/room/CODE` on the same origin, and the `Room` Durable Object in `worker/index.js` passes messages between them. Nothing is peer to peer, so it works on any network that allows WebSockets. The relay keeps no game state. If the host leaves, the relay hands the room to the guest who has been there longest, and `adoptFloor` rebuilds what the old host's mascots were thinking from `S`. Guests never change `S`. They send actions (`p` for where they are, `use`, `call`, `name`) to the host through `net.send`.
+
+`main.js` loads `three/app.js`, and with it three.js, the first time a night is drawn, so the title screen and lobby come up without waiting for it.
 
 ## Winning
 
-A run is five nights (`FINAL_NIGHT` in `config.js`). Surviving a night sets `S.phase` to `'win'` and offers the next one; surviving the last sets it to `'won'`, which shows the morning scene and the run's tallies (`S.slams`, `S.deaths`). Dying retries the same night, so the tallies carry across attempts.
+A run is five nights (`FINAL_NIGHT` in `config.js`). Surviving a night sets `S.phase` to `'win'` and offers the next one; surviving the last sets it to `'won'`, which shows the run's tallies (`S.total`, `S.deaths`). Everyone flat at once sets `'dead'` and retries the same night, so the tallies carry across attempts.
 
-## Rot and dread
+## The rules
 
-Mascots start each night as the costumes they were and come apart as it goes on. `rotOf(S, m)` in `rules.js` returns a stage: 0 is the cute costume, 1 is off (dull fur, too many teeth), 2 is the tall shaggy thing with extra limbs. Time moves every mascot along, and each door slammed on a mascot (`m.bangs`) moves that one faster. Later nights start further along.
-
-`dreadOf(S)` is the same idea for the building, from 0 to 1. The office gloom, lamp flicker, fog, camera colour drain, poster glitches and background sound all scale with it. `threatOf(S)` is separate and short-lived: it rises while something stands at an open door, and drives the heartbeat and the red at the edges of the screen.
-
-## The building
-
-Nine rooms with cameras and three ways into the booth (`ROOMS` and the diagram above it in `config.js`). Each mascot has two routes of different lengths, some to different doors (`paths` in `MASC`), and picks one each time it sets off:
-
-- Big Biggs: Stage, Main Hall, then west through the Arcade to the left door, or east through the Kitchen to the right.
-- Madame Flan: Stage, then the short way through Backstage and the Kitchen to the right door, or the long way round to the left.
-- Squish: Snack Bar into the Ducts and out of the vent, or through the Kitchen to the right door.
-- Tank: Backstage, then the long way through the Stage and Arcade to the left door, or straight through the Kitchen to the right.
-
-A mascot turned away at a door goes back to where it rests. The camera map (`render/cammap.js`) is a floor plan of this.
-
-## What the booth tells you
-
-A creak says something has reached one of the doors, but not which one. The mascot then hangs back in the dark, unseen, and steps into the doorway for the last 40% of its wait (`REVEAL` in `rules.js`). How long it hangs back first changes every visit, from no time at all to twice the usual (`LURK`), so a creak says something is coming but not when. A crew that counts after the creak and shuts every door has to hold all three for most of a wait, and the shared breaker (below) makes that expensive. The heartbeat and the red at the edges of the screen only happen for an open doorway that is on the guard's screen (`seenThreat`). From the booth alone a guard gets the last 40% of the wait, and only for the door they are panned to. The cameras are how they learn earlier which door to watch: a mascot held back by a lull waits one room from its door, and each hall leads to one door.
-
-## Sanity and the lights
-
-Each guard has a sanity level, kept by the host in their player record (`updateSanity` in `sim.js`, rates in `SANITY`). It falls in the dark and while something stands at an open door. Watching an off or rotten mascot on camera also costs a little, very slowly. It recovers in the booth with the lights on and nothing at the doors.
-
-It gets worse each night and each hour (`wear` and `sanityCap` in `sim.js`): the ceiling starts lower every night and sinks as the night goes on, down to 29% at 6 AM on night 5. Power follows the same idea (`powerWear`): everything draws its listed rate on night 1 and 140% of it by night 5. The crank returns less power the lower the cranking guard's sanity, down to 40% of its rate.
-
-The tuning target is night 5: a guard who never checks cameras and shuts each door at the last safe moment should end it near 13% power without cranking, and anyone less exact should need the crank. Sanity should end just into the red. For a group the target is the same night: two guards on the doors and one working the handle between attacks should end it near 60%, which is about one guard's worth of camera time. A group that seals the booth should be dead before 2 AM on any night. `node tools/balance/run.mjs` plays scripted guards through `sim.js` and checks these (see Balance below).
-
-Low sanity does three things:
-
-- Pressing to shut a door can do nothing (`doorFailChance` in `rules.js`: about a quarter of presses at half sanity, 70% at zero). Opening never fails, and neither does shutting a door in the last quarter of a mascot's wait behind it (`LAST_MOMENT` in `sim.js`). The guard who fumbled is told; everyone hears the click.
-- Below 60% the game plays real event sounds when nothing happened (`FALSE_ALARMS` in `audio.js`).
-- Below 50% an empty camera room sometimes shows a silhouette that is not in the game state (`phantom` in `cams.js`).
-
-The booth lights are a shared switch (`S.lights`, the Lights button or L). Off saves about two thirds of the idle power drain (`DRAIN` in `sim.js`) and drains everyone's sanity. In the dark a doorway shows nothing but eyes, and only for the last 12% of the wait (`REVEAL_DARK`), which is under a second on every night. Switched back on, the strip lights flicker for 1.2 seconds before they strike (`LIGHTS_WARM`, `S.litAt`), and the booth counts as dark until then. So the dark is for the quiet between attacks, and switching the lights on at the creak is a gamble on how long the thing at the door hangs back. A power cut is different: with no light anywhere there is no dark to hide in, and the eyes show from the moment it arrives.
-
-Attacks are paced by lulls. After a mascot is turned away, `S.calmUntil` keeps every mascot from arriving at a door for a random stretch (see `lull` in `sim.js`): usually 20 to 45 seconds, sometimes twice that, and on later nights occasionally almost none. A mascot that wants to arrive during a lull waits one room away. No night has more than `maxAttacks(S)` attacks, seven for one guard, and whatever is left of that budget is spread over the time remaining so the last hours are never safe. Later nights get shorter door timers, some attacks that are two mascots at once from night 4 for one guard, earlier for a crowd, and a weaker guard (see Sanity).
-
-Camera feeds wear out while a player watches them. Each player has a `client.signal` level that drains while they are on the cameras and recovers in under a second once they leave. A worn feed tears and fills with static; below about 40% its light starts cutting out and everything in the room is drawn as a silhouette. It gets worse through the night: a feed lasts a minute at midnight and 10 seconds at 4 AM, and from 4 AM it is already tearing when you open it (`camCap` and `camLife` in `rules.js`). This is per player and not synced, so two guards can see different feeds.
-
-To add a mascot, add an entry to `MASC` in `config.js`, then give `COSTUME` (stages 0 and 1), `HEAD` (stage 2), `BODY` and `NECK` in `render/mascot.js` an entry with the same key.
-
-## Breakers, the handle and a crowd
-
-These three rules exist because a group used to win by shutting every door and cranking all night. Now that loses, and a bigger crew gets more to do.
-
-The three doors are held shut by motors on one breaker. A motor heats while it holds and cools while the door is open (`S.heat`, `DOOR_HEAT` in `rules.js`). One door can hold for 25 seconds from cold. Each other door shut at the same time makes all of them heat half as fast again, and a mascot hitting a shut door adds a lump of heat. At the top the breaker trips: the door drops open and will not shut for 20 seconds (`S.trip`, `tripLeft`). The door buttons and the plates under the doors show the heat.
-
-The generator has one handle (`S.cranker`). Whoever gets there first holds it, and a second guard adds nothing. Turning it heats it: 15 seconds from cold seizes it, and it cools four times slower than it heats (`S.gen`, `GEN_HEAT`), so a night has about a minute of cranking in it at most (66 seconds for a guard who lets go in time). Letting go in the red costs nothing, because it has to cool anyway. Riding it until it seizes jams it: a seized generator cools half again slower and stays locked for 45 seconds (`GEN_HEAT.jam`, `S.seized`, `genLeft`), and a guard who always rides it gets about a sixth less cranking out of a night. The mascots hear the handle only while it turns. Both hands are on the handle, so a guard at the generator who presses a door key lets go of it and is back in the booth (`toggleDoor` in `input.js`; `act` in `sim.js` ignores a door press from the generator). When the power runs out everyone is thrown back to the booth, and the host lets go of the handle for them.
-
-More guards draw more visits (`crowdOf`, `maxAttacks`, `pairFromNight`, `pairChance` in `rules.js`). One guard gets the same seven attacks as before. Each extra guard adds three, shortens the lulls to fit them, and brings pairs a night earlier and more often. The count is read from `S.players` as the night runs, so a guest who joins or leaves changes it at once.
-
-| Guards | Attacks a night | Lull length | Pairs from night | Chance of a pair |
-| --- | --- | --- | --- | --- |
-| 1 | 7 | 1x | 4 | 35% |
-| 2 | 10 | 0.7x | 3 | 47% |
-| 3 | 13 | 0.54x | 2 | 59% |
-| 4 | 16 | 0.44x | 2 | 71% |
-| 6 | 22 | 0.32x | 2 | 80% |
-
-What a guard sees and hears of this:
-
-- Each door button has a bar along its bottom edge that fills as the motor heats, yellow then red for the last fifth. The plate under each door in the booth has the same bar, the door frame goes from grey through orange to red, and the plate's light blinks before a trip.
-- With two or three doors shut, a line at the top of every view says so: "2 doors on one breaker: heating 1.5x".
-- A trip is a pop, a thud and the door dropping, with sparks at the frame for two seconds. The plate reads "TRIPPED 14s" and the button "out 14s", both counting down. Pressing the button shuts nothing. Everyone hears a dull clunk, lower than the click of a fumble, and the guard who pressed is told "Left door breaker is out. 14 s." A relay tick says it is back.
-- A shut door whose motor passes 80% heat whines, with the relay chattering (`strain` event, `DOOR_HEAT.strain`). Everyone hears it in every view, so a guard on the cameras who shut a door early knows to open it.
-- If a mascot came through a tripped door, the death card says so.
-- A Generator strip under the clock is in every view. It shows the generator's heat, the name of whoever is turning it, and "seized 24s" while it is locked. Under it a plate lists the guards and where each one is, two to a row past three guards. At the generator there is a temperature dial, smoke above 70%, and a wheel that only moves while someone is turning it. The heading says whether you have the handle, someone else has it, or it has seized.
-- The lobby and the card between nights tell a crew of two or more how many visits to expect.
-
-The sim tells clients about these through events: `trip`, `strain` and `reset` (with the door), `dead` (the door and who pressed), `seize` and `unseize`.
-
-## Balance
-
-`tools/balance/run.mjs` plays whole nights through the real `sim.js` with a stubbed clock and a seeded `Math.random`, 200 nights per row, and prints a table and a list of targets met or missed. It needs Node 22.7 or later and nothing else.
-
-```sh
-node tools/balance/run.mjs                   # every scenario on nights 1, 3 and 5
-node tools/balance/run.mjs --only S1,T2,G4   # some of them
-node tools/balance/run.mjs --src /tmp/old    # the same guards through another copy of the four sim files
-```
-
-The guards are scripts: an exact one that shuts each door at the last safe moment (the solo tuning target), a human one that reacts in .3 to .7 seconds and has to sweep the room when alone, a sloppy one, a cranker who lets go before it seizes and one who rides it, a turtle that holds doors shut, one that slams every door on the creak, a counter that never looks and shuts every door a fixed count after each creak, and crews that play with the lights off. The rows are solo play (S), turtles (T), slamming everything in a group (C), playing properly in a group (G), counting (K) and the dark (D). Each exploit that was found and closed has a row with a losing target, so a later tuning pass cannot quietly reopen it. The header of the file describes each guard and each column.
-
-Run it after changing anything in `sim.js` or the constants in `rules.js`. To compare against the rules before a change, save the old `sim.js`, `rules.js`, `config.js` and `state.js` to a folder with `git show` and point `--src` at it.
-
-What it measures on the current rules, over 200 nights each:
-
-- One exact guard ends nights 1 to 5 at 46, 37, 29, 20 and 12% power without cranking and never trips a breaker. These are the same numbers as before breakers existed. The one change for a solo guard is the handle: a guard who cranks whenever the doors are clear gets about 35 seconds of it on night 5 and ends at 39%, where the old generator gave a minute and 60%.
-- A crew that shuts all three doors and holds them never wins, with one guard cranking or five. The mean time of death is around 1 AM, before 2:30 AM on every night measured, and over 95% of those deaths come through a tripped door.
-- Slamming every door on the creak gets worse with crew size: two guards usually live, four win 11 to 40%, six win under one night in ten. A solo guard who does it trips a breaker most of night 1 and still wins 98%.
-- Counting after the creak with nobody looking: a solo guard wins 68 to 84%, a duo with a cranker 86 to 100% but ends night 5 at 47% (proper play ends at 66%), four guards 49 to 83%, six 14 to 47%. The duo is the weak spot: its lulls are long enough to cool three hot doors.
-- The lights off all night: everyone loses from night 3, and a solo guard loses from night 1. Off between attacks and on at the creak still works on nights 1 and 3 and loses half of night 5s.
-- Three guards playing properly (two on the doors, one on the handle) win every night and end night 5 at 64%. A fourth guard on the cameras all night brings that to 26%. Two camera watchers use up everything the handle makes (2% left).
-
-## The floor
-
-The second mode is the same building walked in first person. The host runs `three/sim3d.js` in place of `sim.js`, on the same state object, and everything below is in that file unless it says otherwise. `three/map.js` is the building as data, and the host uses it too: rooms, doorways, where the breaker boxes and batteries are, what can be walked on and seen through, and how to get from one place to another.
-
-### The rules
+Everything in this section is in `three/sim3d.js` unless it says otherwise. `three/map.js` is the building as data, and the host uses it too: rooms, doorways, where the breaker boxes and batteries are, what can be walked on and seen through, and how to get from one place to another.
 
 A night is six hours of 70 seconds (`F.HOUR`). Faults break out in the twelve breaker boxes round the building (`BOXES` in `map.js`, `breakOut` and `stepFaults`, tuning in `FAULT`). A guard alone gets one about every 50 seconds, a little sooner each night and each hour; each extra guard adds 70% of that again (`FAULT.crew`). A fault never breaks out within 4 metres of a standing guard, and a mascot banging on a shut booth door shorts the box in the room outside that door a third of the time, so hiding in the booth makes work. `S.faults` has one entry per box: `null`, or `{ k, at, burnt }`. Any guard can fix any fault. (Giving each fault to one guard was tried in the harness: alone it made no difference, and crews of two to six won a third to half as often, because they crossed the building past each other instead of each taking the nearest.)
 
@@ -204,7 +100,7 @@ A guard pulled out is flattened like any catch, and the `found` event comes firs
 
 The booth has three doors, and each button works from both sides of the wall, so nobody can be shut out. A door will not shut on anyone standing in it, guard or mascot. The wall map shows every mascot that is out of its place while the power is on.
 
-### Balance on the floor
+## Balance
 
 `node tools/balance/floor.mjs` plays every scenario 40 times through the real `sim3d.js` and `map.js` and prints a table (`--seeds`, `--only`, `--deaths` and `--trace` are explained at the top of the file). The guards walk with `route()` and `slide()` at the game's speeds, react a quarter to most of a second late, and only know what a person could: what is lit and in front of them, what is close enough to hear, the HUD, the wall map from the booth and a flat teammate's call. Careless, competent and expert guards play alone and in crews of 2, 3, 4 and 6. Then come the strategies that must lose: the booth sealed, one cranking while the rest hide, torches from a corner, ignoring the faults, one runner for three who stay in, camping the charger, kiting a loop, standing in the ducts or the vent doorway, and sitting in lockers all night. The `hides` scenarios are competent guards who also step into a free locker within five metres when something is after them and nothing they know of can see them, and come out after four quiet seconds. They show what the lockers are worth, and nothing asserts on them. It exits non-zero on a softlock (a mascot standing still for 30 seconds, a guard who cannot move, a night that does not end), a guard flattened in the first 30 seconds of night 1, or a bad strategy winning more than one night in ten and more than half as often as playing properly.
 
@@ -219,9 +115,9 @@ Where the rules stand, over 40 nights a row:
 - A competent guard who also ducks into lockers wins about as often as one who does not (85, 50 and 10% of nights 1, 3 and 5, against 90, 50 and 10%), and a crew of three that does wins less (45% of night 3s against 70). Sitting in lockers all night loses every night.
 - The strategies that must lose lose every night 3. On night 1 one runner with three staying in wins under half (a crew playing properly wins them all), and the rest win one in ten or less.
 
-### HUD, input and the screens around a night
+## HUD, input and the screens around a night
 
-`three/hud.js` draws the HUD as HTML over the canvas, styled by the "3D mode" block at the end of `styles.css`. It stays at the edges:
+`three/hud.js` draws the HUD as HTML over the canvas, styled by the "in the night" block of `styles.css`. It stays at the edges:
 
 - Top left: the hour, the night, and building power. The bar turns yellow under 25% and red under 10%, and reads "Power out" at zero.
 - Top left, under the power: the task list. One row per open fault, nearest first: the room, the job and the seconds before it burns. A row turns red for the last 15 seconds and says "burning" after that. The row of the box your hands are in has a green edge. With no faults open it says so.
@@ -236,15 +132,15 @@ A flattened guard gets a panel saying who did it and how far the nearest standin
 
 Input is in `three/player.js`. The mouse is captured on the first click. Esc releases it and opens a pause panel with the controls, look sensitivity, invert-Y, "Highlight things you can use" and "Watch teammates from behind when you are flat" (kept in `localStorage.tsFloor`), and a fullscreen button. The night does not stop. The mouse is released for the screens between nights so their buttons can be clicked. A standard gamepad works: left stick walks, right stick looks, A uses, X is the torch, B is the phone and d-pad up zooms its map, LB runs, Y calls, RB watches, Start pauses.
 
-`three/touch.js` adds touch controls once a finger touches the screen, or from the start on a device with no fine pointer. A touch on the left 45% of the screen puts a stick under that thumb. A drag anywhere else looks. Use is held, the torch and phone buttons toggle, a Map button zooms the phone's map while it is up, and Run stays on until the stick is released. Pause and fullscreen sit in the top right corner. The layout is landscape, and a phone held upright is asked to turn. In this mode the stage fills the window (up to 21:9) instead of the 16:9 box.
+`three/touch.js` adds touch controls once a finger touches the screen, or from the start on a device with no fine pointer. A touch on the left 45% of the screen puts a stick under that thumb. A drag anywhere else looks. Use is held, the torch and phone buttons toggle, a Map button zooms the phone's map while it is up, and Run stays on until the stick is released. Pause and fullscreen sit in the top right corner. The layout is landscape, and a phone held upright is asked to turn. The stage fills the window up to 21:9.
 
-Teaching the game is split in two. The lobby lists the rules under the mode picker, where every guard reads them while the others join. In the night, a tip appears the first time each of these happens on a browser: the first fault, the torch dropping under half, a mascot spotting you, a teammate going flat, stepping into a locker (`hud.tip`, remembered in `localStorage.tsFloorTips`).
+Teaching the game is split in two. The lobby lists the rules, where every guard reads them while the others join. In the night, a tip appears the first time each of these happens on a browser: the first fault, the torch dropping under half, a mascot spotting you, a teammate going flat, stepping into a locker (`hud.tip`, remembered in `localStorage.tsFloorTips`).
 
-The end screens for this mode are in `ui.js`. They read `S.tally` (this night) and `S.total` (the run), which `sim3d.js` fills: faults fixed and faults left to burn, who was flattened and by which mascot, and who peeled someone up.
+The end screens are in `ui.js`. They read `S.tally` (this night) and `S.total` (the run), which `sim3d.js` fills: faults fixed and faults left to burn, who was flattened and by which mascot, and who peeled someone up.
 
-### Sound on the floor
+## Sound in the building
 
-`three/sound.js` gives every sound a place. The listener is this guard's head. A mascot, another guard, the generator, the charger and each one-off event (a fault, a fix, a bang on a door) plays into an emitter: a low-pass filter, a panner with distance rolloff, and a send to the reverb that falls off more slowly than the sound, so far things are more echo than source. It builds no second audio graph. The recipes are `sample()`, `tone()`, `noise()` and `boom()` from `audio.js`, run inside `into(node, fn)` so they land in an emitter and not straight on the limiter. `main.js` skips `SFX` for this mode, apart from the win jingle.
+`three/sound.js` gives every sound a place. The listener is this guard's head. A mascot, another guard, the generator, the charger and each one-off event (a fault, a fix, a bang on a door) plays into an emitter: a low-pass filter, a panner with distance rolloff, and a send to the reverb that falls off more slowly than the sound, so far things are more echo than source. It builds no second audio graph. The recipes are `sample()`, `tone()`, `noise()` and `boom()` from `audio.js`, run inside `into(node, fn)` so they land in an emitter and not straight on the limiter. `main.js` plays only the win jingle, which has no place in the building.
 
 Walls dull sound. Every 0.13 seconds an emitter asks `sees()` whether the listener has a line to it. If not, `doorwaysBetween()` counts doorways along the shortest way, a shut door counting double, and the `OCC` table turns that into a gain and a low-pass frequency. The panning is plain left-right (`equalpower`), because HRTF measured about twenty times the cost per source. Left-right panning cannot say "behind", so sounds behind the listener lose their top end.
 
@@ -261,15 +157,15 @@ Your own body is not placed: footsteps on the camera's bob, panting under 40% st
 
 Being flattened plays a stinger hung on the catch's timings (`CUES` in `actors/scare.js`): a hit at the grab, the mascot's growl at the face (pitched per mascot, `GROWL_RATE`), lower at the bite, then the floor. From then `muffle()` in `audio.js` closes a low-pass over the whole mix, heartbeat included, until you are peeled. Inside a locker it closes part way (`IN_LOCKER`), so the building is heard through steel. Another guard going flat is a splat, a falling whistle and three bubbles, from where it happened.
 
-The heartbeat, the dread drone, the wind and the far-off oddities are still `ambience()` in `audio.js`, driven from `main.js` by `app.threat()` and `dreadOf(S)`. `sound.js` plays no heartbeat or drone of its own.
+The heartbeat, the dread drone, the wind and the far-off oddities are still `ambience()` in `audio.js`, driven from `main.js` by `app.threat()` and `dreadF(S)`. `sound.js` plays no heartbeat or drone of its own.
 
 One-shots are counted (`voices()` in `audio.js`) and cut from the graph when they end. Past 32 new ones are dropped, and past 18 footsteps and other texture are skipped first. With `?debug`, `ts.floor.sound.stats()` returns the live voices, the always-running sources and the emitters. Nothing is built until the audio context is running, and events that arrive before that are dropped, not queued.
 
-### The building, its light and the picture
+## The building, its light and the picture
 
 `three/world.js` puts the Depot together from the files in `three/world/`:
 
-- `surfaces.js` and `tex.js` paint every floor, wall and ceiling with the 2D canvas when the mode loads: a colour map, a normal map from a height canvas, and a roughness map. Each room has its own set (`LOOK`), so one torch-lit patch of floor says which room you are in. A wall texture covers the full height of its room, so dados and damp sit at real heights.
+- `surfaces.js` and `tex.js` paint every floor, wall and ceiling with the 2D canvas when the game loads: a colour map, a normal map from a height canvas, and a roughness map. Each room has its own set (`LOOK`), so one torch-lit patch of floor says which room you are in. A wall texture covers the full height of its room, so dados and damp sit at real heights.
 - `art.js` draws what is stuck on the walls: the posters and the mural of the mascots in their friendly days, staff notices, stains, and the room names. `shell.js` stencils the name of the next room over each doorway, beside it in a low room, or on the floor where the door fills the wall.
 - `shell.js` builds the geometry from `walls()`, `slabs()` and `DOORWAYS` in `map.js`, so the picture cannot drift from the collision. Skirting, door frames, pipes, the stage's arch and the lamp housings go into one mesh (`geo.js`). The stage platform is 12 cm high and nobody climbs it. The game is flat.
 - `props.js` stands the two prop kits (`models/props_a.glb`, `props_b.glb`) where `dressing.js` says. Static props in a room that share a material are merged into one mesh. A kit that has not been built leaves its props out.
@@ -284,13 +180,13 @@ The same patch adds two terms no spotlight gives. One is a little spill round th
 
 Real lights in the scene: the local torch (the only shadow caster, and its shadow pass is skipped while it is off), three point lights that move to the nearest open faults, and whatever `actors.js` gives other guards' torches. With `?debug`, `ts.floor.renderer.info` counts a whole frame. With one prop kit loaded a frame is 70 to 140 draw calls with the torch off and up to about 300 with it on, because the shadow pass draws every caster in the beam a second time. About 30 of those are the building, up to 50 are props and usable things, and the rest are mascots and guards.
 
-`three/post.js` draws the scene into a half-float buffer and finishes it in one full-screen pass: exposure, ACES tone mapping, a vignette, grain, and colour fringing at the edges. Dread (`dreadOf`) drains colour, tightens the vignette, thickens the fog and makes the lamps sag. Threat (`app.threat()`) adds grain, fringing and bands of the picture slipping sideways. The grain goes on after tone mapping with a small lift under it, which keeps black areas from being one flat value on a laptop screen. The CSS grain on `.ts-stage` is off in this mode.
+`three/post.js` draws the scene into a half-float buffer and finishes it in one full-screen pass: exposure, ACES tone mapping, a vignette, grain, and colour fringing at the edges. Dread (`dreadF`, which fills through each night and starts higher on later ones) drains colour, tightens the vignette, thickens the fog and makes the lamps sag. Threat (`app.threat()`) adds grain, fringing and bands of the picture slipping sideways. The grain goes on after tone mapping with a small lift under it, which keeps black areas from being one flat value on a laptop screen. The CSS grain on `.ts-stage` is off while a night is drawn.
 
 Usable things get a gold outline, like the highlight in some games' accessibility modes, so they read as something to walk to in the dark (`three/outline.js`). Open faults pulse gold, red in their last 15 seconds, wherever they can be seen; flat teammates are red; batteries, the crank, the charger and door buttons are a faint gold within 6 metres; and whatever the use key would act on gets the widest, brightest edge. The pause panel's switch turns it off (`prefs.outline`, on by default). Only while something is marked, `post.js` draws those meshes again, flat, into a mask (they go on layer 7 under `scene.overrideMaterial`, each setting its colour as it is drawn), and drops any fragment the scene's depth texture puts behind a wall. The full-screen pass edges the mask with eight taps at up to three widths and lays the edge over the finished picture, after tone mapping, so it shows in the dark. The torch's shadow is not redrawn for the mask.
 
-Quality is `high` or `low` (`QUALITY` in `post.js`). High draws at up to 1280 pixels across with a 1024 shadow map, low at 854 with a 512 map and no fringing. The mode starts on high, times sixty frames once the shaders have compiled, and drops to low if they average over 26 ms. `?q=low` or `?q=high` in the URL fixes it.
+Quality is `high` or `low` (`QUALITY` in `post.js`). High draws at up to 1280 pixels across with a 1024 shadow map, low at 854 with a 512 map and no fringing. The game starts on high, times sixty frames once the shaders have compiled, and drops to low if they average over 26 ms. `?q=low` or `?q=high` in the URL fixes it.
 
-### Mascots, other guards and the catch
+## Mascots, other guards and the catch
 
 `three/actors.js` owns everything that moves and is not you. The work is in `three/actors/`.
 
@@ -317,9 +213,9 @@ Materials named `eye_glow` are drawn unlit and without fog (`loadActor` in `asse
 
 `scare.js` is the catch, from the `flat` event for this guard. For a second and a half the camera is taken to the mascot's face (`face` in the manifest; the worm's mouth for Tank at stage 2) while the mascot plays its `scare` pose, then dropped to the floor as it sits. A 2D canvas over the 3D one strobes and tears the frame, and does neither under `prefers-reduced-motion`. The cues are `CUES` in that file: `grab` 0, `face` 0.12, `bite` 0.62, `drop` 1.05, `floor` 1.3, `end` 1.5 seconds. `app.actors.scare.listen((cue, by, seconds) => ...)` calls back as each passes, and `app.actors.scare.now` is `{ by, t, cue }` during a catch.
 
-## Sound
+## Recordings
 
-Doors, bangs, footsteps, creaks, wind and growls are recordings in `public/sfx`. The hum, heartbeat, chimes and UI clicks are synthesised in `audio.js`, because they change with dread and threat as you play. Each recording has a synthesised stand-in that plays if the file has not loaded.
+Doors, bangs, footsteps, creaks, wind and growls are recordings in `public/sfx`. The hum, heartbeat and chimes are synthesised in `audio.js`, because they change with dread and threat as you play. Each recording has a synthesised stand-in that plays if the file has not loaded.
 
 All recordings are CC0, converted to mono MP3:
 
@@ -328,7 +224,3 @@ All recordings are CC0, converted to mono MP3:
 - `steps*`, `creak*`, `wind`, `scare_growl`, `far_growl*`: [Free horror SFX](https://liminal-space-dev.itch.io/free-horror-sfx-sounds) by Liminal Games (itch.io)
 
 A bang on a shut door is one of four layered recipes in `BANGS`, picked at random. Recordings pass through a generated room reverb (`room()`), with more of it for sounds that are further away.
-
-## Performance notes
-
-Stroking curves is the slowest thing the 2D canvas does here, so outlines are darker shapes drawn underneath. Art that never changes (the room, mascot bodies, glows) is baked into offscreen sprites with `bake()` in `render/canvas.js`.

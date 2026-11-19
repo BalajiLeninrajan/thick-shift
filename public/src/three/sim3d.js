@@ -1,6 +1,7 @@
-// Host-side simulation of the 3D mode ("the floor"). Only the host calls
-// stepFloor() and actFloor(). The booth game's rules are in ../sim.js; this
-// file shares its state object S, its events and its phases, and nothing else.
+// Host-side simulation. Only the host calls stepFloor() and actFloor(); net.js
+// sends the state S it keeps to every guest. S.phase is 'lobby' until the host
+// starts night 1, then 'play', and a night ends in 'win', 'dead' or, after the
+// last one, 'won'.
 //
 // The night in one paragraph: faults break out in the breaker boxes around the
 // building, and a guard has to walk to each and fix it. An open fault leaks
@@ -134,8 +135,13 @@ export const clockF = S => (hourF(S) || 12) + ' AM';
 // The building has light, doors and a charging dock until the power runs out, and again once it has been cranked
 // back to F.RESTART. S.power is 0 for exactly as long as S.out is set.
 export const lightsF = S => !S.out;
+// How eerie the building is, 0 to 1: fog, colour drained from the picture, sagging lamps and the background
+// sound (app.js, post.js, audio.js) all follow it. It fills over seven 45-second spans counted from midnight
+// on night 1, with two more already counted for each later night: full at 4:30 on night 1, from midnight on night 5.
+const DREAD_SPAN = 45, DREAD_FULL = 7;
+export const dreadF = S => S.dev?.dread >= 0 ? S.dev.dread : Math.min(1, (S.t / DREAD_SPAN + (S.night - 1) * 2) / DREAD_FULL);
 const late = S => S.night <= RAMP.length ? RAMP[S.night - 1] : RAMP.at(-1) + S.night - RAMP.length;
-// The same three stages as rotOf in rules.js, on this mode's clock. Left alone they are whole until 5 AM on
+// Mascots start the night as the costumes they were and come apart: 0 is cute, 1 is off, 2 is what is underneath. Left alone they are whole until 5 AM on
 // night 1, so the torch stops them dead while a guard is learning what it is for, and fully rotten from
 // 3 AM on night 5, when it only slows them. Torchlight and doors slammed on one (m.ire) bring it on sooner.
 function rot(S, m) {
@@ -195,9 +201,14 @@ function placeGuard(p, i) {
   Object.assign(p, spawnPoint(i), { pitch: 0, on: false, ph: false, bat: 1, flat: false, flatBy: -1, sp: false, act: '', safe: 0, callAt: 0, hid: -1 });
 }
 
+// A room's state before its first night. evs is the event list (emit); deaths and slams count the whole run.
+export function newState(code) {
+  return { phase: 'lobby', night: 1, t: 0, power: 100, doors: OPEN(), m: [], players: [], killer: -1, evs: [], evId: 0, deaths: 0, slams: 0, code };
+}
+
 export function startFloorNight(n) {
   const S = game.S;
-  Object.assign(S, { mode: 'floor', phase: 'play', night: n, t: 0, power: 100, cap: 100, out: false, restart: 0, stir: false, doors: OPEN(), killer: -1, killDoor: null, crank: false, round: -1 });
+  Object.assign(S, { phase: 'play', night: n, t: 0, power: 100, cap: 100, out: false, restart: 0, stir: false, doors: OPEN(), killer: -1, crank: false, round: -1 });
   S.m = MASC.map((d, i) => ({ i, x: REST[i].x, z: REST[i].z, yaw: REST[i].yaw, st: 'rest', rot: 0, lit: false, ire: 0 }));
   // Nothing moves for the first half minute of night 1, and a quarter minute after that.
   // S.waveAt is when the mascots next stir or settle, on S.t, kept in S so a guest who takes over as host has it.
@@ -436,7 +447,7 @@ function flatten(S, p, m, b) {
   m.st = 'feast'; b.timer = FEAST; b.tgt = null; b.path = []; b.last = { x: p.x, z: p.z };
   if (!standing(S).length) endNight(S, m.i);
 }
-function endNight(S, by) { S.phase = 'dead'; S.killer = by; S.killDoor = null; S.deaths++; emit('scare'); }
+function endNight(S, by) { S.phase = 'dead'; S.killer = by; S.deaths++; emit('scare'); }
 
 // Touching is being within F.CATCH with no wall between: a table between does not save anyone.
 function catchGuards(S, m, b) {
@@ -668,29 +679,30 @@ export function stepFloor() {
 
 const num = (v, lo, hi, fallback) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fallback;
 
-// One guard's action. Returns false for an action this mode does not handle.
+// One guard's action, from their own browser or sent over the wire (net.js).
 export function actFloor(pid, a) {
   const S = game.S, p = game.players[pid];
-  if (!p || a.t === 'name') return false;
-  if (S.phase !== 'play' || p.x == null) return true;
+  if (!p) return;
+  if (a.t === 'name') { p.name = String(a.n || 'Guard').slice(0, 12); return; }
+  if (S.phase !== 'play' || p.x == null) return;
   if (a.t === 'p') {
     // The guard's own browser moves them; the host only refuses a position inside a wall or a shut door.
     // In a locker they stay where they stepped in, with the torch off.
-    if (hidden(p)) { p.yaw = num(a.yaw, -1e3, 1e3, p.yaw); p.pitch = num(a.pitch, -1.6, 1.6, p.pitch); p.on = p.sp = false; p.act = ''; p.ph = !!a.ph && p.bat > 0; return true; }
+    if (hidden(p)) { p.yaw = num(a.yaw, -1e3, 1e3, p.yaw); p.pitch = num(a.pitch, -1.6, 1.6, p.pitch); p.on = p.sp = false; p.act = ''; p.ph = !!a.ph && p.bat > 0; return; }
     if (!p.flat && Number.isFinite(a.x) && Number.isFinite(a.z) && walkable(a.x, a.z, .2, S.doors)) { p.x = a.x; p.z = a.z; }
     p.yaw = num(a.yaw, -1e3, 1e3, p.yaw); p.pitch = num(a.pitch, -1.6, 1.6, p.pitch);
     p.on = !!a.on && p.bat > 0 && !p.flat;
     p.ph = !!a.ph && p.bat > 0 && !p.flat;   // the phone up, reading the map
     p.sp = !!a.sp && !p.flat && !p.ph;
     p.act = p.flat ? '' : ['crank', 'charge', 'fix'].includes(a.act) ? a.act : '';   // fix: hands in a breaker box
-    return true;
+    return;
   }
   if (a.t === 'call') {
     // A flat guard shouting for help: everyone gets a ping where they lie.
     if (p.flat && S.t >= (p.callAt || 0)) { p.callAt = S.t + F.CALL_GAP; emit('call', { id: p.id, x: p.x, z: p.z }); }
-    return true;
+    return;
   }
-  if (a.t !== 'use' || p.flat) return true;
+  if (a.t !== 'use' || p.flat) return;
   const near = thing => thing && dist(p, thing) < F.REACH;
   if (a.what === 'fix' && S.faults[a.i] && near(BOXES[a.i])) {
     S.faults[a.i] = null; count(S, 'fixed', 1);
@@ -700,7 +712,7 @@ export function actFloor(pid, a) {
     // A door will not shut on someone standing in it.
     const d = DOORWAYS.find(d => d.key === a.k), [x0, z0, x1, z1] = d.rect;
     const inWay = (q, r) => q.x > x0 - r && q.x < x1 + r && q.z > z0 - r && q.z < z1 + r;
-    if (!S.doors[a.k] && (S.players.some(q => inWay(q, PLAYER_R)) || S.m.some(m => inWay(m, MASCOT_R)))) { emit('fumble', { k: a.k, by: p.id }); return true; }
+    if (!S.doors[a.k] && (S.players.some(q => inWay(q, PLAYER_R)) || S.m.some(m => inWay(m, MASCOT_R)))) { emit('fumble', { k: a.k, by: p.id }); return; }
     S.doors[a.k] = !S.doors[a.k];
     emit('door', S.doors[a.k]);
   } else if (a.what === 'bat' && S.bats.includes(a.i) && near(BATTERY_SPOTS[a.i]) && p.bat < 1) {
@@ -728,5 +740,4 @@ export function actFloor(pid, a) {
       emit('peel', { id: other.id, by: p.id, x: other.x, z: other.z });
     }
   }
-  return true;
 }

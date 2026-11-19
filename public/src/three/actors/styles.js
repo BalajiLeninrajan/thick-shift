@@ -1,7 +1,7 @@
 // What makes each mascot itself: how it walks, how far its head turns, the
 // pose it takes in each state, and the parts only it has. mascot.js runs the
 // machinery; this file is the tuning, written from the notes each model
-// carries in public/models/<key>.json and from the 2D art in render/mascot.js.
+// carries in public/models/<key>.json.
 import * as THREE from 'three';
 import { EYE_PALE } from '../assets.js';
 import { lag } from './rig.js';

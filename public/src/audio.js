@@ -1,7 +1,7 @@
 // Sound. Physical events (doors, bangs, footsteps, growls) are recordings from
 // public/sfx; things that change as you play (the hum, the heartbeat) are
 // synthesised. If a recording has not loaded yet, a synthesised stand-in plays.
-// The 3D mode's positioned sound (three/sound.js) is built from the same
+// three/sound.js places each sound in the building, built from these
 // pieces: it plays them into its own nodes with into().
 let ac = null, master = null, ears = null;
 const OPEN_HZ = 20000;
@@ -221,27 +221,13 @@ const BANGS = [
 
 /* ---------- event sounds ---------- */
 
-const STEP_GAP = 20;
-let lastSteps = -STEP_GAP;
-
-// Keyed by simulation event type. Each gets the event, for the few that need it.
+// Keyed by simulation event type, for the sounds three/sound.js reuses (bang, out, scare) and the win jingle,
+// which main.js plays itself because it has no place in the building.
 export const SFX = {
-  // e.x is true when the door just shut.
-  door(e) { sample(e && e.x ? 'door_shut' : 'door_open', { gain: .9, rate: .9, wet: .2 }) || tone(90, .25, 'square', .15, 40); },
   bang() {
     if (!buffers.slam1) { noise(.35, .5); tone(55, .4, 'sine', .5, 30); return; }
     BANGS[Math.random() * BANGS.length | 0]();
   },
-  // It moved, somewhere else in the building.
-  // Mascots move every few seconds; you only hear some of it. At most one set
-  // of footsteps per STEP_GAP seconds, and then only about half the time.
-  step() {
-    if (!ac || ac.currentTime - lastSteps < STEP_GAP || Math.random() < .5) return;
-    lastSteps = ac.currentTime;
-    sample(pick('steps1', 'steps2'), { gain: .6, rate: .8, lowpass: 650, wet: .4 }) || tone(48, .3, 'sine', .35, 30);
-  },
-  // It is outside one of your doors. The creak says so, but not which door.
-  arrive() { sample(pick('creak1', 'creak2'), { gain: .7, rate: .8, wet: .3 }); tone(70, .6, 'sawtooth', .05, 50); },
   scare() {
     // The growl leads. The shriek is quieter than it sounds like it should be,
     // because everything shares one limiter and a loud shriek ducks the growl.
@@ -252,40 +238,13 @@ export const SFX = {
   },
   win() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, .5, 'triangle', .2), i * 160)); },
   out() { sample('hit_low', { gain: .9, rate: .7 }); tone(200, 1.2, 'sawtooth', .12, 30); },
-  hour() { tone(880, .15, 'triangle', .08); },
-  lights(e) { tone(e && e.x ? 1400 : 900, .04, 'square', .06); },
-  // The door control clicks and nothing moves.
-  fumble() { tone(180, .08, 'square', .12); setTimeout(() => tone(140, .1, 'square', .1), 90); },
-  // A door breaker goes: a pop and a thud in the wall, then the door dropping open.
-  trip() {
-    noise(.07, .5, { band: 2400, q: .7 }); tone(110, .3, 'sine', .45, 38);
-    sample('door_open', { gain: 1, rate: .8, at: .08, wet: .3 }) || tone(90, .3, 'square', .15, 40, .08);
-  },
-  // The breaker is back in: one relay tick.
-  reset() { tone(1900, .03, 'square', .07); },
-  // A button on a tripped door. Lower and shorter than a fumble, with nothing
-  // after it, so hands failing and hardware failing do not sound the same.
-  dead() { tone(95, .06, 'square', .14, 70); },
-  // The generator seizes: the handle grinds down to a stop.
-  seize() { tone(200, .5, 'sawtooth', .16, 40); noise(.5, .22, { band: 900, band2: 160, q: 1.5 }); },
-  // Cool enough to turn again.
-  unseize() { tone(700, .04, 'triangle', .06); },
-  // A shut door's motor is close to tripping its breaker: a rising whine and
-  // the relay chattering. Played in every view, so a guard on the cameras
-  // hears a trip coming in time to open the door.
-  strain() {
-    tone(140, .9, 'sawtooth', .07, 230); tone(281, .9, 'square', .025, 460);
-    for (let i = 0; i < 5; i++) tone(2200, .015, 'square', .05, 0, .25 + i * .11);
-  },
 };
-
-export const click = (f = 600) => tone(f, .05, 'square', .05);
 
 /* ---------- ambience ---------- */
 
 // Quiet is the default. The hum is barely there, the wind comes in gusts with
 // long gaps, and a background sound happens about once a minute.
-let bed = null, windGain = null, nextBeat = 0, nextOdd = 0, nextFalse = 0;
+let bed = null, windGain = null, nextBeat = 0, nextOdd = 0;
 
 // A low two-note hum and some filtered hiss that run for the whole night.
 function startBed() {
@@ -322,13 +281,9 @@ const ODD = [
   farGrowl, farGrowl, farGrowl,                             // it, downstairs
 ];
 
-// Sounds the game makes when something real happens, played when nothing has.
-// They are exactly the real ones, so you cannot tell.
-const FALSE_ALARMS = [() => SFX.arrive(), () => SFX.arrive(), () => SFX.bang(), () => { lastSteps = -STEP_GAP; SFX.step(); SFX.step(); }];
-
 // Call once per frame. threat and dread: 0 to 1 while a night is running.
-// sanity: this guard's, 1 to 0. threat = -1 goes quiet.
-export function ambience(threat, dread = 0, sanity = 1) {
+// threat = -1 goes quiet.
+export function ambience(threat, dread = 0) {
   if (!ac || ac.state !== 'running') return;
   if (!bed) startBed();
   if (!windGain && buffers.wind) startWind();
@@ -341,7 +296,5 @@ export function ambience(threat, dread = 0, sanity = 1) {
     nextBeat = now + 1 - threat * .55;
     tone(58, .14, 'sine', .22 + threat * .2, 38); setTimeout(() => tone(52, .16, 'sine', .16 + threat * .15, 34), 150);
   }
-  // Below 60% sanity you start hearing things: more often the lower it goes.
-  if (now > nextFalse) { if (nextFalse && Math.random() < (.6 - sanity) * 1.6) pick(...FALSE_ALARMS)(); nextFalse = now + 14 + Math.random() * 22; }
   if (now > nextOdd) { if (nextOdd && dread > .25) ODD[Math.random() * ODD.length | 0](); nextOdd = now + 45 - dread * 15 + Math.random() * 60; }
 }

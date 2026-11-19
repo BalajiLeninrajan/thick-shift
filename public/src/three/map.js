@@ -4,7 +4,7 @@
 // the host runs it without a renderer.
 //
 // Metres. x runs east, z runs south, so the plan below reads like a map.
-// The same building as ROOMS in config.js:
+// The building:
 //
 //   z 0   +-----------Stage-----------+------Backstage------+
 //         |                           |               (gen) |
@@ -25,7 +25,7 @@ import { obstacles, DRESSING } from './world/dressing.js';
 export const PLAYER_R = .35, MASCOT_R = .7;
 export const EYE = 1.65, DOOR_H = 3;
 
-// Room indices match ROOMS in config.js for 0 to 8. 9 is the booth.
+// Room indices: 0 to 8 are the rooms outside, 9 is the booth.
 export const BOOTH = 9, DUCTS = 8;
 // rects: [x0, z0, x1, z1]. A room with two overlaps them so you can walk from one into the other.
 // h: ceiling height. lamps: where its ceiling lights hang.

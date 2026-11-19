@@ -22,7 +22,7 @@ const footAt = q => q < .5 ? q * 4 - 1 : Math.cos(Math.PI * (q * 2 - 1));
 
 const SEEN_RANGE = 46;     // metres: past this the fog has it anyway
 const LOOK_EVERY = .2;     // seconds between checks of whether the camera can see it
-const STEP_HZ = 14;        // shudders and spasms change this often and hold in between, like the 2D art
+const STEP_HZ = 14;        // shudders and spasms change this often and hold in between, like stop motion
 const SEAT_LOCAL = .8, SEAT_OTHER = .3;   // metres from a flattened guard's middle to where it sits: on them, but in view of the one underneath
 
 // One soft point, drawn over every eye_glow so the eyes still read as two

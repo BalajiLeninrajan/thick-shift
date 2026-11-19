@@ -1,10 +1,8 @@
-// HTML chrome: the overlay screens and the control bar under the canvas.
+// The overlay screens around a night: title, lobby, and the cards between nights.
 // Everything here is derived from game/client state once per frame.
-import { MASC, DOORS, FINAL_NIGHT } from './config.js';
+import { MASC, FINAL_NIGHT } from './config.js';
 import { game, client } from './state.js';
-import { clock, tripLeft, maxAttacks, pairFromNight } from './rules.js';
 import { startFloorNight, restartFloor, clockF } from './three/sim3d.js';
-import { startNight, restart } from './sim.js';
 import { host, join } from './net.js';
 import { unlockAudio } from './audio.js';
 
@@ -24,10 +22,9 @@ function titleScreen() {
   return {
     key: 'title',
     html: card(`
-      <h1 class="ts-logo">Thick Shift</h1>
+      <h1 class="ts-logo">Thick Shift 3D</h1>
       <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
-      <p class="cn-meta cn-m-0">The retired theme-park mascots are enormous, and at night they wander. Shut a door when one is outside it, watch the cameras, and keep the power on until 6 AM. Door motors overheat if you hold a door shut through a quiet spell, and a whine means one is about to trip. The generator has one handle. Last five nights and you can go home. Works on a phone. Share a room code to play together.</p>
-      <p class="cn-meta cn-m-0">Or walk the floor in 3D. Do the watchman's rounds with a torch whose battery runs down. Touch a mascot and you are flat until a teammate peels you up. The host picks the mode in the lobby.</p>
+      <p class="cn-meta cn-m-0">The retired theme-park mascots are enormous, and at night they wander. Walk the building with a torch whose battery runs down, fix the wiring before it burns out, and keep the power on until 6 AM. Touch a mascot and you are flat until a teammate peels you up. Last five nights and you can go home. Works on a phone held sideways. Share a room code to play together.</p>
       <div class="field"><label for="nm">Your name</label><input id="nm" maxlength="12" placeholder="Guard" value="${esc(savedName)}"></div>
       <div class="field"><label for="rc">Room code</label><input id="rc" maxlength="4" placeholder="ABCD" autocapitalize="characters" value="${esc((q.get('room') || '').slice(0, 4))}"><small>Only needed to join a friend's night.</small></div>`,
       '<button class="btn btn-primary" id="hb">Host a night</button><button class="btn btn-secondary" id="jb">Join room</button>'),
@@ -52,13 +49,8 @@ function messageScreen(key, title, detail, back) {
   };
 }
 
-// The two ways to play. The host picks one in the lobby; S.mode carries it to the guests.
-const MODES = {
-  booth: ['The booth', 'Sit in the security booth. Watch the cameras, shut the doors, keep the power on.'],
-  floor: ['The floor (3D)', 'Walk the building with a torch and keep its wiring alive. It plays nothing like the booth:'],
-};
-// The floor's whole loop. Everyone reads it in the lobby while the others join.
-const FLOOR_RULES = [
+// The whole loop. Everyone reads it in the lobby while the others join.
+const RULES = [
   '<b>The job.</b> Faults keep breaking out in the breaker boxes around the building. Each one leaks power, more the longer it is left, and after a while puts its room\'s lights out; left too long it burns out the wiring, and the building holds less charge for the rest of the night. The list under the power and the yellow marks on the compass lead to them. Press E at the box and do the job: flip the breakers, join the wires or bleed the valve. Your hands are busy and your torch points at the floor while you do.',
   '<b>Power.</b> Doors, lights and the torch charger run on it. Hold E at the generator crank in the booth to put some back. At zero every door opens and the lights go out.',
   '<b>Your torch.</b> The beam holds a mascot back while it is on it. A full battery lasts about a minute: charge it at the dock in the booth, or pick up spare batteries.',
@@ -68,14 +60,7 @@ const FLOOR_RULES = [
   '<b>The booth</b> is where you start: the generator, the charger, a wall map of the faults, and three doors you can shut. Shut doors drain power fast and faults do not fix themselves, so it is no place to hide. Something banging on a shut door can short the box outside it.',
   '<b>Controls.</b> W A S D walk, mouse or arrow keys look, Shift runs, F is the torch, C is the phone, E uses things, Esc pauses.',
 ];
-function modePicker(S) {
-  const mode = S.mode || 'booth';
-  const about = `<p class="cn-meta cn-m-0">${game.isHost ? '' : `<strong>${MODES[mode][0]}.</strong> `}${MODES[mode][1]}</p>${mode === 'floor' ? `<ul class="cn-meta cn-m-0 ts-rules">${FLOOR_RULES.map(r => `<li>${r}</li>`).join('')}</ul>` : ''}`;
-  if (!game.isHost) return about;
-  return `<div class="segmented">${Object.keys(MODES).map(m => `<button id="mode-${m}" aria-pressed="${m === mode}"><b>${MODES[m][0]}</b></button>`).join('')}</div>${about}`;
-}
-
-// The floor's tallies as a list: S.tally for one night, S.total for the run (see three/sim3d.js).
+// The night's tallies as a list: S.tally for one night, S.total for the run (see three/sim3d.js).
 // Flats are grouped by guard, with who did it for a night and a count for the run.
 function floorStats(t, run) {
   const group = (list, key, val) => { const by = {}; for (const e of list) (by[key(e)] ||= []).push(val(e)); return Object.entries(by); };
@@ -87,17 +72,11 @@ function floorStats(t, run) {
 
 function nightScreen(S) {
   const names = S.players.map(p => p.name), who = names.map(esc).join(', ') || esc(game.myName);
-  const floor = S.mode === 'floor';
-  // More guards draw more visits (crowdOf in rules.js). Said where a crew reads it: the lobby and between nights.
-  const crowd = !floor && names.length > 1 ? `<p class="cn-meta cn-m-0">${names.length} guards on shift. A crowd draws them: up to ${maxAttacks(S)} visits a night, pairs from night ${pairFromNight(S)}.</p>` : '';
-  // The jumpscare has the screen: in the booth for its frames, on the floor until client.holdUntil (see main.js).
-  const scaring = floor ? performance.now() < client.holdUntil : client.scareT > 0;
-  const key = [S.phase, S.night, names.join(','), game.netNote, scaring, S.mode].join('|');
-  const next = () => S.phase === 'won' ? (floor ? restartFloor : restart)() : (floor ? startFloorNight : startNight)(S.phase === 'win' ? S.night + 1 : S.night);
-  const wire = () => {
-    const go = $('go'); if (go) go.onclick = () => { unlockAudio(); next(); };
-    for (const m in MODES) { const b = $('mode-' + m); if (b) b.onclick = () => { S.mode = m; }; }   // lobby, host only
-  };
+  // The catch has the screen until client.holdUntil (see main.js).
+  const scaring = performance.now() < client.holdUntil;
+  const key = [S.phase, S.night, names.join(','), game.netNote, scaring].join('|');
+  const next = () => S.phase === 'won' ? restartFloor() : startFloorNight(S.phase === 'win' ? S.night + 1 : S.night);
+  const wire = () => { const go = $('go'); if (go) go.onclick = () => { unlockAudio(); next(); }; };
   if (S.phase === 'lobby') {
     const link = `${location.origin}${location.pathname}?room=${S.code}`;
     return {
@@ -105,19 +84,15 @@ function nightScreen(S) {
         <div class="stat is-lg"><span>Room code</span><strong>${esc(S.code)}</strong></div>
         <p class="cn-meta cn-m-0">Friends join at<br><span class="cn-code ts-selectable">${esc(link)}</span></p>
         <div class="cn-cluster">${names.map(n => `<span class="chip">${esc(n)}</span>`).join('')}</div>
-        ${modePicker(S)}
-        ${crowd}
+        <ul class="cn-meta cn-m-0 ts-rules">${RULES.map(r => `<li>${r}</li>`).join('')}</ul>
         ${game.netNote ? `<div class="banner cn-tone-warning">${esc(game.netNote)}</div>` : ''}`, hostAction('Start night 1')),
     };
   }
-  if (S.phase === 'win' && floor) {
+  if (S.phase === 'win') {
     const note = S.players.some(p => p.flat) ? 'The day shift will peel up whoever is still on the floor.' : S.tally.flats.length ? 'Everyone is the right shape again.' : 'Nobody was flattened. They are saving it up.';
     return { key, wire, html: card(`<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(S.tally)}`, hostAction('Start night ' + (S.night + 1))) };
   }
-  if (S.phase === 'win') return {
-    key, wire, html: card(`<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">Everyone is un-squished. Guards: ${who}</p>${crowd}`, hostAction('Start night ' + (S.night + 1))),
-  };
-  if (S.phase === 'won' && floor) return {
+  if (S.phase === 'won') return {
     key, wire, html: card(`
       <h1 class="ts-logo">Shift over</h1>
       <p class="lede cn-m-0">You walked all ${FINAL_NIGHT} nights at the Mascot Depot.</p>
@@ -125,28 +100,9 @@ function nightScreen(S) {
       ${floorStats(S.total, true)}
       <p class="cn-meta cn-m-0">${S.deaths ? `The whole crew went down ${S.deaths === 1 ? 'once' : S.deaths + ' times'} along the way.` : 'The whole crew never went down at once.'}</p>`, hostAction('Start over from night 1')),
   };
-  if (S.phase === 'won') {
-    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-    return {
-      key, wire, html: card(`
-        <h1 class="ts-logo">Shift over</h1>
-        <p class="lede cn-m-0">You survived all ${FINAL_NIGHT} nights at the Mascot Depot.</p>
-        <p class="cn-meta cn-m-0">The sun is up and the mascots are back on their stage, exactly as they were. Nobody will believe you. Guards: ${who}</p>
-        <dl class="kv"><dt>Doors slammed on them</dt><dd class="cn-tabular">${S.slams || 0}</dd><dt>Times flattened</dt><dd class="cn-tabular">${S.deaths || 0}</dd></dl>
-        <p class="cn-meta cn-m-0">${S.deaths ? `It took ${plural(S.deaths, 'retry').replace('retrys', 'retries')}.` : 'Not flattened once.'}</p>`, hostAction('Start over from night 1')),
-    };
-  }
-  if (S.phase === 'dead' && !scaring && floor) return {
+  if (S.phase === 'dead' && !scaring) return {
     key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(MASC[S.killer]?.name || 'Something')} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}. Nobody is left to do the peeling.</p>${floorStats(S.tally)}`, hostAction('Retry night ' + S.night), 'ts-card-slow'),
   };
-  if (S.phase === 'dead' && !scaring && !floor) {
-    const d = MASC[S.killer];
-    // The sim stops at the death, so the door it came through is still marked tripped if that is why it was open.
-    const tripped = S.trip?.[S.killDoor] ? '<p class="cn-meta cn-m-0">Its breaker had tripped. The door was held shut until the motor cut out.</p>' : '';
-    return {
-      key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">${esc(d.name)} ${esc(d.how)}.</p><p class="cn-meta cn-m-0">It came through ${{ L: 'the left door', R: 'the right door', V: 'the vent' }[S.killDoor] || 'a door'}.</p>${tripped}<p class="cn-meta cn-m-0">Night ${S.night}, ${clock(S)}.</p>`, hostAction('Retry night ' + S.night)),
-    };
-  }
   return { key, html: '' };
 }
 
@@ -166,36 +122,4 @@ export function syncOverlay() {
   ui.hidden = !s.html;
   ui.innerHTML = s.html;
   if (s.html && s.wire) s.wire();
-}
-
-/* ---------- control bar ---------- */
-
-const DOOR_BTN = { L: 'bL', V: 'bV', R: 'bR' };
-function press(id, on) {
-  const b = $(id), v = String(!!on);
-  if (b.getAttribute('aria-pressed') !== v) b.setAttribute('aria-pressed', v);
-}
-
-const flag = (b, name, on) => { const v = String(!!on); if (b.getAttribute(name) !== v) b.setAttribute(name, v); };
-
-export function syncControls() {
-  const S = game.S, playing = !!S && S.phase === 'play';
-  // A door button says its state in words and carries its motor's heat as a
-  // bar along the bottom edge (--heat, see styles.css), so the gauge is under
-  // the thumb that is holding the door shut. A tripped one counts down. It
-  // says "out", not "tripped", because the button has no room for more.
-  for (const k of DOORS) {
-    const b = $(DOOR_BTN[k]), word = b.querySelector('span');
-    const shut = playing && S.doors[k], heat = playing ? S.heat?.[k] || 0 : 0, wait = playing ? Math.ceil(tripLeft(S, k)) : 0;
-    const label = wait ? `out ${wait}s` : shut ? 'shut' : 'open', level = heat.toFixed(2);
-    press(DOOR_BTN[k], shut);
-    if (word.textContent !== label) word.textContent = label;
-    if (b.style.getPropertyValue('--heat') !== level) b.style.setProperty('--heat', level);
-    flag(b, 'data-hot', heat > .8);
-    flag(b, 'data-tripped', wait > 0);
-  }
-  press('bCam', client.view === 'cams');
-  press('bGen', client.view === 'crank');
-  press('bTilt', client.tilt);
-  press('bLight', playing && S.lights !== false && S.power > 0);
 }

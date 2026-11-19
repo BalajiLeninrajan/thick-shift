@@ -1,4 +1,4 @@
-// Touch controls for the 3D mode: a stick under the left thumb, look by
+// Touch controls: a stick under the left thumb, look by
 // dragging anywhere else, and buttons for the torch, the phone, its map's
 // zoom, running and using things. They drive the guard through player.pad,
 // player.look, player.toggleTorch, player.togglePhone and player.toggleZoom,

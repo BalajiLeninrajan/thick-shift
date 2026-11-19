@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plays the 3D mode ("the floor") thousands of times with scripted guards and
+// Plays the game thousands of times with scripted guards and
 // prints what happened. The numbers in public/src/three/sim3d.js were tuned
 // against this table.
 //
@@ -27,7 +27,6 @@ globalThis.performance = { now: () => now };
 process.removeAllListeners('warning');   // the repo's package.json does not say its modules are ES modules; Node works it out
 const src = new URL('../../public/src/', import.meta.url);
 const { game } = await import(new URL('state.js', src));
-const { newState } = await import(new URL('sim.js', src));
 const { MASC } = await import(new URL('config.js', src));
 const sim = await import(new URL('three/sim3d.js', src));
 const M = await import(new URL('three/map.js', src));
@@ -588,7 +587,7 @@ function checkBuilding(name) {
 
 function play(sc, seed, trace) {
   seedRandom(seed);
-  game.S = newState('TEST'); game.players = {};
+  game.S = sim.newState('TEST'); game.players = {};
   const team = { bots: [], fault: new Map() };
   for (let i = 0; i < sc.n; i++) { const id = 'g' + i; game.players[id] = { id, name: 'G' + i }; team.bots.push(makeBot(id, i, sc.guard(i, sc.n))); }
   sim.startFloorNight(sc.night);
