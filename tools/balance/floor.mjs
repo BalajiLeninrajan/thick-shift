@@ -24,7 +24,6 @@ import { cpus } from 'node:os';
 
 let now = 0;
 globalThis.performance = { now: () => now };
-process.removeAllListeners('warning');   // roblox/diff/run.sh's scratch copy has no package.json to say its modules are ES modules; Node works it out
 const src = new URL('../../packages/game/src/', import.meta.url);
 const { game } = await import(new URL('state.js', src));
 const { MASC } = await import(new URL('config.js', src));
