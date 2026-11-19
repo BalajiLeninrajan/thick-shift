@@ -1,4 +1,4 @@
-# Squish, the toad. Builds public/models/toad_<stage>.glb and toad.json.
+# Squish, the toad. Builds packages/game/public/models/toad_<stage>.glb and toad.json.
 #
 #   tools/models/bl tools/models/toad/build.py -- 0        one stage
 #   tools/models/bl tools/models/toad/build.py -- 0 1 2    all of them

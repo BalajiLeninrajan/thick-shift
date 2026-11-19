@@ -2,12 +2,10 @@
   "name": "thick-shift",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "vendor": "sh tools/vendor-three.sh"
-  },
-  "devDependencies": {
-    "three": "^0.187.0",
-    "wrangler": "^4.162.0"
+    "dev": "pnpm --filter @thick-shift/web dev",
+    "dev:discord": "pnpm --filter @thick-shift/discord dev",
+    "deploy": "pnpm --filter @thick-shift/web run deploy",
+    "deploy:discord": "pnpm --filter @thick-shift/discord run deploy",
+    "vendor": "pnpm -r run vendor"
   }
 }

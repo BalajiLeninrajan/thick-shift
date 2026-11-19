@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The Discord Activity: the same game as its own Worker, so it can be deployed and broken separately.
+  // DISCORD_CLIENT_ID is the application's ID from the Developer Portal. The secret goes in with:
+  // pnpm wrangler secret put DISCORD_CLIENT_SECRET
+  "name": "thick-shift-discord",
+  "compatibility_date": "2026-11-15",
+  "main": "worker.js",
+  // dist/ is the game's static files with this app's public/ laid over them (packages/game/assemble.mjs).
+  // Wrangler rebuilds it before dev and deploy, and again in dev when either side changes.
+  "build": { "command": "pnpm run build", "watch_dir": ["public", "../../packages/game/public"] },
+  // The Worker sees the page before it is served, to point its CDN links at /ext (worker.js).
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": ["/", "/index.html"] },
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "vars": { "DISCORD_CLIENT_ID": "1572848365811663080" }
+}

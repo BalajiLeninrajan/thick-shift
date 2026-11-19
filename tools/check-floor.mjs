@@ -1,11 +1,11 @@
-// Checks that the furniture in public/src/three/world/dressing.js has not
+// Checks that the furniture in packages/game/public/src/three/world/dressing.js has not
 // blocked anything the 3D mode needs: doorways, the mascots' waypoints, and
 // the way to every breaker box, button, battery and resting mark. Run it after
 // moving a prop or anything in map.js:
 //   node tools/check-floor.mjs
 import { readFileSync, existsSync } from 'node:fs';
-import * as M from '../public/src/three/map.js';
-import { FOOT, DRESSING } from '../public/src/three/world/dressing.js';
+import * as M from '../packages/game/public/src/three/map.js';
+import { FOOT, DRESSING } from '../packages/game/public/src/three/world/dressing.js';
 
 const bad = [], warn = [];
 const at = p => `(${p.x}, ${p.z})`;
@@ -42,7 +42,7 @@ for (const [x0, z0, x1, z1] of M.OBSTACLES) {
 const LOOSE = { skee_ball: 'tickets on the floor', soda_machine: 'the lead and the puddle', spare_heads: 'the top head, 2.3 m up' };
 const sizes = {};
 let built = 0;
-for (const kit of ['props_a', 'props_b']) { const f = new URL(`../public/models/${kit}.json`, import.meta.url); if (existsSync(f)) { built++; Object.assign(sizes, JSON.parse(readFileSync(f)).props); } else warn.push(`${kit}.json is not built yet, so its props are unchecked`); }
+for (const kit of ['props_a', 'props_b']) { const f = new URL(`../packages/game/public/models/${kit}.json`, import.meta.url); if (existsSync(f)) { built++; Object.assign(sizes, JSON.parse(readFileSync(f)).props); } else warn.push(`${kit}.json is not built yet, so its props are unchecked`); }
 for (const name in FOOT) if (sizes[name] && !LOOSE[name]) { const [w, , d] = sizes[name].size; if (Math.abs(w - FOOT[name][0]) > .2 || Math.abs(d - FOOT[name][1]) > .2) warn.push(`${name}: FOOT says ${FOOT[name]}, the kit says ${[w, d]}`); }
 if (built === 2) for (const name of new Set(DRESSING.flat().map(row => row[0]))) if (!sizes[name]) warn.push(`${name} is placed but is in neither kit`);
 

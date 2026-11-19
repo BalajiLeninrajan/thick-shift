@@ -1,0 +1,14 @@
+{
+  "name": "@thick-shift/web",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@thick-shift/game": "workspace:*"
+  },
+  "devDependencies": {
+    "wrangler": "^4.162.0"
+  }
+}

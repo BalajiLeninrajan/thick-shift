@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Plays the game thousands of times with scripted guards and
-// prints what happened. The numbers in public/src/three/sim3d.js were tuned
+// prints what happened. The numbers in packages/game/public/src/three/sim3d.js were tuned
 // against this table.
 //
 //   node tools/balance/floor.mjs                 every scenario, 40 seeds each
@@ -25,7 +25,7 @@ import { cpus } from 'node:os';
 let now = 0;
 globalThis.performance = { now: () => now };
 process.removeAllListeners('warning');   // the repo's package.json does not say its modules are ES modules; Node works it out
-const src = new URL('../../public/src/', import.meta.url);
+const src = new URL('../../packages/game/public/src/', import.meta.url);
 const { game } = await import(new URL('state.js', src));
 const { MASC } = await import(new URL('config.js', src));
 const sim = await import(new URL('three/sim3d.js', src));
