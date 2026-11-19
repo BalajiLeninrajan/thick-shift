@@ -50,6 +50,7 @@ function create() {
 
   // A flat guard can watch a standing teammate (player.me.watch is their id): through their eyes, or with
   // prefs.third from behind and above them. seat is that view, eased between the host's updates.
+  const LINGER = 1.5;   // seconds a caught guard lies looking up at what sat on them before the night's end card
   const BACK = 3, ABOVE = 2.2, AIM = 1.4;   // third person: metres behind, camera height, and the height looked at
   function spectate(S, dt) {
     const p = S.players.find(q => q.id === player.me.watch);
@@ -139,6 +140,8 @@ function create() {
       scene.fog.density = FOG + FOG_DREAD * dread;
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch);   // also runs the catch, which takes the camera
+      // The end card (ui.js) waits until LINGER after the catch is over, however long a slow machine takes over it.
+      if (actors.scare.active) client.holdUntil = Math.max(client.holdUntil, now + LINGER * 1000);
       phone.update(S, player.me, dt, now, actors.scare.active);
       sound.update(S, player.me, dt);
       hud.update(S, player.me, actors.scare.active);

@@ -68,6 +68,12 @@ body {
 }
 /* Auto margins centre the card, and let one taller than a phone screen start at the top and scroll. */
 .ts-card { width: min(100%, 520px); margin-block: auto; }
+/* The floor's "Flattened" card, and the dimming behind it, come up slowly over the mascot that is sitting on you. */
+.ts-overlay:has(.ts-card-slow) { animation: ts-card-fade 1.2s ease-out both; }
+.ts-card-slow { animation: ts-card-rise 1.2s ease-out both; }
+@keyframes ts-card-fade { from { opacity: 0; } }
+@keyframes ts-card-rise { from { translate: 0 10px; } }
+@media (prefers-reduced-motion: reduce) { .ts-card-slow { animation: none; } }
 .ts-selectable, .ts-overlay input { user-select: text; -webkit-user-select: text; }
 
 .ts-logo {

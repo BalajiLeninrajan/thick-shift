@@ -12,7 +12,7 @@ const $ = id => document.getElementById(id);
 const q = new URLSearchParams(location.search);
 const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 
-const card = (body, footer = '') => `<div class="panel ts-card"><div class="panel-body cn-stack cn-gap-16">${body}</div>${footer && `<div class="panel-footer cn-cluster">${footer}</div>`}</div>`;
+const card = (body, footer = '', cls = '') => `<div class="panel ts-card ${cls}"><div class="panel-body cn-stack cn-gap-16">${body}</div>${footer && `<div class="panel-footer cn-cluster">${footer}</div>`}</div>`;
 const hostAction = label => game.isHost ? `<button class="btn btn-primary" id="go">${label}</button>` : '<span class="cn-meta">Waiting for the host…</span>';
 
 /* ---------- screens ---------- */
@@ -90,7 +90,9 @@ function nightScreen(S) {
   const floor = S.mode === 'floor';
   // More guards draw more visits (crowdOf in rules.js). Said where a crew reads it: the lobby and between nights.
   const crowd = !floor && names.length > 1 ? `<p class="cn-meta cn-m-0">${names.length} guards on shift. A crowd draws them: up to ${maxAttacks(S)} visits a night, pairs from night ${pairFromNight(S)}.</p>` : '';
-  const key =[S.phase, S.night, names.join(','), game.netNote, client.scareT > 0, S.mode].join('|');
+  // The jumpscare has the screen: in the booth for its frames, on the floor until client.holdUntil (see main.js).
+  const scaring = floor ? performance.now() < client.holdUntil : client.scareT > 0;
+  const key = [S.phase, S.night, names.join(','), game.netNote, scaring, S.mode].join('|');
   const next = () => S.phase === 'won' ? (floor ? restartFloor : restart)() : (floor ? startFloorNight : startNight)(S.phase === 'win' ? S.night + 1 : S.night);
   const wire = () => {
     const go = $('go'); if (go) go.onclick = () => { unlockAudio(); next(); };
@@ -134,10 +136,10 @@ function nightScreen(S) {
         <p class="cn-meta cn-m-0">${S.deaths ? `It took ${plural(S.deaths, 'retry').replace('retrys', 'retries')}.` : 'Not flattened once.'}</p>`, hostAction('Start over from night 1')),
     };
   }
-  if (S.phase === 'dead' && client.scareT <= 0 && floor) return {
-    key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(MASC[S.killer].name)} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}. Nobody is left to do the peeling.</p>${floorStats(S.tally)}`, hostAction('Retry night ' + S.night)),
+  if (S.phase === 'dead' && !scaring && floor) return {
+    key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(MASC[S.killer]?.name || 'Something')} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}. Nobody is left to do the peeling.</p>${floorStats(S.tally)}`, hostAction('Retry night ' + S.night), 'ts-card-slow'),
   };
-  if (S.phase === 'dead' && client.scareT <= 0) {
+  if (S.phase === 'dead' && !scaring && !floor) {
     const d = MASC[S.killer];
     // The sim stops at the death, so the door it came through is still marked tripped if that is why it was open.
     const tripped = S.trip?.[S.killDoor] ? '<p class="cn-meta cn-m-0">Its breaker had tripped. The door was held shut until the motor cut out.</p>' : '';

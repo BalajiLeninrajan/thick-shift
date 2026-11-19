@@ -8,12 +8,17 @@ import { bindInput } from './input.js';
 import { render } from './render/frame.js';
 import { SCARE_FRAMES } from './render/screens.js';
 
+const FLOOR_HOLD_MS = 3000;   // the 3D catch is 1.5 s (CUES.end in three/actors/scare.js); the rest is lying there
+
 // What each simulation event does on this client, besides its sound.
 const ON_EVENT = {
   bang() { client.shake = 14; },
   step() { client.glitch = 40; },
   arrive() { client.glitch = 40; },
-  scare() { client.scareT = SCARE_FRAMES; },
+  // On the floor the catch (three/actors/scare.js) takes 1.5 s, and then you lie looking up at it for a while
+  // before the end card comes. Timed in milliseconds there, since frames come at whatever rate the screen runs;
+  // three/app.js pushes holdUntil on while its catch is still playing.
+  scare() { client.scareT = SCARE_FRAMES; client.holdUntil = performance.now() + FLOOR_HOLD_MS; },
   out() { client.view = 'office'; },
   // Only the guard whose hands failed is told why the door is still open.
   fumble(e) { if (e.x.by === game.myId) { client.fumbleT = 110; client.shake = Math.max(client.shake, 5); } },

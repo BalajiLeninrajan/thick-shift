@@ -26,6 +26,7 @@ export const client = {
   shake: 0,
   glitch: 0,
   scareT: 0,        // frames of jumpscare left
+  holdUntil: 0,     // on the floor: performance.now() before which the end card waits, for the catch and a look at what sat on you
   fumbleT: 0,       // frames left to show that a door did not shut
   deadT: 0,         // frames left to show that a door's breaker is out
   deadK: null,      // which door that was
