@@ -9,6 +9,8 @@
 //   dead   its lamps are out
 //   soft   walk through it even though FOOT gives it a footprint
 //   s      scale
+// Every locker outside the booth is also a place to hide (HIDES in map.js), so a locker
+// wants a metre of clear floor in front of its doors.
 // A prop is solid when FOOT has its footprint and it is not marked soft.
 
 // [width, depth] of each solid prop's footprint in metres, before it is turned,
@@ -56,6 +58,7 @@ export const DRESSING = [
   [
     ...[15.7, 16.6, 19.7, 20.6, 21.5].map(z => ['arcade_cabinet', .5, z, 90]), ['arcade_cabinet', 7.3, 21.6, 270], ['arcade_cabinet', 8.15, 21.6, 90], ['arcade_cabinet', 7, 11.95, 0],
     ['skee_ball', 4, 12.9, 0], ['skee_ball', 5, 12.9, 0], ['prize_counter', 10.9, 21.4, 270], ['claw_machine', 10.6, 24, 315],
+    ['locker', 11.15, 13.2, 270],
     ['stool', 1.35, 15.7, 0], ['stool', 1.35, 20.6, 0], ['stool', 6.4, 21.6, 0], ['trash_can', 11, 16.4, 0], ['balloons', 2.2, 24.2, 0], ['chair_fallen', 9, 15.4, 100],
   ],
   // 3 Main Hall. A party that was never cleared away: four laid tables, chairs
@@ -71,7 +74,7 @@ export const DRESSING = [
   // 4 Kitchen. Range and sinks on the north wall under the extract duct, two
   // prep counters down the middle, the fridge standing open, something hanging from the rail.
   [
-    ['counter_steel', 30.2, 11.9, 0], ['range', 31.9, 12, 0], ['sink_unit', 38.6, 11.9, 0], ['barrel', 41.4, 12.2, 0],
+    ['counter_steel', 30.2, 11.9, 0], ['range', 31.9, 12, 0], ['locker', 27.85, 14, 90], ['sink_unit', 38.6, 11.9, 0], ['barrel', 41.4, 12.2, 0],
     ['counter_steel', 32.2, 16.2, 90], ['counter_steel', 32.2, 20.6, 90], ['pot_rack', 32.2, 16.2, 90, HANG], ['fridge', 41.55, 16.5, 270],
     ['wire_shelf', 33.5, 24.6, 180], ['wire_shelf', 34.8, 24.6, 180], ['meat_rail', 40, 18.8, 90, { y: 2.15 }],
     ['mop_bucket', 28.2, 24.2, 30], ['wet_floor_sign', 30.6, 22, 20], ['trash_bag', 41.3, 24.2, 0], ['trash_bag', 40.5, 24.4, 120], ['wall_fan', 42, 13.6, 270, wall(2.8)],
@@ -90,12 +93,12 @@ export const DRESSING = [
     ['snack_counter', 24.2, 26.6, 0], ['menu_board', 24.2, 25.5, 0, wall(2.45)], ['popcorn_cart', 17.6, 26.6, 0], ['soda_machine', 30.5, 29, 270],
     ['bar_stool', 23.2, 27.5, 0], ['bar_stool', 24.3, 27.55, 30], ['bar_stool', 25.3, 27.5, 0],
     ['table_round', 25.5, 31, 0], ['table_round', 19.5, 31.2, 50], ['chair', 26.5, 31.3, -90], ['chair', 25, 30, 20], ['chair_fallen', 24.4, 31.6, 0], ['chair', 20.3, 30.4, -40], ['chair', 18.6, 31.8, 120],
-    ['trash_can', 13.5, 26, 0], ['high_chair', 20.4, 32.2, 170], ['trash_bag', 30.4, 32.4, 0], ['balloons', 13.6, 32.3, 0],
+    ['locker', 13.35, 29, 90], ['trash_can', 13.5, 26, 0], ['high_chair', 20.4, 32.2, 170], ['trash_bag', 30.4, 32.4, 0], ['balloons', 13.6, 32.3, 0],
   ],
   // 7 East Hall. The delivery side: crates, drums, and a coat left on a stand at the corner.
   [
     ['crate', 36.55, 30, 0], ['crate', 36.55, 31.05, 0], ['barrel', 39.6, 28.4, 0], ['barrel', 39.6, 29.1, 0], ['crate', 31, 39.05, 0], ['barrel', 34.6, 42.1, 0],
-    ['cardboard_box', 36.5, 35, 0], ['cardboard_box', 36.4, 35.6, 60], ['pallet', 39.3, 38, 0], ['coat_rack', 39.4, 41.9, 225], ['wet_floor_sign', 36.9, 37.2, 100],
+    ['cardboard_box', 36.5, 35, 0], ['cardboard_box', 36.4, 35.6, 60], ['locker', 39.65, 36.8, 270], ['pallet', 39.3, 38, 0], ['coat_rack', 39.4, 41.9, 225], ['wet_floor_sign', 36.9, 37.2, 100],
     ['trash_bag', 36.4, 41.9, 0], ['trash_bag', 37.1, 42.1, 90], ['fire_extinguisher', 36, 33.5, 90, wall(1.2)], ['vent_cover', 40, 35.2, 270, wall(.5)],
     ...[27, 29].map(z => ['pipe_run', 36.45, z, 0, HANG]), ...[28.5, 30.5, 32.5, 34.5].map(x => ['duct_run', x, 39.1, 90, HANG]),
   ],

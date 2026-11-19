@@ -18,7 +18,7 @@ export const ART = {
 const POSTER_LINE = ['THERE IS ALWAYS ROOM\nFOR ONE MORE', 'HUGS ARE FREE', 'HE FITS ANYWHERE', 'NO RUNNING\n(EXCEPT TANK)'];
 const NOTES = [
   ['NOTICE', 'CLOSED until further notice. Do not let anyone tell you it is a party.'],
-  ['NIGHT STAFF', 'Punch every clock, every hour. The clocks do not care how you feel.'],
+  ['NIGHT STAFF', 'Sparks mean a fault. Fix it before it fixes you. The wiring does not care how you feel.'],
   ['COSTUME CARE', 'Heads on the shelf. Bodies on the rack. Count both. Count again.'],
   ['LOST CHILD?', 'Bring them to the booth. Do not hand them to a mascot.'],
   ['REMINDER', 'Nobody is inside the suits. Please stop asking.'],

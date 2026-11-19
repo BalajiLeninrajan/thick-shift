@@ -9,7 +9,8 @@
 // give: a little spill round the beam, so a mascot standing beside it is a
 // shape, and a trace of night vision, so the dark is not one flat black.
 import * as THREE from 'three';
-import { ROOMS3 } from '../map.js';
+import { ROOMS3, BOXES } from '../map.js';
+import { darkRoom } from '../sim3d.js';
 import { roomOf, open, sees, reach } from './sight.js';
 import { Batch } from './geo.js';
 import { ART, uvOf } from './art.js';
@@ -113,12 +114,48 @@ function bake(lamps) {
   return [tex(a), tex(b)];
 }
 
+/* ---------- rooms with a fault ---------- */
+
+// A floor-plan mask, two texels a metre, of how much of its lamps' light each room is getting: 1 normally, flickering
+// while a fault in it is open, and nearly nothing once the fault has had its room's lights (sim3d.js darkRoom).
+const MASK_PER_M = 2, MW = 42 * MASK_PER_M, MH = 44 * MASK_PER_M;
+function roomMask() {
+  const ids = new Int8Array(MW * MH), data = new Uint8Array(MW * MH * 4).fill(255);
+  for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) {
+    const x = (i + .5) / MASK_PER_M, z = (j + .5) / MASK_PER_M;
+    let r = roomOf(x, z);
+    // Inside a wall: whichever room is nearest, so a wall's face takes its own room's light.
+    for (let d = .5; r < 0 && d <= 1.5; d += .5) for (const [dx, dz] of [[d, 0], [-d, 0], [0, d], [0, -d]]) if (r < 0) r = roomOf(x + dx, z + dz);
+    ids[j * MW + i] = r;
+  }
+  const tex = new THREE.DataTexture(data, MW, MH); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+  const level = ROOMS3.map(() => 1);
+  return {
+    tex,
+    update(S, t, dt) {
+      let changed = false;
+      ROOMS3.forEach((_, r) => {
+        const open = S.faults?.some((f, i) => f && BOXES[i].room === r), dark = !S.out && darkRoom(S, r);
+        // Open: the room's tubes stutter. Dark: they have given up, with the odd attempt to strike.
+        const want = dark ? (jump(t, 3, r) > .93 ? .35 : .04) : open ? (jump(t, 11, r + 20) > .8 ? .3 : 1) : 1;
+        const v = level[r] + (want - level[r]) * Math.min(1, dt * 14);
+        if (Math.abs(v - level[r]) > .004) { level[r] = v; changed = true; }
+      });
+      if (!changed) return;
+      for (let k = 0; k < ids.length; k++) if (ids[k] >= 0) data[k * 4] = 255 * level[ids[k]];
+      tex.needsUpdate = true;
+    },
+  };
+}
+const mask = roomMask();
+
 /* ---------- the patch ---------- */
 
 const U = {
   uLmA: { value: null }, uLmB: { value: null }, uLmC: { value: new THREE.DataTexture(new Uint8Array(4), 1, 1) }, uGlow: { value: 0 }, uLmInv: { value: new THREE.Vector2(1 / 42, 1 / 44) },
   uSteady: { value: 1 }, uCa: { value: new THREE.Color() }, uCb: { value: new THREE.Color() }, uCe: { value: new THREE.Color() }, uCc: { value: new THREE.Color() },
   uEye: { value: new THREE.Vector3() }, uTorch: { value: new THREE.Vector4() }, uAdapt: { value: new THREE.Color() },
+  uRoomLit: { value: mask.tex },
 };
 const VERT_PARS = 'varying vec3 vDepotPos;\n', VERT = `
   vec4 depotP = vec4( transformed, 1.0 );
@@ -127,11 +164,11 @@ const VERT_PARS = 'varying vec3 vDepotPos;\n', VERT = `
   #endif
   vDepotPos = ( modelMatrix * depotP ).xyz;`;
 const FRAG_PARS = `varying vec3 vDepotPos;
-uniform sampler2D uLmA, uLmB, uLmC; uniform vec2 uLmInv; uniform float uSteady, uGlow; uniform vec3 uCa, uCb, uCe, uCc, uEye, uAdapt; uniform vec4 uTorch;
+uniform sampler2D uLmA, uLmB, uLmC, uRoomLit; uniform vec2 uLmInv; uniform float uSteady, uGlow; uniform vec3 uCa, uCb, uCe, uCc, uEye, uAdapt; uniform vec4 uTorch;
 `, FRAG = `{
   vec2 luv = vDepotPos.xz * uLmInv;
   vec4 lb = texture2D( uLmB, luv );
-  vec3 dl = texture2D( uLmA, luv ).rgb * uSteady + texture2D( uLmC, luv ).rgb * uGlow + lb.r * uCa + lb.g * uCb + lb.b * uCe + lb.a * uCc;
+  vec3 dl = ( texture2D( uLmA, luv ).rgb * uSteady + texture2D( uLmC, luv ).rgb * uGlow + lb.r * uCa + lb.g * uCb + lb.a * uCc ) * texture2D( uRoomLit, luv ).r + lb.b * uCe;
   // the lamps are overhead: tops catch more than sides, undersides little
   dl *= ( .72 + .28 * dot( normal, ( viewMatrix * vec4( 0., 1., 0., 0. ) ).xyz ) ) * ( 1. - .4 * smoothstep( 2.4, 4.4, vDepotPos.y ) );
   vec3 toP = vDepotPos - uEye; float d2 = dot( toP, toP ), ahead = max( 0., dot( toP * inversesqrt( d2 + 1e-4 ), uTorch.xyz ) );
@@ -288,6 +325,7 @@ export function createLight(scene, trim, artTex) {
       const fc = on * (jump(t, .45, 6) > .7 - worse * .25 ? (jump(t, 22, 7) > .45 ? 1 : .15) : .03);
       const exit = power ? 1 : .55 + .1 * Math.sin(t * 2.3);
       U.uSteady.value = on;
+      mask.update(S, t, dt);
       U.uGlow.value = on * (.85 + .15 * Math.sin(t * 9 + Math.sin(t * 2.3) * 4));   // screens that have been on for years
       U.uCa.value.copy(tubeCol).multiplyScalar(fa); U.uCb.value.copy(tubeCol).multiplyScalar(fb); U.uCc.value.copy(tubeCol).multiplyScalar(fc);
       U.uCe.value.copy(exitCol).multiplyScalar(exit);

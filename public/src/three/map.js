@@ -20,7 +20,7 @@
 //           |  Hall     L     Booth     R       Hall     |
 //   z 44    +-----------+---------------+----------------+
 
-import { obstacles } from './world/dressing.js';
+import { obstacles, DRESSING } from './world/dressing.js';
 
 export const PLAYER_R = .35, MASCOT_R = .7;
 export const EYE = 1.65, DOOR_H = 3;
@@ -64,9 +64,9 @@ export const DOORWAYS = [
 /* ---------- things with a place ---------- */
 // face: the way the thing looks out from its wall, as a yaw (0 faces south, +z).
 
-// Watchman's clocks: one in each room outside the booth and the ducts, and a second in four of the big rooms, so a
-// crew of six still gets two each an hour (sim3d.js openRound).
-export const CLOCKS = [
+// Breaker boxes, where faults break out (sim3d.js breakOut): one in each room outside the booth and the ducts, and
+// a second in four of the big rooms.
+export const BOXES = [
   { room: 0, x: 14.5, z: 10.95, face: Math.PI },   // by the door, not in the corner beside where two of them stand
   { room: 1, x: 41.95, z: 8.5, face: -Math.PI / 2 },
   { room: 2, x: .05, z: 14, face: Math.PI / 2 },
@@ -96,6 +96,13 @@ export const BATTERY_SPOTS = [
   { x: 25.5, z: 23 }, { x: 40.5, z: 13 }, { x: 29.5, z: 23.5 }, { x: 4, z: 30 }, { x: 28, z: 27 }, { x: 14.5, z: 31.5 },
   { x: 38, z: 36 }, { x: 25, z: 34.8 }, { x: 9, z: 41.5 }, { x: 33, z: 41.5 },
 ];
+// Places to hide: every locker in DRESSING outside the booth (the booth's hold coats). A guard steps in from `at`,
+// in front of its doors, and is somewhere no mascot looks unless it saw them go in or stands outside long enough
+// (sim3d.js openLockers). x, z: the locker itself. face: the way its doors look out.
+export const HIDES = DRESSING.flatMap((rows, room) => room === BOOTH ? [] : rows.filter(r => r[0] === 'locker').map(([, x, z, yaw]) => {
+  const face = yaw * Math.PI / 180;
+  return { room, x, z, face, at: { x: x + Math.sin(face) * .85, z: z + Math.cos(face) * .85 } };
+}));
 // Where each mascot stands when it is not walking, by MASC index, and which way it faces.
 export const REST = [{ x: 16, z: 3, yaw: 0 }, { x: 21, z: 3, yaw: 0 }, { x: 16, z: 28, yaw: Math.PI / 2 }, { x: 33, z: 3.5, yaw: 0 }];
 export const spawnPoint = i => ({ x: 18.5 + (i % 4) * 1.6, z: 41.5 - Math.floor(i / 4) * 1.4, yaw: Math.PI });

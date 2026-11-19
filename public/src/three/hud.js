@@ -1,14 +1,16 @@
 // The 3D mode's heads-up display: HTML laid over the canvas. It is kept to
 // the edges and kept small, because the thing to look at is the dark room.
-// Top left: the hour and the building's power. Top centre: a compass with
-// this hour's clocks on it, and the events of the night under it. Top right:
+// Top left: the hour, the building's power and the task list (the faults to
+// fix, where, and how long before each burns). Top centre: a compass with the
+// faults on it, and the events of the night under it. Top right:
 // the other guards. Bottom left: the torch. Everything else shows only while
 // it matters (a prompt in reach, stamina while winded, the flat and pause
 // states).
 import { MASC } from '../config.js';
 import { game } from '../state.js';
-import { ROOMS3, CLOCKS, CHARGER, GENERATOR, roomAt, route } from './map.js';
-import { F, clockF } from './sim3d.js';
+import { ROOMS3, BOXES, CHARGER, GENERATOR, roomAt, route } from './map.js';
+import { F, clockF, faultLeft } from './sim3d.js';
+import { FAULT_NAME } from './task.js';
 import { prefs, savePrefs } from './player.js';
 import { createTouch, toggleFullscreen, canFullscreen } from './touch.js';
 
@@ -17,13 +19,15 @@ const LABEL_GAP = 6;      // pixels kept between two compass labels
 const NAV_MS = 150;       // one compass mark has its walking route refreshed this often, in turn
 const LOW_BAT = .25, LOW_POWER = 25, CRIT_POWER = 10;
 const GEN_MARK = 40;   // power, in percent, under which the compass points to the generator
-const HURRY = 15;         // seconds left in the hour when unpunched clocks turn red
+const HURRY = 15;         // seconds left before a fault burns when its row turns red
+const MAX_TASKS = 6;      // rows in the task list before the rest are counted
 const CELLS = 5;          // bars in the torch battery
 // What each mascot did to you, by MASC index. The booth game's lines are about doors.
 const HOW = ['sat on you', 'hugged you a bit too hard', 'landed on you', 'did not slow down'];
 
 const PATHS = {
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  fault: '<path d="M10 2 4 13h6l-2 9 10-13h-6l2-7z"/>',
   bolt: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
   torch: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><path d="M6 6h12M12 12v2"/>',
   battery: '<rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2M6 11v2"/>',
@@ -33,17 +37,18 @@ const PATHS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
   pause: '<path d="M9 5v14M15 5v14"/>',
   full: '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
+  locker: '<rect x="5" y="2" width="14" height="20" rx="1"/><path d="M12 2v20M8 6h2M8 8h2M14 6h2M14 8h2"/>',
   rotate: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 9a10 10 0 0 0 3 9m17-3a10 10 0 0 0-3-9"/>',
 };
 const icon = name => `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
 // Each kind of toast has its own icon and colour (in styles.css), so a low
-// torch, low power, a missed clock and a guard going down do not look alike.
-const TOAST_ICON = { info: 'info', tip: 'info', clock: 'clock', missed: 'clock', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call' };
+// torch, low power, a fault burning and a guard going down do not look alike.
+const TOAST_ICON = { info: 'info', tip: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call', hide: 'locker' };
 const MAX_TOASTS = 3;
 
 const CONTROLS = {
-  keys: [['Walk', 'W A S D'], ['Run', 'Shift'], ['Look', 'Mouse, or the arrow keys'], ['Torch', 'F or click'], ['Phone map (drains the battery fast)', 'C'], ['Zoom the phone map', 'R'], ['Use, punch, peel', 'E (hold)'], ['Call out while flat', 'Q'], ['Watch a teammate while flat', 'Space'], ['Pause', 'Esc'], ['Back from pause', 'Enter']],
-  touch: [['Walk', 'Left thumb, anywhere'], ['Look', 'Drag the right side'], ['Use, punch, peel', 'Hold Use'], ['Run', 'Tap Run, lift to stop'], ['Phone map (drains the battery fast)', 'The phone button, then Map to zoom']],
+  keys: [['Walk', 'W A S D'], ['Run', 'Shift'], ['Look', 'Mouse, or the arrow keys'], ['Torch', 'F or click'], ['Phone map (drains the battery fast)', 'C'], ['Zoom the phone map', 'R'], ['Use, fix, peel, hide', 'E (hold to peel or hide)'], ['In a breaker box: choose, act, let go', 'W A S D or 1–5, E, X'], ['Call out while flat', 'Q'], ['Watch a teammate while flat', 'Space'], ['Pause', 'Esc'], ['Back from pause', 'Enter']],
+  touch: [['Walk', 'Left thumb, anywhere'], ['Look', 'Drag the right side'], ['Use, fix, peel, hide', 'Use (hold to peel or hide)'], ['In a breaker box', 'Tap the parts'], ['Run', 'Tap Run, lift to stop'], ['Phone map (drains the battery fast)', 'The phone button, then Map to zoom']],
 };
 
 const el = (tag, cls, parent) => { const e = document.createElement(tag); e.className = cls; parent.append(e); return e; };
@@ -63,14 +68,15 @@ const roomName = p => ROOMS3[roomAt(p.x, p.z)]?.name || '';
 export function createHud(stage, player) {
   const root = el('div', 'ts-fhud', stage);
   root.innerHTML = `
+    <div class="ts-f-locker"></div>
     <div class="ts-f-vignette"></div>
     <div class="ts-f-status">
       <div class="ts-f-time"><b></b><span></span></div>
       <div class="ts-f-power">${icon('bolt')}<div class="ts-f-bar"><i></i></div><span class="cn-tabular"></span></div>
+      <ol class="ts-f-tasks" aria-label="Faults to fix"></ol>
     </div>
     <div class="ts-f-nav">
       <div class="ts-f-compass"></div>
-      <div class="ts-f-rounds">${icon('clock')}<div class="ts-f-pips"></div><span class="cn-tabular"></span></div>
       <div class="ts-f-toasts" role="status" aria-live="polite"></div>
     </div>
     <div class="ts-f-crew"></div>
@@ -105,6 +111,7 @@ export function createHud(stage, player) {
           <div class="cn-stack cn-gap-16">
             <div class="field"><label for="ts-sens">Look sensitivity</label><input class="slider" id="ts-sens" type="range" min=".3" max="2.5" step=".1"><small></small></div>
             <label class="choice"><input class="switch" type="checkbox" id="ts-invert">Invert looking up and down</label>
+            <label class="choice"><input class="switch" type="checkbox" id="ts-outline">Highlight things you can use</label>
             <p class="cn-meta cn-m-0">A gamepad works too: sticks to walk and look, A to use, X for the torch, B for the phone map and d-pad up to zoom it, LB to run, Start to pause.</p>
           </div>
         </div>
@@ -117,12 +124,12 @@ export function createHud(stage, player) {
     <div class="ts-f-rotate"><div class="empty-state">${icon('rotate')}<strong>Turn your phone sideways</strong><span>The floor is walked in landscape.</span></div></div>`;
   const $ = sel => root.querySelector(sel);
   const [time, night] = $('.ts-f-time').children, power = $('.ts-f-power'), powerBar = power.querySelector('i'), powerText = power.lastChild;
-  const nav = $('.ts-f-nav'), compass = $('.ts-f-compass'), rounds = $('.ts-f-rounds'), pips = $('.ts-f-pips'), roundText = rounds.lastChild, toasts = $('.ts-f-toasts');
+  const nav = $('.ts-f-nav'), compass = $('.ts-f-compass'), tasks = $('.ts-f-tasks'), toasts = $('.ts-f-toasts');
   const crew = $('.ts-f-crew'), dot = $('.ts-f-dot');
   const prompt = $('.ts-f-prompt'), [promptKey, promptText] = $('.ts-f-prompt-row').children, hold = $('.ts-f-hold'), holdBar = hold.firstChild;
   const torch = $('.ts-f-torch'), stam = $('.ts-f-stam'), cells = [...$('.ts-f-cells').children], torchText = $('.ts-f-torch-row').lastChild;
   const start = $('.ts-f-start'), flat = $('.ts-f-flat'), [, flatHow, flatSub] = flat.children, callText = $('[data-do="call"] span'), watchBtn = $('[data-do="watch"]');
-  const pause = $('.ts-f-pause'), keyList = pause.querySelector('dl'), sens = $('#ts-sens'), sensText = sens.nextElementSibling, invert = $('#ts-invert');
+  const pause = $('.ts-f-pause'), keyList = pause.querySelector('dl'), sens = $('#ts-sens'), sensText = sens.nextElementSibling, invert = $('#ts-invert'), outline = $('#ts-outline');
   const touch = createTouch(root, player);
   // Compass ticks, by bearing. Yaw 0 faces south and grows toward east, as in player.js.
   const ticks = [['S', 0], ['', Math.PI / 4], ['E', Math.PI / 2], ['', Math.PI * .75], ['N', Math.PI], ['', -Math.PI * .75], ['W', -Math.PI / 2], ['', -Math.PI / 4]]
@@ -134,9 +141,10 @@ export function createHud(stage, player) {
     if (name) actions[name]();
     else if (e.target === pause) player.resume();   // a click beside the panel
   });
-  const showPrefs = () => { sens.value = prefs.sens; invert.checked = prefs.invert; set(sensText, `${Math.round(prefs.sens * 100)}% of normal`); };
+  const showPrefs = () => { sens.value = prefs.sens; invert.checked = prefs.invert; outline.checked = prefs.outline; set(sensText, `${Math.round(prefs.sens * 100)}% of normal`); };
   sens.oninput = () => { prefs.sens = +sens.value; savePrefs(); showPrefs(); };
   invert.onchange = () => { prefs.invert = invert.checked; savePrefs(); };
+  outline.onchange = () => { prefs.outline = outline.checked; savePrefs(); };
 
   /* ---------- toasts and first-time tips ---------- */
 
@@ -174,8 +182,8 @@ export function createHud(stage, player) {
   }
   function drawCompass(S, me, mine, now) {
     const list = [];
-    // A clock hangs on a wall. Aim at the floor in front of it.
-    S.clocks?.forEach((c, i) => { if (c === 1) list.push({ key: 'c' + i, kind: 'clock', x: CLOCKS[i].x + Math.sin(CLOCKS[i].face) * .9, z: CLOCKS[i].z + Math.cos(CLOCKS[i].face) * .9 }); });
+    // A breaker box hangs on a wall. Aim at the floor in front of it.
+    S.faults?.forEach((f, i) => { if (f) list.push({ key: 'f' + i + '@' + f.at, kind: 'fault', x: BOXES[i].x + Math.sin(BOXES[i].face) * .9, z: BOXES[i].z + Math.cos(BOXES[i].face) * .9, hot: faultLeft(S, f) < HURRY }); });
     for (const p of S.players) if (p.flat && p.id !== game.myId && p.x != null) list.push({ key: 'p' + p.id, kind: 'flat', x: p.x, z: p.z, name: p.name, ping: pings.get(p.id) > now });
     if ((mine.bat ?? 1) < LOW_BAT && S.power > 0) list.push({ key: 'dock', kind: 'dock', x: CHARGER.x, z: CHARGER.z - .9, name: 'charger' });
     if (S.power < GEN_MARK) list.push({ key: 'gen', kind: 'gen', x: GENERATOR.x + Math.sin(GENERATOR.face) * .9, z: GENERATOR.z + Math.cos(GENERATOR.face) * .9, name: 'crank' });
@@ -193,7 +201,7 @@ export function createHud(stage, player) {
       if (r.far && Math.hypot(r.x - me.x, r.z - me.z) < 1.2) { findRoute(S, me, t); r = routes.get(t.key); }   // reached the corner it pointed at
       t.dist = Math.hypot(r.x - me.x, r.z - me.z) + r.far;
       t.off = -angDiff(Math.atan2(r.x - me.x, r.z - me.z), me.yaw) / HALF_SPAN;
-      if (t.kind === 'clock' && (!nearest || t.dist < nearest.dist)) nearest = t;
+      if (t.kind === 'fault' && (!nearest || t.dist < nearest.dist)) nearest = t;
     }
     for (const t of list) {
       t.at = Math.max(-1, Math.min(1, t.off));
@@ -204,6 +212,7 @@ export function createHud(stage, player) {
       data(m, 'side', t.off < -1 ? 'left' : t.off > 1 ? 'right' : '');
       m.classList.toggle('is-near', t === nearest);
       m.classList.toggle('is-ping', !!t.ping);
+      m.classList.toggle('is-hot', !!t.hot);
       set(m.lastChild, (t.name ? t.name + ' ' : '') + metres(t.dist));
     }
     for (const [key, m] of marks) if (!list.some(t => t.key === key)) { m.remove(); marks.delete(key); routes.delete(key); }
@@ -239,6 +248,20 @@ export function createHud(stage, player) {
     }
   }
 
+  /* ---------- the task list ---------- */
+
+  // Every open fault, nearest first: the room, the job, and the seconds before it starts to burn the building's ceiling.
+  function drawTasks(S, me) {
+    const ours = (S.faults || []).map((f, i) => f && { f, i, d: Math.hypot(BOXES[i].x - me.x, BOXES[i].z - me.z) }).filter(Boolean).sort((a, b) => a.d - b.d);
+    const rows = ours.slice(0, MAX_TASKS).map(({ f, i }) => {
+      const left = faultLeft(S, f), state = left <= 0 ? 'burn' : left < HURRY ? 'hot' : '';
+      return `<li data-state="${state}"${me.task?.i === i ? ' class="is-here"' : ''}>${icon('fault')}<b>${esc(ROOMS3[BOXES[i].room]?.name || '')}</b><span>${FAULT_NAME[f.k]}</span><em class="cn-tabular">${left <= 0 ? 'burning' : Math.ceil(left) + 's'}</em></li>`;
+    });
+    if (ours.length > MAX_TASKS) rows.push(`<li class="is-more">${ours.length - MAX_TASKS} more</li>`);
+    if (!ours.length) rows.push(`<li class="is-clear">${icon('fault')}<span>No faults. Listen for the next one.</span></li>`);
+    html(tasks, rows.join(''));
+  }
+
   /* ---------- once a frame ---------- */
 
   let lastT = 1e9, was = { bat: 1, power: 100 }, calledAt = -1e9;
@@ -256,6 +279,7 @@ export function createHud(stage, player) {
       for (let i = live.length - 1; i >= 0; i--) if (now > live[i].until) drop(live.splice(i, 1)[0]);
       if (root.hidden) return;
       data(root, 'flat', me.flat);
+      data(root, 'hid', me.hid >= 0 && !me.flat);
 
       set(time, clockF(S)); set(night, 'Night ' + S.night);
       powerBar.style.width = S.power + '%';
@@ -264,18 +288,13 @@ export function createHud(stage, player) {
       if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say('Power under a quarter. Someone crank the generator in the booth.', 'power', 7);
       was.power = S.power;
 
-      // This hour's clocks: a pip each, filled once punched, and the time left to punch the rest.
-      const due = S.clocks.filter(c => c === 1).length, done = S.clocks.filter(c => c === 2).length, left = Math.max(0, Math.ceil(F.HOUR - S.t % F.HOUR));
-      rounds.hidden = !due && !done;
-      html(pips, '<i class="is-done"></i>'.repeat(done) + '<i></i>'.repeat(due));
-      set(roundText, due ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'all punched');
-      data(rounds, 'state', !due ? 'done' : left <= HURRY ? 'hurry' : 'due');
+      drawTasks(S, me);
       compass.hidden = me.flat;
       if (!me.flat) drawCompass(S, me, mine, now);
 
       html(crew, mates.map(p => p.flat
         ? `<div class="ts-f-mate is-flat"><span class="tag cn-tone-danger">flat</span><b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`
-        : `<div class="ts-f-mate"><b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`).join(''));
+        : `<div class="ts-f-mate">${p.hid >= 0 ? '<span class="tag">locker</span>' : ''}<b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`).join(''));
 
       // The torch: lit bars for charge, yellow while it is on, red and blinking when nearly out.
       const lit = Math.ceil(bat * CELLS - .001), state = bat <= 0 ? 'dead' : me.act === 'charge' ? 'charging' : bat < LOW_BAT ? 'low' : 'ok';
@@ -293,7 +312,7 @@ export function createHud(stage, player) {
 
       const t = me.target;
       dot.hidden = me.flat || me.paused;
-      prompt.hidden = !t;
+      prompt.hidden = !t || !!me.task;
       if (t) {
         set(promptKey, me.touch ? 'Use' : 'E');
         set(promptText, (t.hold === 0 ? '' : 'Hold to ') + (t.hold === 0 ? t.label : t.label[0].toLowerCase() + t.label.slice(1)));

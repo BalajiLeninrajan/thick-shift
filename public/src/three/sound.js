@@ -1,6 +1,6 @@
 // Sound for the 3D mode. On the floor you hear things before you see them, so
 // everything that makes a noise has a place: a mascot, another guard, a door,
-// a clock. Each place is an emitter (a panner with a filter in front of it),
+// a breaker box. Each place is an emitter (a panner with a filter in front of it),
 // the listener is this guard's head, and walls dull what is behind them.
 //
 // The sounds themselves are the pieces in ../audio.js (recordings, tones,
@@ -10,15 +10,17 @@
 import { MASC, DOORS } from '../config.js';
 import { game, rnd } from '../state.js';
 import { SFX, ctx, bus, room, into, muffle, voices, sample, tone, noise, boom, pick, whiteNoise, shriek } from '../audio.js';
-import { ROOMS3, DOORWAYS, PANELS, GENERATOR, CHARGER, DUCTS, EYE, sees, roomAt } from './map.js';
+import { ROOMS3, DOORWAYS, PANELS, BOXES, GENERATOR, CHARGER, DUCTS, EYE, sees, roomAt } from './map.js';
 import { lightsF } from './sim3d.js';
 import { CUES } from './actors/scare.js';
 
 const HEAR = 28;        // metres past which a footstep is not worth a voice
 const BUSY = 18;        // with this many voices sounding, footsteps and other texture are skipped
-const POOL = 8;         // emitters shared by one-off sounds (a bang, a punched clock)
+const POOL = 8;         // emitters shared by one-off sounds (a bang, a fixed fault)
+const FIZZ = [1.6, 3.2];  // seconds between the crackles of an open fault, so it can be found by ear
 const MAX_GUARDS = 5;   // other guards whose footsteps are placed
 const MUFFLED = 420;    // Hz the whole mix is cut to while this guard is flat
+const IN_LOCKER = 2600; // and while they stand in a locker, behind its doors
 // What walls do to a sound, as [gain, low-pass Hz]: in sight, in the same room
 // but round a corner, then one, two, and three or more doorways away.
 const OCC = [[1, 18000], [.8, 4500], [.55, 1400], [.36, 750], [.24, 450]];
@@ -81,7 +83,7 @@ function doorwaysBetween(a, b, doors) {
 const SIZE = ROOMS3.map(r => { const [x0, z0, x1, z1] = r.rects[0]; return Math.max(0, Math.min(1, Math.log((x1 - x0) * (z1 - z0) * r.h / 69) / Math.log(14))); });
 
 export function createSound() {
-  let ac = null, now = 0, rig = null, lastEv = -1, stingAt = -9, sting = null, wasPlay = false, under = false, echo = 1;
+  let ac = null, now = 0, rig = null, lastEv = -1, stingAt = -9, sting = null, wasPlay = false, under = 0, echo = 1;
   let head = { x: 0, z: 0, fx: 0, fz: 1 }, doors = null, torchOn = false, sources = 0, steps = 0, pant = 0, gasp = false, crank = 0, holdTick = 0, dim = false;
 
   /* ---------- the graph ---------- */
@@ -175,22 +177,23 @@ export function createSound() {
   /* ---------- events ---------- */
 
   const BELL = (f, level, when = 0) => { tone(f, .9, 'sine', level, 0, when); tone(f * 2.4, .35, 'sine', level * .35, 0, when); };
-  // S.t is small only at the start of a night, when no hour has just struck.
-  const afterChime = S => S.t > 3 ? 1.6 : .3;
   const ON = {
-    // The time clocks ring once for each clock that is now due.
-    round(n, S) { for (let k = 0; k < Math.min(n, 5); k++) BELL(1568, .12, afterChime(S) + k * .24); },
-    miss() { tone(196, .5, 'sawtooth', .1, 98, .8); tone(185, .6, 'square', .05, 92, .85); sample('hit_low', { gain: .35, rate: .8, at: .8 }); },
-    // The hour, from a clock nobody has found. Dry, and again through the reverb alone.
+    // A breaker going: a pop and a thud where it is, and the hum of the building catching for a moment.
+    fault(x, S) { at(S, x, () => { noise(.06, .5, { band: 3200, q: 1 }); sample('hit_low', { gain: .4, rate: 1.3, at: .03 }); fizz(); }); tone(60, .5, 'sawtooth', .05, 45, .1); },
+    // A fault burning: a low warning everyone hears.
+    burn() { tone(196, .5, 'sawtooth', .1, 98, .2); tone(185, .6, 'square', .05, 92, .25); sample('hit_low', { gain: .35, rate: .8, at: .2 }); },
+    // The hour, from a clock nobody can see. Dry, and again through the reverb alone.
     hour() { const bell = v => { tone(392, 2.6, 'sine', v); tone(1082, 1.4, 'sine', v * .4); tone(2117, .7, 'sine', v * .2); }; bell(.1); into(room(), () => bell(.14)); },
     out() { SFX.out(); sample('door_shut', { rate: .6, gain: .6, at: .1 }); },
     // A relay, then the tubes catching one at a time.
     on() { sample('door_shut', { rate: 1.5, gain: .5 }) || tone(120, .08, 'square', .2, 60); for (let k = 0; k < 4; k++) tone(rnd(2400, 4200), .05, 'sine', .04, 0, .15 + k * rnd(.1, .2)); },
-    punch(x, S) {
+    // Fixed: the breaker's clunk, then the relay and the lights catching.
+    fix(x, S) {
       at(S, x, () => {
-        for (let k = 0; k < 5; k++) noise(.03, .35, { band: 1800 + k * 250, q: 4, at: k * .045 });   // the ratchet
-        sample('knock1', { rate: 1.4, gain: .5, at: .26 });                                         // the stamp
-        BELL(2093, .3, .28);
+        sample('knock1', { rate: .9, gain: .7 }) || tone(90, .1, 'square', .25, 50);
+        tone(120, .08, 'square', .12, 60, .08);
+        for (let k = 0; k < 3; k++) tone(rnd(2400, 4200), .05, 'sine', .04, 0, .2 + k * rnd(.08, .16));
+        BELL(1568, .15, .45);
       });
     },
     bat(x, S) {
@@ -242,6 +245,14 @@ export function createSound() {
     calm() { into(room(), () => sample(pick('creak1', 'creak2'), { rate: .5, gain: .5 })); },
     // It has run out of wind and given up the chase: a long breath out.
     quit(x) { into(rig.mascots[x.i].e.in, () => noise(.8, 1.2, { band: BREATH[x.i].hz * 2, band2: BREATH[x.i].hz, q: 1, attack: .12 })); },
+    // A locker door: a sheet-metal clank and the latch. Pulled open, it is wrenched.
+    locker(x, S) {
+      const clank = () => { sample('sheet3', { rate: x.in ? 1.7 : 1.5, gain: .45 }) || noise(.18, .35, { band: 2400, q: 3 }); tone(x.in ? 1400 : 1200, .03, 'square', .05, 0, .12); };
+      if (mine(x.id)) clank(); else at(S, x, clank);
+    },
+    // A mascot yanking open a locker that turned out empty.
+    check(x, S) { at(S, x, () => { sample('sheet3', { rate: 1.2, gain: .6 }) || noise(.25, .45, { band: 1800, q: 2 }); sample('knock1', { rate: .9, gain: .4, at: .35 }); }); },
+    found(x, S) { at(S, x, () => { sample('slam2', { rate: 1.3, gain: .8 }) || noise(.3, .6, { band: 1500 }); sample('sheet3', { rate: 1.1, gain: .7, at: .02 }); }); },
     peel(x, S) {
       const rip = () => { noise(.5, .6, { band: 600, band2: 3600, q: 2.5, attack: .3 }); tone(300, .08, 'sine', .4, 900, .46); };
       if (mine(x.id)) rip(); else at(S, x, rip);
@@ -315,10 +326,23 @@ export function createSound() {
     const dip = me.on && bat < .15 && bat > 0 && Math.sin(performance.now() * .05) < -.2;
     if (dip && !dim) { tone(110, .05, 'square', .035); noise(.03, .05, { band: 3000, q: 2 }); }
     dim = dip;
-    // Holding the use key: the clock's key winding, or a friend coming unstuck.
+    // Holding the use key: a friend coming unstuck, or the hum of something being held.
     const tick = me.hold > 0 ? Math.floor(me.hold / .2) + 1 : 0;
     if (tick > holdTick) me.target?.what === 'peel' ? noise(.12, .12, { band: rnd(1800, 3000), q: 3, attack: .05 }) : tone(700 + tick * 70, .025, 'square', .05);
     holdTick = tick;
+  }
+
+  // An open fault spits and crackles, now and then, from its box.
+  const fizzAt = BOXES.map(() => 0);
+  function fizz() { for (let k = 0; k < 4; k++) noise(.02 + Math.random() * .03, .22, { band: rnd(2500, 6000), q: 2, at: k * rnd(.04, .12) }); }
+  function faults(S, dt) {
+    S.faults?.forEach((f, i) => {
+      if (!f) { fizzAt[i] = 0; return; }
+      if ((fizzAt[i] -= dt) > 0) return;
+      fizzAt[i] = rnd(...FIZZ);
+      const b = BOXES[i];
+      if (Math.hypot(b.x - head.x, b.z - head.z) < HEAR) at(S, b, fizz);
+    });
   }
 
   function building(S, dt) {
@@ -345,7 +369,7 @@ export function createSound() {
     now = ac.currentTime;
     for (const g of rig.loops) aim(g.gain, 0, .1);
     doors = null;
-    if (under) { under = false; muffle(); }
+    if (under) { under = 0; muffle(); }
   }
 
   return {
@@ -354,8 +378,8 @@ export function createSound() {
     // Call once per frame while a night on the floor is drawn. me: player.me.
     update(S, me, dt) {
       ac = ctx();
-      // A night already under way: what has happened has happened, except the clocks that just came due.
-      if (lastEv < 0) { lastEv = S.evId; if (S.t < 3) for (const e of S.evs) if (e.type === 'round') lastEv = e.id - 1; }
+      // A night already under way: what has happened has happened.
+      if (lastEv < 0) lastEv = S.evId;
       const fresh = S.evs.filter(e => e.id > lastEv);
       if (fresh.length) lastEv = fresh[fresh.length - 1].id;
       if (!ac) return;
@@ -379,13 +403,15 @@ export function createSound() {
       if (l.positionX) { l.positionX.value = head.x; l.positionY.value = EYE; l.positionZ.value = head.z; l.forwardX.value = head.fx; l.forwardY.value = 0; l.forwardZ.value = head.fz; }
       else { l.setPosition(head.x, EYE, head.z); l.setOrientation(head.fx, 0, head.fz, 0, 1, 0); }
       building(S, dt);
+      faults(S, dt);
       for (const m of S.m) mascot(S, m, rig.mascots[m.i], dt);
       otherGuards(S);
       self(me, mate.bat ?? 1, dt);
       for (const e of fresh) ON[e.type]?.(e.x, S);
       // Flat on the floor the world is somewhere above you, from the moment the catch drops you there.
-      const down = me.flat && now - stingAt > CUES.floor;
-      if (down !== under) { under = down; muffle(down ? MUFFLED : undefined); }
+      const down = me.flat && now - stingAt > CUES.floor, shut = !me.flat && me.hid >= 0;
+      const want = down ? MUFFLED : shut ? IN_LOCKER : 0;
+      if (want !== (under || 0)) { under = want; muffle(want || undefined); }
     },
     // For ?debug and tests: what is sounding, and the recipes by name.
     stats: () => ({ voices: voices(), loops: sources, emitters: rig ? rig.mascots.length + POOL + 2 + rig.guards.size : 0 }),

@@ -11,7 +11,7 @@
 //   node tools/balance/floor.mjs --trace "solo competent n1" --seed 3   one night's events (--steps adds where everyone is each second)
 //
 // It exits non-zero if an assertion fails: a softlock (a mascot wedged on
-// geometry, a clock nobody can reach, a night that does not end), a guard
+// geometry, a breaker box nobody can reach, a night that does not end), a guard
 // playing honestly flattened in the first 30 seconds of night 1, or a
 // strategy that should lose doing as well as playing properly.
 //
@@ -57,7 +57,7 @@ function seedRandom(seed) {
 // 'see', 'hear' or null. Seeing needs it in front of you, in line of sight and lit: by the building, or by your torch.
 function sense(S, bot, m) {
   const d = dist(bot, m), off = Math.abs(angDiff(ang(bot, m), bot.yaw));
-  const range = sim.lightsF(S) ? 18 : bot.on && off < .5 ? 13 : 4;
+  const range = !sim.darkRoom(S, M.roomAt(m.x, m.z)) ? 18 : bot.on && off < .5 ? 13 : 4;
   if (d < range && off < bot.skill.fov && M.sees(bot.x, bot.z, m.x, m.z, S.doors)) return 'see';
   if (MOVING.includes(m.st) && d < (COMING.includes(m.st) ? 9 : 6)) return 'hear';
   return null;
@@ -194,13 +194,14 @@ function act(S, bot, dt) {
   if (u) {
     const d = dist(bot, u.at);
     if (d < (u.reach || F.REACH - .3)) {
-      // In reach: face it and hold the key. Holding the crank roots you; the rest do not, but a hand on a clock is not walking.
+      // In reach: face it and hold the key. Holding the crank roots you; the rest do not, but hands in a breaker box are not walking.
       face = w.face ?? u.face ?? ang(bot, u.at);
       if (u.hold < 0) { bot.act = u.what; if (u.what === 'crank' || !w.goal) goal = null; }
       else {
         goal = null;
         if (bot.holding !== u.key) { bot.holding = u.key; bot.hold = 0; }
         bot.hold += dt;
+        if (u.what === 'fix') bot.act = 'fix';   // hands in the box: the torch hangs and holds nothing
         if (bot.hold >= u.hold + .05) {
           sim.actFloor(bot.id, { t: 'use', what: u.what, i: u.i, k: u.k, id: u.id }); bot.hold = 0; bot.holding = null;
           if (u.what === 'door' && !!S.doors[u.k] !== u.shut) bot.state['stuck' + u.k] = S.t + 2;
@@ -289,22 +290,31 @@ function fleeTo(S, bot, r) {
   return nodes[best];
 }
 
-// Share out the due clocks: each to whoever would get there soonest after what they already have.
 // Whose job the generator is: the last guard standing who cranks at all.
 const cranker = team => team.bots.filter(b => !b.flat && b.skill.cranks && b.policy.cranks !== false).at(-1);
-// In a crew with the power getting low, that guard takes fewer clocks so there is time to crank.
-function assignClocks(S, team) {
+const fixable = S => S.faults.map((f, i) => f ? i : -1).filter(i => i >= 0);
+// Share out the open faults: each to whoever would get there soonest after what they already have. The one a guard
+// is on the way to stays theirs (a person who has set off for one does not turn back because another broke out
+// somewhere else) unless they go down; the rest are shared out again. In a crew with the power getting low, the cranker takes fewer so there is
+// time to crank.
+function assignFaults(S, team) {
   const spare = team.bots.length > 1 && S.power < 60 ? cranker(team) : null;
-  const up = team.bots.filter(b => !b.flat && b.policy.clocks !== false);
-  const due = S.clocks.map((c, i) => c === 1 ? i : -1).filter(i => i >= 0);
-  const at = new Map(up.map(b => [b, { x: b.x, z: b.z, len: 0 }]));
-  team.clock = new Map(up.map(b => [b.id, []]));
-  while (due.length && up.length) {
+  const up = team.bots.filter(b => !b.flat && b.policy.faults !== false);
+  const open = new Set(fixable(S));
+  const keep = new Map(up.map(b => [b.id, (team.fault.get(b.id) || []).filter(i => open.has(i)).slice(0, 1)]));
+  for (const list of keep.values()) for (const i of list) open.delete(i);
+  team.fault = keep;
+  const at = new Map(up.map(b => {
+    let x = b.x, z = b.z, len = 0;
+    for (const i of keep.get(b.id)) { len += Math.hypot(M.BOXES[i].x - x, M.BOXES[i].z - z); x = M.BOXES[i].x; z = M.BOXES[i].z; }
+    return [b, { x, z, len: len * (b.policy.share ?? 1) * (b === spare ? 3 : 1) }];
+  }));
+  while (open.size && up.length) {
     let best = null;
-    for (const b of up) for (const i of due) { const a = at.get(b), cost = a.len + dist(a, M.CLOCKS[i]) * (b.policy.share ?? 1) * (b === spare ? 3 : 1); if (!best || cost < best.cost) best = { b, i, cost }; }
-    due.splice(due.indexOf(best.i), 1);
-    team.clock.get(best.b.id).push(best.i);
-    Object.assign(at.get(best.b), { x: M.CLOCKS[best.i].x, z: M.CLOCKS[best.i].z, len: best.cost });
+    for (const b of up) for (const i of open) { const a = at.get(b), cost = a.len + dist(a, M.BOXES[i]) * (b.policy.share ?? 1) * (b === spare ? 3 : 1); if (!best || cost < best.cost) best = { b, i, cost }; }
+    open.delete(best.i);
+    team.fault.get(best.b.id).push(best.i);
+    Object.assign(at.get(best.b), { x: M.BOXES[best.i].x, z: M.BOXES[best.i].z, len: best.cost });
   }
 }
 
@@ -359,6 +369,12 @@ function defend(S, bot, objective) {
   // In the booth with it outside: the doors are the answer. With it inside: out by another door.
   if (booth && canHole && !hs.some(inBooth)) { st.holed = S.t + 3; return false; }
   const r = race(S, bot, hs, speed);
+  // Out of sight of everything it knows about for long enough that nothing still knows where it is (eight seconds of
+  // Biggs), with a free locker close by and the lights on: in, if this guard hides at all.
+  if (known(S, bot, 4).some(k => k.st !== 'rest' && M.sees(k.x, k.z, bot.x, bot.z, S.doors))) st.seenAt = S.t;
+  const lostThem = S.t - (st.seenAt ?? -99) > (hs.some(k => k.i === 0) ? 8.5 : 2);
+  const locker = bot.policy.hides && sim.lightsF(S) && !(st.hideCool > S.t) && lostThem && freeLocker(S, bot, 5);
+  if (locker) { w.use = locker; w.goal = null; w.sprint = true; return true; }
   // Carry on with the job if we can get there and do it before anything gets there. Once running, keep running a while.
   const pressed = hs.length > 1 || (bot.bat <= 0 && h.i !== 0) || S.t - st.chased > 10;
   const u = objective?.use, target = u ? u.stand || front(u.at) : objective?.goal;
@@ -384,14 +400,14 @@ function objectiveOf(S, bot, team) {
     const helpers = team.bots.filter(b => !b.flat && b.policy.peels !== false && dist(b, f) < b.skill.peelRange).sort((a, b) => dist(a, f) - dist(b, f));
     if (helpers[0] === bot) return { use: { what: 'peel', id: f.id, at: { x: f.x, z: f.z }, stand: { x: f.x, z: f.z }, hold: F.PEEL_HOLD, key: 'peel' + f.id }, urgent: true };
   }
-  // 2. The clocks that are ours this hour.
-  let mine = pol.clocks === false ? [] : sk.plans ? (team.clock.get(bot.id) || []).filter(i => S.clocks[i] === 1) : S.clocks.map((c, i) => c === 1 ? i : -1).filter(i => i >= 0);
+  // 2. The faults that are ours.
+  let mine = pol.faults === false ? [] : sk.plans ? (team.fault.get(bot.id) || []).filter(i => S.faults[i]) : fixable(S);
   if (mine.length) {
-    mine.sort((a, b) => dist(bot, M.CLOCKS[a]) - dist(bot, M.CLOCKS[b]));
-    // A careless guard drifts off between clocks.
+    mine.sort((a, b) => dist(bot, M.BOXES[a]) - dist(bot, M.BOXES[b]));
+    // A careless guard drifts off between jobs.
     if (!sk.plans && st.drift > S.t) return { goal: st.driftTo };
-    const i = mine[0];
-    return { use: { what: 'clock', i, at: M.CLOCKS[i], hold: F.PUNCH_HOLD, key: 'clock' + i }, clock: true };
+    const i = mine[0], f = S.faults[i];
+    return { use: { what: 'fix', i, at: M.BOXES[i], hold: F.FIX[f.k], key: 'fix' + i + '@' + f.at }, fault: f };
   } else if (!sk.plans && !(st.drift > S.t) && Math.random() < .02) { st.drift = S.t + 6 + Math.random() * 10; st.driftTo = pick(M.nav().nodes.filter(n => n.room !== M.DUCTS)); }
   // 3. Light.
   if (bot.bat < 1 && sk !== SKILL.careless || bot.bat < .3) {
@@ -415,6 +431,7 @@ const honest = (skill, opts = {}) => ({
   skill: SKILL[skill], ...opts,
   think(S, bot, team) {
     const sk = bot.skill, w = bot.want, st = bot.state, booth = inBooth(bot);
+    if (stayHidden(S, bot)) return;
     const obj = objectiveOf(S, bot, team);
     const dark = !sim.lightsF(S);
     w.on = sk.torch === 'always' ? !booth || dark : (!booth && bot.bat > sk.reserve) || (dark && bot.bat > sk.reserve / 2);
@@ -423,23 +440,42 @@ const honest = (skill, opts = {}) => ({
     if (sk.doors && booth && !dark) {
       const leaving = !obj.home;
       if (mindDoors(S, bot, team, leaving)) return;
-      if (st.holed > S.t || (leaving && w.keep.length === 3) || (leaving && w.keep && !obj.urgent && F.HOUR - S.t % F.HOUR > 30)) {
+      if (st.holed > S.t || (leaving && w.keep.length === 3) || (leaving && w.keep && !obj.urgent && !(obj.fault && sim.faultLeft(S, obj.fault) < 15))) {
         w.goal = BOOTH_MID; if (bot.bat < .95) w.use = { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' };
         return;
       }
     }
     w.goal = obj.goal; w.use = obj.use;
-    // Something known is on every way there: wait for it to move on, unless the hour is nearly up.
+    // Something known is on every way there: wait for it to move on, unless the fault is about to burn.
     const to = obj.use ? obj.use.stand || front(obj.use.at) : obj.goal;
-    if (sk.plans && to && dist(bot, to) > 2 && wayTo(S, bot, to).risk && !obj.urgent && F.HOUR - S.t % F.HOUR > dist(bot, to) / F.WALK * 1.4 + 8) {
+    const deadline = obj.fault ? sim.faultLeft(S, obj.fault) : 1e9;
+    if (sk.plans && to && dist(bot, to) > 2 && wayTo(S, bot, to).risk && !obj.urgent && deadline > dist(bot, to) / F.WALK * 1.4 + 8) {
       const nearest = known(S, bot, 4).filter(h => MOVING.includes(h.st)).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
       w.goal = booth ? BOOTH_MID : nearest && dist(bot, nearest) < 8 ? fleeTo(S, bot, race(S, bot, [nearest], () => 3)) : null; w.use = null;
       return;
     }
-    // Running late for a clock or a friend.
-    if (obj.use && (obj.urgent || obj.clock) && dist(bot, obj.use.at) / F.WALK > (obj.urgent ? 3 : F.HOUR - S.t % F.HOUR - 6)) w.sprint = true;
+    // Running late for a fault or a friend.
+    if (obj.use && (obj.urgent || obj.fault) && dist(bot, obj.use.at) / F.WALK > (obj.urgent ? 3 : sim.faultLeft(S, obj.fault) - 6)) w.sprint = true;
   },
 });
+
+// Lockers (M.HIDES). The nearest one nobody is in, within `within` metres, as something to use.
+function freeLocker(S, bot, within) {
+  const free = M.HIDES.map((h, i) => ({ h, i })).filter(({ h, i }) => !S.players.some(p => p.hid === i) && dist(bot, h.at) < within && M.clear(bot.x, bot.z, h.at.x, h.at.z, M.PLAYER_R, S.doors));
+  const best = free.sort((a, b) => dist(bot, a.h.at) - dist(bot, b.h.at))[0];
+  return best && { what: 'hide', i: best.i, at: best.h.at, stand: best.h.at, hold: F.HIDE_HOLD, key: 'hide' + best.i };
+}
+// In a locker: stay while anything known is moving nearby, then out after a few seconds of quiet (or 25 s at most,
+// since the faults do not wait). Returns true while in one.
+function stayHidden(S, bot) {
+  const me = game.players[bot.id], st = bot.state, w = bot.want;
+  if (!(me.hid >= 0)) { st.hidFor = 0; return false; }
+  st.hidFor = (st.hidFor || 0) + DT;
+  w.on = false;
+  const near = known(S, bot, 4).some(h => MOVING.includes(h.st) && dist(bot, h) < 9);
+  if ((!near && st.hidFor > 4) || st.hidFor > 25) { w.use = { what: 'hide', i: me.hid, at: bot, stand: bot, hold: 0, key: 'out' }; st.hideCool = S.t + 8; }
+  return true;
+}
 
 /* ---------- playing to break it ---------- */
 
@@ -485,6 +521,13 @@ const DEGENERATE = {
     if (dist(bot, at) > .3) w.goal = at;
     if (h && dist(bot, h) < F.BEAM_RANGE) { w.face = ang(bot, h); w.on = true; }
   } }),
+  // Into a locker at the start of the night, a different one each, and stay there.
+  locker: () => ({ skill: SKILL.competent, think(S, bot) {
+    if (game.players[bot.id].hid >= 0) return;
+    const spawn = M.spawnPoint(0), order = M.HIDES.map((_, i) => i).sort((a, b) => dist(spawn, M.HIDES[a].at) - dist(spawn, M.HIDES[b].at));
+    const i = order[bot.i % order.length], h = M.HIDES[i];
+    bot.want.use = { what: 'hide', i, at: h.at, stand: h.at, hold: F.HIDE_HOLD, key: 'hide' + i };
+  } }),
   // Crank the generator and nothing else, torch on whatever turns up.
   cranker: () => ({ skill: SKILL.competent, think(S, bot) {
     const w = bot.want, h = known(S, bot).filter(k => k.how !== 'map').sort((a, b) => dist(bot, a) - dist(bot, b))[0];
@@ -520,7 +563,7 @@ function checkBuilding(name) {
     const r = M.route(start.x, start.z, stand.x, stand.z, { r: M.PLAYER_R });
     if (!r.path.length) fail(name, `${label}: no route from the booth`);
   };
-  M.CLOCKS.forEach((c, i) => reachable('clock ' + i, c, front(c)));
+  M.BOXES.forEach((c, i) => reachable('box ' + i, c, front(c)));
   reachable('generator', M.GENERATOR, front(M.GENERATOR));
   reachable('charger', M.CHARGER, front(M.CHARGER));
   M.BATTERY_SPOTS.forEach((b, i) => reachable('battery ' + i, b, b));
@@ -546,24 +589,26 @@ function checkBuilding(name) {
 function play(sc, seed, trace) {
   seedRandom(seed);
   game.S = newState('TEST'); game.players = {};
-  const team = { bots: [], clock: new Map() };
+  const team = { bots: [], fault: new Map() };
   for (let i = 0; i < sc.n; i++) { const id = 'g' + i; game.players[id] = { id, name: 'G' + i }; team.bots.push(makeBot(id, i, sc.guard(i, sc.n))); }
   sim.startFloorNight(sc.night);
   const S = game.S;
   if (sc.dev) S.dev = sc.dev;
   for (const b of team.bots) Object.assign(b, { x: game.players[b.id].x, z: game.players[b.id].z, bat: 1, flat: false });
-  const out = { win: false, t: 0, flats: 0, peels: 0, by: [0, 0, 0, 0], warn: [], firstFlat: 1e9, notes: [], hunted: 0, quiet: 0, calms: 0, stood: 0, lit: 0, dead: 0, low: 0, dry: 0, dryFlat: 0, darkFlat: 0, power: 0, missed: 0, punched: 0, outs: 0, cranked: 0, shut: 0, bangs: 0, charging: 0 };
+  const out = { win: false, t: 0, flats: 0, peels: 0, by: [0, 0, 0, 0], warn: [], firstFlat: 1e9, notes: [], hunted: 0, quiet: 0, calms: 0, stood: 0, lit: 0, dead: 0, low: 0, dry: 0, dryFlat: 0, darkFlat: 0, power: 0, burnt: 0, fixed: 0, outs: 0, cranked: 0, shut: 0, bangs: 0, charging: 0 };
   const firstSeen = team.bots.map(() => [null, null, null, null]), lastSeen = team.bots.map(() => [-9, -9, -9, -9]);
   const parked = S.m.map(m => ({ x: m.x, z: m.z, t: 0 }));
-  let seenEv = 0, round = -1, calm = 0, flatKey = '', tickNo = 0;
+  let seenEv = 0, faultKey = '', calm = 0, flatKey = '', tickNo = 0;
   while (S.phase === 'play') {
     now += DT * 1000; tickNo++;
-    if (S.round !== round || team.bots.map(b => +b.flat).join('') !== flatKey) { round = S.round; flatKey = team.bots.map(b => +b.flat).join(''); assignClocks(S, team); }
+    const fk = S.faults.map(f => f ? 1 : 0).join('');
+    if (fk !== faultKey || team.bots.map(b => +b.flat).join('') !== flatKey) { faultKey = fk; flatKey = team.bots.map(b => +b.flat).join(''); assignFaults(S, team); }
     for (const bot of team.bots) {
       const me = game.players[bot.id];
       bot.bat = me.bat;
       if (me.flat) { if (!bot.flat) { bot.flat = true; bot.x = me.x; bot.z = me.z; } if (S.t - (bot.called || -9) > F.CALL_GAP) { bot.called = S.t; sim.actFloor(bot.id, { t: 'call' }); } continue; }
       bot.flat = false;
+      if (me.hid >= 0) { bot.x = me.x; bot.z = me.z; }
       bot.want = { on: false };
       if ((tickNo + bot.i) % 3 === 0) perceive(S, bot);
       bot.policy.think(S, bot, team);
@@ -614,7 +659,7 @@ function play(sc, seed, trace) {
     });
   }
   if (calm >= 20) out.calms++;
-  Object.assign(out, { win: S.phase === 'win' || S.phase === 'won', t: S.t, power: S.power, missed: S.tally.missed, punched: S.tally.punched });
+  Object.assign(out, { win: S.phase === 'win' || S.phase === 'won', t: S.t, power: S.power, burnt: S.tally.burnt, fixed: S.tally.fixed });
   if (S.phase === 'play') fail(sc.name, `seed ${seed}: the night did not end`);
   return out;
 }
@@ -625,7 +670,7 @@ const all = policy => () => policy;
 const scenarios = [];
 const add = (name, n, night, guard, expect = {}) => scenarios.push({ name: `${name} n${night}`, n, night, guard, ...expect });
 
-// The building with nothing moving in it: every clock can be reached in the hour it is given.
+// The building with nothing moving in it: every fault can be fixed before it burns.
 for (const n of [1, 2, 4, 6]) add(`empty building x${n}`, n, 1, all(honest('competent')), { dev: { freeze: true }, noMiss: true });
 for (const night of [1, 3, 5]) add('solo careless', 1, night, all(honest('careless')));
 for (const night of [1, 2, 3, 4, 5]) add('solo competent', 1, night, all(honest('competent')));
@@ -636,22 +681,27 @@ for (const night of [3, 5]) add('crew of 4 expert', 4, night, all(honest('expert
 // A crew that splits up but leaves each other on the floor, and one that never cranks: what coordination is worth.
 add('crew of 4, no peels', 4, 5, all(honest('competent', { peels: false })));
 add('crew of 4, no crank', 4, 5, all(honest('competent', { cranks: false })));
+// Ducking into a locker when something is after you and cannot see you: what the lockers are worth.
+for (const night of [1, 3, 5]) add('solo competent, hides', 1, night, all(honest('competent', { hides: true })));
+for (const night of [3, 5]) add('crew of 3 competent, hides', 3, night, all(honest('competent', { hides: true })));
 
 // The ones that must not work. worse: the proper scenario each has to do clearly worse than.
-const sitter = honest('competent', { clocks: false, stays: true, peels: false, cranks: false });
+const sitter = honest('competent', { faults: false, stays: true, peels: false, cranks: false });
 const bad = (name, n, guard) => { for (const night of [1, 3]) add(name, n, night, guard, { worse: `${n === 1 ? 'solo' : `crew of ${n}`} competent n${night}` }); };
 bad('x4 turtle: doors shut, nobody moves', 4, all(DEGENERATE.turtle()));
 bad('x1 turtle', 1, all(DEGENERATE.turtle()));
 bad('x4 one cranks, three hide', 4, i => i ? DEGENERATE.turtle() : DEGENERATE.cranker());
 bad('x4 corner with torches', 4, all(DEGENERATE.corner({ x: 1, z: 12.5, look: Math.PI / 4 })));
 bad('x4 booth corner with torches', 4, all(DEGENERATE.corner({ x: 15.8, z: 42.6, look: Math.PI * .75 })));
-bad('x4 ignore the clocks, mind the doors', 4, i => honest('competent', { clocks: false, stays: true, cranks: i === 3 }));
-bad('x1 ignore the clocks, mind the doors', 1, all(honest('competent', { clocks: false, stays: true })));
+bad('x4 ignore the faults, mind the doors', 4, i => honest('competent', { faults: false, stays: true, cranks: i === 3 }));
+bad('x1 ignore the faults, mind the doors', 1, all(honest('competent', { faults: false, stays: true })));
 bad('x4 one runner, three never leave', 4, i => i ? sitter : honest('competent', { share: .01 }));
 bad('x4 camp the charger', 4, all(DEGENERATE.dock()));
 bad('x1 kite round the loop', 1, all(DEGENERATE.kite()));
 bad('x4 sit in the ducts', 4, all(DEGENERATE.hole({ x: 20, z: 34.75, dx: 1.2 })));
 bad('x2 stand in the vent doorway', 2, all(DEGENERATE.hole({ x: 22.9, z: 36.25, dx: 0, dz: .2 })));
+bad('x1 sit in a locker all night', 1, all(DEGENERATE.locker()));
+bad('x4 sit in lockers all night', 4, all(DEGENERATE.locker()));
 bad('x2 stand in the duct mouth', 2, all(DEGENERATE.hole({ x: 15.9, z: 33.25, dx: 0, dz: .2 })));
 
 /* ---------- running them ---------- */
@@ -683,7 +733,7 @@ if (!isMainThread) {
     let next = 0, live = 0;
     const count = Math.max(1, Math.min(jobs.length, cpus().length, WORKERS));
     for (let k = 0; k < count; k++) {
-      const w = new Worker(new URL(import.meta.url));
+      const w = new Worker(new URL(import.meta.url), { argv: process.argv.slice(2) });
       const give = () => { if (next < jobs.length) { live++; w.postMessage(jobs[next++]); } else { w.terminate(); if (!live) done(); } };
       w.on('message', r => { live--; results.get(r.i).push(...r.runs); failures.push(...r.failures); give(); });
       w.on('error', e => { console.error(e); process.exit(2); });
@@ -697,7 +747,7 @@ if (!isMainThread) {
   const sum = (runs, f) => runs.reduce((s, r) => s + f(r), 0);
   const median = list => list.length ? [...list].sort((a, b) => a - b)[list.length >> 1] : NaN;
   const rate = new Map();
-  const head = ['scenario', 'win%', 'end', 'flat/g', 'peel', 'B F S T %', 'warn s', '<1.5s', 'hunted', 'calms', 'torch', 'low', 'dead', 'dry/g', 'dry>flat', 'flat dark', 'miss', 'power', 'out%', 'crank s', 'door s', 'bangs', 'dock s'];
+  const head = ['scenario', 'win%', 'end', 'flat/g', 'peel', 'B F S T %', 'warn s', '<1.5s', 'hunted', 'calms', 'torch', 'low', 'dead', 'dry/g', 'dry>flat', 'flat dark', 'burnt', 'power', 'out%', 'crank s', 'door s', 'bangs', 'dock s'];
   const rows = [];
   const row = (sc, runs) => {
     const n = runs.length, warn = runs.flatMap(r => r.warn), flats = sum(runs, r => r.flats), stood = sum(runs, r => r.stood);
@@ -705,12 +755,12 @@ if (!isMainThread) {
     rows.push([sc.name, rate.get(sc.name), Math.round(sum(runs, r => r.t) / n), (flats / n / sc.n).toFixed(2), pct(sum(runs, r => r.peels), flats),
       [0, 1, 2, 3].map(i => pct(sum(runs, r => r.by[i]), flats)).join(' '), median(warn).toFixed(1), pct(warn.filter(x => x < 1.5).length, warn.length) + '%',
       pct(sum(runs, r => r.hunted), stood) + '%', (sum(runs, r => r.calms) / n).toFixed(1), pct(sum(runs, r => r.lit), stood) + '%', pct(sum(runs, r => r.low), stood) + '%', pct(sum(runs, r => r.dead), stood) + '%', (sum(runs, r => r.dry) / n / sc.n).toFixed(1), pct(sum(runs, r => r.dryFlat), sum(runs, r => r.dry)) + '%', pct(sum(runs, r => r.darkFlat), flats) + '%',
-      pct(sum(runs, r => r.missed), sum(runs, r => r.missed + r.punched)) + '%', Math.round(sum(runs, r => r.power) / n), pct(sum(runs, r => +(r.outs > 0)), n), Math.round(sum(runs, r => r.cranked) / n), Math.round(sum(runs, r => r.shut) / n), (sum(runs, r => r.bangs) / n).toFixed(1), Math.round(sum(runs, r => r.charging) / n)]);
+      pct(sum(runs, r => r.burnt), sum(runs, r => r.fixed + r.burnt)) + '%', Math.round(sum(runs, r => r.power) / n), pct(sum(runs, r => +(r.outs > 0)), n), Math.round(sum(runs, r => r.cranked) / n), Math.round(sum(runs, r => r.shut) / n), (sum(runs, r => r.bangs) / n).toFixed(1), Math.round(sum(runs, r => r.charging) / n)]);
     return runs;
   };
   for (const i of todo) {
     const sc = scenarios[i], runs = row(sc, results.get(i));
-    if (sc.noMiss && sum(runs, r => r.missed)) fail(sc.name, `${sum(runs, r => r.missed)} clocks missed with nothing in the way: the round does not fit in the hour`);
+    if (sc.noMiss && sum(runs, r => r.burnt)) fail(sc.name, `${sum(runs, r => r.burnt)} faults burnt with nothing in the way: they come faster than they can be walked to`);
     if (sc.night === 1 && !sc.worse && !sc.dev) { const early = Math.min(...runs.map(r => r.firstFlat)); if (early < 30) fail(sc.name, `a guard was flattened ${early.toFixed(0)} s into night 1`); }
   }
   // A strategy that should not work has to win under one night in ten, or under half as often as playing properly.
@@ -729,7 +779,7 @@ warn s  median seconds between a mascot being there to see or hear and it catchi
 hunted  share of standing time with something after you    calms   stretches of 20 s or more with nothing after anyone, per night
 torch   share of standing time with the torch on           low, dead   share with it under a quarter, and flat; dry/g is how often it ran out per guard
 dry>flat  share of torches running out that ended in a flattening within 20 s    flat dark  share of flattenings with the torch dead
-miss    share of due clocks missed    power   mean power at the end    out%    nights the power went out    crank s  seconds cranked    door s  seconds of shut door (two doors for ten seconds is 20)
+burnt   share of faults left to burn    power   mean power at the end    out%    nights the power went out    crank s  seconds cranked    door s  seconds of shut door (two doors for ten seconds is 20)
 bangs   bangs on shut doors    dock s  guard-seconds spent charging at the dock`);
   if (argv.includes('--deaths')) for (const i of todo) console.log(`\n${scenarios[i].name}\n` + results.get(i).flatMap(r => r.notes).slice(0, 30).join('\n'));
   if (failures.length) { console.log(`\n${failures.length} FAILED\n` + failures.join('\n')); process.exit(1); }

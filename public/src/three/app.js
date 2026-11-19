@@ -8,10 +8,12 @@ import { createPlayer } from './player.js';
 import { createActors } from './actors.js';
 import { createHud, where } from './hud.js';
 import { EYE } from './map.js';
-import { hourF } from './sim3d.js';
+import { createTask, FAULT_NAME } from './task.js';
+import { BOXES, ROOMS3 } from './map.js';
 import { createSound } from './sound.js';
 import { createPost } from './post.js';
 import { createPhone } from './actors/phone.js';
+import { createOutlines } from './outline.js';
 import { dreadOf } from '../rules.js';
 
 let app = null;
@@ -30,6 +32,8 @@ function create() {
   scene.add(camera);
 
   const world = buildWorld(scene), actors = createActors(scene, camera, renderer), player = createPlayer(camera, canvas), hud = createHud(stage, player), sound = createSound();
+  player.setTask(createTask(hud.root));
+  const outlines = createOutlines(world.parts, actors);
   // post.js draws the frame and owns its resolution and the torch's shadow map; the torch gets a cheap torch's beam pattern.
   const post = createPost(renderer, player.torch);
   player.torch.map = world.torchCookie();
@@ -62,15 +66,18 @@ function create() {
   // those). hud.say takes the line, its kind (which sets icon and colour) and seconds.
   const guard = id => game.S.players.find(p => p.id === id), isMe = id => id === game.myId;
   const SAY = {
-    round(e) {
-      hud.say(`${e.x} clocks are due before ${hourF(game.S) + 1} AM.`, 'clock', 5);
-      hud.tip('round', 'The yellow marks on the compass lead to the clocks that are due. Hold {use} at each one.');
+    // A fault broke out: where, and what it needs.
+    fault(e) {
+      const f = game.S.faults[e.x.i];
+      if (!f) return;
+      hud.say(`Fault in the ${ROOMS3[BOXES[e.x.i].room]?.name}: ${FAULT_NAME[f.k].toLowerCase()}.`, 'fault', 4);
+      hud.tip('fault', 'Faults leak power until they are fixed, and darken their room. The list under the power, and the yellow marks on the compass, lead to them. Press {use} at the box.');
     },
-    punch(e) {
-      const left = game.S.clocks.filter(c => c === 1).length, rest = left ? `${left} to go.` : 'That is all of them this hour.';
-      hud.say(isMe(e.x.by) ? `Punched. ${rest}` : `${guard(e.x.by)?.name || 'Someone'} punched one. ${rest}`, 'clock', 3);
+    fix(e) {
+      const left = game.S.faults.filter(Boolean).length, rest = left ? `${left} still open.` : 'All clear.';
+      hud.say(isMe(e.x.by) ? `Fixed. ${rest}` : `${guard(e.x.by)?.name || 'Someone'} fixed the ${ROOMS3[BOXES[e.x.i].room]?.name}. ${rest}`, 'fixed', 3);
     },
-    miss: e => hud.say(`${e.x > 1 ? e.x + ' clocks were' : 'A clock was'} missed. The power takes the hit.`, 'missed', 6),
+    burn: () => hud.say('A fault is burning out the wiring. Fix it before the building cannot hold a charge.', 'burnt', 6),
     out: () => hud.say('The power is out. Every door is open.', 'out', 7),
     on: () => hud.say('The power is back.', 'back', 3),
     flat(e) {
@@ -88,6 +95,11 @@ function create() {
     },
     spot(e) { if (isMe(e.x.id)) hud.tip('spot', 'It has seen you. Keep the torch on it and back away. The beam holds it while the battery lasts.'); },
     bat(e) { if (isMe(e.x.by)) hud.say('Fresh battery.', 'torch', 2.5); },
+    locker(e) { if (isMe(e.x.id) && e.x.in) hud.tip('hide', 'Nothing sees you in here. One that saw you get in will open the door. One that lost you nearby may check, and one that stands outside long enough will sniff you out. The doors are loud.'); },
+    found(e) {
+      if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker.`, 'down', 4);
+      else hud.say(`${MASC[e.x.i].name} pulled ${guard(e.x.id)?.name || 'someone'} out of a locker ${where(e.x)}.`, 'hide', 6);
+    },
     fumble(e) { if (isMe(e.x.by)) hud.say('The door will not shut. Something is standing in it.', 'info', 3); },
   };
 
@@ -118,7 +130,7 @@ function create() {
       phone.update(S, player.me, dt, now, actors.scare.active);
       sound.update(S, player.me, dt);
       hud.update(S, player.me, actors.scare.active);
-      post.render(scene, camera, now, fear, dread, world.stop);
+      post.render(scene, camera, now, fear, dread, world.stop, outlines.pick(S, player.me, t));
       actors.after();
     },
     threat, player, actors, world, scene, camera, renderer, sound, post, phone,

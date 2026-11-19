@@ -5,7 +5,7 @@
 //   shell.js, geo.js      geometry from map.js: rooms, frames, pipes, the stage
 //   light.js              baked lamp light, flicker, torch spill, dust
 //   props.js, dressing.js furniture from the prop kits, and where it stands
-//   usable.js             clocks, door buttons, generator, charger, batteries, doors, wall map
+//   usable.js             breaker boxes, door buttons, generator, charger, batteries, doors, wall map
 //   sight.js              which rooms can be seen from which, so the rest are not drawn
 import { surfaces } from './world/surfaces.js';
 import { art } from './world/art.js';
@@ -27,6 +27,7 @@ export function buildWorld(scene) {
 
   return {
     torchCookie,
+    parts: usables.parts,   // what outline.js can put a gold edge round
     stop: 1,   // how far to stop the picture down against torch glare this frame (light.js)
     // torch: how bright the local guard's torch is, 0 to 1. dread, threat: 0 to 1.
     update(S, t, dt, camera, torch, dread, threat) {
