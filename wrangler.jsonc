@@ -3,9 +3,21 @@
   "name": "thick-shift",
   "compatibility_date": "2026-11-15",
   // Everything in public/ is served as-is. Requests that match no file reach
-  // the Worker, which only answers /room/CODE (see worker/index.js).
+  // the Worker, which answers /room/CODE and the Discord sign-in (see worker/index.js).
   "main": "worker/index.js",
   "assets": { "directory": "./public" },
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  // The Discord Activity: the same game as its own Worker, so it can be deployed and broken separately
+  // (pnpm run deploy:discord). DISCORD_CLIENT_ID is the application's ID from the Developer Portal. The secret
+  // goes in with: pnpm wrangler secret put DISCORD_CLIENT_SECRET --env discord
+  "env": {
+    "discord": {
+      "name": "thick-shift-discord",
+      // The Worker sees the page before it is served, to point its CDN links at /ext (worker/index.js).
+      "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/", "/index.html"] },
+      "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
+      "vars": { "DISCORD_CLIENT_ID": "1572848365811663080" }
+    }
+  }
 }

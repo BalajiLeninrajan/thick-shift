@@ -2,3 +2,4 @@ node_modules
 .wrangler
 tools/models/previews
 __pycache__
+.dev.vars

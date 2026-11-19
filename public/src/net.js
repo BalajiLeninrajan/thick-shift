@@ -2,6 +2,8 @@
 // state to every guest ten times a second, through a WebSocket relay on the
 // same origin (worker/index.js). If the host leaves, the relay makes the guest
 // who has been there longest the host, and the night carries on (takeOver).
+// In a Discord Activity the room is fixed and nobody chooses to host: everyone
+// tries to, and whoever finds it taken joins instead (becomeGuest).
 import { game } from './state.js';
 import { newState, stepFloor, actFloor, adoptFloor } from './three/sim3d.js';
 
@@ -11,6 +13,7 @@ const MAX_BACKLOG = 256 * 1024;            // bytes queued before the host skips
 let ws = null, loop = 0;
 
 const roomUrl = (code, query) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
+const ROOM = /^([A-Z]{4}|d-[\w-]{1,80})$/;   // a typed code, or a Discord Activity's (discord.js)
 const newCode = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('');
 const parse = text => { try { return JSON.parse(text); } catch (e) { return null; } };
 const guard = (id, name = 'Guard') => ({ id, name });
@@ -39,7 +42,9 @@ function hostRoom(sock, opened) {
     else actFloor(id, d);
   };
   ws.onclose = e => {
-    // Someone else is hosting under this code. Nobody has joined yet, so take another.
+    // Someone else is hosting under this code. In Discord that is the rest of the channel, so go and join them.
+    // Otherwise nobody has joined yet, so take another code.
+    if (e.code === CODE_TAKEN && game.discord) return becomeGuest();
     if (e.code === CODE_TAKEN) { game.code = game.S.code = newCode(); return openRoom(); }
     for (const id in game.players) if (id !== game.myId) delete game.players[id];
     game.netNote = opened ? 'Lost the connection to the room. You can keep playing solo.' : 'Multiplayer unavailable. You can still play solo.';
@@ -51,14 +56,23 @@ function openRoom() {
   hostRoom(new WebSocket(roomUrl(game.code, 'role=host')), false);
 }
 
-export function host() {
+export function host(code = newCode()) {
   game.isHost = true;
-  game.code = newCode();
+  game.code = code;
   game.S = newState(game.code);
   game.myId = 'host';
   game.players = { host: guard('host', game.myName) };
   run();
   openRoom();
+}
+
+// Drop the night we were about to host and join the one already running under our code.
+function becomeGuest() {
+  clearInterval(loop);
+  loop = 0;
+  game.S = null;
+  game.players = {};
+  join(game.code);
 }
 
 // The host left and the relay picked us. Carry on from the last state it sent, with the guards still in the
@@ -78,9 +92,10 @@ function takeOver(guests) {
   run();
 }
 
+let rehosts = 0;   // Discord only: times a join found nobody hosting and went back to hosting
 export function join(code) {
-  code = code.toUpperCase().trim();
-  if (!/^[A-Z]{4}$/.test(code)) return;
+  if (!code.startsWith('d-')) code = code.toUpperCase().trim();
+  if (!ROOM.test(code)) return;
   game.code = code;
   game.isHost = false;
   game.joining = true;
@@ -99,6 +114,8 @@ export function join(code) {
     const wasIn = !!game.S;
     game.S = null;
     game.joining = false;
+    // The Discord host left between our try at hosting and our try at joining. Host after all.
+    if (!wasIn && e.code === NO_HOST && game.discord && rehosts++ < 3) return host(code);
     // A host leaving hands the room on (takeOver), so a close here is the connection failing.
     game.error = wasIn ? { title: 'Lost the connection to the room', detail: 'Reload to start again.' }
       : { title: 'Could not join room ' + code, detail: e.code === NO_HOST ? 'Nobody is hosting a room with that code.' : 'The connection failed.' };

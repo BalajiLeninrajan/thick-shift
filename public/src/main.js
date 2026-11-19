@@ -40,6 +40,14 @@ function frame() {
   if (S && S.phase === 'play') ambience(floorThreat, dreadF(S)); else ambience(-1);
 }
 
+// Discord adds frame_id to an Activity's URL (discord.js). The SDK is only fetched then.
+if (new URLSearchParams(location.search).has('frame_id')) {
+  game.discord = { room: '', name: '' };
+  import('./discord.js').then(m => m.startDiscord()).then(
+    d => { game.discord = d; },
+    err => { game.error = { title: 'Could not reach Discord', detail: String(err.message || err) }; });
+}
+
 frame();
 
 // ?debug exposes state on window for poking at scenes from the console.

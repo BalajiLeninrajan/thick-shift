@@ -12,6 +12,7 @@ export const game = {
   netNote: '',      // status line shown in the lobby
   joining: false,
   error: null,      // { title, detail } when the session cannot continue
+  discord: null,    // inside a Discord Activity: { room, name }, both '' until Discord answers (discord.js)
 };
 
 // client: what this browser is looking at. Never sent over the network.

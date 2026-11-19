@@ -1,18 +1,67 @@
-// The Worker in front of the static files. It only handles /room/CODE, a
-// WebSocket that relays between one host and that room's guests. Everything
-// else is served from public/ before this code runs.
+// The Worker in front of the static files. It handles /room/CODE, a WebSocket
+// that relays between one host and that room's guests. As the Discord Activity
+// (env.discord in wrangler.jsonc) it also signs players in and carries the
+// page's stylesheets and fonts, which Discord's sandbox will not fetch from
+// their CDNs. Everything else is served from public/ before this code runs.
 import { DurableObject } from 'cloudflare:workers';
 
 const NO_HOST = 4404, CODE_TAKEN = 4409;
 const MAX_GUEST_MESSAGE = 2000;   // characters. Guest actions are tiny.
 
+// A room is a four-letter code someone typed, or d- and a Discord Activity's instance id (src/discord.js).
+const ROOM = /^\/room\/([A-Z]{4}|d-[\w-]{1,80})$/;
+
 export default {
   fetch(req, env) {
-    const m = new URL(req.url).pathname.match(/^\/room\/([A-Z]{4})$/);
+    const path = new URL(req.url).pathname;
+    if (path === '/api/discord/config') return Response.json({ clientId: env.DISCORD_CLIENT_ID || '' });
+    if (path === '/api/discord/token' && req.method === 'POST') return discordToken(req, env);
+    if (env.ASSETS && (path === '/' || path === '/index.html')) return discordPage(req, env);
+    if (env.ASSETS && path.startsWith('/ext/')) return external(req, path.slice(5));
+    const m = path.match(ROOM);
     if (!m || req.headers.get('Upgrade') !== 'websocket') return new Response('Not found', { status: 404 });
     return env.ROOMS.get(env.ROOMS.idFromName(m[1])).fetch(req);
   },
 };
+
+// Trades the code Discord gave the Activity (commands.authorize) for an access token, which the page hands
+// back to Discord (commands.authenticate) to learn who is playing. The client secret never leaves the Worker.
+async function discordToken(req, env) {
+  const { code } = await req.json().catch(() => ({}));
+  if (typeof code !== 'string' || !code || code.length > 200) return Response.json({ error: 'bad code' }, { status: 400 });
+  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) return Response.json({ error: 'not configured' }, { status: 503 });
+  const r = await fetch('https://discord.com/api/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET, grant_type: 'authorization_code', code }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || typeof d.access_token !== 'string') return Response.json({ error: 'exchange failed' }, { status: 502 });
+  return Response.json({ access_token: d.access_token });
+}
+
+// Discord's sandbox only lets the page load from its own origin, so the page's CDN links become /ext/ paths
+// that external() fetches. Only the pinned design system and Google's fonts go through.
+const CDN = [
+  ['jsd/', 'https://cdn.jsdelivr.net/', /^gh\/BalajiLeninrajan\/catppuccin-neu@v[\d.]+\/css\/[\w-]+\.css$/],
+  ['gfonts/', 'https://fonts.googleapis.com/', /^css2\?[\w&=;:@+%.-]+$/],
+  ['gstatic/', 'https://fonts.gstatic.com/', /^s\/[\w/.-]+$|^l\/font\?[\w&=.-]+$/],
+];
+
+async function discordPage(req, env) {
+  const ext = { element(e) { const h = e.getAttribute('href') || '', c = CDN.find(([, origin]) => h.startsWith(origin)); if (c) e.setAttribute('href', '/ext/' + c[0] + h.slice(c[1].length)); } };
+  return new HTMLRewriter().on('link[rel=stylesheet]', ext).on('link[rel=preconnect]', { element(e) { e.remove(); } }).transform(await env.ASSETS.fetch(req));
+}
+
+async function external(req, rest) {
+  const c = CDN.find(([prefix]) => rest.startsWith(prefix)), tail = c && rest.slice(c[0].length) + new URL(req.url).search;
+  if (!c || !c[2].test(tail)) return new Response('Not found', { status: 404 });
+  // Google picks the font format from the browser, so it gets the player's user agent.
+  const r = await fetch(c[1] + tail, { headers: { 'User-Agent': req.headers.get('User-Agent') || '' }, cf: { cacheTtl: 86400, cacheEverything: true } });
+  if (c[0] !== 'gfonts/' || !r.ok) return new Response(r.body, r);
+  const css = (await r.text()).replaceAll('https://fonts.gstatic.com/', '/ext/gstatic/');
+  return new Response(css, { headers: { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public, max-age=86400' } });
+}
 
 // One instance per room code. The host's messages go to every guest as they
 // are. A guest's message goes to the host wrapped as {"from": id, "d": message}.

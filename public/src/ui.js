@@ -41,6 +41,29 @@ function titleScreen() {
   };
 }
 
+// Inside Discord the room and the name come from Discord. The button is still needed, since sound can only
+// start from a click.
+function discordTitle() {
+  const d = game.discord;
+  if (!d.room) return messageScreen('discord', 'Connecting to Discord…', '', false);
+  return {
+    key: 'discord-title',
+    html: card(`
+      <h1 class="ts-logo">Thick Shift 3D</h1>
+      <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
+      <p class="cn-meta cn-m-0">Keep the power on until 6 AM. The retired mascots are enormous, and at night they wander.</p>
+      <p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel works the same night.</p>`,
+      `<button class="btn btn-primary" id="hb">Clock in${d.name ? ' as ' + esc(d.name.slice(0, 12)) : ''}</button>`),
+    wire() {
+      $('hb').onclick = () => {
+        unlockAudio();
+        game.myName = (d.name || 'Guard').slice(0, 12);
+        host(d.room);
+      };
+    },
+  };
+}
+
 function messageScreen(key, title, detail, back) {
   return {
     key,
@@ -76,10 +99,19 @@ function nightScreen(S) {
   const wire = () => { const go = $('go'); if (go) go.onclick = () => { unlockAudio(); next(); }; };
   if (S.phase === 'lobby') {
     const link = `${location.origin}${location.pathname}?room=${S.code}`;
+    // Discord has no use for the code: everyone in the channel is already in the room.
+    const where = game.discord
+      ? '<p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel joins this night.</p><div class="cn-cluster"><button class="btn btn-secondary" id="inv">Invite someone</button></div>'
+      : `<div class="stat is-lg"><span>Room code</span><strong>${esc(S.code)}</strong></div>
+        <p class="cn-meta cn-m-0">Friends join at<br><span class="cn-code ts-selectable">${esc(link)}</span></p>`;
+    const wireLobby = () => {
+      wire();
+      const inv = $('inv');
+      if (inv) inv.onclick = () => import('./discord.js').then(m => m.invite());
+    };
     return {
-      key, wire, html: card(`
-        <div class="stat is-lg"><span>Room code</span><strong>${esc(S.code)}</strong></div>
-        <p class="cn-meta cn-m-0">Friends join at<br><span class="cn-code ts-selectable">${esc(link)}</span></p>
+      key, wire: wireLobby, html: card(`
+        ${where}
         <div class="cn-cluster">${names.map(n => `<span class="chip">${esc(n)}</span>`).join('')}</div>
         <ul class="cn-meta cn-m-0 ts-rules">${RULES.map(r => `<li>${r}</li>`).join('')}</ul>
         ${game.netNote ? `<div class="banner cn-tone-warning">${esc(game.netNote)}</div>` : ''}`, hostAction('Start night 1')),
@@ -106,8 +138,8 @@ function nightScreen(S) {
 function currentScreen() {
   if (game.error) return messageScreen('error:' + game.error.title, game.error.title, game.error.detail, true);
   if (game.S) return nightScreen(game.S);
-  if (game.joining) return messageScreen('joining', `Connecting to room ${game.code}…`, '', false);
-  return titleScreen();
+  if (game.joining) return messageScreen('joining', game.discord ? 'Joining the night…' : `Connecting to room ${game.code}…`, '', false);
+  return game.discord ? discordTitle() : titleScreen();
 }
 
 let shownKey = null;

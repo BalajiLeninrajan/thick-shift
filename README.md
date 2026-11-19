@@ -20,7 +20,7 @@ Add `?dev` to the URL for the dev menu (the backtick key, or the Dev button on t
 
 ```
 wrangler.jsonc      Cloudflare Workers config
-worker/index.js     the room relay: one Durable Object per room code
+worker/index.js     the room relay (one Durable Object per room) and the Discord sign-in
 public/
 index.html          markup
 styles.css          stage layout and the HUD; everything else comes from catppuccin-neu
@@ -30,15 +30,33 @@ src/
   config.js         the mascot roster, the doors, the number of nights
   state.js          the two shared mutable objects: game (session) and client (this browser)
   net.js            hosting and joining rooms; the host broadcasts the whole state
+  discord.js        the Discord Activity's sign-in and room, loaded only inside Discord
   audio.js          recorded and synthesised sound, and the ambience
   ui.js             overlay screens: title, lobby, and the cards between nights
   dev.js            dev menu, loaded only with ?dev
   main.js           the frame loop
   three/            the game: simulation, building, actors, HUD, input, sound and picture (below)
+vendor/             three.js and the Discord SDK, copied by pnpm vendor
 tools/
   balance/floor.mjs scripted guards played through three/sim3d.js
   check-floor.mjs   checks nothing in the building is blocked or cut off
 ```
+
+## Discord Activity
+
+The same game runs as a Discord Activity, deployed as its own Worker (`env.discord` in `wrangler.jsonc`). Discord adds `frame_id` to the page's URL, and `main.js` loads `src/discord.js` when it sees it. Everyone who opens the Activity in one channel shares Discord's `instanceId`, so that becomes the room (`d-` and the id) and nobody types a code. Each player presses Clock in, which tries to host. Whoever finds the room taken joins it instead (`becomeGuest` in `net.js`). Names come from Discord through an OAuth sign-in. The Worker trades the code for a token at `/api/discord/token`, so the client secret stays on the server. A player who declines the sign-in plays as Guard.
+
+Discord only lets the page reach its own origin. The SDK is copied into `public/vendor/` (`tools/vendor-discord.sh`). The stylesheets and fonts stay on their pinned CDN links in `index.html`, and the Discord Worker rewrites those links to `/ext/...` as it serves the page, then fetches them from jsdelivr and Google Fonts itself. Only the catppuccin-neu stylesheets and Google's font files pass through it.
+
+To set it up:
+
+1. In the Discord Developer Portal, create an application. Under Activities > Settings, enable Activities (and iOS and Android if wanted). Under OAuth2, add a redirect such as `https://127.0.0.1`. The SDK needs one but never uses it.
+2. Put the application ID in `env.discord.vars.DISCORD_CLIENT_ID`, then run `pnpm wrangler secret put DISCORD_CLIENT_SECRET --env discord` and `pnpm run deploy:discord`.
+3. Under Activities > URL Mappings, map `/` to the Worker's host with no protocol, for example `thick-shift-discord.<account>.workers.dev`.
+4. Start the Activity from a voice channel. Until the app is published, only its owner and team members can launch it.
+5. To verify the app, put `https://<worker host>/terms` and `https://<worker host>/privacy` in General Information as the Terms of Service and Privacy Policy URLs (`public/terms.html`, `public/privacy.html`). If the game starts collecting anything new, update `privacy.html`.
+
+To test from your own machine, run `pnpm wrangler dev --env discord` behind a tunnel such as `cloudflared tunnel --url localhost:8787`, and map `/` to the tunnel's host. Put `DISCORD_CLIENT_SECRET=...` in `.dev.vars`, which git ignores.
 
 ## How the pieces talk
 
