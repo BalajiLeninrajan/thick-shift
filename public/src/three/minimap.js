@@ -2,11 +2,11 @@
 // old green LCD, a few times a second. Near, it is centred on the guard and
 // turns with them, so what is ahead is up. Zoomed out it is the whole
 // building with north up. It shows rooms and doorways, the booth doors that
-// are shut, the guards (a cross for a flat one), the clocks that are due,
+// are shut, the guards (a cross for a flat one), the open faults,
 // the generator and the charger, spare batteries, and every mascot that is
 // off its mark, as the booth's wall map does.
 import * as THREE from 'three';
-import { ROOMS3, DOORWAYS, CLOCKS, GENERATOR, CHARGER, BATTERY_SPOTS, roomAt } from './map.js';
+import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, BATTERY_SPOTS, roomAt } from './map.js';
 import { canvas } from './world/tex.js';
 
 export const MAP_W = 288, MAP_H = 224;   // canvas pixels: the 4:3-ish shape of the phone's glass
@@ -35,11 +35,11 @@ export function createMinimap() {
       c.fillStyle = shut ? INK.shut : INK.room;
       if (d.axis === 'x') c.fillRect(x0 - g, z0, x1 - x0 + g * 2, z1 - z0); else c.fillRect(x0, z0 - g, x1 - x0, z1 - z0 + g * 2);
     }
-    // Where to go: the crank and the charger, the clocks due (blinking), spare batteries.
+    // Where to go: the crank and the charger, the open faults (blinking), spare batteries.
     box(GENERATOR.x, GENERATOR.z - .4, 4 * px, INK.gen);
     box(CHARGER.x, CHARGER.z - .4, 4 * px, INK.dock);
     const blink = t % 600 < 380;
-    CLOCKS.forEach((cl, i) => { if (S.clocks?.[i] === 1 && blink) dot(cl.x + Math.sin(cl.face) * .5, cl.z + Math.cos(cl.face) * .5, 5 * px, INK.due); });
+    BOXES.forEach((cl, i) => { if (S.faults?.[i] && blink) dot(cl.x + Math.sin(cl.face) * .5, cl.z + Math.cos(cl.face) * .5, 5 * px, INK.due); });
     for (const i of S.bats || []) box(BATTERY_SPOTS[i].x, BATTERY_SPOTS[i].z, 3 * px, INK.bat);
     // Mascots off their marks: a blip with a ring that grows.
     const ring = (t % 900) / 900;

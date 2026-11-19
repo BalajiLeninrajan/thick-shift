@@ -1,6 +1,6 @@
 // Checks that the furniture in public/src/three/world/dressing.js has not
 // blocked anything the 3D mode needs: doorways, the mascots' waypoints, and
-// the way to every clock, button, battery and resting mark. Run it after
+// the way to every breaker box, button, battery and resting mark. Run it after
 // moving a prop or anything in map.js:
 //   node tools/check-floor.mjs
 import { readFileSync, existsSync } from 'node:fs';
@@ -19,7 +19,7 @@ for (const d of M.DOORWAYS) {
   const [a, b] = d.axis === 'x' ? [[x0 - out, cz], [x1 + out, cz]] : [[cx, z0 - out], [cx, z1 + out]];
   if (!M.clear(a[0], a[1], b[0], b[1], M.MASCOT_R)) bad.push(`the doorway between ${M.ROOMS3[d.a].name} and ${M.ROOMS3[d.b].name} is blocked within ${out} m`);
 }
-const onWalls = [...M.CLOCKS.map((c, i) => [c, `the clock in ${M.ROOMS3[c.room].name}`]), [M.GENERATOR, 'the generator'], [M.CHARGER, 'the charger'], [M.WALL_MAP, 'the wall map'], ...Object.entries(M.PANELS).map(([k, p]) => [p, `door button ${k}`])];
+const onWalls = [...M.BOXES.map((c, i) => [c, `the breaker box in ${M.ROOMS3[c.room].name}`]), [M.GENERATOR, 'the generator'], [M.CHARGER, 'the charger'], [M.WALL_MAP, 'the wall map'], ...Object.entries(M.PANELS).map(([k, p]) => [p, `door button ${k}`])];
 for (const [c, name] of onWalls) {
   const p = { x: c.x + Math.sin(c.face) * .8, z: c.z + Math.cos(c.face) * .8 };
   if (!M.walkable(p.x, p.z, M.PLAYER_R)) bad.push(`nowhere to stand in front of ${name}`); else reach(p, name);

@@ -141,7 +141,7 @@ function syncFloor(S, on) {
   const row = (k, v) => `<dt>${k}</dt><dd class="cn-tabular">${v}</dd>`;
   $('dv-read').innerHTML = row('Phase', S.phase) + row('Night', `${S.night}, ${clockF(S)} (${(S.t / F.HOUR).toFixed(2)} h)`)
     + row('Power', `${Math.round(S.power)}% of ${Math.round(S.cap ?? 100)}%${S.out ? ', out' : ''}${S.crank ? ', cranking' : ''}`)
-    + row('Clocks due', (S.clocks || []).filter(c => c === 1).length) + row('Mascots stirring', S.stir ? 'yes' : 'no')
+    + row('Faults open', (S.faults || []).filter(Boolean).length) + row('Mascots stirring', S.stir ? 'yes' : 'no')
     + row('Guards', S.players.map(p => `${p.name} ${Math.round((p.bat ?? 1) * 100)}%${p.flat ? ' flat' : ''}`).join(', '));
 }
 

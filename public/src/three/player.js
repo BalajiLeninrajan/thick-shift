@@ -7,8 +7,9 @@ import * as THREE from 'three';
 import { game } from '../state.js';
 import { send } from '../net.js';
 import { unlockAudio } from '../audio.js';
-import { PLAYER_R, EYE, CLOCKS, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, slide, walkable } from './map.js';
+import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, slide, walkable } from './map.js';
 import { F } from './sim3d.js';
+import { FAULT_NAME } from './task.js';
 
 const SENS = .0022, SEND_MS = 80;   // radians per pixel of mouse travel at sensitivity 1
 const PITCH_MAX = 1.45;
@@ -33,6 +34,7 @@ export function createPlayer(camera, canvas) {
     touch: false,    // a finger is driving (set by touch.js), so there is no pointer to lock
     watch: null,     // id of the teammate a flat guard is watching through, or null
     ph: false,       // the phone is up, showing the minimap
+    task: null,      // hands in a breaker box: { i } of the box, while the minigame panel (task.js) is up
     zoom: false };   // the minimap shows the whole building, not what is round the guard
   const keys = new Set();
   // Touch and gamepad code can drive the guard through these instead of keys.
@@ -41,6 +43,8 @@ export function createPlayer(camera, canvas) {
   let sinceSprint = 0, lastSend = 0, usedTap = false, lastCall = -1e9, drop = 0;
   let mouseLocked = false, gpLive = false, gpWas = [];
   let keysLive = false, arrowHeld = 0;   // keysLive: playing on the keyboard alone, so there is no pointer to lock
+  let task = null;   // the minigame panel (task.js), handed over by app.js once the HUD exists
+  function letGo() { if (me.task) { me.task = null; task?.close(); } }
 
   const torch = new THREE.SpotLight(0xfff0d0, 0, 26, .5, .55, 1.5);
   torch.position.set(.22, -.18, 0); torch.target.position.set(.05, -.05, -3);
@@ -99,7 +103,8 @@ export function createPlayer(camera, canvas) {
     mouseLocked = document.pointerLockElement === canvas;
     if (mouseLocked) gpLive = false;
     // Esc, or the browser, took the mouse away in the middle of a night: that is a pause.
-    if (was && !mouseLocked) { keys.clear(); if (playing()) me.paused = true; }
+    // Esc with hands in a box lets go of the box, not the night.
+    if (was && !mouseLocked) { keys.clear(); if (me.task) letGo(); else if (playing()) me.paused = true; }
   });
   addEventListener('mousemove', e => { if (mouseLocked) look(e.movementX, e.movementY); });
 
@@ -119,7 +124,15 @@ export function createPlayer(camera, canvas) {
     const axis = i => Math.abs(g.axes[i]) > GP.dead ? g.axes[i] : 0, down = i => !!g.buttons[i]?.pressed, hit = i => down(i) && !gpWas[i];
     if (hit(GP.pause)) { if (me.paused || !me.locked) { gpLive = true; me.paused = false; } else pause(); }
     else if (!me.paused && g.buttons.some((b, i) => b.pressed && !gpWas[i])) gpLive = true;   // any button takes over from the mouse
-    if (gpLive && !me.paused) {
+    if (gpLive && !me.paused && me.task) {
+      // Hands in a box: the stick and d-pad choose, A works it, B lets go.
+      const fresh = i => hit(i), sx = axis(0), sy = axis(1), was = gp.stick || [0, 0];
+      const stick = [Math.abs(sx) > .6 ? Math.sign(sx) : 0, Math.abs(sy) > .6 ? Math.sign(sy) : 0];
+      const dir = fresh(14) ? [-1, 0] : fresh(15) ? [1, 0] : fresh(12) ? [0, -1] : fresh(13) ? [0, 1] : stick[0] !== was[0] && stick[0] ? [stick[0], 0] : stick[1] !== was[1] && stick[1] ? [0, stick[1]] : null;
+      gp.stick = stick;
+      look(axis(2) * GP.look * dt / SENS, axis(3) * GP.look * dt / SENS);
+      task?.pad(dir, down(GP.use), !!gpWas[GP.use], fresh(GP.phone));
+    } else if (gpLive && !me.paused) {
       Object.assign(gp, { fwd: -axis(1), strafe: axis(0), sprint: down(GP.sprint), use: down(GP.use) });
       look(axis(2) * GP.look * dt / SENS, axis(3) * GP.look * dt / SENS);
       if (hit(GP.torch)) toggleTorch();
@@ -135,7 +148,7 @@ export function createPlayer(camera, canvas) {
   // hold: seconds to hold the use key, 0 for a tap, -1 for as long as you hold it.
   function findTarget(S, mine) {
     const list = [];
-    S.clocks?.forEach((c, i) => { if (c === 1) list.push({ what: 'clock', i, at: CLOCKS[i], label: 'Punch the clock', hold: F.PUNCH_HOLD }); });
+    S.faults?.forEach((f, i) => { if (f) list.push({ what: 'fix', i, at: BOXES[i], label: FAULT_NAME[f.k], hold: 0 }); });
     if (S.power > 0) for (const k in PANELS) list.push({ what: 'door', k, at: PANELS[k], label: `${S.doors[k] ? 'Open' : 'Shut'} the ${DOOR_NAME[k]}`, hold: 0 });
     if (mine.bat < 1) for (const i of S.bats || []) list.push({ what: 'bat', i, at: BATTERY_SPOTS[i], label: 'Take the battery', hold: 0 });
     for (const p of S.players) if (p.flat && p.id !== game.myId) list.push({ what: 'peel', id: p.id, at: p, label: `Peel ${p.name} off the floor`, hold: F.PEEL_HOLD });
@@ -152,7 +165,22 @@ export function createPlayer(camera, canvas) {
   function use(S, dt) {
     const t = me.target, held = keys.has('KeyE') || pad.use || gp.use;
     me.act = '';
+    if (me.task) {
+      // Hands in the box until the job is done or let go. Fixed by someone else, or out of reach: let go.
+      const f = S.faults?.[me.task.i];
+      if (!f || f.at !== me.task.at || Math.hypot(BOXES[me.task.i].x - me.x, BOXES[me.task.i].z - me.z) > F.REACH) letGo();
+      else { me.act = 'fix'; return; }
+    }
     if (!held) usedTap = false;
+    if (t?.what === 'fix' && held && !usedTap && task) {
+      // A fault is a minigame, not a hold: open the panel.
+      usedTap = true; me.hold = 0;
+      const f = S.faults[t.i];
+      me.task = { i: t.i, at: f.at };
+      task.open(t.i, f.k, () => { send({ t: 'use', what: 'fix', i: t.i }); me.task = null; }, () => { me.task = null; });
+      me.act = 'fix';
+      return;
+    }
     if (!t || !held) { me.hold = 0; return; }
     if (t.hold < 0) { me.act = t.what; return; }
     if (usedTap) return;
@@ -170,7 +198,7 @@ export function createPlayer(camera, canvas) {
     if (me.sp) { me.stam = Math.max(0, me.stam - STAMINA.drain * dt); sinceSprint = 0; }
     else { sinceSprint += dt; if (sinceSprint > STAMINA.rest) me.stam = Math.min(1, me.stam + STAMINA.gain * dt); }
     me.moving = 0;
-    if (!len || me.act === 'crank') return;
+    if (!len || me.act === 'crank' || me.task) return;
     const speed = (me.sp ? F.SPRINT : F.WALK * (me.ph ? F.PHONE_WALK : 1)) * Math.min(1, len) * dt / len;
     const sin = Math.sin(me.yaw), cos = Math.cos(me.yaw);
     // right of forward (sin, cos) is (-cos, sin)
@@ -179,9 +207,9 @@ export function createPlayer(camera, canvas) {
   }
 
   return {
-    me, pad, torch, toggleTorch, togglePhone, toggleZoom, look, pause, resume, call, watchNext,
+    me, pad, torch, letGo, setTask(t) { task = t; }, toggleTorch, togglePhone, toggleZoom, look, pause, resume, call, watchNext,
     // Put the guard where the host says they are: the start of a night, or after joining.
-    reset(mine) { Object.assign(me, { x: mine.x, z: mine.z, yaw: mine.yaw ?? Math.PI, pitch: 0, on: false, ph: false, stam: 1, bob: 0, hold: 0, paused: false, watch: null }); },
+    reset(mine) { letGo(); Object.assign(me, { x: mine.x, z: mine.z, yaw: mine.yaw ?? Math.PI, pitch: 0, on: false, ph: false, stam: 1, bob: 0, hold: 0, paused: false, watch: null }); },
     update(S, dt, now) {
       const mine = S.players.find(p => p.id === game.myId);
       if (!mine || mine.x == null) return;
@@ -190,16 +218,17 @@ export function createPlayer(camera, canvas) {
       me.flat = !!mine.flat;
       pollPad(dt); arrowLook(dt);
       // The screens between nights need the mouse back.
-      if (S.phase !== 'play') { me.paused = false; if (mouseLocked) document.exitPointerLock(); }
+      if (S.phase !== 'play') { me.paused = false; letGo(); if (mouseLocked) document.exitPointerLock(); }
       me.locked = (mouseLocked || me.touch || gpLive || keysLive) && !me.paused;
       if (!S.players.some(p => p.id === me.watch && !p.flat) || !me.flat) me.watch = null;
       if (S.phase === 'play') {
-        if (me.flat || me.paused) { me.act = ''; me.target = null; me.sp = false; me.hold = 0; me.moving = 0; if (me.flat) me.on = me.ph = false; }
+        if (me.flat || me.paused) { me.act = ''; me.target = null; me.sp = false; me.hold = 0; me.moving = 0; if (me.flat) { me.on = me.ph = false; letGo(); } }
         else {
           // A door shut on top of us, or the host put us somewhere else.
           if (!walkable(me.x, me.z, PLAYER_R * .5, S.doors)) { me.x = mine.x; me.z = mine.z; }
-          me.target = findTarget(S, mine);
+          if (!me.task) me.target = findTarget(S, mine);
           use(S, dt); walk(S, dt);
+          if (me.task) task?.tick(dt);
           if (mine.bat <= 0) me.on = me.ph = false;
         }
         if (now - lastSend > SEND_MS) { lastSend = now; send({ t: 'p', x: me.x, z: me.z, yaw: me.yaw, pitch: me.pitch, on: me.on, ph: me.ph, sp: me.sp, act: me.act }); }
@@ -207,8 +236,8 @@ export function createPlayer(camera, canvas) {
       // Low battery: the beam dims and stutters.
       const bat = mine.bat ?? 1, weak = bat < .15 ? (Math.sin(now * .05) > -.2 ? .5 : .1) : 1;
       torch.intensity = me.on && bat > 0 ? 60 * weak * (.55 + .45 * Math.min(1, bat * 3)) : 0;
-      // With the phone up the torch hangs in the other hand, lighting the floor a step ahead (and holding nothing: sim3d.js beamOn).
-      drop += ((me.ph ? 1 : 0) - drop) * Math.min(1, dt * 8);
+      // With the phone up, or hands in a box, the torch hangs, lighting the floor a step ahead (and holding nothing: sim3d.js beamOn).
+      drop += ((me.ph || me.task ? 1 : 0) - drop) * Math.min(1, dt * 8);
       torch.target.position.set(.05, -.05 - 2.4 * drop, -3 + 1.2 * drop);
       const y = me.flat ? .22 : EYE + Math.sin(me.bob) * .045;
       camera.position.set(me.x, y, me.z);

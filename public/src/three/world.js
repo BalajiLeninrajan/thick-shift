@@ -5,7 +5,7 @@
 //   shell.js, geo.js      geometry from map.js: rooms, frames, pipes, the stage
 //   light.js              baked lamp light, flicker, torch spill, dust
 //   props.js, dressing.js furniture from the prop kits, and where it stands
-//   usable.js             clocks, door buttons, generator, charger, batteries, doors, wall map
+//   usable.js             breaker boxes, door buttons, generator, charger, batteries, doors, wall map
 //   sight.js              which rooms can be seen from which, so the rest are not drawn
 import { surfaces } from './world/surfaces.js';
 import { art } from './world/art.js';

@@ -64,9 +64,9 @@ export const DOORWAYS = [
 /* ---------- things with a place ---------- */
 // face: the way the thing looks out from its wall, as a yaw (0 faces south, +z).
 
-// Watchman's clocks: one in each room outside the booth and the ducts, and a second in four of the big rooms, so a
-// crew of six still gets two each an hour (sim3d.js openRound).
-export const CLOCKS = [
+// Breaker boxes, where faults break out (sim3d.js breakOut): one in each room outside the booth and the ducts, and
+// a second in four of the big rooms.
+export const BOXES = [
   { room: 0, x: 14.5, z: 10.95, face: Math.PI },   // by the door, not in the corner beside where two of them stand
   { room: 1, x: 41.95, z: 8.5, face: -Math.PI / 2 },
   { room: 2, x: .05, z: 14, face: Math.PI / 2 },

@@ -131,7 +131,65 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-power[data-level="crit"] svg, .ts-f-power[data-level="out"] svg { animation: ts-blink 1s steps(2, jump-none) infinite; }
 .ts-f-power[data-level="out"] .ts-f-bar { display: none; }
 
-/* Top centre: the compass, this hour's clocks, then what just happened. */
+/* Under the power: the faults to fix, nearest first, like a crew's job list. */
+.ts-f-tasks { display: grid; gap: 3px; margin: 4px 0 0; padding: 0; list-style: none; max-width: min(340px, 40vw); }
+.ts-f-tasks li { display: grid; grid-template-columns: 14px auto 1fr auto; align-items: center; gap: 6px; padding: 3px 8px 3px 6px; border-radius: 6px; border-left: 3px solid var(--yellow); background: var(--ts-plate); color: var(--subtext-1); font-weight: 500; text-shadow: none; }
+.ts-f-tasks li svg { width: 14px; height: 14px; color: var(--yellow); }
+.ts-f-tasks li b { color: var(--text); font-weight: 600; white-space: nowrap; }
+.ts-f-tasks li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-f-tasks li em { font-style: normal; color: var(--subtext-0); }
+.ts-f-tasks li.is-here { border-left-color: var(--green); }
+.ts-f-tasks li[data-state="hot"] { border-left-color: var(--red); }
+.ts-f-tasks li[data-state="hot"] em, .ts-f-tasks li[data-state="burn"] em { color: var(--red); }
+.ts-f-tasks li[data-state="burn"] { border-left-color: var(--red); background: color-mix(in srgb, var(--red) 22%, var(--neu-ink)); }
+.ts-f-tasks li[data-state="burn"] em { animation: ts-blink .6s steps(2, jump-none) infinite; }
+.ts-f-tasks li.is-more { display: block; border-left-color: var(--overlay-0); color: var(--overlay-2); font-size: 11px; }
+.ts-f-tasks li.is-clear { grid-template-columns: 14px 1fr; border-left-color: var(--green); color: var(--overlay-2); }
+.ts-f-tasks li.is-clear svg { color: var(--green); }
+
+/* Hands in a breaker box: the minigame over the bottom half, the room still in view above. */
+@keyframes ts-shake { 20%, 60% { translate: -6px 0; } 40%, 80% { translate: 6px 0; } }
+.ts-f-task { position: absolute; left: 50%; bottom: 0; z-index: 4; transform: translateX(-50%); display: grid; gap: 8px; width: min(640px, 100%); height: 48%; min-height: 230px; max-height: 340px; padding: 12px 16px 14px; border-radius: 14px 14px 0 0; border: 1px solid var(--surface-1); border-bottom: 0; background: color-mix(in srgb, var(--mantle) 94%, transparent); grid-template-rows: auto 1fr auto; pointer-events: auto; text-shadow: none; box-shadow: 0 -12px 40px color-mix(in srgb, var(--crust) 70%, transparent); }
+.ts-f-task.is-wrong { animation: ts-shake .3s; border-color: var(--red); }
+.ts-f-task-head { display: flex; align-items: center; gap: 10px; }
+.ts-f-task-head b { font-size: 16px; }
+.ts-f-task-head > span { flex: 1; color: var(--subtext-0); font-weight: 500; }
+.ts-f-task-head .btn { gap: 6px; }
+.ts-f-task-body { display: grid; place-items: center; min-height: 0; }
+.ts-f-task-help { color: var(--subtext-0); font-weight: 500; font-size: 12px; line-height: 1.8; }
+.ts-f-task-help .ts-key { margin: 0 1px; }
+.ts-fhud[data-touch="true"] .ts-f-task-help, .ts-fhud[data-touch="true"] .ts-f-task .ts-key { display: none; }
+
+.ts-tk-breaker { display: flex; gap: 12px; }
+.ts-tk-switch { all: unset; cursor: pointer; display: grid; justify-items: center; gap: 6px; width: 52px; padding: 8px 0; border-radius: 8px; background: var(--surface-0); border: 2px solid transparent; }
+.ts-tk-switch i { position: relative; width: 22px; height: 56px; border-radius: 4px; background: var(--crust); }
+.ts-tk-switch i::after { content: ""; position: absolute; left: 2px; right: 2px; bottom: 2px; height: 24px; border-radius: 3px; background: var(--red); transition: bottom .12s; }
+.ts-tk-switch.is-up i::after { bottom: 30px; background: var(--green); }
+.ts-tk-switch span { min-width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--yellow); color: var(--crust); font-weight: 700; }
+.ts-tk-switch span:empty { background: none; }
+.ts-tk-switch small { color: var(--overlay-2); }
+.ts-tk-switch.is-sel { border-color: var(--yellow); }
+
+.ts-tk-wires { display: grid; grid-template-columns: 56px 1fr 56px; width: min(440px, 100%); height: 100%; max-height: 210px; }
+.ts-tk-wires > div { display: grid; grid-template-rows: repeat(4, 1fr); align-items: center; justify-items: center; }
+.ts-tk-wires svg { width: 100%; height: 100%; }
+.ts-tk-end { all: unset; display: grid; place-items: center; width: 34px; height: 22px; border-radius: 5px; background: var(--c); opacity: .55; color: var(--crust); font-size: 11px; font-weight: 700; }
+.ts-tk-end.is-live { opacity: 1; box-shadow: 0 0 0 3px var(--surface-0), 0 0 12px var(--c); animation: ts-blink .8s steps(2, jump-none) infinite; }
+.ts-tk-end.is-joined { opacity: 1; }
+.ts-tk-end.is-socket { cursor: pointer; border: 2px solid transparent; }
+.ts-tk-end.is-socket.is-sel { border-color: var(--text); opacity: 1; }
+
+.ts-tk-valve { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-items: center; gap: 10px 18px; width: min(420px, 100%); }
+.ts-tk-dial { grid-row: span 2; position: relative; width: 120px; height: 120px; border-radius: 50%; background: var(--crust); border: 4px solid var(--surface-1); }
+.ts-tk-band { position: absolute; inset: 6px; border-radius: 50%; background: conic-gradient(from -120deg, transparent calc(var(--a) * 240deg), color-mix(in srgb, var(--green) 55%, transparent) 0 calc(var(--b) * 240deg), transparent 0); }
+.ts-tk-needle { position: absolute; left: calc(50% - 2px); bottom: 50%; width: 4px; height: 44%; border-radius: 2px; background: var(--text); transform-origin: 50% 100%; rotate: -120deg; }
+.ts-tk-dial[data-state="ok"] { border-color: var(--green); }
+.ts-tk-dial[data-state="high"] { border-color: var(--red); }
+.ts-tk-fill { height: 10px; border-radius: 5px; background: var(--surface-0); }
+.ts-tk-fill i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--green); }
+.ts-tk-hold { touch-action: none; user-select: none; }
+
+/* Top centre: the compass, then what just happened. */
 .ts-f-nav { position: absolute; top: 10px; left: 50%; width: min(40%, 400px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .ts-f-compass { position: relative; align-self: stretch; height: 44px; }
 .ts-f-compass::before { content: ""; position: absolute; inset: 17px 0 auto; height: 1px; background: linear-gradient(90deg, transparent, var(--overlay-1) 12%, var(--overlay-1) 88%, transparent); }
@@ -141,8 +199,10 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-mark { position: absolute; top: 12px; transform: translateX(-50%); display: grid; justify-items: center; gap: 3px; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ts-f-mark b { font-weight: 600; }
 .ts-f-mark i { box-sizing: border-box; width: 11px; height: 11px; border-radius: 50%; border: 2px solid currentColor; background: var(--neu-ink); }
-.ts-f-mark.is-clock { color: color-mix(in srgb, var(--yellow) 65%, var(--overlay-0)); }
-.ts-f-mark.is-clock.is-near { color: var(--yellow); z-index: 1; }
+.ts-f-mark.is-fault { color: color-mix(in srgb, var(--yellow) 65%, var(--overlay-0)); }
+.ts-f-mark.is-fault.is-near { color: var(--yellow); z-index: 1; }
+.ts-f-mark.is-fault.is-hot { color: var(--red); }
+.ts-f-mark.is-fault.is-hot i { animation: ts-blink .6s steps(2, jump-none) infinite; }
 .ts-f-mark.is-near i { background: currentColor; }
 .ts-f-mark.is-flat { color: var(--red); z-index: 2; }
 .ts-f-mark.is-flat i { width: 16px; height: 7px; margin: 2px 0; border-radius: 4px; background: currentColor; }
@@ -156,15 +216,6 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-mark[data-side="left"] b::before { content: "\2039\00a0"; }
 .ts-f-mark[data-side="right"] b::after { content: "\00a0\203a"; }
 
-.ts-f-rounds { display: flex; align-items: center; gap: 8px; padding: 3px 10px 3px 7px; border-radius: 999px; background: var(--ts-plate); color: var(--yellow); }
-.ts-f-rounds svg { width: 14px; height: 14px; }
-.ts-f-pips { display: flex; gap: 5px; }
-.ts-f-pips i { box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; }
-.ts-f-pips i.is-done { background: var(--green); border-color: var(--green); }
-.ts-f-rounds[data-state="done"] { color: var(--green); }
-.ts-f-rounds[data-state="hurry"] { color: var(--red); }
-.ts-f-rounds[data-state="hurry"] span { animation: ts-blink .6s steps(2, jump-none) infinite; }
-
 .ts-f-toasts { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .ts-f-toast {
   --tc: var(--subtext-0);
@@ -174,9 +225,10 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 }
 .ts-f-toast svg { width: 16px; height: 16px; color: var(--tc); }
 .ts-f-toast.is-gone { opacity: 0; }
-.ts-f-toast.is-clock, .ts-f-toast.is-power { --tc: var(--yellow); }
-.ts-f-toast.is-missed, .ts-f-toast.is-out, .ts-f-toast.is-down { --tc: var(--red); }
-.ts-f-toast.is-missed, .ts-f-toast.is-down { background: color-mix(in srgb, var(--red) 22%, var(--neu-ink)); }
+.ts-f-toast.is-fault, .ts-f-toast.is-power { --tc: var(--yellow); }
+.ts-f-toast.is-fixed { --tc: var(--green); }
+.ts-f-toast.is-burnt, .ts-f-toast.is-out, .ts-f-toast.is-down { --tc: var(--red); }
+.ts-f-toast.is-burnt, .ts-f-toast.is-down { background: color-mix(in srgb, var(--red) 22%, var(--neu-ink)); }
 .ts-f-toast.is-torch { --tc: var(--peach); }
 .ts-f-toast.is-back, .ts-f-toast.is-up { --tc: var(--green); }
 .ts-f-toast.is-call { --tc: var(--sky); }

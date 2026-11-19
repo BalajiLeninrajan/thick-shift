@@ -1,18 +1,18 @@
-// The things a guard uses: watchman's clocks, door buttons, the generator,
+// The things a guard uses: breaker boxes, door buttons, the generator,
 // the charger, spare batteries, the booth's three doors and its wall map.
 // Each starts as a plain stand-in and is swapped for its model from the prop
 // kit when that arrives; if it never does, the stand-ins are the game.
 import * as THREE from 'three';
 import { MASC, DOORS } from '../../config.js';
-import { ROOMS3, DOORWAYS, CLOCKS, GENERATOR, CHARGER, WALL_MAP, PANELS, BATTERY_SPOTS, DOOR_H, BOOTH, roomAt } from '../map.js';
+import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, WALL_MAP, PANELS, BATTERY_SPOTS, DOOR_H, BOOTH, roomAt } from '../map.js';
 import { lightsF } from '../sim3d.js';
 import { floorY } from './shell.js';
 import { canvas } from './tex.js';
 import { prop } from './props.js';
 import { GEN_BACK } from './dressing.js';
 
-const AMBER = 0xffb040, DONE = 0x2c7a2c, OFF = 0x1a0d00, SHUT = 0xd20f39, OPEN = 0x40a02b, DEAD = 0x222222;
-const DUE_LIGHTS = 2;   // real lights for clocks that are due: the nearest two to the guard get one each
+const AMBER = 0xffb040, SPARK = 0xff7a20, DONE = 0x2c7a2c, OFF = 0x1a0d00, SHUT = 0xd20f39, OPEN = 0x40a02b, DEAD = 0x222222;
+const FAULT_LIGHTS = 3;   // real lights for open faults: the nearest three to the guard get one each, flickering like a short
 
 function box(w, h, d, color) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color, roughness: .7 }));
@@ -30,13 +30,13 @@ async function upgrade(group, name, lamp, big) {
   const model = await prop(name);
   if (!model) return null;
   group.clear(); group.add(model);
-  if (!big) model.traverse(o => { o.castShadow = false; });   // a clock's shadow is not worth a second draw
+  if (!big) model.traverse(o => { o.castShadow = false; });   // a small thing's shadow is not worth a second draw
   if (lamp) model.traverse(o => { if (o.isMesh && o.material.name === 'status_glow') { o.material = lamp; o.castShadow = false; } });
   return model;
 }
 
 // The floor plan on the booth wall: a dot for every guard and every mascot
-// on the move, a lamp for every clock that is due. It needs the power.
+// on the move, a red lamp for every open fault. It needs the power.
 function wallMap(scene) {
   const W = 820, H = 380, k = 8.2, ox = 14, oy = 9, c = canvas(W, H), tex = new THREE.CanvasTexture(c.canvas);
   // The model's UVs are glTF's, which run the other way up from a plane's: it gets an unflipped copy of the same canvas.
@@ -55,16 +55,16 @@ function wallMap(scene) {
       c.strokeStyle = '#3d7a4c'; c.lineWidth = 2;
       for (const room of ROOMS3) for (const [x0, z0, x1, z1] of room.rects) { c.fillStyle = '#12261a'; c.fillRect(x0 * k, z0 * k, (x1 - x0) * k, (z1 - z0) * k); c.strokeRect(x0 * k, z0 * k, (x1 - x0) * k, (z1 - z0) * k); }
       for (const d of DOORWAYS) { c.fillStyle = d.key && S.doors[d.key] ? '#c0392b' : '#12261a'; c.fillRect(d.rect[0] * k - 1, d.rect[1] * k - 1, (d.rect[2] - d.rect[0]) * k + 2, (d.rect[3] - d.rect[1]) * k + 2); }
-      CLOCKS.forEach((cl, i) => { if (S.clocks?.[i]) { c.fillStyle = S.clocks[i] === 1 ? '#f9e2af' : '#3d7a4c'; c.beginPath(); c.arc(cl.x * k, cl.z * k, 5, 0, 7); c.fill(); } });
+      BOXES.forEach((cl, i) => { c.fillStyle = S.faults?.[i] ? (t % 1 < .5 ? '#f38ba8' : '#f9e2af') : '#3d7a4c'; c.beginPath(); c.arc(cl.x * k, cl.z * k, S.faults?.[i] ? 7 : 4, 0, 7); c.fill(); });
       for (const m of S.m) if (m.st !== 'rest') { c.fillStyle = MASC[m.i].col; c.beginPath(); c.arc(m.x * k, m.z * k, 8, 0, 7); c.fill(); c.strokeStyle = '#f38ba8'; c.stroke(); }
       for (const p of S.players) if (p.x != null) { c.fillStyle = p.flat ? '#6c7086' : '#a6e3a1'; c.fillRect(p.x * k - 4, p.z * k - 4, 8, 8); }
       c.restore();
       // the legend, in the space the plan leaves
-      const out = S.m.filter(m => m.st !== 'rest').length, due = CLOCKS.filter((_, i) => S.clocks?.[i] === 1);
+      const out = S.m.filter(m => m.st !== 'rest').length, due = BOXES.filter((_, i) => S.faults?.[i]);
       c.fillStyle = '#3d7a4c'; c.font = 'bold 30px monospace'; c.fillText('MASCOT DEPOT', 400, 44);
       c.font = '20px monospace'; c.fillStyle = '#7fbf8a';
       c.fillText(`POWER    ${Math.ceil(S.power)}%`, 400, 86); c.fillText(`OFF MARK ${out} of ${S.m.length}`, 400, 114);
-      c.fillStyle = '#f9e2af'; c.fillText(due.length ? 'CLOCKS DUE' : 'NO CLOCKS DUE', 400, 160);
+      c.fillStyle = due.length ? '#f38ba8' : '#7fbf8a'; c.fillText(due.length ? 'FAULTS' : 'NO FAULTS', 400, 160);
       due.forEach((cl, i) => c.fillText('  ' + ROOMS3[cl.room].name, 400 + (i > 6 ? 200 : 0), 188 + (i % 7) * 26));
     }
     tex.needsUpdate = glbTex.needsUpdate = true;
@@ -72,14 +72,18 @@ function wallMap(scene) {
 }
 
 export function createUsables(scene) {
-  const clocks = CLOCKS.map(cl => {
-    const g = mount(scene, 'clock', cl, 1.45), lamp = lampMat(), body = box(.4, .55, .15, 0x6b5a3a), bulb = new THREE.Mesh(new THREE.SphereGeometry(.05, 12, 8), lamp);
-    body.position.z = .075; bulb.position.set(0, .34, .1); g.add(body, bulb);
-    const c = { lamp, lever: null, at: new THREE.Vector3(cl.x + Math.sin(cl.face) * .35, 1.5, cl.z + Math.cos(cl.face) * .35) };
-    upgrade(g, 'time_clock', lamp).then(model => { c.lever = model?.getObjectByName('lever') || null; });
-    return c;
+  // Breaker boxes: a grey cabinet with a status lamp on top and its door hanging open while it has a fault, sparks
+  // spitting out of it. Seen from down a corridor by the light it throws.
+  const sparkMat = new THREE.SpriteMaterial({ color: SPARK, blending: THREE.AdditiveBlending, depthWrite: false, map: haloTexture() });
+  const boxes = BOXES.map(cl => {
+    const g = mount(scene, 'breaker box', cl, 1.3), lamp = lampMat(), body = box(.5, .7, .16, 0x5a5f66), bulb = new THREE.Mesh(new THREE.SphereGeometry(.05, 12, 8), lamp);
+    const door = new THREE.Group(), slab = box(.48, .68, .03, 0x6b7078);
+    slab.position.x = .24; door.add(slab); door.position.set(-.25, 0, .17);
+    body.position.z = .08; bulb.position.set(0, .42, .1); g.add(body, bulb, door);
+    const sparks = Array.from({ length: 3 }, () => { const s = new THREE.Sprite(sparkMat); s.scale.setScalar(.25); s.position.set(0, 0, .25); s.visible = false; g.add(s); return s; });
+    return { lamp, door, sparks, at: new THREE.Vector3(cl.x + Math.sin(cl.face) * .5, 1.4, cl.z + Math.cos(cl.face) * .5) };
   });
-  const dueLights = Array.from({ length: DUE_LIGHTS }, () => { const l = new THREE.PointLight(AMBER, 0, 5.5, 2); scene.add(l); return l; });
+  const faultLights = Array.from({ length: FAULT_LIGHTS }, () => { const l = new THREE.PointLight(SPARK, 0, 9, 1.6); scene.add(l); return l; });
 
   const panels = Object.fromEntries(DOORS.map(k => {
     const g = mount(scene, 'door button', PANELS[k], 1.3), lamp = lampMat(), body = box(.25, .4, .1, 0x3b3f4a), btn = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, .05, 16), lamp);
@@ -121,21 +125,27 @@ export function createUsables(scene) {
     return [d.key, { g, h, at: 0 }];
   }));
 
-  const updateMap = wallMap(scene), order = clocks.map((_, i) => i);
+  const updateMap = wallMap(scene), order = boxes.map((_, i) => i);
   return {
     // inView: the rooms that might be seen from the camera (sight.js).
     update(S, t, dt, camera, inView) {
       updateMap(S, t);
       for (const g of placed) g.visible = inView.has(g.userData.room);
       const pulse = .6 + .4 * Math.sin(t * 6);
-      clocks.forEach((c, i) => {
-        const state = S.clocks?.[i];
-        c.lamp.color.setHex(state === 1 ? AMBER : state === 2 ? DONE : OFF).multiplyScalar(state === 1 ? pulse : 1);
-        if (c.lever) c.lever.rotation.x += ((state === 2 ? .7 : 0) - c.lever.rotation.x) * Math.min(1, dt * 10);
+      // A short: bursts of light at random, never steady.
+      const crackle = i => (Math.sin(t * 37 + i * 9.1) * Math.sin(t * 23.7 + i * 3.3) > .2 ? 1 : .15) * (.7 + .3 * Math.sin(t * 90 + i));
+      boxes.forEach((c, i) => {
+        const f = S.faults?.[i];
+        c.lamp.color.setHex(f ? (pulse > .6 ? 0xff2020 : AMBER) : S.power > 0 ? DONE : OFF);
+        c.door.rotation.y += ((f ? -1.6 : 0) - c.door.rotation.y) * Math.min(1, dt * 8);
+        c.sparks.forEach((s, k) => {
+          s.visible = !!f && crackle(i * 3 + k) > .5;
+          if (s.visible) s.position.set(Math.sin(t * 17 + k * 2) * .18, Math.cos(t * 13 + k * 5) * .25, .2 + k * .03);
+        });
       });
-      order.sort((a, b) => clocks[a].at.distanceToSquared(camera.position) - clocks[b].at.distanceToSquared(camera.position));
-      const due = order.filter(i => S.clocks?.[i] === 1);
-      dueLights.forEach((l, k) => { l.intensity = k < due.length ? pulse * 1.6 : 0; if (k < due.length) l.position.copy(clocks[due[k]].at); });
+      order.sort((a, b) => boxes[a].at.distanceToSquared(camera.position) - boxes[b].at.distanceToSquared(camera.position));
+      const open = order.filter(i => S.faults?.[i]);
+      faultLights.forEach((l, k) => { l.intensity = k < open.length ? 2.2 * crackle(open[k]) : 0; if (k < open.length) l.position.copy(boxes[open[k]].at); });
       for (const k of DOORS) {
         const p = panels[k], shut = !!S.doors[k];
         p.lamp.color.setHex(S.power <= 0 ? DEAD : shut ? SHUT : OPEN);
