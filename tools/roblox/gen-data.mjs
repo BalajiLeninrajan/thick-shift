@@ -8,7 +8,6 @@
 // one up.
 import { writeFileSync, readFileSync } from 'node:fs';
 
-process.removeAllListeners('warning');
 const src = new URL('../../packages/game/src/', import.meta.url);
 const config = await import(new URL('config.js', src));
 const map = await import(new URL('three/map.js', src));
