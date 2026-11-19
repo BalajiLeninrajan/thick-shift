@@ -190,6 +190,44 @@ export function shriek(level = .7, at = 0) {
   mix.connect(cut1).connect(cut2).connect(bite).connect(chop).connect(amp).connect(out());
 }
 
+// Wind-up teeth where they came down (TEETH in three/sim3d.js): a clatter of plastic on the floor, then the jaw
+// clacking, fast at first and slowing as the spring runs down over `secs`, each clack a hit and a smaller one as
+// it springs back. Every clack rings a hollow plastic note. Made once into a buffer, so the whole run is one voice
+// and not forty.
+let chatterBuf = null;
+export function chatter(gain = .6, at = 0, secs = 3) {
+  if (full()) return;
+  chatterBuf ||= chatterBuffer(secs);
+  const src = ac.createBufferSource(), g = ac.createGain(), t = ac.currentTime + at;
+  src.buffer = chatterBuf; g.gain.value = gain;
+  src.connect(g).connect(out());
+  play(src, g, t, t + chatterBuf.duration);
+}
+function chatterBuffer(secs) {
+  const sr = ac.sampleRate, len = Math.ceil(sr * (secs + .5)), buf = ac.createBuffer(1, len, sr), d = buf.getChannelData(0);
+  // A click of noise two milliseconds long, ringing a resonance at hz for a few milliseconds more.
+  const clack = (t, v, hz) => {
+    const i0 = Math.floor(t * sr), n = Math.floor(sr * .04), w = 2 * Math.PI * hz / sr, r = .997, c1 = 2 * r * Math.cos(w), c2 = -r * r;
+    let y1 = 0, y2 = 0;
+    for (let k = 0; k < n && i0 + k < len; k++) {
+      const x = k < sr * .002 ? (Math.random() * 2 - 1) * v : 0, y = x * .02 + c1 * y1 + c2 * y2;
+      y2 = y1; y1 = y;
+      d[i0 + k] += y + x * .4;
+    }
+  };
+  [0, .1, .17].forEach((t, k) => clack(t, 1 - k * .3, 1300 + k * 250));   // it lands and bounces
+  for (let t = .32; t < secs + .32;) {
+    const left = 1 - (t - .32) / secs, rate = 3 + 8 * left;
+    clack(t, .4 + .5 * left, 2300 + Math.random() * 300);
+    clack(t + .3 / rate, .15 + .2 * left, 1750);
+    t += 1 / rate * (.9 + Math.random() * .2);
+  }
+  let peak = 0;
+  for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(d[i]));
+  for (let i = 0; i < len; i++) d[i] /= peak * 1.1;
+  return buf;
+}
+
 // The part of a heavy impact you feel more than hear.
 export function boom({ from = 72, to = 30, level = .9, at = 0 } = {}) {
   if (full()) return;

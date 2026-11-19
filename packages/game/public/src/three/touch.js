@@ -1,8 +1,9 @@
 // Touch controls: a stick under the left thumb, look by
 // dragging anywhere else, and buttons for the torch, the phone, its map's
-// zoom, running and using things. They drive the guard through player.pad,
-// player.look, player.toggleTorch, player.togglePhone and player.toggleZoom,
-// and show only while a finger is the pointer.
+// zoom, the wind-up teeth, running and using things. They drive the guard
+// through player.pad, player.look, player.toggleTorch, player.togglePhone,
+// player.toggleZoom and player.throwTeeth, and show only while a finger is the pointer.
+import { game } from '../state.js';
 import { unlockAudio } from '../audio.js';
 
 const STICK_R = 48;       // pixels the knob travels for full speed
@@ -12,6 +13,8 @@ const LOOK = 2.6;         // a thumb drags fewer pixels than a mouse travels
 const TORCH = '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><path d="M6 6h12M12 12v2"/></svg>';
 
 const PHONE = '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="5" width="10" height="17" rx="2"/><path d="M14 5V2M9.5 8.5h5v4h-5zM10 16h.01M14 16h.01M12 19h.01"/></svg>';
+
+const TEETH = '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10V9a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4v1zM3 14v1a4 4 0 0 0 4 4h9a4 4 0 0 0 4-4v-1z"/><path d="M7.5 10v2M11.5 10v2M15.5 10v2M9.5 14v-2M13.5 14v-2M20 12h2"/></svg>';
 
 export const canFullscreen = !!document.documentElement.requestFullscreen;
 // Phones that allow it are also turned to landscape, which is the only layout.
@@ -29,9 +32,10 @@ export function createTouch(root, player) {
     <button class="ts-t-btn ts-t-torch" aria-label="Torch" aria-pressed="false">${TORCH}</button>
     <button class="ts-t-btn ts-t-use">Use</button>
     <button class="ts-t-btn ts-t-phone" aria-label="Phone" aria-pressed="false">${PHONE}</button>
-    <button class="ts-t-btn ts-t-zoom" aria-label="Zoom the map" aria-pressed="false">Map</button>`;
+    <button class="ts-t-btn ts-t-zoom" aria-label="Zoom the map" aria-pressed="false">Map</button>
+    <button class="ts-t-btn ts-t-teeth" aria-label="Throw wind-up teeth">${TEETH}<b></b></button>`;
   root.append(layer);
-  const [stickEl, runBtn, torchBtn, useBtn, phoneBtn, zoomBtn] = layer.children, knob = stickEl.firstChild;
+  const [stickEl, runBtn, torchBtn, useBtn, phoneBtn, zoomBtn, teethBtn] = layer.children, knob = stickEl.firstChild, teethN = teethBtn.lastChild;
   let stick = null, drag = null;   // the finger on the stick and the finger looking: { id, x, y }
 
   // Whichever kind of pointer was used last decides whether these controls show.
@@ -86,6 +90,8 @@ export function createTouch(root, player) {
   press(torchBtn, () => player.toggleTorch());
   press(phoneBtn, () => player.togglePhone());
   press(zoomBtn, () => player.toggleZoom());
+  // Thrown where the view points, as with the key: drag to look down at a spot first to throw it short.
+  press(teethBtn, () => player.throwTeeth());
   press(runBtn, () => { pad.sprint = !pad.sprint; });
 
   const flag = (e, name, v) => { if (e.getAttribute(name) !== String(v)) e.setAttribute(name, v); };
@@ -100,6 +106,9 @@ export function createTouch(root, player) {
       if (zoomBtn.hidden === me.ph) zoomBtn.hidden = !me.ph;
       flag(runBtn, 'aria-pressed', pad.sprint);
       useBtn.classList.toggle('is-ready', !!me.target);
+      const sets = game.S?.players.find(p => p.id === game.myId)?.teeth ?? 0;
+      if (teethN.textContent !== String(sets)) teethN.textContent = sets;
+      flag(teethBtn, 'data-n', sets);
     },
   };
 }

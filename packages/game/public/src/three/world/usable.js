@@ -1,10 +1,11 @@
 // The things a guard uses: breaker boxes, door buttons, the generator,
-// the charger, spare batteries, the booth's three doors and its wall map.
+// the charger, spare batteries, the booth's three doors and its wall map, and
+// the carton of wind-up teeth on the prize counter.
 // Each starts as a plain stand-in and is swapped for its model from the prop
 // kit when that arrives; if it never does, the stand-ins are the game.
 import * as THREE from 'three';
 import { MASC, DOORS } from '../../config.js';
-import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, WALL_MAP, PANELS, BATTERY_SPOTS, DOOR_H, BOOTH, roomAt } from '../map.js';
+import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, WALL_MAP, PANELS, BATTERY_SPOTS, PRIZES, DOOR_H, BOOTH, roomAt } from '../map.js';
 import { lightsF } from '../sim3d.js';
 import { floorY } from './shell.js';
 import { canvas } from './tex.js';
@@ -125,10 +126,11 @@ export function createUsables(scene) {
     return [d.key, { g, h, at: 0 }];
   }));
 
+  const carton = prizeCarton(scene);
   const updateMap = wallMap(scene), order = boxes.map((_, i) => i);
   return {
     // The groups that can be outlined (outline.js), by what a guard would use them for.
-    parts: { boxes: boxes.map(b => b.g), bats: bats.map(b => b.g), gen, dock, panels: Object.fromEntries(DOORS.map(k => [k, panels[k].g])) },
+    parts: { boxes: boxes.map(b => b.g), bats: bats.map(b => b.g), gen, dock, panels: Object.fromEntries(DOORS.map(k => [k, panels[k].g])), carton },
     // inView: the rooms that might be seen from the camera (sight.js).
     update(S, t, dt, camera, inView) {
       updateMap(S, t);
@@ -161,6 +163,26 @@ export function createUsables(scene) {
       if (S.crank) crank.rotation.z = t * 7;
     },
   };
+}
+
+// The carton the wind-up teeth come in, standing on the prize counter with its label to the Arcade. Drawn in code:
+// the prop kit's counter has no such thing.
+const CARTON = { w: .34, h: .22, d: .22, top: 1.0, back: .3 };   // metres; top: the counter's height; back: how far behind PRIZES it stands
+function prizeCarton(scene) {
+  const c = canvas(256, 166), g = c;
+  g.fillStyle = '#e8782a'; g.fillRect(0, 0, 256, 166);
+  g.fillStyle = '#c8506a'; g.fillRect(0, 0, 256, 38); g.fillRect(0, 138, 256, 28);
+  g.fillStyle = '#fff6e0'; g.textAlign = 'center'; g.font = 'bold 30px sans-serif'; g.fillText('BIGGS BITES', 128, 30);
+  // the grin itself, as the box draws it
+  g.fillStyle = '#7a1e32'; g.beginPath(); g.ellipse(128, 80, 70, 34, 0, 0, Math.PI); g.fill();
+  g.fillStyle = '#fff6e0'; for (let k = 0; k < 7; k++) { g.fillRect(70 + k * 17, 80, 13, k === 0 || k === 6 ? 24 : 14); g.fillRect(70 + k * 17, 104, 13, 10); }
+  g.fillStyle = '#2a1408'; g.font = 'bold 15px sans-serif'; g.fillText('WIND-UP CHATTERING TEETH', 128, 132); g.fillStyle = '#fff6e0'; g.fillText('40 TICKETS · DO NOT FEED', 128, 158);
+  const tex = new THREE.CanvasTexture(c.canvas); tex.colorSpace = THREE.SRGBColorSpace;
+  const at = { room: PRIZES.room, x: PRIZES.x - Math.sin(PRIZES.face) * CARTON.back, z: PRIZES.z - Math.cos(PRIZES.face) * CARTON.back, face: PRIZES.face };
+  const grp = mount(scene, 'prize carton', at, CARTON.top + CARTON.h / 2), body = box(CARTON.w, CARTON.h, CARTON.d, 0xc8603a);
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(CARTON.w * .96, CARTON.h * .92), new THREE.MeshStandardMaterial({ map: tex, roughness: .8 }));
+  label.position.z = CARTON.d / 2 + .002; grp.add(body, label);
+  return grp;
 }
 
 function haloTexture() {

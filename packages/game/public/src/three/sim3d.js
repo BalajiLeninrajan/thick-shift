@@ -15,6 +15,8 @@
 // peels you up. Everyone flat at once ends the night. A guard can step into a
 // locker to get out of sight. A mascot that saw them go in pulls them out, one
 // that lost them nearby checks the lockers, and one that lingers sniffs them out.
+// A guard can also throw a set of wind-up teeth from the prize counter: where it
+// lands it chatters, and a mascot wandering nearby goes to see who is there.
 //
 // The numbers here were tuned against scripted guards in tools/balance/floor.mjs
 // (`node tools/balance/floor.mjs`), which plays every night with careless,
@@ -28,7 +30,7 @@
 // README's "Balance on the floor").
 import { MASC, FINAL_NIGHT, DOORS } from '../config.js';
 import { game, rnd } from '../state.js';
-import { BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, REST, BOOTH, DUCTS, MASCOT_R, PLAYER_R, DOORWAYS, ROOMS3, walkable, slide, clear, sees, reaches, roomAt, roomCentre, route, spawnPoint } from './map.js';
+import { BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, PRIZES, REST, BOOTH, DUCTS, MASCOT_R, PLAYER_R, DOORWAYS, ROOMS3, walkable, slide, clear, sees, reaches, roomAt, roomCentre, route, spawnPoint } from './map.js';
 
 // Tuning. Clients read some of these to draw bars and prompts.
 export const F = {
@@ -123,6 +125,16 @@ const SNIFF = { near: 1.6, time: 3 };
 // doors and opens them, empty or not. The way to beat it is to get further than that, or to outlast its wind.
 const CHECK = { near: 8, chance: .5, most: 2 };
 const LOCKER_NOISE = [6, .5];
+// Wind-up teeth (Biggs Bites, 40 tickets at the prize counter, PRIZES in map.js). A guard clocks in with `start` sets
+// and carries `carry` at most; the counter's box holds `box` more each night, and one more for each guard. A set is
+// thrown along the guard's view, no further than `range` metres, and flies at `speed` metres a second over the
+// furniture until a wall or a shut door stops it. Where it lands it chatters, which is a noise() of `hear` metres at
+// `chance`: whatever is wandering or searching nearby goes to look, and whatever is already after a guard does not,
+// so they buy a way past, not a way out. `gap` is the seconds between two throws, and S.teeth keeps the last `keep`
+// sets thrown so the clients can draw them. Checked against the harness, whose competent and expert guards throw a
+// set to draw a wanderer off their way: they throw two or three a night each, a third to two thirds of a mascot goes
+// to look per set, and they win about as often as they did without them. The strategies that must lose still lose.
+export const TEETH = { start: 2, carry: 3, box: 2, range: 14, speed: 11, hear: 12, chance: .9, chatter: 3, gap: 1, keep: 8 };
 
 const OPEN = () => ({ L: false, V: false, R: false });
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -198,7 +210,7 @@ const standing = S => S.players.filter(p => !p.flat);
 const outside = S => S.players.filter(p => !p.flat && !hidden(p));
 
 function placeGuard(p, i) {
-  Object.assign(p, spawnPoint(i), { pitch: 0, on: false, ph: false, bat: 1, flat: false, flatBy: -1, sp: false, act: '', safe: 0, callAt: 0, hid: -1 });
+  Object.assign(p, spawnPoint(i), { pitch: 0, on: false, ph: false, bat: 1, flat: false, flatBy: -1, sp: false, act: '', safe: 0, callAt: 0, hid: -1, teeth: TEETH.start, throwAt: 0 });
 }
 
 // A room's state before its first night. evs is the event list (emit); deaths and slams count the whole run.
@@ -228,6 +240,10 @@ export function startFloorNight(n) {
   const spots = BATTERY_SPOTS.map((_, i) => i).sort(() => Math.random() - .5);
   S.batN = Math.min(spots.length, 3 + all.length);   // the night's batteries, lying about or due back
   S.bats = spots.slice(0, S.batN);
+  // The wind-up teeth: what is left in the prize counter's box, and the sets thrown, newest last. Each set is
+  // { by, x0, z0: where it left the hand, x, z: where it lands, at: when it was thrown, land: when it lands, heard }.
+  S.prizes = TEETH.box + all.length;
+  S.teeth = [];
   batTimers = []; crankNoise = 0;
 }
 
@@ -253,6 +269,8 @@ export function adoptFloor() {
   const missing = (S.batN ?? Math.min(BATTERY_SPOTS.length, 3 + S.players.length)) - (S.bats || []).length;
   batTimers = Array.from({ length: Math.max(0, missing) }, () => rnd(5, 50)).sort((a, b) => a - b);
   S.waveAt ??= S.t + rnd(.2, 1) * (S.stir ? rnd(...STIR) * (1 + h) : rnd(...CALM) * (1 - .7 * h));
+  // A host from before the teeth sent none.
+  S.teeth ||= []; S.prizes ??= TEETH.box + S.players.length;
   // When the next fault was due is lost too, so it comes any time in a usual gap.
   nextFault = faultGap(S) * rnd(.2, 1);
   crankNoise = 0;
@@ -377,6 +395,25 @@ function noise(S, x, z, radius, chance) {
     if (!['roam', 'search'].includes(m.st) || b.home || Math.hypot(m.x - x, m.z - z) > radius || Math.random() > chance) return;
     m.st = 'search'; b.last = { x, z }; b.timer = rnd(3, 6); b.repath = 0;
   });
+}
+
+// Where a thrown thing comes down: along `yaw` from (x, z), as far as d, but short of a wall or a shut door. It goes
+// over the furniture, not onto it: one that would come down on a table drops back toward the thrower.
+export function landing(S, x, z, yaw, d) {
+  const sx = Math.sin(yaw), sz = Math.cos(yaw), step = .25;
+  let k = 0;
+  while (k + step <= d && walkable(x + sx * (k + step), z + sz * (k + step), .1, S.doors, true)) k += step;
+  while (k > 0 && !walkable(x + sx * k, z + sz * k, .1, S.doors)) k -= step;
+  return { x: x + sx * k, z: z + sz * k };
+}
+
+// Thrown teeth that have just come down chatter where they land, and whatever hears them comes to look.
+function landTeeth(S) {
+  for (const s of S.teeth) if (!s.heard && S.t >= s.land) {
+    s.heard = true;
+    emit('teeth', { by: s.by, x: s.x, z: s.z });
+    noise(S, s.x, s.z, TEETH.hear, TEETH.chance);
+  }
 }
 
 // Where to walk next.
@@ -673,6 +710,7 @@ export function stepFloor() {
   respawnBatteries(S, dt);
   turnWave(S);
   if (S.crank && (crankNoise -= dt) <= 0) { crankNoise = 2; noise(S, GENERATOR.x, GENERATOR.z, 24, .35); }
+  landTeeth(S);
   if (S.dev?.freeze) return;
   for (let i = 0; i < S.m.length && S.phase === 'play'; i++) runMascot(S, S.m[i], brains[i], dt);
 }
@@ -702,6 +740,15 @@ export function actFloor(pid, a) {
     if (p.flat && S.t >= (p.callAt || 0)) { p.callAt = S.t + F.CALL_GAP; emit('call', { id: p.id, x: p.x, z: p.z }); }
     return;
   }
+  if (a.t === 'throw') {
+    // A set of teeth, along the way the guard is looking (yaw) and as far as they aimed (d). Not from a locker.
+    if (p.flat || hidden(p) || !(p.teeth > 0) || S.t < (p.throwAt || 0)) return;
+    const to = landing(S, p.x, p.z, num(a.yaw, -1e3, 1e3, p.yaw), num(a.d, 0, TEETH.range, TEETH.range));
+    p.teeth--; p.throwAt = S.t + TEETH.gap;
+    S.teeth.push({ by: p.id, x0: p.x, z0: p.z, x: to.x, z: to.z, at: S.t, land: S.t + Math.max(.3, dist(p, to) / TEETH.speed), heard: false });
+    if (S.teeth.length > TEETH.keep && S.teeth[0].heard) S.teeth.shift();   // never one still in the air
+    return;
+  }
   if (a.t !== 'use' || p.flat) return;
   const near = thing => thing && dist(p, thing) < F.REACH;
   if (a.what === 'fix' && S.faults[a.i] && near(BOXES[a.i])) {
@@ -720,6 +767,11 @@ export function actFloor(pid, a) {
     batTimers.push(rnd(30, 50));
     p.bat = Math.min(1, p.bat + F.BAT_PICKUP);
     emit('bat', { by: p.id });
+  } else if (a.what === 'teeth' && near(PRIZES) && S.prizes > 0 && p.teeth < TEETH.carry) {
+    // As many from the prize counter's box as the guard has room for.
+    const n = Math.min(S.prizes, TEETH.carry - p.teeth);
+    S.prizes -= n; p.teeth += n;
+    emit('prize', { by: p.id, n, x: PRIZES.x, z: PRIZES.z });
   } else if (a.what === 'hide' && HIDES[a.i]) {
     const h = HIDES[a.i];
     if (p.hid === a.i) {

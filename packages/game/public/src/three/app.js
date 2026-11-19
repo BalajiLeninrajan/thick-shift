@@ -114,6 +114,13 @@ function create() {
       else hud.say(`${MASC[e.x.i].name} pulled ${guard(e.x.id)?.name || 'someone'} out of a locker ${where(e.x)}.`, 'hide', 6);
     },
     fumble(e) { if (isMe(e.x.by)) hud.say('The door will not shut. Something is standing in it.', 'info', 3); },
+    // The first time the mascots get up: what the teeth in your pocket are for.
+    stir() { hud.tip('teeth', 'They are up. {throw} throws a set of wind-up teeth where you are looking, and anything wandering near where it lands goes to see who is chattering. Not anything already after you. The prize counter in the Arcade has more.'); },
+    prize(e) {
+      if (!isMe(e.x.by)) return;
+      const left = game.S.prizes;
+      hud.say(`${e.x.n === 1 ? 'A set' : e.x.n === 2 ? 'Two sets' : 'Three sets'} of wind-up teeth. ${left ? `${left} left in the box.` : 'That was the last of the box.'}`, 'teeth', 3);
+    },
   };
 
   // How scared this guard should be right now, 0 to 1: something hunting, close.

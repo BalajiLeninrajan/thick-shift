@@ -8,6 +8,7 @@
 //   scare.js   the catch, seen by the guard who was caught
 //   hands.js   your own torch, held in view
 //   phone.js   your own phone, held in view, with the minimap (app.js makes it)
+//   teeth.js   the wind-up teeth guards throw, in the air and chattering on the floor
 import * as THREE from 'three';
 import { MASC } from '../config.js';
 import { game } from '../state.js';
@@ -18,6 +19,7 @@ import { Mascot } from './actors/mascot.js';
 import { Guard } from './actors/guard.js';
 import { createScare } from './actors/scare.js';
 import { createHands } from './actors/hands.js';
+import { createTeeth } from './actors/teeth.js';
 
 // Other guards' torches are real lights, but every light costs every pixel, so
 // there are only this many: the nearest lit torches get them and the rest make do with a glowing lens.
@@ -26,7 +28,7 @@ const nearest = (a, b) => a.dist - b.dist;
 
 export function createActors(scene, camera, renderer) {
   const mascots = MASC.map((_, i) => new Mascot(scene, i, renderer));
-  const guards = new Map(), scare = createScare(camera, renderer.domElement), hands = createHands(camera);
+  const guards = new Map(), scare = createScare(camera, renderer.domElement), hands = createHands(camera), teeth = createTeeth(scene);
   // watch: the guard a flat guard is watching through. frustum: what this screen shows, so a mascot only changes model off it.
   const view = { x: 0, y: 0, z: 0, id: '', flat: false, torch: false, watch: null, frustum: new THREE.Frustum() }, viewProj = new THREE.Matrix4();
   let lights = null;   // made when the first other guard turns up, so a guard alone pays for none
@@ -47,7 +49,7 @@ export function createActors(scene, camera, renderer) {
   return {
     mascots, guards, scare,
     // A night began: forget where everything was.
-    reset() { scare.stop(); for (const m of mascots) m.reset(); },
+    reset() { scare.stop(); teeth.reset(); for (const m of mascots) m.reset(); },
     // Every new event from the host comes through here.
     event(e, S, me) {
       const x = e.x;
@@ -77,6 +79,7 @@ export function createActors(scene, camera, renderer) {
       }
       for (let i = list.length - 1; i >= 0; i--) if (!list[i].here) { list[i].dispose(scene); guards.delete(list[i].id); list.splice(i, 1); }
       if (guards.size || lights) lendLights();
+      teeth.sync(S, view);
       scare.update(me, dt, torch);
       hands.update(me, dt, scare.active);
     },

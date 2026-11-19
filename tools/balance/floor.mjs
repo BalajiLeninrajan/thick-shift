@@ -242,10 +242,11 @@ function setDoor(S, bot, k, shut) {
 
 // react: seconds before something perceived is acted on. fov: half-angle of what counts as in front.
 // torch: 'always' on outside the booth, 'thrifty' the same but keeps the last of it (reserve) for holding something off.
+// teeth: throws the wind-up teeth to draw a wanderer off their way, and picks more up at the prize counter in passing.
 const SKILL = {
-  careless: { react: .9, fov: .9, torch: 'always', map: false, plans: false, doors: false, cranks: false, peelRange: 12, dodges: false, alert: 7, beam: 1.2, reserve: 0 },
-  competent: { react: .5, fov: 1.5, torch: 'thrifty', map: true, plans: true, doors: true, cranks: true, peelRange: 99, dodges: true, alert: 15, beam: 2.5, reserve: .15 },
-  expert: { react: .25, fov: 2.2, torch: 'thrifty', map: true, plans: true, doors: true, cranks: true, peelRange: 99, dodges: true, alert: 15, beam: 2.5, reserve: .2 },
+  careless: { react: .9, fov: .9, torch: 'always', map: false, plans: false, doors: false, cranks: false, peelRange: 12, dodges: false, alert: 7, beam: 1.2, reserve: 0, teeth: false },
+  competent: { react: .5, fov: 1.5, torch: 'thrifty', map: true, plans: true, doors: true, cranks: true, peelRange: 99, dodges: true, alert: 15, beam: 2.5, reserve: .15, teeth: true },
+  expert: { react: .25, fov: 2.2, torch: 'thrifty', map: true, plans: true, doors: true, cranks: true, peelRange: 99, dodges: true, alert: 15, beam: 2.5, reserve: .2, teeth: true },
 };
 // alert: how near something coming has to be before they do anything about it. beam: seconds away it is when the torch goes on it.
 
@@ -348,6 +349,8 @@ function defend(S, bot, objective) {
   st.chased ??= S.t;
   const h = hs[0], d = dist(bot, h), sight = M.sees(bot.x, bot.z, h.x, h.z, S.doors);
   // Tank winding up or already coming: get out of its line.
+  // Something wandering close that is not after anyone yet: a set of teeth thrown away from here may take it off.
+  if (!COMING.includes(h.st)) lure(S, bot, objective?.use ? objective.use.stand || front(objective.use.at) : objective?.goal || bot);
   const tank = sk.dodges && known(S, bot, 1.5).find(k => k.i === 3 && (k.st === 'windup' || k.st === 'charge') && (S.t - st.dodgeAt < 3 || M.sees(bot.x, bot.z, k.x, k.z, S.doors)));
   if (tank) {
     // Sideways, to whichever side has more room, and the same side until it has gone past.
@@ -413,6 +416,9 @@ function objectiveOf(S, bot, team) {
     const b = S.bats.map(i => M.BATTERY_SPOTS[i]).filter(s => dist(bot, s) < (bot.bat < sk.reserve ? 14 : 5) && M.sees(bot.x, bot.z, s.x, s.z, S.doors)).sort((a, c) => dist(bot, a) - dist(bot, c))[0];
     if (b && bot.bat <= 1 - F.BAT_PICKUP * .6) return { use: { what: 'bat', i: M.BATTERY_SPOTS.indexOf(b), at: b, stand: b, hold: .2, key: 'bat' } };
   }
+  // 3b. More wind-up teeth, from the prize counter, if it is close and in sight.
+  const me = game.players[bot.id];
+  if (sk.teeth && S.prizes > 0 && me.teeth < sim.TEETH.carry && dist(bot, front(M.PRIZES)) < 8 && M.sees(bot.x, bot.z, M.PRIZES.x - .3, M.PRIZES.z, S.doors)) return { use: { what: 'teeth', at: M.PRIZES, hold: .2, key: 'teeth' } };
   // 4. The generator, if it is our job and the power needs it.
   const genJob = cranker(team) === bot;
   // A crew has the building's whole supply to keep up and more hands, so it starts sooner. An expert cranks between waves.
@@ -449,6 +455,7 @@ const honest = (skill, opts = {}) => ({
     const to = obj.use ? obj.use.stand || front(obj.use.at) : obj.goal;
     const deadline = obj.fault ? sim.faultLeft(S, obj.fault) : 1e9;
     if (sk.plans && to && dist(bot, to) > 2 && wayTo(S, bot, to).risk && !obj.urgent && deadline > dist(bot, to) / F.WALK * 1.4 + 8) {
+      lure(S, bot, to);   // and wait all the same while it goes
       const nearest = known(S, bot, 4).filter(h => MOVING.includes(h.st)).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
       w.goal = booth ? BOOTH_MID : nearest && dist(bot, nearest) < 8 ? fleeTo(S, bot, race(S, bot, [nearest], () => 3)) : null; w.use = null;
       return;
@@ -457,6 +464,27 @@ const honest = (skill, opts = {}) => ({
     if (obj.use && (obj.urgent || obj.fault) && dist(bot, obj.use.at) / F.WALK > (obj.urgent ? 3 : sim.faultLeft(S, obj.fault) - 6)) w.sprint = true;
   },
 });
+
+// Wind-up teeth. The nearest thing this guard can see wandering or searching (not after anyone): throw a set where it
+// will hear them, and where walking to them takes it away from the guard and from where the guard is going (to).
+// Sixteen ways round are tried. Returns true if one was thrown.
+function lure(S, bot, to) {
+  const me = game.players[bot.id], st = bot.state;
+  if (!bot.skill.teeth || !(me.teeth > 0) || S.t < (me.throwAt || 0) || S.t < (st.lureAt || 0)) return false;
+  const h = known(S, bot, 1.5).filter(k => k.how !== 'map' && (k.st === 'roam' || k.st === 'search') && dist(bot, k) < 14).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
+  if (!h) return false;
+  let best = null;
+  for (let k = 0; k < 16; k++) {
+    const yaw = k * Math.PI / 8, at = sim.landing(S, bot.x, bot.z, yaw, sim.TEETH.range);
+    if (dist(at, h) > sim.TEETH.hear - 2 || dist(at, bot) < 6 || dist(at, to) < 6 || segDist(h, at, bot) < 4) continue;
+    const score = dist(at, bot) + dist(at, to) - dist(at, h);
+    if (!best || score > best.score) best = { yaw, d: dist(bot, at), score };
+  }
+  if (!best) return false;
+  st.lureAt = S.t + 6;   // and give that one time to work before throwing another
+  sim.actFloor(bot.id, { t: 'throw', yaw: best.yaw, d: best.d });
+  return true;
+}
 
 // Lockers (M.HIDES). The nearest one nobody is in, within `within` metres, as something to use.
 function freeLocker(S, bot, within) {
@@ -479,10 +507,12 @@ function stayHidden(S, bot) {
 /* ---------- playing to break it ---------- */
 
 const DEGENERATE = {
-  // Everyone in the booth, every door shut, nobody goes anywhere.
-  turtle: () => ({ skill: SKILL.competent, think(S, bot) {
+  // Everyone in the booth, every door shut, nobody goes anywhere. teeth: and throw the wind-up teeth at whatever
+  // wanders near, to keep it off the doors.
+  turtle: teeth => ({ skill: SKILL.competent, think(S, bot) {
     const w = bot.want;
     w.on = !sim.lightsF(S);
+    if (teeth) lure(S, bot, BOOTH_MID);
     for (const k of ['L', 'V', 'R']) if ((bot.i + 'LVR'.indexOf(k)) % 3 === 0 || S.t > 4) if (setDoor(S, bot, k, true)) return;
     const h = known(S, bot).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
     if (h && dist(bot, h) < 12) { w.face = ang(bot, h); w.on = true; }
@@ -594,7 +624,7 @@ function play(sc, seed, trace) {
   const S = game.S;
   if (sc.dev) S.dev = sc.dev;
   for (const b of team.bots) Object.assign(b, { x: game.players[b.id].x, z: game.players[b.id].z, bat: 1, flat: false });
-  const out = { win: false, t: 0, flats: 0, peels: 0, by: [0, 0, 0, 0], warn: [], firstFlat: 1e9, notes: [], hunted: 0, quiet: 0, calms: 0, stood: 0, lit: 0, dead: 0, low: 0, dry: 0, dryFlat: 0, darkFlat: 0, power: 0, burnt: 0, fixed: 0, outs: 0, cranked: 0, shut: 0, bangs: 0, charging: 0 };
+  const out = { win: false, t: 0, flats: 0, peels: 0, by: [0, 0, 0, 0], warn: [], firstFlat: 1e9, notes: [], hunted: 0, quiet: 0, calms: 0, stood: 0, lit: 0, dead: 0, low: 0, dry: 0, dryFlat: 0, darkFlat: 0, power: 0, burnt: 0, fixed: 0, outs: 0, cranked: 0, shut: 0, bangs: 0, charging: 0, teeth: 0, lured: 0 };
   const firstSeen = team.bots.map(() => [null, null, null, null]), lastSeen = team.bots.map(() => [-9, -9, -9, -9]);
   const parked = S.m.map(m => ({ x: m.x, z: m.z, t: 0 }));
   let seenEv = 0, faultKey = '', calm = 0, flatKey = '', tickNo = 0;
@@ -644,6 +674,7 @@ function play(sc, seed, trace) {
         out.notes.push(`seed ${seed} ${S.t.toFixed(0)}s ${MASC[e.x.by].name.split(' ').pop()} got g${gi} in ${M.ROOMS3[M.roomAt(e.x.x, e.x.z)]?.name}; was ${bot.want.use?.key || (bot.want.goal ? 'walking' : 'standing')}, torch ${bot.bat.toFixed(2)}${bot.on ? ' on' : ''}, knew of ${known(S, bot).length}, ${S.m.filter(o => COMING.includes(o.st)).length} hunting, it was rot ${m.rot}${m.lit ? ' lit' : ''}, power ${S.power.toFixed(0)}${S.stir ? ', stir' : ''}`);
       } else if (e.type === 'peel') out.peels++;
       else if (e.type === 'bang') out.bangs++;
+      else if (e.type === 'teeth') { out.teeth++; out.lured += S.m.filter((m, i) => m.st === 'search' && sim.brainOf(i).last?.x === e.x.x && sim.brainOf(i).last?.z === e.x.z).length; }
       else if (e.type === 'out') out.outs++;
     }
 
@@ -689,6 +720,7 @@ const sitter = honest('competent', { faults: false, stays: true, peels: false, c
 const bad = (name, n, guard) => { for (const night of [1, 3]) add(name, n, night, guard, { worse: `${n === 1 ? 'solo' : `crew of ${n}`} competent n${night}` }); };
 bad('x4 turtle: doors shut, nobody moves', 4, all(DEGENERATE.turtle()));
 bad('x1 turtle', 1, all(DEGENERATE.turtle()));
+bad('x4 turtle, teeth at the doors', 4, all(DEGENERATE.turtle(true)));
 bad('x4 one cranks, three hide', 4, i => i ? DEGENERATE.turtle() : DEGENERATE.cranker());
 bad('x4 corner with torches', 4, all(DEGENERATE.corner({ x: 1, z: 12.5, look: Math.PI / 4 })));
 bad('x4 booth corner with torches', 4, all(DEGENERATE.corner({ x: 15.8, z: 42.6, look: Math.PI * .75 })));
@@ -746,7 +778,7 @@ if (!isMainThread) {
   const sum = (runs, f) => runs.reduce((s, r) => s + f(r), 0);
   const median = list => list.length ? [...list].sort((a, b) => a - b)[list.length >> 1] : NaN;
   const rate = new Map();
-  const head = ['scenario', 'win%', 'end', 'flat/g', 'peel', 'B F S T %', 'warn s', '<1.5s', 'hunted', 'calms', 'torch', 'low', 'dead', 'dry/g', 'dry>flat', 'flat dark', 'burnt', 'power', 'out%', 'crank s', 'door s', 'bangs', 'dock s'];
+  const head = ['scenario', 'win%', 'end', 'flat/g', 'peel', 'B F S T %', 'warn s', '<1.5s', 'hunted', 'calms', 'torch', 'low', 'dead', 'dry/g', 'dry>flat', 'flat dark', 'burnt', 'power', 'out%', 'crank s', 'door s', 'bangs', 'dock s', 'teeth/g', 'lured'];
   const rows = [];
   const row = (sc, runs) => {
     const n = runs.length, warn = runs.flatMap(r => r.warn), flats = sum(runs, r => r.flats), stood = sum(runs, r => r.stood);
@@ -754,7 +786,7 @@ if (!isMainThread) {
     rows.push([sc.name, rate.get(sc.name), Math.round(sum(runs, r => r.t) / n), (flats / n / sc.n).toFixed(2), pct(sum(runs, r => r.peels), flats),
       [0, 1, 2, 3].map(i => pct(sum(runs, r => r.by[i]), flats)).join(' '), median(warn).toFixed(1), pct(warn.filter(x => x < 1.5).length, warn.length) + '%',
       pct(sum(runs, r => r.hunted), stood) + '%', (sum(runs, r => r.calms) / n).toFixed(1), pct(sum(runs, r => r.lit), stood) + '%', pct(sum(runs, r => r.low), stood) + '%', pct(sum(runs, r => r.dead), stood) + '%', (sum(runs, r => r.dry) / n / sc.n).toFixed(1), pct(sum(runs, r => r.dryFlat), sum(runs, r => r.dry)) + '%', pct(sum(runs, r => r.darkFlat), flats) + '%',
-      pct(sum(runs, r => r.burnt), sum(runs, r => r.fixed + r.burnt)) + '%', Math.round(sum(runs, r => r.power) / n), pct(sum(runs, r => +(r.outs > 0)), n), Math.round(sum(runs, r => r.cranked) / n), Math.round(sum(runs, r => r.shut) / n), (sum(runs, r => r.bangs) / n).toFixed(1), Math.round(sum(runs, r => r.charging) / n)]);
+      pct(sum(runs, r => r.burnt), sum(runs, r => r.fixed + r.burnt)) + '%', Math.round(sum(runs, r => r.power) / n), pct(sum(runs, r => +(r.outs > 0)), n), Math.round(sum(runs, r => r.cranked) / n), Math.round(sum(runs, r => r.shut) / n), (sum(runs, r => r.bangs) / n).toFixed(1), Math.round(sum(runs, r => r.charging) / n), (sum(runs, r => r.teeth) / n / sc.n).toFixed(1), (sum(runs, r => r.lured) / Math.max(1, sum(runs, r => r.teeth))).toFixed(2)]);
     return runs;
   };
   for (const i of todo) {
@@ -779,7 +811,8 @@ hunted  share of standing time with something after you    calms   stretches of 
 torch   share of standing time with the torch on           low, dead   share with it under a quarter, and flat; dry/g is how often it ran out per guard
 dry>flat  share of torches running out that ended in a flattening within 20 s    flat dark  share of flattenings with the torch dead
 burnt   share of faults left to burn    power   mean power at the end    out%    nights the power went out    crank s  seconds cranked    door s  seconds of shut door (two doors for ten seconds is 20)
-bangs   bangs on shut doors    dock s  guard-seconds spent charging at the dock`);
+bangs   bangs on shut doors    dock s  guard-seconds spent charging at the dock    teeth/g  sets of wind-up teeth thrown per guard per night
+lured   mascots that went to look, per set thrown`);
   if (argv.includes('--deaths')) for (const i of todo) console.log(`\n${scenarios[i].name}\n` + results.get(i).flatMap(r => r.notes).slice(0, 30).join('\n'));
   if (failures.length) { console.log(`\n${failures.length} FAILED\n` + failures.join('\n')); process.exit(1); }
   console.log('\nNo softlocks, and nothing degenerate beats playing properly.');

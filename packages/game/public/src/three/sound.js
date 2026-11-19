@@ -9,9 +9,9 @@
 // that happen before then are dropped, not queued.
 import { MASC, DOORS } from '../config.js';
 import { game, rnd } from '../state.js';
-import { SFX, ctx, bus, room, into, muffle, voices, sample, tone, noise, boom, pick, whiteNoise, shriek } from '../audio.js';
+import { SFX, ctx, bus, room, into, muffle, voices, sample, tone, noise, boom, pick, whiteNoise, shriek, chatter } from '../audio.js';
 import { ROOMS3, DOORWAYS, PANELS, BOXES, GENERATOR, CHARGER, DUCTS, EYE, sees, roomAt } from './map.js';
-import { lightsF } from './sim3d.js';
+import { lightsF, TEETH } from './sim3d.js';
 import { CUES } from './actors/scare.js';
 
 const HEAR = 28;        // metres past which a footstep is not worth a voice
@@ -67,6 +67,9 @@ const SPOT = [
   () => { for (const at of [0, .22]) { tone(150, .18, 'sawtooth', .3, 85, at); noise(.15, .2, { band: 900, band2: 300, q: 2, at }); } },
   () => { noise(.4, .4, { band: 320, q: 1, attack: .04 }); sample('far_growl3', { rate: .8, gain: .6, at: .1 }); },
 ];
+
+// A set of wind-up teeth being wound and thrown: the key's ratchet, then the swish of it leaving the hand.
+const windUp = level => { for (let k = 0; k < 5; k++) tone(rnd(2400, 2900), .014, 'square', .05 * level, 0, k * .04); noise(.22, .12 * level, { band: 900, band2: 2400, q: 1, at: .2 }); };
 
 const doorAt = key => { const [x0, z0, x1, z1] = DOORWAYS.find(d => d.key === key).rect; return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 }; };
 // Doorways between two rooms by the shortest way, a shut door counting double. 9 is "a long way".
@@ -253,6 +256,14 @@ export function createSound() {
     // A mascot yanking open a locker that turned out empty.
     check(x, S) { at(S, x, () => { sample('sheet3', { rate: 1.2, gain: .6 }) || noise(.25, .45, { band: 1800, q: 2 }); sample('knock1', { rate: .9, gain: .4, at: .35 }); }); },
     found(x, S) { at(S, x, () => { sample('slam2', { rate: 1.3, gain: .8 }) || noise(.3, .6, { band: 1500 }); sample('sheet3', { rate: 1.1, gain: .7, at: .02 }); }); },
+    // Wind-up teeth coming down: the clatter, then the chattering, from where they landed, so it can be found by ear
+    // as the mascots find it.
+    teeth(x, S) { at(S, x, () => chatter(.55, 0, TEETH.chatter)); },
+    // Teeth from the prize counter: a rattle of plastic in a cardboard box.
+    prize(x, S) {
+      const rattle = () => { for (let k = 0; k < 6; k++) tone(rnd(1800, 2600), .02, 'triangle', .06, 0, k * rnd(.03, .06)); noise(.2, .08, { band: 600, q: 1 }); };
+      if (mine(x.by)) rattle(); else at(S, x, rattle);
+    },
     peel(x, S) {
       const rip = () => { noise(.5, .6, { band: 600, band2: 3600, q: 2.5, attack: .3 }); tone(300, .08, 'sine', .4, 900, .46); };
       if (mine(x.id)) rip(); else at(S, x, rip);
@@ -332,6 +343,23 @@ export function createSound() {
     holdTick = tick;
   }
 
+  // A set of teeth just thrown (a new entry in S.teeth): wound and let go, from whoever threw it. Yours is at your ears.
+  // The first look only counts what is already there: those were thrown before this guard could hear them.
+  let thrown = null;
+  function throws(S) {
+    const list = S.teeth || [], fresh = !thrown;
+    thrown ||= new Set();
+    for (const t of list) {
+      const key = t.by + '@' + t.at;
+      if (thrown.has(key)) continue;
+      thrown.add(key);
+      if (fresh) continue;
+      if (mine(t.by)) windUp(1); else at(S, { x: t.x0, z: t.z0 }, () => windUp(2));
+    }
+    // Forget the ones swept off the end of S.teeth, so the set stays small through a long night.
+    if (thrown.size > 4 * TEETH.keep) thrown = new Set(list.map(t => t.by + '@' + t.at));
+  }
+
   // An open fault spits and crackles, now and then, from its box.
   const fizzAt = BOXES.map(() => 0);
   function fizz() { for (let k = 0; k < 4; k++) noise(.02 + Math.random() * .03, .22, { band: rnd(2500, 6000), q: 2, at: k * rnd(.04, .12) }); }
@@ -404,6 +432,7 @@ export function createSound() {
       else { l.setPosition(head.x, EYE, head.z); l.setOrientation(head.fx, 0, head.fz, 0, 1, 0); }
       building(S, dt);
       faults(S, dt);
+      throws(S);
       for (const m of S.m) mascot(S, m, rig.mascots[m.i], dt);
       otherGuards(S);
       self(me, mate.bat ?? 1, dt);

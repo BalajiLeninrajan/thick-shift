@@ -11,8 +11,8 @@ local Map = if script then require(script.Parent.Map) else (require :: any)("./M
 local Util = if script then require(script.Parent.Util) else (require :: any)("./Util")
 
 local MASC, FINAL_NIGHT, DOORS = Data.MASC, Data.FINAL_NIGHT, Data.DOORS
-local BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, REST =
-	Map.BOXES, Map.GENERATOR, Map.CHARGER, Map.PANELS, Map.BATTERY_SPOTS, Map.HIDES, Map.REST
+local BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, PRIZES, REST =
+	Map.BOXES, Map.GENERATOR, Map.CHARGER, Map.PANELS, Map.BATTERY_SPOTS, Map.HIDES, Map.PRIZES, Map.REST
 local BOOTH, DUCTS, MASCOT_R, PLAYER_R, DOORWAYS, ROOMS3 =
 	Map.BOOTH, Map.DUCTS, Map.MASCOT_R, Map.PLAYER_R, Map.DOORWAYS, Map.ROOMS3
 local walkable, slide, clear, sees, reaches, roomAt, roomCentre, route, spawnPoint =
@@ -89,6 +89,19 @@ local RAMP = { 0, 1, 2, 3.15, 4.3 }
 local SNIFF = { near = 1.6, time = 3 }
 local CHECK = { near = 8, chance = 0.5, most = 2 }
 local LOCKER_NOISE = { 6, 0.5 }
+-- Wind-up teeth from the prize counter: see TEETH in sim3d.js.
+local TEETH = {
+	start = 2,
+	carry = 3,
+	box = 2,
+	range = 14,
+	speed = 11,
+	hear = 12,
+	chance = 0.9,
+	chatter = 3,
+	gap = 1,
+	keep = 8,
+}
 local DREAD_SPAN, DREAD_FULL = 45, 7
 local COMING = { "hunt", "windup", "charge" }
 -- When each mascot first comes out, by MASC index: hours of the run, and how many sooner for each extra guard.
@@ -109,6 +122,7 @@ end
 local Sim = {}
 Sim.__index = Sim
 Sim.F = F
+Sim.TEETH = TEETH
 
 function Sim.hourF(S): number
 	return math.min(6, math.floor(S.t / F.HOUR))
@@ -225,6 +239,7 @@ local function placeGuard(p, i: number)
 	p.x, p.z, p.yaw = sp.x, sp.z, sp.yaw
 	p.pitch, p.on, p.ph, p.bat, p.flat, p.flatBy, p.sp, p.act, p.safe, p.callAt, p.hid =
 		0, false, false, 1, false, -1, false, "", 0, 0, -1
+	p.teeth, p.throwAt = TEETH.start, 0
 end
 
 local function newBrain(timer: number)
@@ -369,6 +384,9 @@ function Sim:startNight(n: number)
 	end
 	S.batN = math.min(#spots, 3 + #all)
 	S.bats = table.move(spots, 1, S.batN, 1, {})
+	-- The wind-up teeth left in the prize counter's box, and the sets thrown, newest last (see sim3d.js).
+	S.prizes = TEETH.box + #all
+	S.teeth = {}
 	self.batTimers = {}
 	self.crankNoise = 0
 end
@@ -588,6 +606,32 @@ function Sim:noise(x: number, z: number, radius: number, chance: number)
 			b.last = { x = x, z = z }
 			b.timer = self:rnd(3, 6)
 			b.repath = 0
+		end
+	end
+end
+
+-- Where a thrown thing comes down: along yaw from (x, z), as far as d, but short of a wall or a shut door. It goes
+-- over the furniture, not onto it.
+function Sim.landing(S, x: number, z: number, yaw: number, d: number)
+	local sx, sz, step = math.sin(yaw), math.cos(yaw), 0.25
+	local k = 0
+	while k + step <= d and walkable(x + sx * (k + step), z + sz * (k + step), 0.1, S.doors, true) do
+		k += step
+	end
+	while k > 0 and not walkable(x + sx * k, z + sz * k, 0.1, S.doors) do
+		k -= step
+	end
+	return { x = x + sx * k, z = z + sz * k }
+end
+
+-- Thrown teeth that have just come down chatter where they land, and whatever hears them comes to look.
+function Sim:landTeeth()
+	local S = self.S
+	for _, s in S.teeth do
+		if not s.heard and S.t >= s.land then
+			s.heard = true
+			self:emit("teeth", { by = s.by, x = s.x, z = s.z })
+			self:noise(s.x, s.z, TEETH.hear, TEETH.chance)
 		end
 	end
 end
@@ -1258,6 +1302,7 @@ function Sim:step(dt: number)
 			self:noise(GENERATOR.x, GENERATOR.z, 24, 0.35)
 		end
 	end
+	self:landTeeth()
 	if S.dev and S.dev.freeze then
 		return
 	end
@@ -1314,6 +1359,29 @@ function Sim:act(pid: string, a: any)
 		end
 		return
 	end
+	if a.t == "throw" then
+		-- A set of teeth, along the way the guard is looking (yaw) and as far as they aimed (d). Not from a locker.
+		if p.flat or hidden(p) or not ((p.teeth or 0) > 0) or S.t < (p.throwAt or 0) then
+			return
+		end
+		local to = Sim.landing(S, p.x, p.z, num(a.yaw, -1e3, 1e3, p.yaw), num(a.d, 0, TEETH.range, TEETH.range))
+		p.teeth -= 1
+		p.throwAt = S.t + TEETH.gap
+		table.insert(S.teeth, {
+			by = p.id,
+			x0 = p.x,
+			z0 = p.z,
+			x = to.x,
+			z = to.z,
+			at = S.t,
+			land = S.t + math.max(0.3, dist(p, to) / TEETH.speed),
+			heard = false,
+		})
+		if #S.teeth > TEETH.keep and S.teeth[1].heard then
+			table.remove(S.teeth, 1)
+		end
+		return
+	end
 	if a.t ~= "use" or p.flat then
 		return
 	end
@@ -1356,6 +1424,12 @@ function Sim:act(pid: string, a: any)
 		table.insert(self.batTimers, self:rnd(30, 50))
 		p.bat = math.min(1, p.bat + F.BAT_PICKUP)
 		self:emit("bat", { by = p.id })
+	elseif a.what == "teeth" and near(PRIZES) and S.prizes > 0 and p.teeth < TEETH.carry then
+		-- As many from the prize counter's box as the guard has room for.
+		local n = math.min(S.prizes, TEETH.carry - p.teeth)
+		S.prizes -= n
+		p.teeth += n
+		self:emit("prize", { by = p.id, n = n, x = PRIZES.x, z = PRIZES.z })
 	elseif a.what == "hide" and HIDES[i + 1] and i >= 0 then
 		local h = HIDES[i + 1]
 		if p.hid == i then

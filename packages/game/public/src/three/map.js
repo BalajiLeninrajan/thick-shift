@@ -96,6 +96,8 @@ export const BATTERY_SPOTS = [
   { x: 25.5, z: 23 }, { x: 40.5, z: 13 }, { x: 29.5, z: 23.5 }, { x: 4, z: 30 }, { x: 28, z: 27 }, { x: 14.5, z: 31.5 },
   { x: 38, z: 36 }, { x: 25, z: 34.8 }, { x: 9, z: 41.5 }, { x: 33, z: 41.5 },
 ];
+// The prize counter in the Arcade, where the wind-up teeth are (sim3d.js TEETH): the middle of its front, facing out.
+export const PRIZES = { room: 2, x: 10.57, z: 21.4, face: -Math.PI / 2 };
 // Places to hide: every locker in DRESSING outside the booth (the booth's hold coats). A guard steps in from `at`,
 // in front of its doors, and is somewhere no mascot looks unless it saw them go in or stands outside long enough
 // (sim3d.js openLockers). x, z: the locker itself. face: the way its doors look out.
