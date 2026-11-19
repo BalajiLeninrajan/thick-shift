@@ -78,8 +78,10 @@ const BANG_BOX = { L: 5, R: 7, V: 6 };
 // Metres per second. Hunt speed is per mascot, by MASC index. Biggs is slower
 // than a walking guard and never stops coming. Flan crawls while a guard is
 // looking at her and runs when nobody is. Squish is quick, quicker in the
-// ducts. Tank walks until it has a straight run, then charges.
-const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6], unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15 };
+// ducts. Tank walks until it has a straight run, then charges. With the power
+// out every one of them moves `out` times as fast, which outruns a sprinting
+// guard: the crank is the only way out. (Untuned against the harness.)
+const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6], unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15, out: 2 };
 const KEEN = [.8, .04];   // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
 const LIT_SPEED = [0, .2, .4];
@@ -611,6 +613,7 @@ function runMascot(S, m, b, dt) {
     if (!b.dest) { b.dest = pickDest(S, m); b.repath = 0; }
     speed = SPEED.roam; goal = b.dest;
   }
+  if (S.out) speed *= SPEED.out;
   if (m.lit) speed *= LIT_SPEED[m.rot];
   if (stare) speed = 0;
   if (m.lit && lighter) turn(m, Math.atan2(lighter.x - m.x, lighter.z - m.z), 4 * dt);   // it turns to face the light
