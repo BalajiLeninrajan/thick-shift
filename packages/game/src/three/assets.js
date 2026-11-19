@@ -5,7 +5,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader, DRACO_GLTF_CONFIG } from 'three/addons/loaders/DRACOLoader.js';
 
 // three's own glTF-only Draco decoder. DRACOLoader names its files with import.meta.url,
-// so the bundler serves them in dev and copies them, hashed, into the build.
+// so the bundler serves them in dev and copies them, hashed, into the build. Given these
+// URLs it has only the WebAssembly decoder, with no pure-JS fallback, so a browser without
+// WebAssembly draws stand-ins for every model. Every browser with WebGL 2 has WebAssembly.
 const draco = new DRACOLoader().setDecoderPath(DRACO_GLTF_CONFIG);
 const loader = new GLTFLoader().setDRACOLoader(draco);
 const cache = new Map();
