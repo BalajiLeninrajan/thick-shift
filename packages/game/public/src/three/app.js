@@ -86,21 +86,21 @@ function create() {
       const f = game.S.faults[e.x.i];
       if (!f) return;
       hud.say(`Fault in the ${ROOMS3[BOXES[e.x.i].room]?.name}: ${FAULT_NAME[f.k].toLowerCase()}.`, 'fault', 4);
-      hud.tip('fault', 'Faults leak power until they are fixed, and darken their room. The list under the power, and the yellow marks on the compass, lead to them. Press {use} at the box.');
+      hud.tip('fault', 'Faults drain power and black out their room. Follow the yellow marks and press {use} at the breaker box.');
     },
     fix(e) {
       const left = game.S.faults.filter(Boolean).length, rest = left ? `${left} still open.` : 'All clear.';
       hud.say(isMe(e.x.by) ? `Fixed. ${rest}` : `${guard(e.x.by)?.name || 'Someone'} fixed the ${ROOMS3[BOXES[e.x.i].room]?.name}. ${rest}`, 'fixed', 3);
     },
-    burn: () => hud.say('A fault is burning out the wiring. Fix it before the building cannot hold a charge.', 'burnt', 6),
+    burn: () => hud.say('A fault is burning and lowering max power. Fix it.', 'burnt', 6),
     out: () => hud.say('The power is out. Every door is open.', 'out', 7),
     on: () => hud.say('The power is back.', 'back', 3),
     flat(e) {
       const who = guard(e.x.id);
-      if (!isMe(e.x.id) && who) { hud.say(`${MASC[e.x.by].name} flattened ${who.name} ${where(e.x)}.`, 'down', 6); hud.tip('peel', 'A flat guard stays flat until someone stands over them and holds {use}.'); }
+      if (!isMe(e.x.id) && who) { hud.say(`${MASC[e.x.by].name} flattened ${who.name} ${where(e.x)}.`, 'down', 6); hud.tip('peel', 'Stand over a flattened guard and hold {use} to get them up.'); }
     },
     peel(e) {
-      if (isMe(e.x.id)) hud.say('Peeled up. They will not notice you for a few seconds. Go.', 'up', 4);
+      if (isMe(e.x.id)) hud.say('You\'re back up. You have a few seconds before they notice you.', 'up', 4);
       else hud.say(`${isMe(e.x.by) ? 'You' : guard(e.x.by)?.name || 'Someone'} peeled ${guard(e.x.id)?.name || 'someone'} up.`, 'up', 3);
     },
     // A flat guard calling out. sound.js plays its two notes from where the guard lies.
@@ -108,16 +108,16 @@ function create() {
       hud.ping(e.x.id);
       if (!isMe(e.x.id)) hud.say(`${guard(e.x.id)?.name || 'Someone'} is calling from the floor ${where(e.x)}.`, 'call', 4);
     },
-    spot(e) { if (isMe(e.x.id)) hud.tip('spot', 'It has seen you. Keep the torch on it and back away. The beam holds it while the battery lasts.'); },
+    spot(e) { if (isMe(e.x.id)) hud.tip('spot', 'You\'ve been spotted. Keep your torch on it and back away.'); },
     bat(e) { if (isMe(e.x.by)) hud.say('Fresh battery.', 'torch', 2.5); },
-    locker(e) { if (isMe(e.x.id) && e.x.in) hud.tip('hide', 'Nothing sees you in here. One that saw you get in will open the door. One that lost you nearby may check, and one that stands outside long enough will sniff you out. The doors are loud.'); },
+    locker(e) { if (isMe(e.x.id) && e.x.in) hud.tip('hide', 'You\'re hidden. A mascot that saw you get in, or waits outside long enough, will open the door.'); },
     found(e) {
       if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker.`, 'down', 4);
       else hud.say(`${MASC[e.x.i].name} pulled ${guard(e.x.id)?.name || 'someone'} out of a locker ${where(e.x)}.`, 'hide', 6);
     },
     fumble(e) { if (isMe(e.x.by)) hud.say('The door will not shut. Something is standing in it.', 'info', 3); },
     // The first time the mascots get up: what the Mini Biggs in your pocket is for.
-    stir() { hud.tip('toy', 'They are up. {throw} throws your Mini Biggs where you are looking. It sings on a bar of your torch, and anything wandering near where it lands goes to see whose birthday it is. Not anything already after you. Pick it up again to throw it again.'); },
+    stir() { hud.tip('toy', 'Press {throw} to throw your Mini Biggs. It costs a battery bar and pulls nearby mascots toward it, unless they\'re already chasing you.'); },
     grab(e) { if (isMe(e.x.by)) hud.say('Mini Biggs back in hand.', 'toy', 2.5); },
   };
 

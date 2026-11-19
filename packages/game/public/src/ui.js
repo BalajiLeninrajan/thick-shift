@@ -92,19 +92,19 @@ function nightScreen(S) {
     };
   }
   if (S.phase === 'win') {
-    const note = S.players.some(p => p.flat) ? 'The day shift will peel up whoever is still on the floor.' : S.tally.flats.length ? 'Everyone is the right shape again.' : 'Nobody was flattened. They are saving it up.';
+    const note = S.players.some(p => p.flat) ? 'Anyone still down gets back up at dawn.' : S.tally.flats.length ? 'Everyone made it back up.' : 'Nobody got flattened.';
     return { key, wire, html: card(`<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(S.tally)}`, hostAction('Start night ' + (S.night + 1))) };
   }
   if (S.phase === 'won') return {
     key, wire, html: card(`
       <h1 class="ts-logo">Shift over</h1>
       <p class="lede cn-m-0">You walked all ${FINAL_NIGHT} nights at the Mascot Depot.</p>
-      <p class="cn-meta cn-m-0">The sun is up, the lights are on (most of them), and the mascots are back on their stage exactly as they were. Guards: ${who}</p>
+      <p class="cn-meta cn-m-0">The sun is up and the mascots are back on their stage. Guards: ${who}</p>
       ${floorStats(S.total, true)}
       <p class="cn-meta cn-m-0">${S.deaths ? `The whole crew went down ${S.deaths === 1 ? 'once' : S.deaths + ' times'} along the way.` : 'The whole crew never went down at once.'}</p>`, hostAction('Start over from night 1')),
   };
   if (S.phase === 'dead' && !scaring) return {
-    key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(MASC[S.killer]?.name || 'Something')} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}. Nobody is left to do the peeling.</p>${floorStats(S.tally)}`, hostAction('Retry night ' + S.night), 'ts-card-slow'),
+    key, wire, html: card(`<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(MASC[S.killer]?.name || 'Something')} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(S.tally)}`, hostAction('Retry night ' + S.night), 'ts-card-slow'),
   };
   return { key, html: '' };
 }
