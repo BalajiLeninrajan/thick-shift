@@ -4,12 +4,11 @@ import * as THREE from 'three';
 import { MASC } from '../config.js';
 import { game, client } from '../state.js';
 import { buildWorld } from './world.js';
-import { createPlayer } from './player.js';
+import { createPlayer, prefs } from './player.js';
 import { createActors } from './actors.js';
 import { createHud, where } from './hud.js';
-import { EYE } from './map.js';
 import { createTask, FAULT_NAME } from './task.js';
-import { BOXES, ROOMS3 } from './map.js';
+import { EYE, BOXES, ROOMS3, roomAt, reaches } from './map.js';
 import { createSound } from './sound.js';
 import { createPost } from './post.js';
 import { createPhone } from './actors/phone.js';
@@ -49,17 +48,30 @@ function create() {
     if (!on) sound.quiet();
   }
 
-  // A flat guard can watch through a standing teammate's eyes (player.me.watch
-  // is their id). seat is that view, eased between the host's updates.
+  // A flat guard can watch a standing teammate (player.me.watch is their id): through their eyes, or with
+  // prefs.third from behind and above them. seat is that view, eased between the host's updates.
+  const BACK = 3, ABOVE = 2.2, AIM = 1.4;   // third person: metres behind, camera height, and the height looked at
   function spectate(S, dt) {
     const p = S.players.find(q => q.id === player.me.watch);
     if (!p) { seat = null; return; }
     const k = seat ? Math.min(1, dt * 10) : 1;
-    seat ||= { x: p.x, z: p.z, yaw: p.yaw, pitch: p.pitch };
+    seat ||= { x: p.x, z: p.z, yaw: p.yaw, pitch: p.pitch, back: BACK };
     seat.x += (p.x - seat.x) * k; seat.z += (p.z - seat.z) * k; seat.pitch += (p.pitch - seat.pitch) * k;
     seat.yaw += Math.atan2(Math.sin(p.yaw - seat.yaw), Math.cos(p.yaw - seat.yaw)) * k;
-    camera.position.set(seat.x, EYE, seat.z);
-    camera.rotation.set(seat.pitch, seat.yaw + Math.PI, 0, 'YXZ');
+    if (!prefs.third) {
+      camera.position.set(seat.x, EYE, seat.z);
+      camera.rotation.set(seat.pitch, seat.yaw + Math.PI, 0, 'YXZ');
+      return;
+    }
+    // Drawn in to stay this side of a wall or a shut door (furniture it looks over), quickly when one comes between
+    // and slowly back out, and kept under the ceiling, which in the ducts is low.
+    const fx = Math.sin(seat.yaw), fz = Math.cos(seat.yaw);
+    let back = BACK;
+    while (back > .5 && !reaches(seat.x, seat.z, seat.x - fx * (back + .3), seat.z - fz * (back + .3), S.doors)) back -= .25;
+    seat.back += (back - seat.back) * Math.min(1, dt * (back < seat.back ? 20 : 3));
+    const h = ROOMS3[roomAt(seat.x, seat.z)]?.h ?? 3;
+    camera.position.set(seat.x - fx * seat.back, Math.min(ABOVE, h - .35), seat.z - fz * seat.back);
+    camera.lookAt(seat.x, Math.min(AIM, h - .6), seat.z);
   }
 
   // What each new event means on this screen, beyond its sound (sound.js plays

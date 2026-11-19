@@ -13,6 +13,7 @@ import { MASC } from '../config.js';
 import { game } from '../state.js';
 import { DOORWAYS } from './map.js';
 import { hostClock } from './actors/track.js';
+import { prefs } from './player.js';
 import { Mascot } from './actors/mascot.js';
 import { Guard } from './actors/guard.js';
 import { createScare } from './actors/scare.js';
@@ -65,7 +66,7 @@ export function createActors(scene, camera, renderer) {
     sync(S, dt, me, torch) {
       hostClock.see(S.t, performance.now() / 1000);
       camera.updateMatrixWorld(); view.frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-      view.x = camera.position.x; view.y = camera.position.y; view.z = camera.position.z; view.id = game.myId; view.flat = me.flat; view.torch = me.on; view.watch = me.watch;
+      view.x = camera.position.x; view.y = camera.position.y; view.z = camera.position.z; view.id = game.myId; view.flat = me.flat; view.torch = me.on; view.watch = me.watch; view.third = prefs.third;
       for (const m of S.m) mascots[m.i].sync(m, S, dt, view);
       for (const g of list) g.here = false;
       for (const p of S.players) {

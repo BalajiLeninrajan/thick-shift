@@ -143,9 +143,10 @@ export class Guard {
 
     // Name: only where you could have read a badge, or when they are on the floor waiting for you.
     // A flat guard watching through this one's eyes (view.watch) is inside their head: draw none of them.
+    // Watching from behind (view.third), they are drawn, all but the name tag, which the flat panel already gives.
     // In a locker there is nothing of them to see, whoever is looking.
-    const inside = this.id === view.watch, shut = p.hid >= 0 && !flat;
-    const tag = this.tag; tag.visible = !inside && !shut && (flat ? this.dist < TAG_FLAT : this.seen && this.dist < TAG_NEAR);
+    const inside = this.id === view.watch && !view.third, shut = p.hid >= 0 && !flat;
+    const tag = this.tag; tag.visible = this.id !== view.watch && !shut && (flat ? this.dist < TAG_FLAT : this.seen && this.dist < TAG_NEAR);
     tag.material.depthTest = !flat; tag.position.y = flat ? .55 : 2.05;
     this.group.visible = (this.seen || flat) && !shut; this.pivot.visible = !inside;
     if (!this.group.visible) return;
