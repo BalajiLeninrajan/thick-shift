@@ -6,7 +6,8 @@ import { defineConfig } from 'vite';
 const page = name => fileURLToPath(new URL(name, import.meta.url));
 
 export default defineConfig({
-  plugins: [game(), cloudflare()],
+  // The web app's Worker inspector takes the default port, 9229. Both servers started at once would race for it.
+  plugins: [game(), cloudflare({ inspectorPort: 9230 })],
   // Discord reaches a local dev server through a tunnel (README.md), and Vite turns away hosts it does not know.
   server: { allowedHosts: ['.trycloudflare.com'] },
   environments: {
