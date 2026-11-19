@@ -1,11 +1,11 @@
-// Checks that the furniture in packages/game/public/src/three/world/dressing.js has not
+// Checks that the furniture in packages/game/src/three/world/dressing.js has not
 // blocked anything the 3D mode needs: doorways, the mascots' waypoints, and
 // the way to every breaker box, button, battery and resting mark. Run it after
 // moving a prop or anything in map.js:
 //   node tools/check-floor.mjs
 import { readFileSync, existsSync } from 'node:fs';
-import * as M from '../packages/game/public/src/three/map.js';
-import { FOOT, DRESSING } from '../packages/game/public/src/three/world/dressing.js';
+import * as M from '../packages/game/src/three/map.js';
+import { FOOT, DRESSING } from '../packages/game/src/three/world/dressing.js';
 
 const bad = [], warn = [];
 const at = p => `(${p.x}, ${p.z})`;

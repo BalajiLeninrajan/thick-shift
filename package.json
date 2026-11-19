@@ -1,11 +1,12 @@
 {
   "name": "thick-shift",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "pnpm --filter @thick-shift/web dev",
     "dev:discord": "pnpm --filter @thick-shift/discord dev",
+    "build": "pnpm -r run build",
     "deploy": "pnpm --filter @thick-shift/web run deploy",
-    "deploy:discord": "pnpm --filter @thick-shift/discord run deploy",
-    "vendor": "pnpm -r run vendor"
+    "deploy:discord": "pnpm --filter @thick-shift/discord run deploy"
   }
 }

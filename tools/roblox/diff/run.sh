@@ -11,8 +11,8 @@ seed=${2:-1}
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/packages/game/public" "$work/tools"
-cp -r "$root/packages/game/public/src" "$work/packages/game/public/src"
+mkdir -p "$work/packages/game" "$work/tools"
+cp -r "$root/packages/game/src" "$work/packages/game/src"
 cp -r "$root/tools/balance" "$work/tools/balance"
 cp "$root/tools/roblox/diff/rec.mjs" "$work/tools/roblox-rec.mjs"
 node "$root/tools/roblox/diff/patch.mjs" "$work"

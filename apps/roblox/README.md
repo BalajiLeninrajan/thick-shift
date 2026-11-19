@@ -1,6 +1,6 @@
 # Thick Shift on Roblox
 
-A port of the 3D floor mode to Roblox, built with [Rojo](https://rojo.space). The web game in `packages/game/public/` is still the original: the Roblox sim is a line-for-line port of it, checked against it tick by tick, and the building's data is generated from it.
+A port of the 3D floor mode to Roblox, built with [Rojo](https://rojo.space). The web game in `packages/game/src/` is still the original: the Roblox sim is a line-for-line port of it, checked against it tick by tick, and the building's data is generated from it.
 
 ## Layout
 

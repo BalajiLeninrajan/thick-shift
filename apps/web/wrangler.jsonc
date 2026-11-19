@@ -2,10 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "thick-shift",
   "compatibility_date": "2026-11-15",
-  // The game's static files are served as-is. Requests that match no file reach
-  // the Worker, which only answers /room/CODE (see worker.js).
-  "main": "worker.js",
-  "assets": { "directory": "../../packages/game/public" },
+  // The Vite build's static files are served as-is. Requests that match no file
+  // reach the Worker, which only answers /room/CODE (see worker/index.js).
+  "main": "./worker/index.js",
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
 }

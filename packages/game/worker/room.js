@@ -6,7 +6,7 @@ const NO_HOST = 4404, CODE_TAKEN = 4409;
 const MAX_GUEST_MESSAGE = 2000;   // characters. Guest actions are tiny.
 
 // A room is a four-letter code someone typed, or a lowercase letter, a dash and an id that an app gets from its
-// platform, such as d- and a Discord Activity's instance id (apps/discord). Matches ROOM in public/src/net.js.
+// platform, such as d- and a Discord Activity's instance id (apps/discord). Matches ROOM in src/net.js.
 const ROOM = /^\/room\/([A-Z]{4}|[a-z]-[\w-]{1,80})$/;
 
 export function relay(req, env) {

@@ -1,13 +1,18 @@
 {
   "name": "@thick-shift/game",
   "private": true,
+  "type": "module",
   "exports": {
-    "./worker": "./worker/room.js"
+    ".": "./src/main.js",
+    "./state": "./src/state.js",
+    "./net": "./src/net.js",
+    "./audio": "./src/audio.js",
+    "./ui": "./src/ui.js",
+    "./styles.css": "./src/styles.css",
+    "./worker": "./worker/room.js",
+    "./vite": "./vite.js"
   },
-  "scripts": {
-    "vendor": "sh vendor-three.sh"
-  },
-  "devDependencies": {
-    "three": "^0.187.0"
+  "dependencies": {
+    "three": "0.187.0"
   }
 }

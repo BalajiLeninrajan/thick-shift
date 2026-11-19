@@ -1,17 +1,20 @@
 {
   "name": "@thick-shift/discord",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "node ../../packages/game/assemble.mjs public dist",
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "vendor": "sh vendor-discord.sh"
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy"
   },
   "dependencies": {
+    "@discord/embedded-app-sdk": "2.5.0",
     "@thick-shift/game": "workspace:*"
   },
   "devDependencies": {
-    "@discord/embedded-app-sdk": "2.5.0",
-    "wrangler": "^4.162.0"
+    "@cloudflare/vite-plugin": "1.70.1",
+    "vite": "8.3.8",
+    "wrangler": "4.165.0"
   }
 }

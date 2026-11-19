@@ -1,5 +1,5 @@
 --!nonstrict
--- The frame, after packages/game/public/src/three/app.js: the server's state comes in ten times a second, and every frame the
+-- The frame, after packages/game/src/three/app.js: the server's state comes in ten times a second, and every frame the
 -- world, this guard, the others and the HUD are drawn from it. New events become lines on the HUD.
 
 local Players = game:GetService("Players")

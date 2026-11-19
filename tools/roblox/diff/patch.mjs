@@ -1,4 +1,4 @@
-// Patches a scratch copy of packages/game/public/src and tools/balance (never the repo's own) so a balance-harness night can be
+// Patches a scratch copy of packages/game/src and tools/balance (never the repo's own) so a balance-harness night can be
 // recorded for apps/roblox/test/diff-sim.luau. Usage: node patch.mjs <work dir>
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,11 +11,11 @@ const swap = (file, from, to) => {
 };
 
 // The port shuffles the night's battery spots with Fisher-Yates instead of a random sort.
-swap('packages/game/public/src/three/sim3d.js',
+swap('packages/game/src/three/sim3d.js',
   'const spots = BATTERY_SPOTS.map((_, i) => i).sort(() => Math.random() - .5);',
   'const spots = BATTERY_SPOTS.map((_, i) => i); for (let i = spots.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [spots[i], spots[j]] = [spots[j], spots[i]]; }');
 // The step's real elapsed time, before the sim caps it, so the replay steps by the same amount.
-swap('packages/game/public/src/three/sim3d.js',
+swap('packages/game/src/three/sim3d.js',
   'lastStep = now;\n  S.players = guards();',
   'if (globalThis.__REC) globalThis.__REC.dt = (now - lastStep) / 1000;\n  lastStep = now;\n  S.players = guards();');
 // Record the draws the sim makes, and wrap its entry points.

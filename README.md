@@ -4,68 +4,68 @@ Midnight at the Mascot Depot. A co-op night-shift survival game in first person:
 
 ## Run it
 
-The repo is a pnpm workspace. The game is plain ES modules in `packages/game/public/`, with no build step, and each app in `apps/` runs it somewhere: the web, a Discord Activity, or Roblox.
+The repo is a pnpm workspace. The game is plain ES modules in `packages/game/src/`, and each app in `apps/` runs it somewhere: the web, a Discord Activity, or Roblox. The web and Discord apps are Vite builds. three.js and the Discord SDK come from npm and are bundled, and Cloudflare's Vite plugin runs each app's Worker inside the dev server.
 
 ```sh
 pnpm install
-pnpm dev                 # the web game through Wrangler
-pnpm dev:discord         # the Discord Activity's Worker
-pnpm run deploy          # publish the web game (plain `pnpm deploy` is a pnpm command)
-pnpm run deploy:discord  # publish the Discord Activity
-pnpm vendor              # copy three.js and the Discord SDK out of node_modules
+pnpm dev                 # the web game and its Worker, on localhost:5173
+pnpm dev:discord         # the Discord Activity and its Worker, on 5173 too (the next free port if the web game has it)
+pnpm build               # build both apps into apps/<app>/dist
+pnpm run deploy          # build and publish the web game (plain `pnpm deploy` is a pnpm command)
+pnpm run deploy:discord  # build and publish the Discord Activity
 ```
 
-Any static server pointed at `packages/game/public/` runs the game solo. Rooms need a Worker.
+Rooms need the Worker. `vite dev` runs it, Durable Object and all, so hosting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server pointed at it runs the game solo.
 
 Add `?dev` to the URL for the dev menu (the backtick key, or the Dev button on the pause screen and in the touch menu): god mode, infinite power, freeze, wake every mascot, game speed, forced rot stage and dread, time skips, power and torch buttons, and per-mascot controls. Only the host's changes reach the simulation. Add `?debug` to get `window.ts` (the live `game` and `client` state) in the console.
 
 ## Layout
 
 ```
-packages/game/          the game, shared by the web and Discord apps
+packages/game/          the game, shared by the web and Discord apps (@thick-shift/game)
+  package.json          what an app may import: the game itself, state, net, audio, ui, styles.css, worker and vite
+  vite.js               game(), the game's part of each app's Vite config: public/ as the static files, three's Draco decoder at draco/
   worker/room.js        the room relay (one Durable Object per room), which each app's Worker exports
-  assemble.mjs          lays an app's public/ over the game's to build that app's static site
-  vendor-three.sh       copies three.js into public/vendor (pnpm vendor)
-  public/
-    index.html          markup
-    boot.js             the entry module: starts the game. An app can ship its own
-    styles.css          stage layout and the HUD; everything else comes from catppuccin-neu
+  public/               served as it is, never bundled
     sfx/                recorded sound effects (CC0, see Sound below)
     models/             the mascots, the guard and the prop kits (built by tools/models/)
-    vendor/three/       three.js
-    src/
-      config.js         the mascot roster, the doors, the number of nights
-      state.js          the shared mutable objects: game (session), client (this browser) and platform (app hooks)
-      net.js            hosting and joining rooms; the host broadcasts the whole state
-      audio.js          recorded and synthesised sound, and the ambience
-      ui.js             overlay screens: title, lobby, and the cards between nights
-      dev.js            dev menu, loaded only with ?dev
-      main.js           the frame loop
-      three/            the game: simulation, building, actors, HUD, input, sound and picture (below)
+  src/
+    styles.css          stage layout and the HUD; everything else comes from catppuccin-neu
+    config.js           the mascot roster, the doors, the number of nights
+    state.js            the shared mutable objects: game (session), client (this browser) and platform (app hooks)
+    net.js              hosting and joining rooms; the host broadcasts the whole state
+    audio.js            recorded and synthesised sound, and the ambience
+    ui.js               overlay screens: title, lobby, and the cards between nights
+    dev.js              dev menu, loaded only with ?dev
+    main.js             start() and the frame loop
+    three/              the game: simulation, building, actors, HUD, input, sound and picture (below)
 apps/
-  web/                  the web game: a Worker that relays rooms and serves packages/game/public as it is
-  discord/              the Discord Activity (below)
-    worker.js           the relay, the Discord sign-in and the CDN pass-through
-    public/             laid over the game's files into dist/
-      boot.js           replaces the game's: loads discord/activity.js inside Discord
-      discord/activity.js  the sign-in, the room and the Activity's title screen and invite
-      vendor/discord-sdk/  the Discord SDK (pnpm vendor)
-      terms.html, privacy.html
+  web/                  the web game
+    index.html          the markup and the CDN links, and Vite's entry
+    src/boot.js         loads the stylesheet and calls start()
+    worker/index.js     the Worker: the relay and nothing else. Static files are served before it runs
+    vite.config.js      game() and the Cloudflare plugin
+    wrangler.jsonc      the Worker's name and its Durable Object
+  discord/              the Discord Activity (below), laid out like web/
+    src/boot.js         the same, but loads src/activity.js inside Discord
+    src/activity.js     the sign-in, the room and the Activity's title screen and invite
+    worker/index.js     the relay, the Discord sign-in and the CDN pass-through
+    terms.html, privacy.html  two more pages in the build, served at /terms and /privacy
   roblox/               the Luau port, built with Rojo (apps/roblox/README.md)
 tools/
   balance/floor.mjs     scripted guards played through three/sim3d.js
   check-floor.mjs       checks nothing in the building is blocked or cut off
-  models/               the Blender scripts that build public/models
+  models/               the Blender scripts that build packages/game/public/models
   roblox/               generates the port's data from the game, and checks its sim against the game's
 ```
 
-An app changes how the game starts and what its title screen and lobby offer through `platform` in `state.js`, set by its own `boot.js` before `start()`. `fixedRoom` means the room comes from outside: everyone tries to host it, and whoever finds it taken joins instead (`becomeGuest` in `net.js`). `title` replaces the title screen, and `invite` replaces the room code and link in the lobby. The web game leaves all three alone.
+An app imports the game only by the names `packages/game/package.json` exports (`@thick-shift/game`, `@thick-shift/game/state` and so on), never by a path into `packages/`. The Node tools are the exception: they import `packages/game/src/` by path. An app changes how the game starts and what its title screen and lobby offer through `platform` in `state.js`, set by its own `src/boot.js` before `start()`. `fixedRoom` means the room comes from outside: everyone tries to host it, and whoever finds it taken joins instead (`becomeGuest` in `net.js`). `title` replaces the title screen, and `invite` replaces the room code and link in the lobby. The web game leaves all three alone.
 
 ## Discord Activity
 
-`apps/discord` runs the game as a Discord Activity, deployed as its own Worker (`thick-shift-discord`). Its build lays `apps/discord/public` over the game's files into `dist/` (`packages/game/assemble.mjs`), and Wrangler runs it before dev and deploy. Discord adds `frame_id` to the page's URL, and the app's `boot.js` loads `discord/activity.js` when it sees it. Opened anywhere else, the page plays as the web game does. Everyone who opens the Activity in one channel shares Discord's `instanceId`, so that becomes the room (`d-` and the id) and nobody types a code. Each player presses Clock in, which tries to host. Whoever finds the room taken joins it instead. Names come from Discord through an OAuth sign-in. The Worker trades the code for a token at `/api/discord/token`, so the client secret stays on the server. A player who declines the sign-in plays as Guard.
+`apps/discord` runs the game as a Discord Activity, deployed as its own Worker (`thick-shift-discord`). It is a Vite app like `apps/web`, with `terms.html` and `privacy.html` as two more pages beside `index.html`. Discord adds `frame_id` to the page's URL, and the app's `src/boot.js` imports `src/activity.js` when it sees it. That import is a separate chunk with the SDK in it, so opened anywhere else the page never fetches the SDK and plays as the web game does. Everyone who opens the Activity in one channel shares Discord's `instanceId`, so that becomes the room (`d-` and the id) and nobody types a code. Each player presses Clock in, which tries to host. Whoever finds the room taken joins it instead. Names come from Discord through an OAuth sign-in. The Worker trades the code for a token at `/api/discord/token`, so the client secret stays on the server. A player who declines the sign-in plays as Guard.
 
-Discord only lets the page reach its own origin. The SDK is copied into `apps/discord/public/vendor/` (`vendor-discord.sh`). The stylesheets and fonts stay on their pinned CDN links in `index.html`, and the Discord Worker rewrites those links to `/ext/...` as it serves the page, then fetches them from jsdelivr and Google Fonts itself. Only the catppuccin-neu stylesheets and Google's font files pass through it.
+Discord only lets the page reach its own origin. The SDK is `@discord/embedded-app-sdk` from npm, bundled into the build, so it comes from that origin like the rest of the game. The stylesheets and fonts stay on their pinned CDN links in `index.html`, and the Discord Worker rewrites those links to `/ext/...` as it serves the page, then fetches them from jsdelivr and Google Fonts itself. Vite renames the built page's scripts and stylesheet with hashes and leaves the CDN links as they are. `run_worker_first` in `wrangler.jsonc` sends `/` and `/index.html` to the Worker before the static files, so the Worker rewrites the built page on its way out. Only the catppuccin-neu stylesheets and Google's font files pass through it.
 
 To set it up:
 
@@ -73,15 +73,15 @@ To set it up:
 2. Put the application ID in `vars.DISCORD_CLIENT_ID` in `apps/discord/wrangler.jsonc`. Then, in `apps/discord`, run `pnpm wrangler secret put DISCORD_CLIENT_SECRET`, and from the repo root run `pnpm run deploy:discord`.
 3. Under Activities > URL Mappings, map `/` to the Worker's host with no protocol, for example `thick-shift-discord.<account>.workers.dev`.
 4. Start the Activity from a voice channel. Until the app is published, only its owner and team members can launch it.
-5. To verify the app, put `https://<worker host>/terms` and `https://<worker host>/privacy` in General Information as the Terms of Service and Privacy Policy URLs (`apps/discord/public/terms.html`, `privacy.html`). If the game starts collecting anything new, update `privacy.html`.
+5. To verify the app, put `https://<worker host>/terms` and `https://<worker host>/privacy` in General Information as the Terms of Service and Privacy Policy URLs (`apps/discord/terms.html`, `privacy.html`). If the game starts collecting anything new, update `privacy.html`.
 
-To test from your own machine, run `pnpm dev:discord` behind a tunnel such as `cloudflared tunnel --url localhost:8787`, and map `/` to the tunnel's host. Put `DISCORD_CLIENT_SECRET=...` in `apps/discord/.dev.vars`, which git ignores.
+To test from your own machine, run `pnpm dev:discord` behind a tunnel such as `cloudflared tunnel --url localhost:5173`, and map `/` to the tunnel's host. Vite turns away requests for hosts it does not know, so start it with the tunnel's domain allowed: `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=.trycloudflare.com pnpm dev:discord`. Put `DISCORD_CLIENT_SECRET=...` in `apps/discord/.dev.vars`, which git ignores.
 
 ## How the pieces talk
 
 The host runs `three/sim3d.js` ten times a second and sends the full state `S` to every guest. Both sides hold a WebSocket to `/room/CODE` on the same origin, and the `Room` Durable Object in `packages/game/worker/room.js` passes messages between them. Nothing is peer to peer, so it works on any network that allows WebSockets. The relay keeps no game state. If the host leaves, the relay hands the room to the guest who has been there longest, and `adoptFloor` rebuilds what the old host's mascots were thinking from `S`. Guests never change `S`. They send actions (`p` for where they are, `use`, `call`, `name`) to the host through `net.send`.
 
-`main.js` loads `three/app.js`, and with it three.js, the first time a night is drawn, so the title screen and lobby come up without waiting for it.
+`main.js` loads `three/app.js`, and with it three.js, the first time a night is drawn, so the title screen and lobby come up without waiting for it. Vite builds it, and `dev.js`, as chunks of their own.
 
 ## Winning
 

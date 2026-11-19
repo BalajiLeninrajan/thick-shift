@@ -1,5 +1,5 @@
 --!nonstrict
--- The night, ported from packages/game/public/src/three/sim3d.js. The server owns one Sim and steps it; clients get S. Read the JS
+-- The night, ported from packages/game/src/three/sim3d.js. The server owns one Sim and steps it; clients get S. Read the JS
 -- file for why each number is what it is: the comments there are the tuning record, and this port keeps the same
 -- numbers and the same order of random draws so tools/roblox/diff-sim checks it tick by tick against the original.
 --
