@@ -210,12 +210,11 @@ export function createHud(stage, player) {
     while (live.length > MAX_TOASTS - (root.clientHeight < SHORT)) drop(live.shift());
   }
   // A line of advice the first time something happens, and never again on this browser.
-  // {use} becomes whatever this player presses to use things.
   function tip(key, text) {
     if (seen.split(' ').includes(key)) return;
     seen += ' ' + key;
     try { localStorage.tsFloorTips = seen; } catch (e) { /* storage blocked */ }
-    say(text.replace('{use}', player.me.touch ? 'Use' : 'E').replace('{throw}', player.me.touch ? 'Biggs' : 'G'), 'tip', 9);
+    say(text, 'tip', 9);
   }
 
   /* ---------- the compass ---------- */
