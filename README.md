@@ -15,7 +15,7 @@ pnpm run deploy          # build and publish the web game (plain `pnpm deploy` i
 pnpm run deploy:discord  # build and publish the Discord Activity
 ```
 
-Rooms need the Worker. `vite dev` runs it, Durable Object and all, so hosting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server pointed at it runs the game solo.
+Rooms need the Worker. `vite dev` runs it, Durable Object and all, so hosting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server that serves it at the root of a domain runs the game solo. The page loads its scripts from `/assets/`, so it does not work from a sub-path.
 
 Add `?dev` to the URL for the dev menu (the backtick key, or the Dev button on the pause screen and in the touch menu): god mode, infinite power, freeze, wake every mascot, game speed, forced rot stage and dread, time skips, power and torch buttons, and per-mascot controls. Only the host's changes reach the simulation. Add `?debug` to get `window.ts` (the live `game` and `client` state) in the console.
 
