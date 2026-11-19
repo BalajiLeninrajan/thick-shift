@@ -6,8 +6,10 @@ import { defineConfig } from 'vite';
 const page = name => fileURLToPath(new URL(name, import.meta.url));
 
 export default defineConfig({
-  // The web app's Worker inspector takes the default port, 9229. Both servers started at once would race for it.
-  plugins: [game(), cloudflare({ inspectorPort: 9230 })],
+  // The web app's Worker inspector takes 9229, or the next free port above it, so two servers started at once would
+  // race for it. Discord's sits well above that range. A pinned port never falls back: if something else holds 9329,
+  // such as dev:discord in another checkout, this server exits with EADDRINUSE.
+  plugins: [game(), cloudflare({ inspectorPort: 9329 })],
   // Discord reaches a local dev server through a tunnel (README.md), and Vite turns away hosts it does not know.
   server: { allowedHosts: ['.trycloudflare.com'] },
   environments: {
