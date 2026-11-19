@@ -24,6 +24,7 @@ for (const [c, name] of onWalls) {
   const p = { x: c.x + Math.sin(c.face) * .8, z: c.z + Math.cos(c.face) * .8 };
   if (!M.walkable(p.x, p.z, M.PLAYER_R)) bad.push(`nowhere to stand in front of ${name}`); else reach(p, name);
 }
+M.HIDES.forEach((h, i) => { if (!M.walkable(h.at.x, h.at.z, M.PLAYER_R)) bad.push(`nowhere to stand in front of locker ${i} in ${M.ROOMS3[h.room].name}`); else reach(h.at, `locker ${i}`); });
 M.BATTERY_SPOTS.forEach((b, i) => { if (!M.walkable(b.x, b.z, M.PLAYER_R)) bad.push(`battery spot ${i} at ${at(b)} is inside something`); else reach(b, `battery spot ${i}`); });
 M.REST.forEach((r, i) => { if (!M.walkable(r.x, r.z, M.MASCOT_R)) bad.push(`resting mark ${i} at ${at(r)} is blocked`); else reach(r, `resting mark ${i}`); });
 for (let i = 0; i < 8; i++) { const p = M.spawnPoint(i); if (!M.walkable(p.x, p.z, M.PLAYER_R)) bad.push(`spawn point ${i} at ${at(p)} is blocked`); }

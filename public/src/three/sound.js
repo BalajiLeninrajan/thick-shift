@@ -19,6 +19,7 @@ const BUSY = 18;        // with this many voices sounding, footsteps and other t
 const POOL = 8;         // emitters shared by one-off sounds (a bang, a punched clock)
 const MAX_GUARDS = 5;   // other guards whose footsteps are placed
 const MUFFLED = 420;    // Hz the whole mix is cut to while this guard is flat
+const IN_LOCKER = 2600; // and while they stand in a locker, behind its doors
 // What walls do to a sound, as [gain, low-pass Hz]: in sight, in the same room
 // but round a corner, then one, two, and three or more doorways away.
 const OCC = [[1, 18000], [.8, 4500], [.55, 1400], [.36, 750], [.24, 450]];
@@ -81,7 +82,7 @@ function doorwaysBetween(a, b, doors) {
 const SIZE = ROOMS3.map(r => { const [x0, z0, x1, z1] = r.rects[0]; return Math.max(0, Math.min(1, Math.log((x1 - x0) * (z1 - z0) * r.h / 69) / Math.log(14))); });
 
 export function createSound() {
-  let ac = null, now = 0, rig = null, lastEv = -1, stingAt = -9, under = false, echo = 1;
+  let ac = null, now = 0, rig = null, lastEv = -1, stingAt = -9, under = 0, echo = 1;
   let head = { x: 0, z: 0, fx: 0, fz: 1 }, doors = null, torchOn = false, sources = 0, steps = 0, pant = 0, gasp = false, crank = 0, holdTick = 0, dim = false;
 
   /* ---------- the graph ---------- */
@@ -226,6 +227,14 @@ export function createSound() {
     calm() { into(room(), () => sample(pick('creak1', 'creak2'), { rate: .5, gain: .5 })); },
     // It has run out of wind and given up the chase: a long breath out.
     quit(x) { into(rig.mascots[x.i].e.in, () => noise(.8, 1.2, { band: BREATH[x.i].hz * 2, band2: BREATH[x.i].hz, q: 1, attack: .12 })); },
+    // A locker door: a sheet-metal clank and the latch. Pulled open, it is wrenched.
+    locker(x, S) {
+      const clank = () => { sample('sheet3', { rate: x.in ? 1.7 : 1.5, gain: .45 }) || noise(.18, .35, { band: 2400, q: 3 }); tone(x.in ? 1400 : 1200, .03, 'square', .05, 0, .12); };
+      if (mine(x.id)) clank(); else at(S, x, clank);
+    },
+    // A mascot yanking open a locker that turned out empty.
+    check(x, S) { at(S, x, () => { sample('sheet3', { rate: 1.2, gain: .6 }) || noise(.25, .45, { band: 1800, q: 2 }); sample('knock1', { rate: .9, gain: .4, at: .35 }); }); },
+    found(x, S) { at(S, x, () => { sample('slam2', { rate: 1.3, gain: .8 }) || noise(.3, .6, { band: 1500 }); sample('sheet3', { rate: 1.1, gain: .7, at: .02 }); }); },
     peel(x, S) {
       const rip = () => { noise(.5, .6, { band: 600, band2: 3600, q: 2.5, attack: .3 }); tone(300, .08, 'sine', .4, 900, .46); };
       if (mine(x.id)) rip(); else at(S, x, rip);
@@ -329,7 +338,7 @@ export function createSound() {
     now = ac.currentTime;
     for (const g of rig.loops) aim(g.gain, 0, .1);
     doors = null;
-    if (under) { under = false; muffle(); }
+    if (under) { under = 0; muffle(); }
   }
 
   return {
@@ -361,8 +370,9 @@ export function createSound() {
       self(me, mate.bat ?? 1, dt);
       for (const e of fresh) ON[e.type]?.(e.x, S);
       // Flat on the floor the world is somewhere above you, from the moment the catch drops you there.
-      const down = me.flat && now - stingAt > CUES.floor;
-      if (down !== under) { under = down; muffle(down ? MUFFLED : undefined); }
+      const down = me.flat && now - stingAt > CUES.floor, shut = !me.flat && me.hid >= 0;
+      const want = down ? MUFFLED : shut ? IN_LOCKER : 0;
+      if (want !== (under || 0)) { under = want; muffle(want || undefined); }
     },
     // For ?debug and tests: what is sounding, and the recipes by name.
     stats: () => ({ voices: voices(), loops: sources, emitters: rig ? rig.mascots.length + POOL + 2 + rig.guards.size : 0 }),

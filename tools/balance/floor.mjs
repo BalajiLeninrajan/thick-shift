@@ -359,6 +359,12 @@ function defend(S, bot, objective) {
   // In the booth with it outside: the doors are the answer. With it inside: out by another door.
   if (booth && canHole && !hs.some(inBooth)) { st.holed = S.t + 3; return false; }
   const r = race(S, bot, hs, speed);
+  // Out of sight of everything it knows about for long enough that nothing still knows where it is (eight seconds of
+  // Biggs), with a free locker close by and the lights on: in, if this guard hides at all.
+  if (known(S, bot, 4).some(k => k.st !== 'rest' && M.sees(k.x, k.z, bot.x, bot.z, S.doors))) st.seenAt = S.t;
+  const lostThem = S.t - (st.seenAt ?? -99) > (hs.some(k => k.i === 0) ? 8.5 : 2);
+  const locker = bot.policy.hides && sim.lightsF(S) && !(st.hideCool > S.t) && lostThem && freeLocker(S, bot, 5);
+  if (locker) { w.use = locker; w.goal = null; w.sprint = true; return true; }
   // Carry on with the job if we can get there and do it before anything gets there. Once running, keep running a while.
   const pressed = hs.length > 1 || (bot.bat <= 0 && h.i !== 0) || S.t - st.chased > 10;
   const u = objective?.use, target = u ? u.stand || front(u.at) : objective?.goal;
@@ -415,6 +421,7 @@ const honest = (skill, opts = {}) => ({
   skill: SKILL[skill], ...opts,
   think(S, bot, team) {
     const sk = bot.skill, w = bot.want, st = bot.state, booth = inBooth(bot);
+    if (stayHidden(S, bot)) return;
     const obj = objectiveOf(S, bot, team);
     const dark = !sim.lightsF(S);
     w.on = sk.torch === 'always' ? !booth || dark : (!booth && bot.bat > sk.reserve) || (dark && bot.bat > sk.reserve / 2);
@@ -440,6 +447,24 @@ const honest = (skill, opts = {}) => ({
     if (obj.use && (obj.urgent || obj.clock) && dist(bot, obj.use.at) / F.WALK > (obj.urgent ? 3 : F.HOUR - S.t % F.HOUR - 6)) w.sprint = true;
   },
 });
+
+// Lockers (M.HIDES). The nearest one nobody is in, within `within` metres, as something to use.
+function freeLocker(S, bot, within) {
+  const free = M.HIDES.map((h, i) => ({ h, i })).filter(({ h, i }) => !S.players.some(p => p.hid === i) && dist(bot, h.at) < within && M.clear(bot.x, bot.z, h.at.x, h.at.z, M.PLAYER_R, S.doors));
+  const best = free.sort((a, b) => dist(bot, a.h.at) - dist(bot, b.h.at))[0];
+  return best && { what: 'hide', i: best.i, at: best.h.at, stand: best.h.at, hold: F.HIDE_HOLD, key: 'hide' + best.i };
+}
+// In a locker: stay while anything known is moving nearby, then out after a few seconds of quiet (or 25 s at most,
+// since the clocks do not wait). Returns true while in one.
+function stayHidden(S, bot) {
+  const me = game.players[bot.id], st = bot.state, w = bot.want;
+  if (!(me.hid >= 0)) { st.hidFor = 0; return false; }
+  st.hidFor = (st.hidFor || 0) + DT;
+  w.on = false;
+  const near = known(S, bot, 4).some(h => MOVING.includes(h.st) && dist(bot, h) < 9);
+  if ((!near && st.hidFor > 4) || st.hidFor > 25) { w.use = { what: 'hide', i: me.hid, at: bot, stand: bot, hold: 0, key: 'out' }; st.hideCool = S.t + 8; }
+  return true;
+}
 
 /* ---------- playing to break it ---------- */
 
@@ -484,6 +509,13 @@ const DEGENERATE = {
     w.ducts = true;
     if (dist(bot, at) > .3) w.goal = at;
     if (h && dist(bot, h) < F.BEAM_RANGE) { w.face = ang(bot, h); w.on = true; }
+  } }),
+  // Into a locker at the start of the night, a different one each, and stay there.
+  locker: () => ({ skill: SKILL.competent, think(S, bot) {
+    if (game.players[bot.id].hid >= 0) return;
+    const spawn = M.spawnPoint(0), order = M.HIDES.map((_, i) => i).sort((a, b) => dist(spawn, M.HIDES[a].at) - dist(spawn, M.HIDES[b].at));
+    const i = order[bot.i % order.length], h = M.HIDES[i];
+    bot.want.use = { what: 'hide', i, at: h.at, stand: h.at, hold: F.HIDE_HOLD, key: 'hide' + i };
   } }),
   // Crank the generator and nothing else, torch on whatever turns up.
   cranker: () => ({ skill: SKILL.competent, think(S, bot) {
@@ -564,6 +596,7 @@ function play(sc, seed, trace) {
       bot.bat = me.bat;
       if (me.flat) { if (!bot.flat) { bot.flat = true; bot.x = me.x; bot.z = me.z; } if (S.t - (bot.called || -9) > F.CALL_GAP) { bot.called = S.t; sim.actFloor(bot.id, { t: 'call' }); } continue; }
       bot.flat = false;
+      if (me.hid >= 0) { bot.x = me.x; bot.z = me.z; }
       bot.want = { on: false };
       if ((tickNo + bot.i) % 3 === 0) perceive(S, bot);
       bot.policy.think(S, bot, team);
@@ -636,6 +669,9 @@ for (const night of [3, 5]) add('crew of 4 expert', 4, night, all(honest('expert
 // A crew that splits up but leaves each other on the floor, and one that never cranks: what coordination is worth.
 add('crew of 4, no peels', 4, 5, all(honest('competent', { peels: false })));
 add('crew of 4, no crank', 4, 5, all(honest('competent', { cranks: false })));
+// Ducking into a locker when something is after you and cannot see you: what the lockers are worth.
+for (const night of [1, 3, 5]) add('solo competent, hides', 1, night, all(honest('competent', { hides: true })));
+for (const night of [3, 5]) add('crew of 3 competent, hides', 3, night, all(honest('competent', { hides: true })));
 
 // The ones that must not work. worse: the proper scenario each has to do clearly worse than.
 const sitter = honest('competent', { clocks: false, stays: true, peels: false, cranks: false });
@@ -652,6 +688,8 @@ bad('x4 camp the charger', 4, all(DEGENERATE.dock()));
 bad('x1 kite round the loop', 1, all(DEGENERATE.kite()));
 bad('x4 sit in the ducts', 4, all(DEGENERATE.hole({ x: 20, z: 34.75, dx: 1.2 })));
 bad('x2 stand in the vent doorway', 2, all(DEGENERATE.hole({ x: 22.9, z: 36.25, dx: 0, dz: .2 })));
+bad('x1 sit in a locker all night', 1, all(DEGENERATE.locker()));
+bad('x4 sit in lockers all night', 4, all(DEGENERATE.locker()));
 bad('x2 stand in the duct mouth', 2, all(DEGENERATE.hole({ x: 15.9, z: 33.25, dx: 0, dz: .2 })));
 
 /* ---------- running them ---------- */

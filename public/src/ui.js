@@ -64,6 +64,7 @@ const FLOOR_RULES = [
   '<b>Your torch.</b> The beam holds a mascot back while it is on it. A full battery lasts about a minute: charge it at the dock in the booth, or pick up spare batteries.',
   '<b>Your phone.</b> C holds up a map of the building, R zooms it. It eats the torch battery four times as fast as the torch, and while it is up you walk slowly and the torch points at the floor. Glance, then put it away.',
   '<b>The mascots.</b> They stand still, then wander in waves. Touch one and you are flat until a friend stands over you and holds E. While flat, Q calls for help and Space watches a friend. Everyone flat at once ends the night.',
+  '<b>Lockers.</b> Hold E at a locker out on the floor to step inside and out of sight. Get out of sight first: one that sees you get in, or was right behind you, opens the door. One that has lost you checks the lockers nearby, and one that stands outside too long sniffs you out. The doors clank, so mind who is near.',
   '<b>The booth</b> is where you start: the generator, the charger, a wall map of what is due, and three doors you can shut. Shut doors drain power fast and the clocks do not wait, so it is no place to hide.',
   '<b>Controls.</b> W A S D walk, mouse or arrow keys look, Shift runs, F is the torch, C is the phone, E uses things, Esc pauses.',
 ];
