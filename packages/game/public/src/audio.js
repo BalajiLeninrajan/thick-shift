@@ -190,6 +190,47 @@ export function shriek(level = .7, at = 0) {
   mix.connect(cut1).connect(cut2).connect(bite).connect(chop).connect(amp).connect(out());
 }
 
+// A Mini Biggs singing where it came down (TOY in three/sim3d.js): a thump on the floor, a click as the voice box
+// wakes, then two lines of Happy Birthday from a chip that was never meant to run on a torch battery. A thin pulse
+// wave, crushed to a few bits like a cheap voice box, that drags and sags in pitch as the charge runs out over
+// `secs`, until the last note is a groan. Made once into a buffer, so the whole song is one voice.
+let songBuf = null;
+export function song(gain = .5, at = 0, secs = 3) {
+  if (full()) return;
+  songBuf ||= songBuffer(secs);
+  const src = ac.createBufferSource(), g = ac.createGain(), t = ac.currentTime + at;
+  src.buffer = songBuf; g.gain.value = gain;
+  src.connect(g).connect(out());
+  play(src, g, t, t + songBuf.duration);
+}
+function songBuffer(secs) {
+  const sr = ac.sampleRate, start = .25, len = Math.ceil(sr * (secs + start + .4)), buf = ac.createBuffer(1, len, sr), d = buf.getChannelData(0);
+  // The thump of a soft toy landing, and the click of the voice box.
+  for (let i = 0; i < sr * .08; i++) d[i] += Math.sin(i / sr * 2 * Math.PI * 90) * Math.exp(-i / (sr * .02)) * .8;
+  for (let i = 0; i < sr * .004; i++) d[Math.floor(sr * .15) + i] += (Math.random() * 2 - 1) * .5;
+  // Semitones from G4 and beats: "Happy birthday to you, happy birthday to you".
+  const NOTES = [[0, .75], [0, .25], [2, 1], [0, 1], [5, 1], [4, 2], [0, .75], [0, .25], [2, 1], [0, 1], [7, 1], [5, 2.5]];
+  const beats = NOTES.reduce((n, [, b]) => n + b, 0);
+  let t = start, phase = 0, beat = 0;
+  for (const [semi, b] of NOTES) {
+    // How much charge is left, by how far through the song it is: the tempo drags to half and the pitch falls up to
+    // seven semitones, most of it at the end.
+    const left = 1 - beat / beats, dur = b * secs / beats * (1.5 - .5 * left) / 1.15, n = Math.floor(dur * sr), i0 = Math.floor(t * sr);
+    for (let k = 0; k < n && i0 + k < len; k++) {
+      const u = k / n, now = 1 - (beat + b * u) / beats, sag = 7 * (1 - now) ** 2;
+      const hz = 392 * 2 ** ((semi - sag) / 12) * (1 + .012 * Math.sin((t + k / sr) * 2 * Math.PI * 6));   // a warble
+      phase = (phase + hz / sr) % 1;
+      const pulse = phase < .28 ? 1 : -1, env = Math.min(1, u * 40) * Math.min(1, (1 - u) * 12) * (.4 + .6 * now);
+      d[i0 + k] += Math.round(pulse * env * .5 * 8) / 8;   // three bits of voice box
+    }
+    t += dur; beat += b;
+  }
+  let peak = 0;
+  for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(d[i]));
+  for (let i = 0; i < len; i++) d[i] /= peak * 1.1;
+  return buf;
+}
+
 // The part of a heavy impact you feel more than hear.
 export function boom({ from = 72, to = 30, level = .9, at = 0 } = {}) {
   if (full()) return;

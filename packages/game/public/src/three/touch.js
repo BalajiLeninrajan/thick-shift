@@ -1,8 +1,10 @@
 // Touch controls: a stick under the left thumb, look by
 // dragging anywhere else, and buttons for the torch, the phone, its map's
-// zoom, running and using things. They drive the guard through player.pad,
-// player.look, player.toggleTorch, player.togglePhone and player.toggleZoom,
-// and show only while a finger is the pointer.
+// zoom, a Mini Biggs to throw, running and using things. They drive the guard
+// through player.pad, player.look, player.toggleTorch, player.togglePhone,
+// player.toggleZoom and player.throwToy, and show only while a finger is the pointer.
+import { game } from '../state.js';
+import { TOY } from './sim3d.js';
 import { unlockAudio } from '../audio.js';
 
 const STICK_R = 48;       // pixels the knob travels for full speed
@@ -12,6 +14,8 @@ const LOOK = 2.6;         // a thumb drags fewer pixels than a mouse travels
 const TORCH = '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><path d="M6 6h12M12 12v2"/></svg>';
 
 const PHONE = '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="5" width="10" height="17" rx="2"/><path d="M14 5V2M9.5 8.5h5v4h-5zM10 16h.01M14 16h.01M12 19h.01"/></svg>';
+
+const PLUSH = '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="6.5" r="2.2"/><path d="M9.5 11v.01M14.5 11v.01M10 16.5h.01M14 16.5h.01"/></svg>';
 
 export const canFullscreen = !!document.documentElement.requestFullscreen;
 // Phones that allow it are also turned to landscape, which is the only layout.
@@ -29,9 +33,10 @@ export function createTouch(root, player) {
     <button class="ts-t-btn ts-t-torch" aria-label="Torch" aria-pressed="false">${TORCH}</button>
     <button class="ts-t-btn ts-t-use">Use</button>
     <button class="ts-t-btn ts-t-phone" aria-label="Phone" aria-pressed="false">${PHONE}</button>
-    <button class="ts-t-btn ts-t-zoom" aria-label="Zoom the map" aria-pressed="false">Map</button>`;
+    <button class="ts-t-btn ts-t-zoom" aria-label="Zoom the map" aria-pressed="false">Map</button>
+    <button class="ts-t-btn ts-t-toy" aria-label="Throw a Mini Biggs">${PLUSH}</button>`;
   root.append(layer);
-  const [stickEl, runBtn, torchBtn, useBtn, phoneBtn, zoomBtn] = layer.children, knob = stickEl.firstChild;
+  const [stickEl, runBtn, torchBtn, useBtn, phoneBtn, zoomBtn, toyBtn] = layer.children, knob = stickEl.firstChild;
   let stick = null, drag = null;   // the finger on the stick and the finger looking: { id, x, y }
 
   // Whichever kind of pointer was used last decides whether these controls show.
@@ -86,6 +91,8 @@ export function createTouch(root, player) {
   press(torchBtn, () => player.toggleTorch());
   press(phoneBtn, () => player.togglePhone());
   press(zoomBtn, () => player.toggleZoom());
+  // Thrown where the view points, as with the key: drag to look down at a spot first to throw it short.
+  press(toyBtn, () => player.throwToy());
   press(runBtn, () => { pad.sprint = !pad.sprint; });
 
   const flag = (e, name, v) => { if (e.getAttribute(name) !== String(v)) e.setAttribute(name, v); };
@@ -100,6 +107,9 @@ export function createTouch(root, player) {
       if (zoomBtn.hidden === me.ph) zoomBtn.hidden = !me.ph;
       flag(runBtn, 'aria-pressed', pad.sprint);
       useBtn.classList.toggle('is-ready', !!me.target);
+      // Greyed out with empty hands, or while the battery has less than a throw costs.
+      const mine = game.S?.players.find(p => p.id === game.myId);
+      flag(toyBtn, 'aria-disabled', !mine?.toy || mine.bat < TOY.cost);
     },
   };
 }

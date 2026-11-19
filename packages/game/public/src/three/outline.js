@@ -8,7 +8,7 @@
 // higher it is, and the widest, at 1, is kept for what the use key would act on):
 //   open faults          gold, pulsing, red in their last seconds; in any room that can be seen
 //   what you are aiming at  brighter and thicker, whatever it is
-//   batteries, the crank, the charger, door buttons  a faint gold, within NEAR metres
+//   batteries, the crank, the charger, door buttons, a Mini Biggs on the floor (with empty hands)  a faint gold, within NEAR metres
 //   flat teammates       red, wherever they can be seen
 // The switch is in the pause panel (prefs.outline in player.js), on by default.
 import { game } from '../state.js';
@@ -32,7 +32,8 @@ export function createOutlines(parts, actors) {
       // The thing the use key would act on.
       if (aim && !me.task) {
         const obj = aim.what === 'fix' ? parts.boxes[aim.i] : aim.what === 'bat' ? parts.bats[aim.i] : aim.what === 'crank' ? parts.gen
-          : aim.what === 'charge' ? parts.dock : aim.what === 'door' ? parts.panels[aim.k] : aim.what === 'peel' ? actors.guards.get(aim.id)?.group : null;
+          : aim.what === 'charge' ? parts.dock : aim.what === 'door' ? parts.panels[aim.k] : aim.what === 'peel' ? actors.guards.get(aim.id)?.group
+          : aim.what === 'toy' ? actors.plush.group(aim.id) : null;
         add(obj, aim.what === 'peel' ? RED : GOLD, 1); aimed.add(obj);
       }
       const pulse = .62 + .22 * Math.sin(t * 4);
@@ -41,6 +42,7 @@ export function createOutlines(parts, actors) {
       const faint = (obj, at) => { if (!aimed.has(obj) && near(at)) add(obj, GOLD, .45); };
       for (const i of S.bats || []) faint(parts.bats[i], BATTERY_SPOTS[i]);
       faint(parts.gen, GENERATOR);
+      if (!S.players.find(p => p.id === game.myId)?.toy) for (const toy of S.toys || []) if (S.t >= toy.land) faint(actors.plush.group(toy.id), toy);
       if (S.power > 0) { faint(parts.dock, CHARGER); for (const k in PANELS) faint(parts.panels[k], PANELS[k]); }
       return marks;
     },

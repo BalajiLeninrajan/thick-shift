@@ -116,6 +116,9 @@ function create() {
       else hud.say(`${MASC[e.x.i].name} pulled ${guard(e.x.id)?.name || 'someone'} out of a locker ${where(e.x)}.`, 'hide', 6);
     },
     fumble(e) { if (isMe(e.x.by)) hud.say('The door will not shut. Something is standing in it.', 'info', 3); },
+    // The first time the mascots get up: what the Mini Biggs in your pocket is for.
+    stir() { hud.tip('toy', 'They are up. {throw} throws your Mini Biggs where you are looking. It sings on a bar of your torch, and anything wandering near where it lands goes to see whose birthday it is. Not anything already after you. Pick it up again to throw it again.'); },
+    grab(e) { if (isMe(e.x.by)) hud.say('Mini Biggs back in hand.', 'toy', 2.5); },
   };
 
   // How scared this guard should be right now, 0 to 1: something hunting, close.

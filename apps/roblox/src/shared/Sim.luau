@@ -89,6 +89,15 @@ local RAMP = { 0, 1, 2, 3.15, 4.3 }
 local SNIFF = { near = 1.6, time = 3 }
 local CHECK = { near = 8, chance = 0.5, most = 2 }
 local LOCKER_NOISE = { 6, 0.5 }
+-- Mini Biggs, the plush that sings on the torch's battery: see TOY in sim3d.js.
+local TOY = {
+	cost = 0.2,
+	range = 14,
+	speed = 11,
+	hear = 12,
+	chance = 0.9,
+	sing = 3,
+}
 local DREAD_SPAN, DREAD_FULL = 45, 7
 local COMING = { "hunt", "windup", "charge" }
 -- When each mascot first comes out, by MASC index: hours of the run, and how many sooner for each extra guard.
@@ -109,6 +118,7 @@ end
 local Sim = {}
 Sim.__index = Sim
 Sim.F = F
+Sim.TOY = TOY
 
 function Sim.hourF(S): number
 	return math.min(6, math.floor(S.t / F.HOUR))
@@ -225,6 +235,7 @@ local function placeGuard(p, i: number)
 	p.x, p.z, p.yaw = sp.x, sp.z, sp.yaw
 	p.pitch, p.on, p.ph, p.bat, p.flat, p.flatBy, p.sp, p.act, p.safe, p.callAt, p.hid =
 		0, false, false, 1, false, -1, false, "", 0, 0, -1
+	p.toy = true
 end
 
 local function newBrain(timer: number)
@@ -369,6 +380,9 @@ function Sim:startNight(n: number)
 	end
 	S.batN = math.min(#spots, 3 + #all)
 	S.bats = table.move(spots, 1, S.batN, 1, {})
+	-- The Mini Biggses thrown, newest last (see sim3d.js).
+	S.toys = {}
+	S.toyId = 0
 	self.batTimers = {}
 	self.crankNoise = 0
 end
@@ -588,6 +602,32 @@ function Sim:noise(x: number, z: number, radius: number, chance: number)
 			b.last = { x = x, z = z }
 			b.timer = self:rnd(3, 6)
 			b.repath = 0
+		end
+	end
+end
+
+-- Where a thrown thing comes down: along yaw from (x, z), as far as d, but short of a wall or a shut door. It goes
+-- over the furniture, not onto it.
+function Sim.landing(S, x: number, z: number, yaw: number, d: number)
+	local sx, sz, step = math.sin(yaw), math.cos(yaw), 0.25
+	local k = 0
+	while k + step <= d and walkable(x + sx * (k + step), z + sz * (k + step), 0.1, S.doors, true) do
+		k += step
+	end
+	while k > 0 and not walkable(x + sx * k, z + sz * k, 0.1, S.doors) do
+		k -= step
+	end
+	return { x = x + sx * k, z = z + sz * k }
+end
+
+-- A thrown Mini Biggs that has just come down sings where it lands, and whatever hears it comes to look.
+function Sim:landToys()
+	local S = self.S
+	for _, s in S.toys do
+		if not s.heard and S.t >= s.land then
+			s.heard = true
+			self:emit("toy", { by = s.by, x = s.x, z = s.z })
+			self:noise(s.x, s.z, TOY.hear, TOY.chance)
 		end
 	end
 end
@@ -1258,6 +1298,7 @@ function Sim:step(dt: number)
 			self:noise(GENERATOR.x, GENERATOR.z, 24, 0.35)
 		end
 	end
+	self:landToys()
 	if S.dev and S.dev.freeze then
 		return
 	end
@@ -1314,6 +1355,32 @@ function Sim:act(pid: string, a: any)
 		end
 		return
 	end
+	if a.t == "throw" then
+		-- Their Mini Biggs, along the way the guard is looking (yaw) and as far as they aimed (d), sung on the torch's
+		-- battery. Not from a locker, and not on less than it costs.
+		if p.flat or hidden(p) or not p.toy or p.bat < TOY.cost then
+			return
+		end
+		local to = Sim.landing(S, p.x, p.z, num(a.yaw, -1e3, 1e3, p.yaw), num(a.d, 0, TOY.range, TOY.range))
+		p.bat = math.max(0, p.bat - TOY.cost)
+		p.toy = false
+		if p.bat <= 0 then
+			p.on, p.ph = false, false
+		end
+		S.toyId += 1
+		table.insert(S.toys, {
+			id = S.toyId,
+			by = p.id,
+			x0 = p.x,
+			z0 = p.z,
+			x = to.x,
+			z = to.z,
+			at = S.t,
+			land = S.t + math.max(0.3, dist(p, to) / TOY.speed),
+			heard = false,
+		})
+		return
+	end
 	if a.t ~= "use" or p.flat then
 		return
 	end
@@ -1356,6 +1423,21 @@ function Sim:act(pid: string, a: any)
 		table.insert(self.batTimers, self:rnd(30, 50))
 		p.bat = math.min(1, p.bat + F.BAT_PICKUP)
 		self:emit("bat", { by = p.id })
+	elseif a.what == "toy" and not p.toy and not hidden(p) then
+		-- A Mini Biggs on the floor, anyone's, into empty hands. Not one still in the air.
+		local k = nil
+		for j, o in S.toys do
+			if o.id == a.id then
+				k = j
+			end
+		end
+		local t = k and S.toys[k]
+		if not t or S.t < t.land or not near(t) then
+			return
+		end
+		table.remove(S.toys, k)
+		p.toy = true
+		self:emit("grab", { by = p.id, x = t.x, z = t.z })
 	elseif a.what == "hide" and HIDES[i + 1] and i >= 0 then
 		local h = HIDES[i + 1]
 		if p.hid == i then
