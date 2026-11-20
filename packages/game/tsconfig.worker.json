@@ -3,6 +3,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "tsBuildInfoFile": "${configDir}/node_modules/.tmp/tsconfig.worker.tsbuildinfo",
+    // The sim's rules, for files ported to TS in PR 5 of #7: type-only imports say `import type`, and nothing that
+    // stripping types cannot erase (enums, parameter properties, namespaces).
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["worker"]
