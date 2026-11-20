@@ -7,13 +7,18 @@
 // slide() the game uses, at the game's speeds, and react late.
 import {
   actFloor,
+  assert,
   brainOf,
+  DOORS,
   darkRoom,
+  defined,
   F,
   faultLeft,
+  isPlaced,
   landing,
   lightsF,
   MASC,
+  MASCOTS,
   newSim,
   newState,
   seeded,
@@ -21,9 +26,9 @@ import {
   stepFloor,
   TOY,
 } from '../../packages/sim/src/index.ts';
-import type { NavLink } from '../../packages/sim/src/map.ts';
+import type { NavLink, NavNode } from '../../packages/sim/src/map.ts';
 import * as M from '../../packages/sim/src/map.ts';
-import type { Dev, DoorKey, Fault, Guard, GuardAct, MascotState, NightState, Point, UseWhat } from '../../packages/sim/src/types.ts';
+import type { Dev, DoorKey, Fault, Guard, GuardAct, MascotIndex, MascotState, NightState, Point, UseWhat } from '../../packages/sim/src/types.ts';
 import type { Night } from '../roblox/diff/rec.ts';
 
 // The sim's clock, in milliseconds: each tick moves it on by DT. It runs on from one night to the next.
@@ -44,7 +49,7 @@ type Sense = 'see' | 'hear' | 'map';
 // What a guard remembers of a mascot: where it was and what it was doing at t, since when they have known of it
 // without a break, and how they knew.
 interface Memory extends Point {
-  i: number;
+  i: MascotIndex;
   st: MascotState;
   rot: number;
   lit: boolean;
@@ -66,31 +71,34 @@ interface Way {
   at: number;
 }
 // Something to use, and how. at: the thing. stand: where to stand to use it, if not in front of it. hold: seconds to
-// hold the key, or -1 to hold it for as long as this is wanted. key: tells one use from another, so a new one starts
-// its hold again. reach: how close counts, if not F.REACH - 0.3. shut: for a door, which way it should end up.
-interface Use {
-  what: UseWhat | 'crank' | 'charge';
+// hold the key, or -1 for the crank and the dock, which are held for as long as they are wanted. key: tells one use
+// from another, so a new one starts its hold again. reach: how close counts, if not F.REACH - 0.3. A door's use
+// says which door (k) and which way it should end up (shut); the others say which box, spot or locker (i) or which
+// guard or toy (id).
+interface UseBase {
   at: Point & { face?: number };
-  hold: number;
   key: string;
   stand?: Point;
   face?: number;
   reach?: number;
-  shut?: boolean;
-  i?: number;
-  k?: DoorKey;
-  id?: string | number;
 }
+type Use = UseBase &
+  (
+    | { what: 'crank'; hold: -1 }
+    | { what: 'charge'; hold: -1 }
+    | { what: 'door'; hold: number; k: DoorKey; shut: boolean; i?: never; id?: never }
+    | { what: Exclude<UseWhat, 'door'>; hold: number; i?: number; id?: string | number; k?: never; shut?: never }
+  );
 // What a guard wants to do this tick. dash: a heading to run along without thinking about a route. keep: the booth
 // doors that should stay shut.
 interface Want {
   on?: boolean;
-  goal?: Point | null;
+  goal?: Point | null | undefined;
   face?: number | null;
-  use?: Use | null;
+  use?: Use | null | undefined;
   dash?: number;
   sprint?: boolean;
-  keep?: string;
+  keep?: DoorKey[];
   ducts?: boolean;
 }
 // Where everyone could be and when (race()).
@@ -107,15 +115,14 @@ interface BotState extends DoorTimes {
   stirred?: boolean;
   stirAt?: number;
   chased?: number | null;
-  dodge?: number;
-  dodgeAt?: number;
+  dodge?: { side: 1 | -1; at: number }; // the side stepped to out of Tank's way, and when
   holed?: number;
   seenAt?: number;
   hideCool?: number;
   race?: Race;
   fleeNode?: number;
-  drift?: number;
-  driftTo?: Point;
+  drift?: { until: number; to: Point }; // a careless guard wandering off
+
   cranking?: boolean;
   topUp?: boolean;
   lureAt?: number;
@@ -170,7 +177,7 @@ export interface Bot extends Point {
   rested: number;
   hold: number;
   holding: string | null;
-  mem: (Memory | undefined)[];
+  mem: (Memory | undefined)[]; // by MascotIndex
   want: Want;
   state: BotState;
   still: number;
@@ -180,17 +187,22 @@ export interface Bot extends Point {
   called?: number;
   wasDry?: boolean;
   dryAt?: number;
+  // For the table: when the guard last could have perceived each mascot, and when that stretch began (null: never).
+  firstSeen: Each<number | null>;
+  lastSeen: Each<number>;
 }
 // The guards of one night, and the faults each has (by id).
 export interface Team {
   bots: Bot[];
   fault: Map<string, number[]>;
 }
+// One count or time per mascot, by MascotIndex, that the harness writes to as the night goes.
+type Each<T> = [T, T, T, T];
 // What an honest guard wants to be doing (objectiveOf). urgent: a teammate on the floor. fault: the fault being gone
 // to. home: nothing to do but be in the booth.
 interface Objective {
   use?: Use;
-  goal?: Point;
+  goal?: Point | undefined;
   urgent?: boolean;
   fault?: Fault;
   crank?: boolean;
@@ -207,18 +219,33 @@ const angDiff = (a: number, b: number) => {
   if (d < -Math.PI) d += Math.PI * 2;
   return d;
 };
-const pick = <T>(list: T[]): T => list[(random() * list.length) | 0];
+const pick = <T>(list: readonly T[]): T => defined(list[(random() * list.length) | 0], 'a pick from an empty list');
 const MOVING: MascotState[] = ['roam', 'search', 'hunt', 'charge'],
   COMING: MascotState[] = ['hunt', 'windup', 'charge'];
 const BOOTH_MID = { x: 21, z: 40.5 };
+// When Biggs, Flan and Squish can wake: once the night plus the guards is more than 1 plus this. Tank waits for night 2.
+const WAKES_WITH: readonly [number, number, number] = [0, 0, 1];
+// How fast a mascot comes with a torch on it, as a share of its pace, by its rot.
+const LIT_PACE = [0.05, 0.3, 0.5];
 const inBooth = (p: Point) => M.roomAt(p.x, p.z) === M.BOOTH;
 const doorMid = (k: DoorKey) => {
-  const [x0, z0, x1, z1] = (M.DOORWAYS.find(d => d.key === k) as M.Doorway).rect;
+  const [x0, z0, x1, z1] = defined(
+    M.DOORWAYS.find(d => d.key === k),
+    `the ${k} doorway`
+  ).rect;
   return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
 };
 // Where to stand to work a door's button from outside the booth: the wall is thin enough to reach through.
 const OUTSIDE: Record<DoorKey, Point> = { L: { x: 13.9, z: 39.7 }, R: { x: 28.1, z: 39.7 }, V: { x: 23.3, z: 35.5 } };
 const front = (t: Point & { face?: number }): Point => (t.face == null ? t : { x: t.x + Math.sin(t.face) * 0.9, z: t.z + Math.cos(t.face) * 0.9 });
+// Breaker box i: S.faults, team.fault and the 'fix' uses all name boxes by their place in M.BOXES.
+const box = (i: number) => defined(M.BOXES[i], `box ${i}`);
+// A bot's guard as the sim has them. The night places every guard in sim.players when it starts.
+function guardOf(bot: Bot): Guard {
+  const p = defined(sim.players[bot.id], `guard ${bot.id}`);
+  assert(isPlaced(p), `guard ${bot.id} has not been placed`);
+  return p;
+}
 
 export function seedRandom(seed: number): void {
   random = seeded(seed);
@@ -276,6 +303,8 @@ function makeBot(id: string, i: number, policy: Policy): Bot {
     want: {},
     state: {},
     still: 0,
+    firstSeen: [null, null, null, null],
+    lastSeen: [-9, -9, -9, -9],
     // play() sets these once the night has placed the guard.
     bat: 1,
     flat: false,
@@ -307,7 +336,7 @@ const costOf = (avoid?: Berth[]): Cost =>
         }
         return d;
       }
-    : (a, b, d) => d;
+    : (_a, _b, d) => d;
 
 // Cheapest costs over the waypoints, from those already priced in best. step(u, link) prices a link, or returns -1
 // for one that cannot be used. visit(u, cost) is told each waypoint as it is settled and returns false to stop.
@@ -319,41 +348,55 @@ function spread(
 ): void {
   const { links } = M.nav(),
     done = new Uint8Array(best.length),
-    heap: [number, number][] = [];
+    heap: [d: number, i: number][] = [];
+  // A binary heap on d. Each entry moves up or down by shifting the ones in its way into its place, then lands.
   const push = (d: number, i: number) => {
-    heap.push([d, i]);
-    for (let k = heap.length - 1; k; ) {
-      const up = (k - 1) >> 1;
-      if (heap[up][0] <= d) break;
-      [heap[up], heap[k]] = [heap[k], heap[up]];
+    const entry: [number, number] = [d, i];
+    let k = heap.length;
+    heap.push(entry);
+    while (k > 0) {
+      const up = (k - 1) >> 1,
+        parent = defined(heap[up], 'a heap entry');
+      if (parent[0] <= d) break;
+      heap[k] = parent;
       k = up;
     }
+    heap[k] = entry;
   };
   const pop = () => {
+    // Undefined from an empty heap. Otherwise the last entry moves down from the top into the gap.
     const top = heap[0],
-      last = heap.pop() as [number, number];
-    if (heap.length) {
-      heap[0] = last;
-      for (let k = 0; ; ) {
-        let m = k;
-        for (const c of [2 * k + 1, 2 * k + 2]) if (c < heap.length && heap[c][0] < heap[m][0]) m = c;
-        if (m === k) break;
-        [heap[m], heap[k]] = [heap[k], heap[m]];
-        k = m;
+      last = heap.pop();
+    if (!last || !heap.length) return top;
+    let k = 0;
+    for (;;) {
+      let m = k,
+        low = last;
+      for (const c of [2 * k + 1, 2 * k + 2]) {
+        const child = heap[c];
+        if (child && child[0] < low[0]) {
+          m = c;
+          low = child;
+        }
       }
+      if (m === k) break;
+      heap[k] = low;
+      k = m;
     }
+    heap[k] = last;
     return top;
   };
-  for (let i = 0; i < best.length; i++) if (best[i] < 1e9) push(best[i], i);
-  while (heap.length) {
-    const [d, u] = pop();
-    if (done[u] || d > best[u]) continue;
+  for (const [i, d] of best.entries()) if (d < 1e9) push(d, i);
+  for (let next = pop(); next; next = pop()) {
+    const [d, u] = next;
+    // u, l.to: waypoint indices, and best has one entry per waypoint.
+    if (done[u] || d > defined(best[u], "a waypoint's cost")) continue;
     done[u] = 1;
     if (visit && visit(u, d) === false) return;
-    for (const l of links[u]) {
+    for (const l of defined(links[u], "a waypoint's links")) {
       if (done[l.to]) continue;
       const c = step(u, l);
-      if (c >= 0 && d + c < best[l.to]) {
+      if (c >= 0 && d + c < defined(best[l.to], "a waypoint's cost")) {
         best[l.to] = d + c;
         if (prev) prev[l.to] = u;
         push(d + c, l.to);
@@ -361,6 +404,9 @@ function spread(
     }
   }
 }
+// Waypoint i of the nav graph: the graph's indices, and the arrays priced over it, all have one entry per waypoint.
+const node = (nodes: NavNode[], i: number) => defined(nodes[i], 'a waypoint');
+const costAt = (f: Float64Array, i: number) => defined(f[i], "a waypoint's cost");
 
 // The way a person who knows the building would go: the shortest way that keeps clear of the mascots they know about.
 // Returns { path, risk }: risk is true when every way passes close to one. Null when a shut door is in every way.
@@ -375,8 +421,7 @@ function plan(S: NightState, bot: Bot, goal: Point, ducts?: boolean): { path: Po
     prev = new Int16Array(n).fill(-1);
   const room = M.roomAt(bot.x, bot.z),
     goalRoom = M.roomAt(goal.x, goal.z);
-  for (let i = 0; i < n; i++) {
-    const nd = nodes[i];
+  for (const [i, nd] of nodes.entries()) {
     if (!ducts && nd.room === M.DUCTS) continue;
     const d = dist(nd, bot),
       g = dist(nd, goal);
@@ -388,19 +433,22 @@ function plan(S: NightState, bot: Bot, goal: Point, ducts?: boolean): { path: Po
   spread(
     best,
     prev,
-    (u, l) => ((l.duct && !ducts) || (l.key && S.doors[l.key]) ? -1 : cost(nodes[u], nodes[l.to], l.d)),
+    (u, l) => ((l.duct && !ducts) || (l.key && S.doors[l.key]) ? -1 : cost(node(nodes, u), node(nodes, l.to), l.d)),
     (u, d) => {
       if (d >= total) return false;
-      if (d + end[u] < total) {
-        total = d + end[u];
+      const via = d + costAt(end, u);
+      if (via < total) {
+        total = via;
         last = u;
       }
     }
   );
   if (last < 0) return null;
   const path: Point[] = [goal];
-  for (let i = last; i >= 0; i = prev[i]) path.unshift(nodes[i]);
-  while (path.length > 1 && cost(bot, path[1], 0) < RISK && M.clear(bot.x, bot.z, path[1].x, path[1].z, M.PLAYER_R, S.doors)) path.shift();
+  // prev leads back from the last waypoint to the first, whose prev is -1.
+  for (let i = last; i >= 0; i = defined(prev[i], "a waypoint's way back")) path.unshift(node(nodes, i));
+  // Skip the first waypoints while the next one can be walked to straight.
+  for (let next = path[1]; next && cost(bot, next, 0) < RISK && M.clear(bot.x, bot.z, next.x, next.z, M.PLAYER_R, S.doors); next = path[1]) path.shift();
   return { path, risk: total >= RISK, calm: !avoid.length };
 }
 // The plan for getting to a point. Thought about again every second, or sooner with a mascot about.
@@ -426,8 +474,11 @@ function wayTo(S: NightState, bot: Bot, goal: Point, ducts?: boolean): Way {
 function walk(S: NightState, bot: Bot, goal: Point, dt: number, sprint?: boolean, face?: number | null, ducts?: boolean): DoorKey | null {
   const way = wayTo(S, bot, goal, ducts),
     path = way.path;
-  while (path.length && dist(bot, path[0]) < (path.length > 1 ? 0.5 : 0.15)) path.shift();
-  const next = path[0];
+  let next = path[0];
+  while (next && dist(bot, next) < (path.length > 1 ? 0.5 : 0.15)) {
+    path.shift();
+    next = path[0];
+  }
   if (!next) return way.blocked;
   const dir = ang(bot, next);
   bot.yaw = face ?? dir;
@@ -465,9 +516,9 @@ function act(S: NightState, bot: Bot, dt: number): void {
     if (d < (u.reach || F.REACH - 0.3)) {
       // In reach: face it and hold the key. Holding the crank roots you; the rest do not, but hands in a breaker box are not walking.
       face = w.face ?? u.face ?? ang(bot, u.at);
-      if (u.hold < 0) {
-        // Only the crank and the dock are held for as long as they are wanted.
-        bot.act = u.what as GuardAct;
+      if (u.what === 'crank' || u.what === 'charge') {
+        // Only the crank and the dock are held for as long as they are wanted (hold -1).
+        bot.act = u.what;
         if (u.what === 'crank' || !w.goal) goal = null;
       } else {
         goal = null;
@@ -478,10 +529,10 @@ function act(S: NightState, bot: Bot, dt: number): void {
         bot.hold += dt;
         if (u.what === 'fix') bot.act = 'fix'; // hands in the box: the torch hangs and holds nothing
         if (bot.hold >= u.hold + 0.05) {
-          api.actFloor(sim, S, bot.id, { t: 'use', what: u.what as UseWhat, i: u.i, k: u.k, id: u.id });
+          api.actFloor(sim, S, bot.id, { t: 'use', what: u.what, i: u.i, k: u.k, id: u.id });
           bot.hold = 0;
           bot.holding = null;
-          if (u.what === 'door' && !!S.doors[u.k as DoorKey] !== u.shut) bot.state[`stuck${u.k as DoorKey}`] = S.t + 2;
+          if (u.what === 'door' && S.doors[u.k] !== u.shut) bot.state[`stuck${u.k}`] = S.t + 2;
         }
       }
     } else {
@@ -498,7 +549,7 @@ function act(S: NightState, bot: Bot, dt: number): void {
   } else if (goal && dist(bot, goal) > 0.15) {
     const shut = walk(S, bot, goal, dt, w.sprint, face, w.ducts);
     // A shut booth door in the way: go and press its button, from whichever side we are on.
-    if (shut && lightsF(S) && !(w.keep || '').includes(shut)) {
+    if (shut && lightsF(S) && !w.keep?.includes(shut)) {
       const panel = M.PANELS[shut],
         at = inBooth(bot) ? front(panel) : OUTSIDE[shut];
       if (dist(bot, panel) < F.REACH - 0.3) {
@@ -589,12 +640,11 @@ function field(S: NightState, from: Point, avoid?: Berth[]): Float64Array {
     best = new Float64Array(n).fill(1e9);
   const cost = costOf(avoid),
     room = M.roomAt(from.x, from.z);
-  for (let i = 0; i < n; i++) {
-    const nd = nodes[i],
-      d = dist(nd, from);
+  for (const [i, nd] of nodes.entries()) {
+    const d = dist(nd, from);
     if (nd.room !== M.DUCTS && (nd.room === room || d < 5) && M.clear(from.x, from.z, nd.x, nd.z, M.PLAYER_R, S.doors)) best[i] = cost(from, nd, d);
   }
-  spread(best, null, (u, l) => (l.duct || (l.key && S.doors[l.key]) ? -1 : cost(nodes[u], nodes[l.to], l.d)));
+  spread(best, null, (u, l) => (l.duct || (l.key && S.doors[l.key]) ? -1 : cost(node(nodes, u), node(nodes, l.to), l.d)));
   return best;
 }
 // The same distance to a point that is not a waypoint.
@@ -602,9 +652,11 @@ function fieldAt(S: NightState, f: Float64Array, p: Point): number {
   const { nodes } = M.nav(),
     room = M.roomAt(p.x, p.z);
   let best = 1e9;
-  for (let i = 0; i < nodes.length; i++) {
-    const d = dist(nodes[i], p);
-    if (f[i] + d < best && (nodes[i].room === room || d < 5) && M.clear(p.x, p.z, nodes[i].x, nodes[i].z, M.PLAYER_R, S.doors)) best = f[i] + d;
+  // f comes from field(), one entry per waypoint.
+  for (const [i, nd] of nodes.entries()) {
+    const d = dist(nd, p),
+      via = costAt(f, i) + d;
+    if (via < best && (nd.room === room || d < 5) && M.clear(p.x, p.z, nd.x, nd.z, M.PLAYER_R, S.doors)) best = via;
   }
   return best;
 }
@@ -614,31 +666,40 @@ function fieldAt(S: NightState, f: Float64Array, p: Point): number {
 function race(S: NightState, bot: Bot, hs: Memory[], pace: (h: Memory) => number): Race {
   const st = bot.state;
   if (st.race && S.t - st.race.at < 0.5) return st.race;
-  const mine = field(S, bot, berths(S, bot)),
-    n = mine.length,
-    theirs = new Float64Array(n).fill(1e9);
-  for (const h of hs) {
-    const f = field(S, h);
-    for (let i = 0; i < n; i++) theirs[i] = Math.min(theirs[i], f[i] / pace(h));
-  }
-  for (let i = 0; i < n; i++) mine[i] /= F.WALK;
-  return (st.race = { mine, theirs, at: S.t });
+  const mine = field(S, bot, berths(S, bot)).map(d => d / F.WALK),
+    theirs = new Float64Array(mine.length).fill(1e9);
+  for (const h of hs) for (const [i, d] of field(S, h).entries()) theirs[i] = Math.min(costAt(theirs, i), d / pace(h));
+  const r = { mine, theirs, at: S.t };
+  st.race = r;
+  return r;
 }
 // Where to run: the waypoint furthest (in their time) from everything after this guard, out of those the guard
 // can reach first. Kept to unless another is clearly better.
-function fleeTo(S: NightState, bot: Bot, r: Race): Point {
+function fleeTo(_S: NightState, bot: Bot, r: Race): Point {
   // A doorway beats the far corner of a room, and the next room beats both: a corner is where it ends.
   const { nodes } = M.nav(),
     st = bot.state,
     room = M.roomAt(bot.x, bot.z);
-  const worth = (i: number) =>
-    r.mine[i] + 1 < r.theirs[i] && r.mine[i] < 14 ? Math.min(r.theirs[i], 25) - r.mine[i] * 0.2 + (nodes[i].room !== room ? 7 : nodes[i].door ? 4 : 0) : -1;
-  let best = -1;
-  for (let i = 0; i < nodes.length; i++) if (nodes[i].room !== M.DUCTS && worth(i) > 0 && (best < 0 || worth(i) > worth(best))) best = i;
-  if (best < 0) return bot;
-  if (st.fleeNode !== undefined && st.fleeNode >= 0 && dist(bot, nodes[st.fleeNode]) > 1.5 && worth(st.fleeNode) > worth(best) - 3) best = st.fleeNode;
-  st.fleeNode = best;
-  return nodes[best];
+  // nd: waypoint i, and r has one entry per waypoint.
+  const worth = (i: number, nd: NavNode) => {
+    const mine = costAt(r.mine, i),
+      theirs = costAt(r.theirs, i);
+    return mine + 1 < theirs && mine < 14 ? Math.min(theirs, 25) - mine * 0.2 + (nd.room !== room ? 7 : nd.door ? 4 : 0) : -1;
+  };
+  let best: { i: number; nd: NavNode; worth: number } | null = null;
+  for (const [i, nd] of nodes.entries()) {
+    if (nd.room === M.DUCTS) continue;
+    const w = worth(i, nd);
+    if (w > 0 && (!best || w > best.worth)) best = { i, nd, worth: w };
+  }
+  if (!best) return bot;
+  if (st.fleeNode !== undefined) {
+    const i = st.fleeNode,
+      nd = node(nodes, i);
+    if (dist(bot, nd) > 1.5 && worth(i, nd) > best.worth - 3) best = { i, nd, worth: worth(i, nd) };
+  }
+  st.fleeNode = best.i;
+  return best.nd;
 }
 
 // Whose job the generator is: the last guard standing who cranks at all.
@@ -648,59 +709,75 @@ const fixable = (S: NightState) => S.faults.map((f, i) => (f ? i : -1)).filter(i
 // is on the way to stays theirs (a person who has set off for one does not turn back because another broke out
 // somewhere else) unless they go down; the rest are shared out again. In a crew with the power getting low, the cranker takes fewer so there is
 // time to crank.
-type Spot = Point & { len: number }; // where a guard will be after the faults they have, and how far they walk to get there
+// A guard's share: the faults they have (the same list as in team.fault), where they will be after them, and how
+// far they walk to get there.
+interface Share {
+  b: Bot;
+  list: number[];
+  x: number;
+  z: number;
+  len: number;
+}
 function assignFaults(S: NightState, team: Team): void {
   const spare = team.bots.length > 1 && S.power < 60 ? cranker(team) : null;
   const up = team.bots.filter(b => !b.flat && b.policy.faults !== false);
   const open = new Set(fixable(S));
-  const keep = new Map(up.map(b => [b.id, (team.fault.get(b.id) || []).filter(i => open.has(i)).slice(0, 1)]));
-  for (const list of keep.values()) for (const i of list) open.delete(i);
-  team.fault = keep;
-  const at = new Map(
-    up.map(b => {
-      let x = b.x,
-        z = b.z,
-        len = 0;
-      for (const i of keep.get(b.id) as number[]) {
-        len += Math.hypot(M.BOXES[i].x - x, M.BOXES[i].z - z);
-        x = M.BOXES[i].x;
-        z = M.BOXES[i].z;
-      }
-      return [b, { x, z, len: len * (b.policy.share ?? 1) * (b === spare ? 3 : 1) } as Spot];
-    })
-  );
-  while (open.size && up.length) {
-    let best: { b: Bot; i: number; cost: number } | null = null;
-    for (const b of up)
+  const kept = up.map(b => ({ b, list: (team.fault.get(b.id) || []).filter(i => open.has(i)).slice(0, 1) }));
+  for (const { list } of kept) for (const i of list) open.delete(i);
+  team.fault = new Map(kept.map(({ b, list }) => [b.id, list]));
+  const shares = kept.map(({ b, list }): Share => {
+    let x = b.x,
+      z = b.z,
+      len = 0;
+    // Fault i is the one in box i.
+    for (const i of list) {
+      const c = box(i);
+      len += Math.hypot(c.x - x, c.z - z);
+      x = c.x;
+      z = c.z;
+    }
+    return { b, list, x, z, len: len * (b.policy.share ?? 1) * (b === spare ? 3 : 1) };
+  });
+  while (open.size && shares.length) {
+    let best: { share: Share; i: number; cost: number } | null = null;
+    for (const share of shares)
       for (const i of open) {
-        const a = at.get(b) as Spot,
-          cost = a.len + dist(a, M.BOXES[i]) * (b.policy.share ?? 1) * (b === spare ? 3 : 1);
-        if (!best || cost < best.cost) best = { b, i, cost };
+        const { b } = share,
+          cost = share.len + dist(share, box(i)) * (b.policy.share ?? 1) * (b === spare ? 3 : 1);
+        if (!best || cost < best.cost) best = { share, i, cost };
       }
-    // up and open are not empty, so the loop above found one.
-    const found = best as { b: Bot; i: number; cost: number };
-    open.delete(found.i);
-    (team.fault.get(found.b.id) as number[]).push(found.i);
-    Object.assign(at.get(found.b) as Spot, { x: M.BOXES[found.i].x, z: M.BOXES[found.i].z, len: found.cost });
+    // shares and open are not empty, so the loop above found one.
+    const { share, i, cost } = defined(best, 'a guard for a fault');
+    open.delete(i);
+    share.list.push(i);
+    const c = box(i);
+    share.x = c.x;
+    share.z = c.z;
+    share.len = cost;
   }
 }
 
-// In the booth: shut whichever door something is coming to, and open it again once it has gone.
-// Returns true while the guard is busy with a button. Sets bot.want.keep to the doors that should stay shut.
-function mindDoors(S: NightState, bot: Bot, team: Team, leaving: boolean): boolean {
-  const w = bot.want,
-    st = bot.state;
-  // One guard to a button: whoever in the booth is nearest it.
-  const mine = (k: DoorKey) => !team.bots.some(b => b !== bot && !b.flat && inBooth(b) && b.skill.doors && dist(b, M.PANELS[k]) < dist(bot, M.PANELS[k]));
-  w.keep = '';
-  for (const k of ['L', 'V', 'R'] as const) {
+// In the booth: the doors that should stay shut, because something is close to them. Notes since when each of the
+// others has been clear.
+function keepShut(S: NightState, bot: Bot): DoorKey[] {
+  const st = bot.state,
+    keep: DoorKey[] = [];
+  for (const k of DOORS) {
     const mid = doorMid(k);
     const close = known(S, bot, 4).some(h => !inBooth(h) && dist(h, mid) < (COMING.includes(h.st) ? 12 : 7));
     if (close) {
       st[`clear${k}`] = null;
-      w.keep += k;
+      keep.push(k);
     } else st[`clear${k}`] ??= S.t;
   }
+  return keep;
+}
+// In the booth: shut whichever door in keep (keepShut) something is coming to, and open the others again once they
+// have been clear long enough. Returns true while the guard is busy with a button.
+function mindDoors(S: NightState, bot: Bot, team: Team, keep: DoorKey[], leaving: boolean): boolean {
+  const st = bot.state;
+  // One guard to a button: whoever in the booth is nearest it.
+  const mine = (k: DoorKey) => !team.bots.some(b => b !== bot && !b.flat && inBooth(b) && b.skill.doors && dist(b, M.PANELS[k]) < dist(bot, M.PANELS[k]));
   // The door something is coming to first. One that will not shut (something is in it) is left for a moment.
   const urgency = (k: DoorKey) =>
     Math.min(
@@ -709,11 +786,15 @@ function mindDoors(S: NightState, bot: Bot, team: Team, leaving: boolean): boole
         .map(h => dist(h, doorMid(k)) - (COMING.includes(h.st) ? 20 : 0)),
       99
     );
-  for (const k of ([...w.keep] as DoorKey[]).sort((a, b) => urgency(a) - urgency(b)))
-    if (!S.doors[k] && mine(k) && !((st[`stuck${k}`] ?? Number.NaN) > S.t) && setDoor(S, bot, k, true)) return true;
-  // A door not in keep had its clear time set above.
-  for (const k of ['L', 'V', 'R'] as const)
-    if (S.doors[k] && mine(k) && !w.keep.includes(k) && S.t - (st[`clear${k}`] as number) > (leaving ? 2 : 5) && setDoor(S, bot, k, false)) return true;
+  for (const k of [...keep].sort((a, b) => urgency(a) - urgency(b))) {
+    const stuck = st[`stuck${k}`];
+    if (!S.doors[k] && mine(k) && (stuck === undefined || stuck <= S.t) && setDoor(S, bot, k, true)) return true;
+  }
+  for (const k of DOORS) {
+    // keepShut set the clear time of every door not in keep, so clear is a number for every door this looks at.
+    const clear = st[`clear${k}`];
+    if (S.doors[k] && mine(k) && !keep.includes(k) && clear != null && S.t - clear > (leaving ? 2 : 5) && setDoor(S, bot, k, false)) return true;
+  }
   return false;
 }
 
@@ -726,23 +807,23 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   if (S.stir && !st.stirred) st.stirAt = S.t;
   st.stirred = S.stir;
   const waking =
-    sk.plans && S.stir && S.t - (st.stirAt ?? Number.NaN) < 8
+    sk.plans && S.stir && st.stirAt !== undefined && S.t - st.stirAt < 8
       ? bot.mem.filter(
           (k): k is Memory =>
-            !!k && k.st === 'rest' && S.t - k.t < 30 && dist(bot, k) < 10 && (k.i === 3 ? S.night > 1 : S.night + S.players.length > 1 + [0, 0, 1][k.i])
+            !!k && k.st === 'rest' && S.t - k.t < 30 && dist(bot, k) < 10 && (k.i === 3 ? S.night > 1 : S.night + S.players.length > 1 + WAKES_WITH[k.i])
         )
       : [];
   const hs = known(S, bot)
     .filter(h => (COMING.includes(h.st) && dist(bot, h) < sk.alert) || (MOVING.includes(h.st) && h.how !== 'map' && dist(bot, h) < 6))
     .concat(waking)
     .sort((a, b) => dist(bot, a) - dist(bot, b));
-  if (!hs.length) {
+  const [h] = hs;
+  if (!h) {
     st.chased = null;
     return false;
   }
   st.chased ??= S.t;
-  const h = hs[0],
-    d = dist(bot, h),
+  const d = dist(bot, h),
     sight = M.sees(bot.x, bot.z, h.x, h.z, S.doors);
   // Tank winding up or already coming: get out of its line.
   // Something wandering close that is not after anyone yet: a Mini Biggs thrown away from here may take it off.
@@ -750,7 +831,7 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   const tank =
     sk.dodges &&
     known(S, bot, 1.5).find(
-      k => k.i === 3 && (k.st === 'windup' || k.st === 'charge') && (S.t - (st.dodgeAt ?? Number.NaN) < 3 || M.sees(bot.x, bot.z, k.x, k.z, S.doors))
+      k => k.i === 3 && (k.st === 'windup' || k.st === 'charge') && ((st.dodge && S.t - st.dodge.at < 3) || M.sees(bot.x, bot.z, k.x, k.z, S.doors))
     );
   if (tank) {
     // Sideways, to whichever side has more room, and the same side until it has gone past.
@@ -760,11 +841,12 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
         while (d < 4 && M.walkable(bot.x + Math.sin(line + s * 1.57) * (d + 0.5), bot.z + Math.cos(line + s * 1.57) * (d + 0.5), M.PLAYER_R, S.doors)) d += 0.5;
         return d;
       };
-    if (!(S.t - (st.dodgeAt ?? Number.NaN) < 3)) {
-      st.dodge = room(1) >= room(-1) ? 1 : -1;
-      st.dodgeAt = S.t;
+    let dodge = st.dodge;
+    if (!dodge || S.t - dodge.at >= 3) {
+      dodge = { side: room(1) >= room(-1) ? 1 : -1, at: S.t };
+      st.dodge = dodge;
     }
-    w.dash = line + (st.dodge as number) * 1.57;
+    w.dash = line + dodge.side * 1.57;
     w.use = null;
     w.goal = null;
     return true;
@@ -773,7 +855,7 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   // of light rots it), eyes on it either way: Flan slows for that alone.
   const speed = (k: Memory) => {
     const base = k.i === 0 ? 2.8 : k.i === 1 ? 2.6 : 3.8;
-    return bot.bat > 0 && k === hs[0] ? Math.max(0.3, base * [0.05, 0.3, 0.5][k.rot]) : base;
+    return bot.bat > 0 && k === h ? Math.max(0.3, base * defined(LIT_PACE[k.rot], 'the pace for a rot')) : base;
   };
   const unlit = h.i === 0 ? 2.8 : h.i === 1 && sight ? 2.6 : 3.8;
   const beam = bot.bat > 0 && sight && COMING.includes(h.st) && d < F.BEAM_RANGE - 0.5 && (d - F.CATCH) / unlit < sk.beam;
@@ -792,7 +874,7 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   // Biggs), with a free locker close by and the lights on: in, if this guard hides at all.
   if (known(S, bot, 4).some(k => k.st !== 'rest' && M.sees(k.x, k.z, bot.x, bot.z, S.doors))) st.seenAt = S.t;
   const lostThem = S.t - (st.seenAt ?? -99) > (hs.some(k => k.i === 0) ? 8.5 : 2);
-  const locker = bot.policy.hides && lightsF(S) && !((st.hideCool ?? Number.NaN) > S.t) && lostThem && freeLocker(S, bot, 5);
+  const locker = bot.policy.hides && lightsF(S) && (st.hideCool === undefined || st.hideCool <= S.t) && lostThem && freeLocker(S, bot, 5);
   if (locker) {
     w.use = locker;
     w.goal = null;
@@ -838,24 +920,22 @@ function objectiveOf(S: NightState, bot: Bot, team: Team): Objective {
   }
   // 2. The faults that are ours.
   const mine = pol.faults === false ? [] : sk.plans ? (team.fault.get(bot.id) || []).filter(i => S.faults[i]) : fixable(S);
-  if (mine.length) {
-    mine.sort((a, b) => dist(bot, M.BOXES[a]) - dist(bot, M.BOXES[b]));
+  const [i] = mine.sort((a, b) => dist(bot, box(a)) - dist(bot, box(b)));
+  if (i !== undefined) {
     // A careless guard drifts off between jobs.
-    if (!sk.plans && (st.drift ?? Number.NaN) > S.t) return { goal: st.driftTo };
-    const i = mine[0],
-      f = S.faults[i] as Fault; // mine holds only open faults
-    return { use: { what: 'fix', i, at: M.BOXES[i], hold: F.FIX[f.k], key: `fix${i}@${f.at}` }, fault: f };
-  } else if (!sk.plans && !((st.drift ?? Number.NaN) > S.t) && random() < 0.02) {
-    st.drift = S.t + 6 + random() * 10;
-    st.driftTo = pick(M.nav().nodes.filter(n => n.room !== M.DUCTS));
+    if (!sk.plans && st.drift && st.drift.until > S.t) return { goal: st.drift.to };
+    const f = defined(S.faults[i], `the fault in box ${i}`); // mine holds only open faults
+    return { use: { what: 'fix', i, at: box(i), hold: defined(F.FIX[f.k], `fault kind ${f.k}`), key: `fix${i}@${f.at}` }, fault: f };
+  } else if (!sk.plans && !(st.drift && st.drift.until > S.t) && random() < 0.02) {
+    st.drift = { until: S.t + 6 + random() * 10, to: pick(M.nav().nodes.filter(n => n.room !== M.DUCTS)) };
   }
   // 3. Light.
   if ((bot.bat < 1 && sk !== SKILL.careless) || bot.bat < 0.3) {
     const b = S.bats
-      .map(i => M.BATTERY_SPOTS[i])
-      .filter(s => dist(bot, s) < (bot.bat < sk.reserve ? 14 : 5) && M.sees(bot.x, bot.z, s.x, s.z, S.doors))
-      .sort((a, c) => dist(bot, a) - dist(bot, c))[0];
-    if (b && bot.bat <= 1 - F.BAT_PICKUP * 0.6) return { use: { what: 'bat', i: M.BATTERY_SPOTS.indexOf(b), at: b, stand: b, hold: 0.2, key: 'bat' } };
+      .map(i => ({ i, at: defined(M.BATTERY_SPOTS[i], `battery spot ${i}`) })) // S.bats holds spot indices
+      .filter(({ at }) => dist(bot, at) < (bot.bat < sk.reserve ? 14 : 5) && M.sees(bot.x, bot.z, at.x, at.z, S.doors))
+      .sort((a, c) => dist(bot, a.at) - dist(bot, c.at))[0];
+    if (b && bot.bat <= 1 - F.BAT_PICKUP * 0.6) return { use: { what: 'bat', i: b.i, at: b.at, stand: b.at, hold: 0.2, key: 'bat' } };
   }
   // 4. The generator, if it is our job and the power needs it.
   const genJob = cranker(team) === bot;
@@ -868,14 +948,14 @@ function objectiveOf(S: NightState, bot: Bot, team: Team): Objective {
   st.cranking = false;
   // 4b. Hands empty: the nearest Mini Biggs on the floor, once it has had a few seconds to send what it drew on its way
   // and nothing known is moving near it. On the way to anything else, the plan keeps clear of the mascots as usual.
-  if (sk.toy && !sim.players[bot.id].toy) {
+  if (sk.toy && !guardOf(bot).toy) {
     const t = S.toys
       .filter(t => S.t > t.land + 6 && !known(S, bot, 4).some(h => MOVING.includes(h.st) && dist(h, t) < 8))
       .sort((a, b) => dist(bot, a) - dist(bot, b))[0];
     if (t) return { use: { what: 'toy', id: t.id, at: t, stand: t, hold: 0.2, key: `toy${t.id}` } };
   }
   // 5. Nothing to do: the booth, and the charger if the torch wants it. A careless guard wanders.
-  if (!sk.plans && pol.stays !== true && !(bot.bat < 0.05 && lightsF(S)) && !st.topUp) return (st.drift ?? Number.NaN) > S.t ? { goal: st.driftTo } : {};
+  if (!sk.plans && pol.stays !== true && !(bot.bat < 0.05 && lightsF(S)) && !st.topUp) return st.drift && st.drift.until > S.t ? { goal: st.drift.to } : {};
   st.topUp = !sk.plans && bot.bat < 0.6; // a careless guard charges only once the torch has died, and not for long
   if (bot.bat < 0.95 && lightsF(S)) return { use: { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' }, home: true };
   return { goal: BOOTH_MID, home: true };
@@ -897,13 +977,13 @@ const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => 
     // In the booth: the doors come before anything else, and nobody walks out past something waiting at one.
     if (sk.doors && booth && !dark) {
       const leaving = !obj.home;
-      if (mindDoors(S, bot, team, leaving)) return;
-      // mindDoors has set w.keep.
-      const keep = w.keep as string;
+      const keep = keepShut(S, bot);
+      w.keep = keep;
+      if (mindDoors(S, bot, team, keep, leaving)) return;
       if (
-        (st.holed ?? Number.NaN) > S.t ||
+        (st.holed !== undefined && st.holed > S.t) ||
         (leaving && keep.length === 3) ||
-        (leaving && keep && !obj.urgent && !(obj.fault && faultLeft(S, obj.fault) < 15))
+        (leaving && keep.length > 0 && !obj.urgent && !(obj.fault && faultLeft(S, obj.fault) < 15))
       ) {
         w.goal = BOOTH_MID;
         if (bot.bat < 0.95) w.use = { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' };
@@ -932,8 +1012,9 @@ const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => 
       w.use = null;
       return;
     }
-    // Running late for a fault or a friend. Without urgent, obj.fault is set.
-    if (obj.use && (obj.urgent || obj.fault) && dist(bot, obj.use.at) / F.WALK > (obj.urgent ? 3 : faultLeft(S, obj.fault as Fault) - 6)) w.sprint = true;
+    // Running late for a friend, or for a fault: seconds of walking that is too many.
+    const late = obj.urgent ? 3 : obj.fault && faultLeft(S, obj.fault) - 6;
+    if (obj.use && late !== undefined && dist(bot, obj.use.at) / F.WALK > late) w.sprint = true;
   },
 });
 
@@ -941,7 +1022,7 @@ const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => 
 // hear it sing, and where walking to it takes it away from the guard and from where the guard is going (to). Sixteen
 // ways round are tried. Only with skill.spare of the battery left after it. Returns true if one was thrown.
 function lure(S: NightState, bot: Bot, to: Point): boolean {
-  const me = sim.players[bot.id] as Guard,
+  const me = guardOf(bot),
     st = bot.state;
   if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < bot.skill.spare || S.t < (st.lureAt || 0)) return false;
   const h = known(S, bot, 1.5)
@@ -974,10 +1055,10 @@ function freeLocker(S: NightState, bot: Bot, within: number): Use | undefined {
 // In a locker: stay while anything known is moving nearby, then out after a few seconds of quiet (or 25 s at most,
 // since the faults do not wait). Returns true while in one.
 function stayHidden(S: NightState, bot: Bot): boolean {
-  const me = sim.players[bot.id] as Guard,
+  const me = guardOf(bot),
     st = bot.state,
     w = bot.want;
-  if (!(me.hid >= 0)) {
+  if (me.hid < 0) {
     st.hidFor = 0;
     return false;
   }
@@ -1002,7 +1083,7 @@ const DEGENERATE = {
       const w = bot.want;
       w.on = !lightsF(S);
       if (toys) lure(S, bot, BOOTH_MID);
-      for (const k of ['L', 'V', 'R'] as const) if ((bot.i + 'LVR'.indexOf(k)) % 3 === 0 || S.t > 4) if (setDoor(S, bot, k, true)) return;
+      for (const [j, k] of DOORS.entries()) if (((bot.i + j) % 3 === 0 || S.t > 4) && setDoor(S, bot, k, true)) return;
       const h = known(S, bot).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
       if (h && dist(bot, h) < 12) {
         w.face = ang(bot, h);
@@ -1049,10 +1130,11 @@ const DEGENERATE = {
           { x: 22, z: 18 },
         ],
         st = bot.state;
+      const leg = (i: number) => defined(loop[i], `leg ${i} of the loop`); // st.leg is kept to the loop's length
       st.leg ??= 0;
-      if (dist(bot, loop[st.leg]) < 1.5) st.leg = (st.leg + 1) % loop.length;
+      if (dist(bot, leg(st.leg)) < 1.5) st.leg = (st.leg + 1) % loop.length;
       const h = known(S, bot).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
-      bot.want.goal = loop[st.leg];
+      bot.want.goal = leg(st.leg);
       bot.want.sprint = !!h && dist(bot, h) < 5;
       bot.want.on = false;
     },
@@ -1075,12 +1157,11 @@ const DEGENERATE = {
   // Into a locker at the start of the night, a different one each, and stay there.
   locker: (): Policy => ({
     skill: SKILL.competent,
-    think(S, bot) {
-      if ((sim.players[bot.id] as Guard).hid >= 0) return;
+    think(_S, bot) {
+      if (guardOf(bot).hid >= 0) return;
       const spawn = M.spawnPoint(0),
-        order = M.HIDES.map((_, i) => i).sort((a, b) => dist(spawn, M.HIDES[a].at) - dist(spawn, M.HIDES[b].at));
-      const i = order[bot.i % order.length],
-        h = M.HIDES[i];
+        order = M.HIDES.map((h, i) => ({ h, i })).sort((a, b) => dist(spawn, a.h.at) - dist(spawn, b.h.at));
+      const { h, i } = defined(order[bot.i % order.length], 'a locker');
       bot.want.use = { what: 'hide', i, at: h.at, stand: h.at, hold: F.HIDE_HOLD, key: `hide${i}` };
     },
   }),
@@ -1119,14 +1200,14 @@ function flood(ducts: boolean): { has: (x: number, z: number) => boolean } {
   const ok = (x: number, z: number) => M.walkable(x, z, M.MASCOT_R) && (ducts || M.roomAt(x, z) !== M.DUCTS);
   const queue = (ducts ? [M.REST[2]] : [M.REST[0], M.REST[3]]).map((r): [number, number] => [Math.round(r.x / step) * step, Math.round(r.z / step) * step]);
   for (const [x, z] of queue) seen[cell(x, z)] = 1;
-  while (queue.length) {
-    const [x, z] = queue.pop() as [number, number];
+  for (let next = queue.pop(); next; next = queue.pop()) {
+    const [x, z] = next;
     for (const [dx, dz] of [
       [step, 0],
       [-step, 0],
       [0, step],
       [0, -step],
-    ]) {
+    ] as const) {
       const nx = x + dx,
         nz = z + dz;
       if (nx >= 0 && nz >= 0 && nx < 42 && nz < 44 && !seen[cell(nx, nz)] && ok(nx, nz)) {
@@ -1157,14 +1238,16 @@ export function checkBuilding(name: string): void {
     reachable(`battery ${i}`, b, b);
   });
   // Every door has a button a guard can press from inside and from outside, so nobody is shut out for good.
-  for (const key in M.PANELS) {
-    const k = key as DoorKey;
-    reachable(`door ${k} inside`, M.PANELS[k], front(M.PANELS[k]));
-    if (!M.walkable(OUTSIDE[k].x, OUTSIDE[k].z, M.PLAYER_R) || dist(OUTSIDE[k], M.PANELS[k]) > reach) fail(name, `door ${k}: cannot be worked from outside`);
+  for (const k of DOORS) {
+    const panel = M.PANELS[k],
+      outside = OUTSIDE[k];
+    reachable(`door ${k} inside`, panel, front(panel));
+    if (!M.walkable(outside.x, outside.z, M.PLAYER_R) || dist(outside, panel) > reach) fail(name, `door ${k}: cannot be worked from outside`);
   }
-  M.REST.forEach((r, i) => {
+  for (const i of MASCOTS) {
+    const r = M.REST[i];
     if (!M.walkable(r.x, r.z, M.MASCOT_R)) fail(name, `${MASC[i].name} rests inside something`);
-  });
+  }
   // Nowhere a guard can stand is out of every mascot's reach: the walkers everywhere but the ducts, Squish there.
   // A mascot that cannot get nearer reaches F.GRAB across furniture, so that is the distance that counts.
   const walkers = flood(false),
@@ -1195,7 +1278,7 @@ export interface Outcome {
   t: number;
   flats: number;
   peels: number;
-  by: number[];
+  by: Each<number>; // flattenings by each mascot
   warn: number[];
   firstFlat: number;
   notes: string[];
@@ -1230,7 +1313,7 @@ export interface PlayOptions {
 
 export function play(sc: Scenario, seed: number, { trace = 0, brains = false, onStep }: PlayOptions = {}): Outcome {
   seedRandom(seed);
-  const S = newState('TEST') as NightState;
+  const S = newState('TEST');
   sim.players = {};
   const team: Team = { bots: [], fault: new Map() };
   for (let i = 0; i < sc.n; i++) {
@@ -1239,8 +1322,11 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     team.bots.push(makeBot(id, i, sc.guard(i, sc.n)));
   }
   api.startFloorNight(sim, S, sc.night);
-  if (sc.dev) S.dev = sc.dev as Dev; // the sim reads only the cheats that are there
-  for (const b of team.bots) Object.assign(b, { x: (sim.players[b.id] as Guard).x, z: (sim.players[b.id] as Guard).z, bat: 1, flat: false });
+  if (sc.dev) S.dev = sc.dev; // the sim reads only the cheats that are there
+  for (const b of team.bots) {
+    const { x, z } = guardOf(b);
+    Object.assign(b, { x, z, bat: 1, flat: false });
+  }
   const out: Outcome = {
     win: false,
     t: 0,
@@ -1271,8 +1357,6 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     toys: 0,
     lured: 0,
   };
-  const firstSeen: (number | null)[][] = team.bots.map(() => [null, null, null, null]),
-    lastSeen = team.bots.map(() => [-9, -9, -9, -9]);
   const parked = S.m.map(m => ({ x: m.x, z: m.z, t: 0 }));
   let seenEv = 0,
     faultKey = '',
@@ -1289,7 +1373,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
       assignFaults(S, team);
     }
     for (const bot of team.bots) {
-      const me = sim.players[bot.id] as Guard;
+      const me = guardOf(bot);
       bot.bat = me.bat;
       if (me.flat) {
         if (!bot.flat) {
@@ -1331,8 +1415,8 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
           '  |  ' +
           S.m
             .map(
-              (m, i) =>
-                `${m.st}${m.lit ? '*' : ''}(${m.x.toFixed(0)},${m.z.toFixed(0)})${brains ? JSON.stringify({ ...brainOf(sim, i), path: brainOf(sim, i).path.length }) : ''}`
+              m =>
+                `${m.st}${m.lit ? '*' : ''}(${m.x.toFixed(0)},${m.z.toFixed(0)})${brains ? JSON.stringify({ ...brainOf(sim, m.i), path: brainOf(sim, m.i).path.length }) : ''}`
             )
             .join(' ') +
           (S.stir ? '  STIR' : '')
@@ -1346,21 +1430,21 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
       if (p.on) out.lit += DT;
       if (p.bat <= 0) out.dead += DT;
       if (p.bat < 0.25) out.low += DT;
-      const bot = team.bots[gi];
+      const bot = defined(team.bots[gi], `bot ${gi}`); // S.players and team.bots are in the same order
       if (p.bat <= 0 && !bot.wasDry) {
         out.dry++;
         bot.dryAt = S.t;
       }
       bot.wasDry = p.bat <= 0;
-      if (S.m.some((m, i) => COMING.includes(m.st) && brainOf(sim, i).tgt === p.id)) {
+      if (S.m.some(m => COMING.includes(m.st) && brainOf(sim, m.i).tgt === p.id)) {
         out.hunted += DT;
         anyHunted = true;
       }
       if (tickNo % 5 === gi % 5)
         for (const m of S.m)
           if (perceivable(S, p, m)) {
-            if (S.t - lastSeen[gi][m.i] > 1.5) firstSeen[gi][m.i] = S.t;
-            lastSeen[gi][m.i] = S.t;
+            if (S.t - bot.lastSeen[m.i] > 1.5) bot.firstSeen[m.i] = S.t;
+            bot.lastSeen[m.i] = S.t;
           }
     });
     if (S.crank) out.cranked += DT;
@@ -1379,17 +1463,19 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
         if (trace && !['bang', 'hour'].includes(e.type))
           console.log(`${S.t.toFixed(1).padStart(6)}  ${e.type} ${e.x == null ? '' : JSON.stringify(e.x)}  power ${S.power.toFixed(0)}`);
         if (e.type === 'flat') {
-          const gi = S.players.findIndex(p => p.id === e.x.id);
+          const { by } = e.x,
+            gi = S.players.findIndex(p => p.id === e.x.id),
+            bot = defined(team.bots[gi], `the flattened guard ${e.x.id}`),
+            m = defined(S.m[by], `mascot ${by}`),
+            first = bot.firstSeen[by];
           out.flats++;
-          out.by[e.x.by]++;
+          out.by[by]++;
           out.firstFlat = Math.min(out.firstFlat, S.t);
           // firstSeen is null only before it was seen, and then lastSeen is too long ago.
-          out.warn.push(S.t - lastSeen[gi][e.x.by] < 1.5 ? S.t - (firstSeen[gi][e.x.by] as number) : 0);
-          const bot = team.bots[gi],
-            m = S.m[e.x.by];
+          out.warn.push(first !== null && S.t - bot.lastSeen[by] < 1.5 ? S.t - first : 0);
           if (bot.bat <= 0) {
             out.darkFlat++;
-            if (S.t - (bot.dryAt ?? Number.NaN) < 20) out.dryFlat++;
+            if (bot.dryAt !== undefined && S.t - bot.dryAt < 20) out.dryFlat++;
           }
           out.notes.push(
             `seed ${seed} ${S.t.toFixed(0)}s ${MASC[e.x.by].name.split(' ').pop()} got g${gi} in ${M.ROOMS3[M.roomAt(e.x.x, e.x.z)]?.name}; was ${bot.want.use?.key || (bot.want.goal ? 'walking' : 'standing')}, torch ${bot.bat.toFixed(2)}${bot.on ? ' on' : ''}, knew of ${known(S, bot).length}, ${S.m.filter(o => COMING.includes(o.st)).length} hunting, it was rot ${m.rot}${m.lit ? ' lit' : ''}, power ${S.power.toFixed(0)}${S.stir ? ', stir' : ''}`
@@ -1398,7 +1484,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
         else if (e.type === 'bang') out.bangs++;
         else if (e.type === 'toy') {
           out.toys++;
-          out.lured += S.m.filter((m, i) => m.st === 'search' && brainOf(sim, i).last?.x === e.x.x && brainOf(sim, i).last?.z === e.x.z).length;
+          out.lured += S.m.filter(m => m.st === 'search' && brainOf(sim, m.i).last?.x === e.x.x && brainOf(sim, m.i).last?.z === e.x.z).length;
         } else if (e.type === 'out') out.outs++;
       }
 
@@ -1412,11 +1498,11 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
       break;
     }
     S.m.forEach((m, i) => {
-      const p = parked[i];
-      if (!Number.isFinite(m.x + m.z + m.yaw)) fail(sc.name, `seed ${seed}: ${MASC[i].name} is nowhere`);
+      const p = defined(parked[i], `where mascot ${i} stood`); // one per mascot
+      if (!Number.isFinite(m.x + m.z + m.yaw)) fail(sc.name, `seed ${seed}: ${MASC[m.i].name} is nowhere`);
       if (!['roam', 'search', 'hunt'].includes(m.st) || m.lit || dist(m, p) > 0.5) Object.assign(p, { x: m.x, z: m.z, t: S.t });
       else if (S.t - p.t > 30) {
-        fail(sc.name, `seed ${seed}: ${MASC[i].name} stood ${m.st}ing at ${m.x.toFixed(1)}, ${m.z.toFixed(1)} for 30 s`);
+        fail(sc.name, `seed ${seed}: ${MASC[m.i].name} stood ${m.st}ing at ${m.x.toFixed(1)}, ${m.z.toFixed(1)} for 30 s`);
         p.t = S.t;
       }
     });

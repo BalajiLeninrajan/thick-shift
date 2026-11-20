@@ -18,13 +18,20 @@
 // Node runs it as it is by stripping the types, so it uses only TypeScript that stripping can erase.
 
 import { cpus } from 'node:os';
-import { isMainThread, type MessagePort, parentPort, Worker } from 'node:worker_threads';
-import { checkBuilding, fail, failures, type Outcome, play, scenarios } from './harness.ts';
+import { isMainThread, parentPort, Worker } from 'node:worker_threads';
+import { defined, MASCOTS } from '../../packages/sim/src/index.ts';
+import { checkBuilding, fail, failures, type Outcome, play, type Scenario, scenarios } from './harness.ts';
 
 const argv = process.argv.slice(2),
   arg = <T>(k: string, d: T): string | T => {
     const i = argv.indexOf(`--${k}`);
-    return i < 0 ? d : argv[i + 1];
+    if (i < 0) return d;
+    const v = argv[i + 1];
+    if (v === undefined) {
+      console.error(`--${k} needs a value`);
+      process.exit(2);
+    }
+    return v;
   };
 const SEEDS = +arg('seeds', 40),
   ONLY = arg('only', ''),
@@ -46,11 +53,12 @@ interface Done {
 
 if (!isMainThread) {
   // A worker plays the scenarios it is handed and posts back the nights and any failures.
-  const port = parentPort as MessagePort;
+  const port = defined(parentPort, 'the parent port of a worker thread');
   port.on('message', ({ i, from, to }: Job) => {
     failures.length = 0;
-    const runs = [];
-    for (let seed = from; seed <= to; seed++) runs.push(play(scenarios[i], seed));
+    const sc = defined(scenarios[i], `scenario ${i}`), // jobs name scenarios by index
+      runs = [];
+    for (let seed = from; seed <= to; seed++) runs.push(play(sc, seed));
     port.postMessage({ i, runs, failures: [...failures] } satisfies Done);
   });
 } else if (TRACE) {
@@ -63,10 +71,16 @@ if (!isMainThread) {
   console.log(play(sc, +arg('seed', 1), { trace: argv.includes('--steps') ? 2 : 1, brains: argv.includes('--brains') }));
   console.log(failures.join('\n'));
 } else {
-  const todo = scenarios.map((s, i) => i).filter(i => ONLY.split(',').some(part => scenarios[i].name.includes(part)));
-  const results = new Map(todo.map(i => [i, [] as Outcome[]])),
+  // The scenarios to play, with the nights each has played so far. i: its place in scenarios, which jobs name it by.
+  interface Todo {
+    i: number;
+    sc: Scenario;
+    runs: Outcome[];
+  }
+  const todo = scenarios.flatMap((sc, i): Todo[] => (ONLY.split(',').some(part => sc.name.includes(part)) ? [{ i, sc, runs: [] }] : []));
+  const byIndex = new Map(todo.map(t => [t.i, t])),
     jobs: Job[] = [];
-  for (const i of todo) for (let from = 1; from <= SEEDS; from += CHUNK) jobs.push({ i, from, to: Math.min(SEEDS, from + CHUNK - 1) });
+  for (const { i } of todo) for (let from = 1; from <= SEEDS; from += CHUNK) jobs.push({ i, from, to: Math.min(SEEDS, from + CHUNK - 1) });
   await new Promise<void>(done => {
     let next = 0,
       live = 0;
@@ -84,7 +98,7 @@ if (!isMainThread) {
       };
       w.on('message', (r: Done) => {
         live--;
-        (results.get(r.i) as Outcome[]).push(...r.runs);
+        defined(byIndex.get(r.i), `scenario ${r.i}`).runs.push(...r.runs);
         failures.push(...r.failures);
         give();
       });
@@ -100,8 +114,8 @@ if (!isMainThread) {
 
   const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : 0);
   const sum = (runs: Outcome[], f: (r: Outcome) => number) => runs.reduce((s, r) => s + f(r), 0);
-  const median = (list: number[]) => (list.length ? [...list].sort((a, b) => a - b)[list.length >> 1] : NaN);
-  const rate = new Map<string, number>();
+  const median = (list: number[]) => [...list].sort((a, b) => a - b)[list.length >> 1] ?? NaN; // NaN for none
+  const rate = new Map<string, number>(); // win% by scenario name
   const head = [
     'scenario',
     'win%',
@@ -130,35 +144,32 @@ if (!isMainThread) {
     'lured',
   ];
   const rows: (string | number)[][] = [];
-  const row = (sc: (typeof scenarios)[number], runs: Outcome[]) => {
+  // Adds the scenario's row to the table and returns its win%.
+  const row = (sc: Scenario, runs: Outcome[]) => {
     const n = runs.length,
       warn = runs.flatMap(r => r.warn),
       flats = sum(runs, r => r.flats),
-      stood = sum(runs, r => r.stood);
-    rate.set(
-      sc.name,
-      pct(
+      stood = sum(runs, r => r.stood),
+      won = pct(
         sum(runs, r => +r.win),
         n
-      )
-    );
+      );
+    rate.set(sc.name, won);
     rows.push([
       sc.name,
-      rate.get(sc.name) as number,
+      won,
       Math.round(sum(runs, r => r.t) / n),
       (flats / n / sc.n).toFixed(2),
       pct(
         sum(runs, r => r.peels),
         flats
       ),
-      [0, 1, 2, 3]
-        .map(i =>
-          pct(
-            sum(runs, r => r.by[i]),
-            flats
-          )
+      MASCOTS.map(i =>
+        pct(
+          sum(runs, r => r.by[i]),
+          flats
         )
-        .join(' '),
+      ).join(' '),
       median(warn).toFixed(1),
       `${pct(warn.filter(x => x < 1.5).length, warn.length)}%`,
       `${pct(
@@ -209,28 +220,32 @@ if (!isMainThread) {
         )
       ).toFixed(2),
     ]);
-    return runs;
+    return won;
   };
-  for (const i of todo) {
-    const sc = scenarios[i],
-      runs = row(sc, results.get(i) as Outcome[]);
+  const wins = todo.map(({ sc, runs }) => {
+    const won = row(sc, runs);
     if (sc.noMiss && sum(runs, r => r.burnt))
       fail(sc.name, `${sum(runs, r => r.burnt)} faults burnt with nothing in the way: they come faster than they can be walked to`);
     if (sc.night === 1 && !sc.worse && !sc.dev) {
       const early = Math.min(...runs.map(r => r.firstFlat));
       if (early < 30) fail(sc.name, `a guard was flattened ${early.toFixed(0)} s into night 1`);
     }
-  }
+    return { sc, won };
+  });
   // A strategy that should not work has to win under one night in ten, or under half as often as playing properly.
-  for (const i of todo) {
-    const sc = scenarios[i],
-      won = rate.get(sc.name) as number;
-    if (sc.worse && rate.has(sc.worse) && won > Math.max(10, (rate.get(sc.worse) as number) / 2))
-      fail(sc.name, `wins ${won}% of nights; playing properly wins ${rate.get(sc.worse)}%`);
+  for (const { sc, won } of wins) {
+    const proper = sc.worse === undefined ? undefined : rate.get(sc.worse);
+    if (proper !== undefined && won > Math.max(10, proper / 2)) fail(sc.name, `wins ${won}% of nights; playing properly wins ${proper}%`);
   }
 
   const width = head.map((h, c) => Math.max(h.length, ...rows.map(r => String(r[c]).length)));
-  const line = (cells: (string | number)[]) => cells.map((v, c) => (c ? String(v).padStart(width[c]) : String(v).padEnd(width[c]))).join('  ');
+  const line = (cells: (string | number)[]) =>
+    cells
+      .map((v, c) => {
+        const w = defined(width[c], `the width of column ${c}`); // every row has a cell for each heading
+        return c ? String(v).padStart(w) : String(v).padEnd(w);
+      })
+      .join('  ');
   console.log(`${SEEDS} seeds per scenario. n1 to n5 is the night.\n`);
   console.log(line(head));
   for (const r of rows) console.log(line(r));
@@ -246,10 +261,10 @@ burnt   share of faults left to burn    power   mean power at the end    out%   
 bangs   bangs on shut doors    dock s  guard-seconds spent charging at the dock    toys/g  Mini Biggses thrown per guard per night
 lured   mascots that went to look, per one thrown`);
   if (argv.includes('--deaths'))
-    for (const i of todo)
+    for (const { sc, runs } of todo)
       console.log(
-        `\n${scenarios[i].name}\n` +
-          (results.get(i) as Outcome[])
+        `\n${sc.name}\n` +
+          runs
             .flatMap(r => r.notes)
             .slice(0, 30)
             .join('\n')

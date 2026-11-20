@@ -1,6 +1,7 @@
 // Loaded by tools/balance/harness.ts when REC_OUT is set (run.sh sets it). Writes one JSON line per sim call to
 // $REC_OUT: the call, the random draws the sim made during it, and after starts and steps the whole state S.
 import { appendFileSync, writeFileSync } from 'node:fs';
+import { defined } from '../../../packages/sim/src/check.ts';
 import type { actFloor, Sim, startFloorNight, stepFloor } from '../../../packages/sim/src/sim.ts';
 import type { State } from '../../../packages/sim/src/types.ts';
 
@@ -15,10 +16,10 @@ export interface Night {
 // the first night, and the sim and the map look it up when they call it, so replacing it here reaches them.
 Math.hypot = (a, b) => Math.sqrt(a * a + b * b);
 
-const out = process.env.REC_OUT as string; // set, or the harness would not have loaded this
+const out = defined(process.env.REC_OUT, 'REC_OUT'); // set, or the harness would not have loaded this
 writeFileSync(out, '');
-const REC = { on: false, rands: [] as number[] };
-const snap = (S: State): unknown => JSON.parse(JSON.stringify(S, (k, v) => (v === null ? false : v)));
+const REC: { on: boolean; rands: number[] } = { on: false, rands: [] };
+const snap = (S: State): unknown => JSON.parse(JSON.stringify(S, (_k, v: unknown) => (v === null ? false : v)));
 
 // The night's entry points, recording each call. Draws are recorded only inside a sim call, so the harness's own
 // draws, which share the stream, are left out.
@@ -43,7 +44,7 @@ export function wrapSim(night: Night, sim: Sim): Night {
     if (S) entry.S = snap(S);
     // Numbers go out as "#<shortest form>": Lune's JSON reader misreads about one double in ten by a bit, and
     // Luau's tonumber reads this form back exactly.
-    appendFileSync(out, `${JSON.stringify(entry, (k, v) => (typeof v === 'number' ? `#${String(v)}` : v))}\n`);
+    appendFileSync(out, `${JSON.stringify(entry, (_k, v) => (typeof v === 'number' ? `#${String(v)}` : v))}\n`);
   };
   return {
     startFloorNight(sim, S, n) {
@@ -56,7 +57,9 @@ export function wrapSim(night: Night, sim: Sim): Night {
       run(() => night.stepFloor(sim, S, now), { op: 'step' }, { dt }, S);
     },
     actFloor(sim, S, id, a) {
-      run(() => night.actFloor(sim, S, id, a), { op: 'act', id, a: JSON.parse(JSON.stringify(a)) }, {}, null);
+      // A copy as JSON has it, taken before the call.
+      const copy: unknown = JSON.parse(JSON.stringify(a));
+      run(() => night.actFloor(sim, S, id, a), { op: 'act', id, a: copy }, {}, null);
     },
   };
 }
