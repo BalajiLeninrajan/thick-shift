@@ -18,25 +18,49 @@
 // Node runs it as it is by stripping the types, so it uses only TypeScript that stripping can erase.
 
 import { cpus } from 'node:os';
+import { parseArgs } from 'node:util';
 import { isMainThread, parentPort, Worker } from 'node:worker_threads';
 import { defined, MASCOTS } from '../../packages/sim/src/index.ts';
 import { checkBuilding, fail, failures, type Outcome, play, type Scenario, scenarios } from './harness.ts';
 
-const argv = process.argv.slice(2),
-  arg = <T>(k: string, d: T): string | T => {
-    const i = argv.indexOf(`--${k}`);
-    if (i < 0) return d;
-    const v = argv[i + 1];
-    if (v === undefined) {
-      console.error(`--${k} needs a value`);
-      process.exit(2);
-    }
-    return v;
-  };
-const SEEDS = +arg('seeds', 40),
-  ONLY = arg('only', ''),
-  TRACE = arg('trace', ''),
-  WORKERS = +arg('workers', 12);
+function usage(why: string): never {
+  console.error(`${why}
+usage: node tools/balance/floor.ts [--seeds N] [--only NAME,...] [--workers N] [--deaths]
+       node tools/balance/floor.ts --trace NAME [--seed N] [--steps] [--brains]`);
+  process.exit(2);
+}
+// The flags, or the usage when one is unknown or lacks its value.
+function flags() {
+  try {
+    return parseArgs({
+      options: {
+        seeds: { type: 'string' },
+        only: { type: 'string', default: '' },
+        workers: { type: 'string' },
+        deaths: { type: 'boolean', default: false },
+        trace: { type: 'string' },
+        seed: { type: 'string' },
+        steps: { type: 'boolean', default: false },
+        brains: { type: 'boolean', default: false },
+      },
+    }).values;
+  } catch (e) {
+    return usage(e instanceof Error ? e.message : String(e));
+  }
+}
+// A flag's value as a whole number of at least min, or d when the flag is not given.
+function whole(flag: string, v: string | undefined, d: number, min: number): number {
+  if (v === undefined) return d;
+  if (!/^\d+$/.test(v) || +v < min) usage(`--${flag} takes a whole number of at least ${min}, not "${v}"`);
+  return +v;
+}
+const opts = flags();
+const SEEDS = whole('seeds', opts.seeds, 40, 1),
+  ONLY = opts.only,
+  TRACE = opts.trace,
+  WORKERS = whole('workers', opts.workers, 12, 1),
+  SEED = whole('seed', opts.seed, 1, 0);
+if (TRACE === '') usage('--trace takes the name of a scenario, or part of one');
 
 const CHUNK = 4; // seeds a worker plays before it reports back
 // A worker's job: scenario i, seeds from to to. What it sends back: the nights and any failures.
@@ -61,14 +85,14 @@ if (!isMainThread) {
     for (let seed = from; seed <= to; seed++) runs.push(play(sc, seed));
     port.postMessage({ i, runs, failures: [...failures] } satisfies Done);
   });
-} else if (TRACE) {
+} else if (TRACE !== undefined) {
   const sc = scenarios.find(s => s.name.includes(TRACE));
   if (!sc) {
     console.error('No scenario matches', TRACE);
     process.exit(2);
   }
-  console.log(sc.name, 'seed', +arg('seed', 1));
-  console.log(play(sc, +arg('seed', 1), { trace: argv.includes('--steps') ? 2 : 1, brains: argv.includes('--brains') }));
+  console.log(sc.name, 'seed', SEED);
+  console.log(play(sc, SEED, { trace: opts.steps ? 2 : 1, brains: opts.brains }));
   console.log(failures.join('\n'));
 } else {
   // The scenarios to play, with the nights each has played so far. i: its place in scenarios, which jobs name it by.
@@ -260,7 +284,7 @@ dry>flat  share of torches running out that ended in a flattening within 20 s   
 burnt   share of faults left to burn    power   mean power at the end    out%    nights the power went out    crank s  seconds cranked    door s  seconds of shut door (two doors for ten seconds is 20)
 bangs   bangs on shut doors    dock s  guard-seconds spent charging at the dock    toys/g  Mini Biggses thrown per guard per night
 lured   mascots that went to look, per one thrown`);
-  if (argv.includes('--deaths'))
+  if (opts.deaths)
     for (const { sc, runs } of todo)
       console.log(
         `\n${sc.name}\n` +
