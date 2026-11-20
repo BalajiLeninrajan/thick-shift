@@ -8,6 +8,8 @@
 import * as THREE from 'three';
 import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, BATTERY_SPOTS, roomAt } from '@thick-shift/sim/map';
 import { canvas } from './world/tex';
+import type { State } from '@thick-shift/sim/types';
+import type { Me } from '../types';
 
 export const MAP_W = 288,
   MAP_H = 224; // canvas pixels: the 4:3-ish shape of the phone's glass
@@ -35,19 +37,19 @@ export function createMinimap() {
   texture.colorSpace = THREE.SRGBColorSpace;
   let next = 0;
 
-  const dot = (x, z, r, col) => {
+  const dot = (x: number, z: number, r: number, col: string): void => {
     c.fillStyle = col;
     c.beginPath();
     c.arc(x, z, r, 0, 7);
     c.fill();
   };
-  const box = (x, z, r, col) => {
+  const box = (x: number, z: number, r: number, col: string): void => {
     c.fillStyle = col;
     c.fillRect(x - r, z - r, r * 2, r * 2);
   };
 
   // The building and what is in it, in metres, under whatever transform is set. k: pixels per metre, for sizes.
-  function plan(S, myId, k, t) {
+  function plan(S: State, myId: string, k: number, t: number): void {
     const px = 1 / k; // one pixel, in metres
     c.fillStyle = INK.room;
     for (const room of ROOMS3) for (const [x0, z0, x1, z1] of room.rects) c.fillRect(x0, z0, x1 - x0, z1 - z0);
@@ -103,7 +105,7 @@ export function createMinimap() {
   }
 
   // This guard: an arrow at (x, y) in pixels, pointing at angle a (radians, 0 is up the screen).
-  function arrow(x, y, a) {
+  function arrow(x: number, y: number, a: number): void {
     c.save();
     c.translate(x, y);
     c.rotate(a);
@@ -124,7 +126,7 @@ export function createMinimap() {
   return {
     texture,
     // me: player.js's guard (x, z, yaw). myId: theirs, to leave out of the other guards. zoom: the whole building. now: milliseconds.
-    draw(S, me, myId, zoom, now) {
+    draw(S: State, me: Me, myId: string, zoom: boolean, now: number): void {
       if (now < next) return;
       next = now + EVERY;
       c.fillStyle = INK.bg;
