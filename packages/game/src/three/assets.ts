@@ -40,14 +40,14 @@ export function loadGLB(name: string): Promise<THREE.Group | null> {
   return cache.get(name) as Promise<THREE.Group | null>;
 }
 export function loadJSON(name: string): Promise<ModelInfo | null> {
-  if (!cache.has(name + '.json'))
+  if (!cache.has(`${name}.json`))
     cache.set(
-      name + '.json',
+      `${name}.json`,
       fetch(`models/${name}.json`)
         .then(r => (r.ok ? r.json() : null))
         .catch(() => null)
     );
-  return cache.get(name + '.json') as Promise<ModelInfo | null>;
+  return cache.get(`${name}.json`) as Promise<ModelInfo | null>;
 }
 
 // The colour eyes are in the dark: a warm off-white (Catppuccin rosewater).
@@ -58,7 +58,7 @@ export const EYE_PALE = 0xf5e0dc;
 // casts a shadow (only the local torch has a shadow map). Returns the source;
 // take copies with instance().
 export function loadActor(name: string): Promise<THREE.Group | null> {
-  const key = name + '|actor';
+  const key = `${name}|actor`;
   if (!cache.has(key))
     cache.set(
       key,

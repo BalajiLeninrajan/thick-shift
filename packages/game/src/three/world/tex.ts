@@ -126,7 +126,7 @@ const hexGrey = (v: number): string => {
   const g = Math.round(Math.max(0, Math.min(1, v)) * 255)
     .toString(16)
     .padStart(2, '0');
-  return '#' + g + g + g;
+  return `#${g}${g}${g}`;
 };
 
 function texOf(ctx: CanvasRenderingContext2D, srgb: boolean, wrapT: THREE.Wrapping): THREE.CanvasTexture {
@@ -226,7 +226,7 @@ export function paint(look: Look, draw: (p: Painter) => void): Maps {
               if (x + ox + rad < 0 || x + ox - rad > s || y + oy + rad < 0 || y + oy - rad > s) continue;
               const g = ctx.createRadialGradient(x + ox, y + oy, rad * 0.15, x + ox, y + oy, rad);
               g.addColorStop(0, v);
-              g.addColorStop(1, v + '00');
+              g.addColorStop(1, `${v}00`);
               ctx.globalAlpha = alpha;
               ctx.fillStyle = g;
               ctx.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);

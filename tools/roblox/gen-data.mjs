@@ -27,19 +27,17 @@ function lua(v, pad = '') {
   }
   if (typeof v === 'string') return JSON.stringify(v);
   if (typeof v === 'boolean') return String(v);
-  const inner = pad + '\t';
+  const inner = `${pad}\t`;
   if (Array.isArray(v)) {
     if (!v.length) return '{}';
     const flat = v.every(x => typeof x !== 'object' || x === null);
-    if (flat) return '{ ' + v.map(x => lua(x)).join(', ') + ' }';
-    return '{\n' + v.map(x => inner + lua(x, inner) + ',').join('\n') + '\n' + pad + '}';
+    if (flat) return `{ ${v.map(x => lua(x)).join(', ')} }`;
+    return `{\n${v.map(x => `${inner + lua(x, inner)},`).join('\n')}\n${pad}}`;
   }
   // A doorway's `door` back-reference and the like are not data.
   const entries = Object.entries(v).filter(([, x]) => x !== undefined && typeof x !== 'function');
   if (!entries.length) return '{}';
-  return (
-    '{\n' + entries.map(([k, x]) => inner + (IDENT.test(k) ? k : '[' + JSON.stringify(k) + ']') + ' = ' + lua(x, inner) + ',').join('\n') + '\n' + pad + '}'
-  );
+  return `{\n${entries.map(([k, x]) => `${inner + (IDENT.test(k) ? k : `[${JSON.stringify(k)}]`)} = ${lua(x, inner)},`).join('\n')}\n${pad}}`;
 }
 
 const data = {

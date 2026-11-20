@@ -90,8 +90,8 @@ export function createTouch(root: HTMLElement, player: PlayerHandle) {
       stick = at;
       // The stick appears under the thumb, wherever that is.
       stickEl.classList.add('is-held');
-      stickEl.style.left = e.clientX - r.left + 'px';
-      stickEl.style.top = e.clientY - r.top + 'px';
+      stickEl.style.left = `${e.clientX - r.left}px`;
+      stickEl.style.top = `${e.clientY - r.top}px`;
     } else if (!drag) drag = at;
   });
   layer.addEventListener('pointermove', e => {

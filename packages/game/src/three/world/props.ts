@@ -103,7 +103,7 @@ function plain(geo: THREE.BufferGeometry, names: string[]): THREE.BufferGeometry
 export function createProps(scene: THREE.Scene) {
   const rooms = ROOMS3.map(room => {
       const g = new THREE.Group();
-      g.name = 'props: ' + room.name;
+      g.name = `props: ${room.name}`;
       scene.add(g);
       return g;
     }),

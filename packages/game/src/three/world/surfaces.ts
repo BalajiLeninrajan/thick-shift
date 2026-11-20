@@ -627,9 +627,9 @@ export function surfaces(): Materials {
     const H = ROOMS3[i].h;
     if (look.floor === 'metal') return { floor: sheet, wall: sheet, ceil: sheet };
     return {
-      floor: once('f' + look.floor, () => std(FLOOR[look.floor]())),
-      wall: once('w' + look.wall + H + (look.dado || ''), () => std(WALL[look.wall](H, look.dado))),
-      ceil: once('c' + look.ceil, () => std(CEIL[look.ceil]())),
+      floor: once(`f${look.floor}`, () => std(FLOOR[look.floor]())),
+      wall: once(`w${look.wall}${H}${look.dado || ''}`, () => std(WALL[look.wall](H, look.dado))),
+      ceil: once(`c${look.ceil}`, () => std(CEIL[look.ceil]())),
     };
   });
   return { rooms, trim: new THREE.MeshStandardMaterial({ ...trim(), roughness: 1, vertexColors: true }) };

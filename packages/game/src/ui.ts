@@ -97,7 +97,7 @@ function floorStats(t: Tally, run?: boolean): string {
     e => e,
     () => 1
   )
-    .map(([name, n]) => `${esc(name)}${n.length > 1 || run ? ' ' + n.length : ''}`)
+    .map(([name, n]) => `${esc(name)}${n.length > 1 || run ? ` ${n.length}` : ''}`)
     .join(', ');
   return `<dl class="kv"><dt>Faults fixed</dt><dd class="cn-tabular">${t.fixed ?? 0}</dd><dt>Left to burn</dt><dd class="cn-tabular">${t.burnt ?? 0}</dd>
     <dt>Flattened</dt><dd>${flats || 'Nobody'}</dd><dt>Peeled a friend up</dt><dd>${peels || 'Nobody'}</dd></dl>`;
@@ -154,7 +154,7 @@ function nightScreen(S: State): OverlayScreen {
       wire,
       html: card(
         `<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(S.tally)}`,
-        hostAction('Start night ' + (S.night + 1))
+        hostAction(`Start night ${S.night + 1}`)
       ),
     };
   }
@@ -168,7 +168,7 @@ function nightScreen(S: State): OverlayScreen {
       <p class="lede cn-m-0">You walked all ${FINAL_NIGHT} nights at the Mascot Depot.</p>
       <p class="cn-meta cn-m-0">The sun is up and the mascots are back on their stage. Guards: ${who}</p>
       ${floorStats(S.total, true)}
-      <p class="cn-meta cn-m-0">${S.deaths ? `The whole crew went down ${S.deaths === 1 ? 'once' : S.deaths + ' times'} along the way.` : 'The whole crew never went down at once.'}</p>`,
+      <p class="cn-meta cn-m-0">${S.deaths ? `The whole crew went down ${S.deaths === 1 ? 'once' : `${S.deaths} times`} along the way.` : 'The whole crew never went down at once.'}</p>`,
         hostAction('Start over from night 1')
       ),
     };
@@ -178,7 +178,7 @@ function nightScreen(S: State): OverlayScreen {
       wire,
       html: card(
         `<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(MASC[S.killer]?.name || 'Something')} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(S.tally)}`,
-        hostAction('Retry night ' + S.night),
+        hostAction(`Retry night ${S.night}`),
         'ts-card-slow'
       ),
     };
@@ -186,7 +186,7 @@ function nightScreen(S: State): OverlayScreen {
 }
 
 function currentScreen(): OverlayScreen {
-  if (game.error) return messageScreen('error:' + game.error.title, game.error.title, game.error.detail, true);
+  if (game.error) return messageScreen(`error:${game.error.title}`, game.error.title, game.error.detail, true);
   if (game.S) return nightScreen(game.S);
   if (game.joining) return messageScreen('joining', platform.fixedRoom ? 'Joining the night…' : `Connecting to room ${game.code}…`, '', false);
   return platform.title ? platform.title() : titleScreen();

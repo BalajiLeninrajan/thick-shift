@@ -43,7 +43,7 @@ export function wrapSim(night: Night, sim: Sim): Night {
     if (S) entry.S = snap(S);
     // Numbers go out as "#<shortest form>": Lune's JSON reader misreads about one double in ten by a bit, and
     // Luau's tonumber reads this form back exactly.
-    appendFileSync(out, JSON.stringify(entry, (k, v) => (typeof v === 'number' ? '#' + String(v) : v)) + '\n');
+    appendFileSync(out, `${JSON.stringify(entry, (k, v) => (typeof v === 'number' ? `#${String(v)}` : v))}\n`);
   };
   return {
     startFloorNight(sim, S, n) {

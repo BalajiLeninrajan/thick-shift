@@ -48,9 +48,6 @@
         "noUnusedFunctionParameters": "off"
       },
       "style": {
-        // 98. String concatenation is used throughout; converting it is churn. Revisit in PR 5 of #7, when the
-        // client is ported to TS and these lines are rewritten anyway.
-        "useTemplate": "off",
         // 26 in styles.css. Reordering rules to satisfy it changes which rule wins, so it would change how the page
         // looks. Revisit if the stylesheet is split up.
         "noDescendingSpecificity": "off"

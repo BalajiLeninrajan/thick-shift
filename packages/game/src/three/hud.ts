@@ -231,11 +231,11 @@ const angDiff = (a: number, b: number): number => {
   if (d < -Math.PI) d += Math.PI * 2;
   return d;
 };
-const metres = (d: number): string => Math.max(1, Math.round(d)) + ' m';
+const metres = (d: number): string => `${Math.max(1, Math.round(d))} m`;
 // "in the Kitchen", for a sentence.
 export function where(p: Partial<Point>): string {
   const name = ROOMS3[roomAt(p.x, p.z)]?.name;
-  return !name ? 'somewhere' : name === 'Backstage' ? 'backstage' : 'in the ' + name;
+  return !name ? 'somewhere' : name === 'Backstage' ? 'backstage' : `in the ${name}`;
 }
 const roomName = (p: Partial<Point>): string => ROOMS3[roomAt(p.x, p.z)]?.name || '';
 
@@ -428,8 +428,8 @@ export function createHud(stage: Element, player: PlayerHandle) {
     setTimeout(() => t.e.remove(), 400);
   }
   function say(text: string, kind = 'info', seconds = 4.5): void {
-    const e = el('div', 'ts-f-toast is-' + kind, toasts);
-    e.innerHTML = icon(TOAST_ICON[kind]) + '<span></span>';
+    const e = el('div', `ts-f-toast is-${kind}`, toasts);
+    e.innerHTML = `${icon(TOAST_ICON[kind])}<span></span>`;
     e.lastChild.textContent = text;
     live.push({ e, until: performance.now() + seconds * 1000 });
     while (live.length > MAX_TOASTS - +(root.clientHeight < SHORT)) drop(live.shift());
@@ -458,7 +458,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
     S.faults?.forEach((f, i) => {
       if (f)
         list.push({
-          key: 'f' + i + '@' + f.at,
+          key: `f${i}@${f.at}`,
           kind: 'fault',
           x: BOXES[i].x + Math.sin(BOXES[i].face) * 0.9,
           z: BOXES[i].z + Math.cos(BOXES[i].face) * 0.9,
@@ -466,7 +466,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
         });
     });
     for (const p of S.players)
-      if (p.flat && p.id !== game.myId && p.x != null) list.push({ key: 'p' + p.id, kind: 'flat', x: p.x, z: p.z, name: p.name, ping: pings.get(p.id) > now });
+      if (p.flat && p.id !== game.myId && p.x != null) list.push({ key: `p${p.id}`, kind: 'flat', x: p.x, z: p.z, name: p.name, ping: pings.get(p.id) > now });
     if ((mine.bat ?? 1) < LOW_BAT && S.power > 0) list.push({ key: 'dock', kind: 'dock', x: CHARGER.x, z: CHARGER.z - 0.9, name: 'charger' });
     if (S.power < GEN_MARK)
       list.push({ key: 'gen', kind: 'gen', x: GENERATOR.x + Math.sin(GENERATOR.face) * 0.9, z: GENERATOR.z + Math.cos(GENERATOR.face) * 0.9, name: 'crank' });
@@ -478,7 +478,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
     for (const t of ticks) {
       const off = -angDiff(t.b, me.yaw) / HALF_SPAN;
       t.e.hidden = Math.abs(off) > 1;
-      t.e.style.left = 50 + off * 50 + '%';
+      t.e.style.left = `${50 + off * 50}%`;
     }
     let nearest: Mark | null = null;
     for (const t of list) {
@@ -496,17 +496,17 @@ export function createHud(stage: Element, player: PlayerHandle) {
       t.at = Math.max(-1, Math.min(1, t.off));
       let m = marks.get(t.key);
       if (!m) {
-        m = el('div', 'ts-f-mark is-' + t.kind, compass);
+        m = el('div', `ts-f-mark is-${t.kind}`, compass);
         m.innerHTML = '<i></i><b></b>';
         marks.set(t.key, m);
       }
-      m.style.left = 50 + t.at * 50 + '%';
+      m.style.left = `${50 + t.at * 50}%`;
       // Off the end of the strip: it is that way, further round.
       data(m, 'side', t.off < -1 ? 'left' : t.off > 1 ? 'right' : '');
       m.classList.toggle('is-near', t === nearest);
       m.classList.toggle('is-ping', !!t.ping);
       m.classList.toggle('is-hot', !!t.hot);
-      set(m.lastChild, (t.name ? t.name + ' ' : '') + metres(t.dist));
+      set(m.lastChild, (t.name ? `${t.name} ` : '') + metres(t.dist));
     }
     for (const [key, m] of marks)
       if (!list.some(t => t.key === key)) {
@@ -555,7 +555,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
         const dx = Math.round(x - l.x);
         if (dx !== (l.b._dx || 0)) {
           l.b._dx = dx;
-          l.b.style.translate = dx ? dx + 'px 0' : '';
+          l.b.style.translate = dx ? `${dx}px 0` : '';
         }
         x += l.w + LABEL_GAP;
       }
@@ -576,7 +576,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
     const rows = ours.slice(0, max).map(({ f, i }) => {
       const left = faultLeft(S, f),
         state = left <= 0 ? 'burn' : left < HURRY ? 'hot' : '';
-      return `<li data-state="${state}"${me.task?.i === i ? ' class="is-here"' : ''}>${icon('fault')}<b>${esc(ROOMS3[BOXES[i].room]?.name || '')}</b><span>${FAULT_NAME[f.k]}</span><em class="cn-tabular">${left <= 0 ? 'burning' : Math.ceil(left) + 's'}</em></li>`;
+      return `<li data-state="${state}"${me.task?.i === i ? ' class="is-here"' : ''}>${icon('fault')}<b>${esc(ROOMS3[BOXES[i].room]?.name || '')}</b><span>${FAULT_NAME[f.k]}</span><em class="cn-tabular">${left <= 0 ? 'burning' : `${Math.ceil(left)}s`}</em></li>`;
     });
     if (ours.length > max) rows.push(`<li class="is-more">${ours.length - max} more</li>`);
     if (!ours.length) rows.push(`<li class="is-clear">${icon('fault')}<span>No faults. Listen for the next one.</span></li>`);
@@ -611,9 +611,9 @@ export function createHud(stage: Element, player: PlayerHandle) {
       data(root, 'hid', me.hid >= 0 && !me.flat);
 
       set(time, clockF(S));
-      set(night, 'Night ' + S.night);
-      powerBar.style.width = S.power + '%';
-      set(powerText, S.power > 0 ? Math.ceil(S.power) + '%' : 'Power out');
+      set(night, `Night ${S.night}`);
+      powerBar.style.width = `${S.power}%`;
+      set(powerText, S.power > 0 ? `${Math.ceil(S.power)}%` : 'Power out');
       data(power, 'level', S.power <= 0 ? 'out' : S.power < CRIT_POWER ? 'crit' : S.power < LOW_POWER ? 'low' : S.crank ? 'crank' : 'ok');
       if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say('Power below 25%.', 'power', 7);
       was.power = S.power;
@@ -672,7 +672,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
       was.empty = me.empty;
       was.dry = me.dry;
       stam.hidden = me.stam >= 1;
-      (stam.firstChild as HTMLElement).style.width = me.stam * 100 + '%';
+      (stam.firstChild as HTMLElement).style.width = `${me.stam * 100}%`;
 
       const t = me.target;
       dot.hidden = me.flat || me.paused;
@@ -681,7 +681,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
         set(promptKey, me.touch ? 'Use' : 'E');
         set(promptText, (t.hold === 0 ? '' : 'Hold to ') + (t.hold === 0 ? t.label : t.label[0].toLowerCase() + t.label.slice(1)));
         hold.hidden = !(t.hold > 0);
-        holdBar.style.width = Math.min(1, me.hold / t.hold) * 100 + '%';
+        holdBar.style.width = `${Math.min(1, me.hold / t.hold) * 100}%`;
         prompt.classList.toggle('is-busy', me.hold > 0 || !!me.act);
       }
 
@@ -702,7 +702,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
         );
         set(callText, now - calledAt < F.CALL_GAP * 1000 ? 'Called' : 'Call out');
         watchBtn.hidden = !up.length;
-        set(watchBtn.lastChild, next ? 'Watch ' + next.name : 'Back to the floor');
+        set(watchBtn.lastChild, next ? `Watch ${next.name}` : 'Back to the floor');
       }
 
       start.hidden = me.locked || me.paused || me.flat;

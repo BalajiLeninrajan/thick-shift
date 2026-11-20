@@ -248,10 +248,10 @@ export function lit<M extends THREE.Material>(material: M): M {
   material.onBeforeCompile = (shader, renderer) => {
     before.call(material, shader, renderer);
     Object.assign(shader.uniforms, U);
-    shader.vertexShader = VERT_PARS + shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>' + VERT);
-    shader.fragmentShader = FRAG_PARS + shader.fragmentShader.replace('#include <aomap_fragment>', FRAG + '#include <aomap_fragment>');
+    shader.vertexShader = VERT_PARS + shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>${VERT}`);
+    shader.fragmentShader = FRAG_PARS + shader.fragmentShader.replace('#include <aomap_fragment>', `${FRAG}#include <aomap_fragment>`);
   };
-  material.customProgramCacheKey = () => 'depot' + key;
+  material.customProgramCacheKey = () => `depot${key}`;
   material.needsUpdate = true;
   return material;
 }

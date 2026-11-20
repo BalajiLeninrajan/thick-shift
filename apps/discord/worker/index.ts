@@ -52,7 +52,7 @@ async function discordPage(req: Request, env: Env): Promise<Response> {
     element(e: Element) {
       const h = e.getAttribute('href') || '',
         c = CDN.find(([, origin]) => h.startsWith(origin));
-      if (c) e.setAttribute('href', '/ext/' + c[0] + h.slice(c[1].length));
+      if (c) e.setAttribute('href', `/ext/${c[0]}${h.slice(c[1].length)}`);
     },
   };
   return new HTMLRewriter()

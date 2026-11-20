@@ -53,7 +53,7 @@ function titleScreen(): OverlayScreen {
       <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
       <p class="cn-meta cn-m-0">Keep the power on until 6 AM. The retired mascots are enormous, and at night they wander.</p>
       <p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel works the same night.</p>`,
-      `<button class="btn btn-primary" id="hb">Clock in${name ? ' as ' + esc(name) : ''}</button>`
+      `<button class="btn btn-primary" id="hb">Clock in${name ? ` as ${esc(name)}` : ''}</button>`
     ),
     wire() {
       $('hb').onclick = () => {

@@ -195,8 +195,8 @@ export function createTask(root: HTMLElement) {
         const ok = j.p > VALVE.band[0] && j.p < VALVE.band[1];
         j.inBand = Math.max(0, j.inBand + (ok ? dt : -dt * 0.5));
         j.done = j.inBand >= VALVE.need;
-        needle.style.rotate = -120 + j.p * 240 + 'deg';
-        fill.style.width = Math.min(1, j.inBand / VALVE.need) * 100 + '%';
+        needle.style.rotate = `${-120 + j.p * 240}deg`;
+        fill.style.width = `${Math.min(1, j.inBand / VALVE.need) * 100}%`;
         dial.dataset.state = ok ? 'ok' : j.p >= VALVE.band[1] ? 'high' : '';
       },
     });

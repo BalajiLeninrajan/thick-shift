@@ -108,7 +108,7 @@ function bind(el: HTMLDialogElement): void {
     }
   };
   for (const key of SWITCHES)
-    $('dv-' + key).onchange = e => {
+    $(`dv-${key}`).onchange = e => {
       if (game.isHost && game.S) cheats()[key] = (e.target as HTMLInputElement).checked;
       sync(el);
     };
@@ -150,7 +150,7 @@ function sync(el: HTMLDialogElement): void {
   for (const input of el.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')) if (input.id !== 'dv-close') input.disabled = !on;
   if (!S) return;
   const dv = cheats();
-  for (const key of SWITCHES) $('dv-' + key).checked = dv[key];
+  for (const key of SWITCHES) $(`dv-${key}`).checked = dv[key];
   for (const b of $('dv-rot').children as HTMLCollectionOf<HTMLElement>) b.setAttribute('aria-pressed', String(+b.dataset.v === dv.rot));
   $('dv-speed').value = String(dv.speed);
   $('dv-speed-out').textContent = String(dv.speed);

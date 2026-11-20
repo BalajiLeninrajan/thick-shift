@@ -128,8 +128,8 @@ export function join(code: string): void {
   game.code = code;
   game.isHost = false;
   game.joining = true;
-  game.myId = 'g' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
-  ws = new WebSocket(roomUrl(code, 'id=' + game.myId));
+  game.myId = `g${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
+  ws = new WebSocket(roomUrl(code, `id=${game.myId}`));
   // Who we are. Sent again to a new host, who may have missed the first time.
   const hello = () => send({ t: 'name', n: game.myName });
   ws.onopen = () => {
@@ -153,7 +153,7 @@ export function join(code: string): void {
     // A host leaving hands the room on (takeOver), so a close here is the connection failing.
     game.error = wasIn
       ? { title: 'Lost the connection to the room', detail: 'Reload to start again.' }
-      : { title: 'Could not join room ' + code, detail: e.code === NO_HOST ? 'Nobody is hosting a room with that code.' : 'The connection failed.' };
+      : { title: `Could not join room ${code}`, detail: e.code === NO_HOST ? 'Nobody is hosting a room with that code.' : 'The connection failed.' };
   };
 }
 

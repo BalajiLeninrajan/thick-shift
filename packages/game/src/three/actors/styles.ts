@@ -560,9 +560,9 @@ export function standIn(def: MascotKind): THREE.Object3D {
     ['L', 1],
     ['R', -1],
   ] as [string, number][]) {
-    node('eye_' + s, head, sx * 0.17, 2.2, 0.4, [GEO.eye, dark], [GEO.glint, GLINT]);
-    node('forearm_' + s, node('arm_' + s, body, sx * 0.62, 1.65, 0, [GEO.limb, mat]), sx * 0.62, 1.2, 0, [GEO.limb, mat]);
-    node('shin_' + s, node('leg_' + s, body, sx * 0.4, 0.85, 0, [GEO.thigh, mat]), sx * 0.4, 0.45, 0, [GEO.limb, mat], [GEO.foot, mat]);
+    node(`eye_${s}`, head, sx * 0.17, 2.2, 0.4, [GEO.eye, dark], [GEO.glint, GLINT]);
+    node(`forearm_${s}`, node(`arm_${s}`, body, sx * 0.62, 1.65, 0, [GEO.limb, mat]), sx * 0.62, 1.2, 0, [GEO.limb, mat]);
+    node(`shin_${s}`, node(`leg_${s}`, body, sx * 0.4, 0.85, 0, [GEO.thigh, mat]), sx * 0.4, 0.45, 0, [GEO.limb, mat], [GEO.foot, mat]);
   }
   return root;
 }

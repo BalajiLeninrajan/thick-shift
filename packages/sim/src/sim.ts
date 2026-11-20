@@ -207,7 +207,7 @@ const pick = <T>(sim: Sim, list: T[]): T => list[(sim.rng() * list.length) | 0];
 const hidden = (p: Guard) => p.hid >= 0;
 
 export const hourF = (S: State): number => Math.min(6, Math.floor(S.t / F.HOUR));
-export const clockF = (S: State): string => (hourF(S) || 12) + ' AM';
+export const clockF = (S: State): string => `${hourF(S) || 12} AM`;
 // The building has light, doors and a charging dock until the power runs out, and again once it has been cranked
 // back to F.RESTART. S.power is 0 for exactly as long as S.out is set.
 export const lightsF = (S: State): boolean => !S.out;

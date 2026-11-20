@@ -25,7 +25,7 @@ export const ART = {
   poster3: [672, 0, 224, 320],
   height: [896, 0, 128, 320],
   mural: [0, 320, 1024, 320],
-  ...Object.fromEntries(Array.from({ length: 8 }, (_, i) => ['note' + i, [i * 128, 640, 128, 160]])),
+  ...Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`note${i}`, [i * 128, 640, 128, 160]])),
   damp: [0, 800, 224, 224],
   hand: [224, 800, 160, 160],
   hole: [384, 800, 160, 160],
@@ -199,7 +199,7 @@ function lines(c: CanvasRenderingContext2D, text: string, x: number, y: number, 
       c.fillText(line.trim(), x, y + n++ * lh);
       line = '';
     }
-    line += word + ' ';
+    line += `${word} `;
   }
   c.fillText(line.trim(), x, y + n * lh);
 }
@@ -210,7 +210,7 @@ function drawArt(): CanvasRenderingContext2D {
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   MASC.forEach((m, i) => {
-    const r = ART['poster' + i],
+    const r = ART[`poster${i}`],
       [x, y, w, h] = r,
       bg = ['#e8c832', '#2ec4c6', '#e86a2a', '#d4418e'][i];
     c.save();
@@ -347,7 +347,7 @@ function drawArt(): CanvasRenderingContext2D {
     }
   }
   NOTES.forEach(([title, body], i) => {
-    const r = ART['note' + i],
+    const r = ART[`note${i}`],
       [x, y, w, h] = r;
     c.fillStyle = i % 3 === 1 ? '#e8e0a8' : '#eeeade';
     c.fillRect(x + 4, y + 6, w - 8, h - 10);
