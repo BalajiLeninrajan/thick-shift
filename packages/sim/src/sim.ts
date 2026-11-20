@@ -826,6 +826,15 @@ function spot(S: NightState, m: Mascot, b: Brain, p: Guard) {
   b.lost = 0;
 }
 
+// The locker a searching mascot means to look in next, and its index in HIDES. Nothing when it has no check left or
+// the next one is not a locker.
+function nextCheck(m: Mascot, b: Brain) {
+  const [i] = b.checks;
+  if (m.st !== 'search' || i === undefined) return undefined;
+  const hide = HIDES[i];
+  return hide && { i, hide };
+}
+
 // It stands outside an occupied locker: one that knows who is in there opens it at once, any other after SNIFF.time.
 function openLockers(S: NightState, m: Mascot, b: Brain, dt: number) {
   const p = standing(S).find(
@@ -1018,16 +1027,14 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   }
 
   // At the doors of a locker it meant to check: it opens them. Whoever is inside is found (openLockers, below).
-  if (m.st === 'search' && isNonEmpty(b.checks)) {
-    const [i] = b.checks,
-      check = HIDES[i];
-    if (check && dist(m, check.at) < SNIFF.near) {
-      b.checks.shift();
-      if (S.players.some(p => p.hid === i && !p.flat)) b.knows = i;
-      else {
-        emit(S, 'check', { i: m.i, h: i, x: check.x, z: check.z });
-        b.timer = Math.max(b.timer, 1.5);
-      }
+  const next = nextCheck(m, b);
+  if (next && dist(m, next.hide.at) < SNIFF.near) {
+    const { i, hide } = next;
+    b.checks.shift();
+    if (S.players.some(p => p.hid === i && !p.flat)) b.knows = i;
+    else {
+      emit(S, 'check', { i: m.i, h: i, x: hide.x, z: hide.z });
+      b.timer = Math.max(b.timer, 1.5);
     }
   }
   if (looking && openLockers(S, m, b, dt)) return;
@@ -1093,8 +1100,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     return;
   } else if (m.st === 'search') {
     speed = SPEED.search * angry;
-    const [first] = b.checks; // HIDES indices (lockersNear)
-    goal = first !== undefined ? hideAt(first).at : defined(b.last, 'what it is looking for');
+    goal = nextCheck(m, b)?.hide.at ?? defined(b.last, 'what it is looking for');
   } else {
     // Between waves they walk back to where they stand. So does one that has run out of puff or been
     // turned away at a door, and it stays there a while. With the power out nothing goes home.

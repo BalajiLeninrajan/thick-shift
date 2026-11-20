@@ -2,9 +2,9 @@
 // over as host (adoptFloor) and starting the run again (restartFloor).
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
-import { BATTERY_SPOTS, REST, spawnPoint } from '../src/map.ts';
+import { BATTERY_SPOTS, HIDES, REST, spawnPoint } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
-import { adoptFloor, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor } from '../src/sim.ts';
+import { adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor } from '../src/sim.ts';
 import type { Guard, NightState, SimEvent, State } from '../src/types.ts';
 import { countEvents, digest, eventsSince } from './nights.ts';
 
@@ -166,6 +166,17 @@ describe('adoptFloor', () => {
     expect(sim.brains[3]?.cool).toBe(10);
     expect(sim.brains.map((b, i) => ({ st: T.m[i]?.st, tgt: b.tgt, timer: r(b.timer), cool: b.cool, wind: r(b.wind) }))).toMatchSnapshot();
     expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault), waveAt: r(T.waveAt) }).toMatchSnapshot();
+  });
+
+  it('walks a searching mascot to where it lost the guard when it means to check a locker that is not there', () => {
+    // adoptFloor turns mascot 1's lost charge into a search. Point its next check past the end of HIDES: it skips
+    // the check and heads for b.last, as it would with no checks left.
+    const { sim, T } = adopt(7);
+    const b = brainOf(sim, 1);
+    expect(T.m[1]?.st).toBe('search');
+    b.checks = [HIDES.length];
+    expect(() => idle(sim, T, 5000, 20)).not.toThrow();
+    expect(b.checks).toEqual([HIDES.length]);
   });
 
   it('carries the night on from there the same way every time', () => {

@@ -1154,7 +1154,8 @@ function Sim:runMascot(m, b, dt: number)
 		return
 	elseif m.st == "search" then
 		speed = SPEED.search * angry
-		goal = if #b.checks > 0 then hideAt(b.checks[1]).at else b.last
+		local check = if #b.checks > 0 then hideAt(b.checks[1]) else nil
+		goal = if check then check.at else b.last
 	else
 		local settle = (not S.stir or b.spent) and not S.out
 		if settle ~= b.home then
