@@ -4,7 +4,7 @@ Midnight at the Mascot Depot. A co-op night-shift survival game in first person:
 
 ## Run it
 
-The repo is a pnpm workspace. The game is plain ES modules in `packages/game/src/`, and each app in `apps/` runs it somewhere: the web, a Discord Activity, or Roblox. The web and Discord apps are Vite builds. three.js and the Discord SDK come from npm and are bundled, and Cloudflare's Vite plugin runs each app's Worker inside the dev server.
+The repo is a pnpm workspace. The game is TypeScript in `packages/game/src/`, and each app in `apps/` runs it somewhere: the web, a Discord Activity, or Roblox. The web and Discord apps are Vite builds. three.js and the Discord SDK come from npm and are bundled, and Cloudflare's Vite plugin runs each app's Worker inside the dev server.
 
 It needs Node 22.18 or later (`.node-version` names the one CI uses) and the pnpm that `packageManager` in `package.json` pins. `corepack enable` sets that pnpm up.
 
@@ -22,7 +22,7 @@ pnpm format              # reformat everything with Biome
 pnpm format:check        # fail if anything is not formatted
 ```
 
-`packages/sim` is strict TypeScript. The rest of the code is still JavaScript, and `pnpm typecheck` checks it with `checkJs`, reading types from JSDoc. GitHub Actions runs the typecheck, the lint, the format check, the tests, both builds, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
+The game, the simulation, the apps and the balance tools are TypeScript. Vite strips the types without checking them, and `pnpm typecheck` checks them. `packages/sim` and `tools/` are strict; the game and the apps turn `strict` on in PR 6 of #7. `tools/roblox/gen-data.mjs` is still JavaScript, checked with `checkJs`. GitHub Actions runs the typecheck, the lint, the format check, the tests, both builds, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
 
 Rooms need the Worker. `vite dev` runs it, Durable Object and all, so hosting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server that serves it at the root of a domain runs the game solo. The page loads its scripts from `/assets/`, so it does not work from a sub-path.
 
@@ -32,7 +32,7 @@ Add `?dev` to the URL for the dev menu (the backtick key, or the Dev button on t
 
 ```
 packages/game/          the game, shared by the web and Discord apps (@thick-shift/game)
-  package.json          what an app may import: the game itself, state, net, audio, ui, styles.css, worker and vite
+  package.json          what an app may import: the game itself, state, net, audio, ui, types, styles.css, worker and vite
   vite.ts               game(), the game's part of each app's Vite config: public/ as the static files, served as-is
   worker/room.ts        the room relay (one Durable Object per room), which each app's Worker exports
   public/               served as it is, never bundled

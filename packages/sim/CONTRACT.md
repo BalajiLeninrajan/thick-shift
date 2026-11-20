@@ -201,7 +201,7 @@ the same way, are now `test/floor-plan.test.ts`.
 
 ## (f) What has to change
 
-### Game (packages/game, stays JS)
+### Game (packages/game, still JS in PR 3; ported to TS in PR 5)
 
 - `src/three/sim3d.js`: moves into `packages/sim/src/sim.ts` behind the signatures above, then is deleted.
 - `src/net.ts`:

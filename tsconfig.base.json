@@ -11,7 +11,7 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    // The code is JS for now. checkJs type-checks it with what TS can infer, plus JSDoc where that falls short.
+    // The scripts in tools/ are JS. checkJs type-checks them with what TS can infer, plus JSDoc where that falls short.
     "allowJs": true,
     "checkJs": true,
     "noEmit": true,
