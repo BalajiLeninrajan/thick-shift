@@ -6,7 +6,7 @@ import type { Camera, Object3D } from 'three';
 import { MeshStandardMaterial } from 'three';
 import type { Me } from '../../types';
 import { loadPart } from '../assets';
-import { HANDS_ORDER } from '../slats';
+import { holdInFront } from '../slats';
 import { eachMesh } from './rig';
 
 const HELD = { x: 0.2, y: -0.2, z: -0.42 },
@@ -23,15 +23,12 @@ export function createHands(camera: Camera) {
     torch = o;
     torch.position.set(HELD.x, HELD.y - LOWERED, HELD.z);
     // It sits a hand's width in front of the beam's own origin; a shadow from it would black out the beam.
-    // In a locker it is held inside the doors, so it goes in front of their slats (slats.ts).
+    // In a locker it is held inside the doors, so it goes in front of their slats. That gives each mesh its own
+    // material, so the lens can light without lighting every other torch's.
+    holdInFront(torch);
     eachMesh(torch, m => {
       m.castShadow = false;
-      m.renderOrder = HANDS_ORDER;
-      if (m.material instanceof MeshStandardMaterial && m.material.name === 'lamp_glow') {
-        const glass = m.material.clone();
-        m.material = glass;
-        lens = glass;
-      }
+      if (m.material instanceof MeshStandardMaterial && m.material.name === 'lamp_glow') lens = m.material;
     });
     camera.add(torch);
   });
