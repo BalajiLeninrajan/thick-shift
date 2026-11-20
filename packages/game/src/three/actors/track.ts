@@ -6,20 +6,29 @@
 const KEEP = 8;
 const TELEPORT = 5; // metres between two snapshots that mean a jump, not a walk
 const TAU = Math.PI * 2;
-export const wrap = a => {
+export const wrap = (a: number): number => {
   a %= TAU;
   return a > Math.PI ? a - TAU : a < -Math.PI ? a + TAU : a;
 };
 
+export interface HostClock {
+  off: number;
+  gap: number;
+  last: number;
+  fresh: boolean;
+  now: number;
+  see(St: number, now: number): void;
+}
+
 // One clock for every track: what host time to draw at.
-export const hostClock = {
+export const hostClock: HostClock = {
   off: 0,
   gap: 0.1,
   last: -1,
   fresh: false,
   now: 0,
   // Call once a frame. A snapshot is new when S.t has moved.
-  see(St, now) {
+  see(St: number, now: number): void {
     this.fresh = St !== this.last;
     if (this.fresh) {
       const off = St - now,
@@ -40,6 +49,22 @@ export const hostClock = {
 };
 
 export class Track {
+  declare t: Float64Array;
+  declare xs: Float32Array;
+  declare zs: Float32Array;
+  declare yaws: Float32Array;
+  declare pitches: Float32Array;
+  declare n: number;
+  declare x: number;
+  declare z: number;
+  declare yaw: number;
+  declare pitch: number;
+  declare speed: number;
+  declare vf: number;
+  declare vs: number;
+  declare spin: number;
+  declare moved: number;
+  declare jumped: boolean;
   constructor() {
     this.t = new Float64Array(KEEP);
     this.xs = new Float32Array(KEEP);
@@ -58,7 +83,7 @@ export class Track {
     this.moved = 0;
     this.jumped = false;
   }
-  push(t, x, z, yaw, pitch = 0) {
+  push(t: number, x: number, z: number, yaw: number, pitch = 0) {
     const n = this.n,
       last = n - 1;
     if (n && (t < this.t[last] || Math.hypot(x - this.xs[last], z - this.zs[last]) > TELEPORT)) {
@@ -89,7 +114,7 @@ export class Track {
   }
   // Move to host time t. Also works out how fast it is going, along its facing
   // (vf), sideways (vs) and round (spin), from the distance it actually moved.
-  sample(t, dt) {
+  sample(t: number, dt: number): void {
     const n = this.n;
     if (!n) return;
     let i = n - 1;
