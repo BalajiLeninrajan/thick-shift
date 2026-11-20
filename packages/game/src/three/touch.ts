@@ -6,10 +6,18 @@
 import { game } from '../state';
 import { TOY } from '@thick-shift/sim';
 import { unlockAudio } from '../audio';
+import type { PlayerHandle } from '../types';
 
 const STICK_R = 48; // pixels the knob travels for full speed
 const STICK_ZONE = 0.45; // the left part of the screen where a touch starts the stick
 const LOOK = 2.6; // a thumb drags fewer pixels than a mouse travels
+
+// A finger on the layer: its pointer id and where it was last.
+interface Finger {
+  id: number;
+  x: number;
+  y: number;
+}
 
 const TORCH =
   '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><path d="M6 6h12M12 12v2"/></svg>';
@@ -20,9 +28,9 @@ const PHONE =
 const PLUSH =
   '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="6.5" r="2.2"/><path d="M9.5 11v.01M14.5 11v.01M10 16.5h.01M14 16.5h.01"/></svg>';
 
-export const canFullscreen = !!document.documentElement.requestFullscreen;
+export const canFullscreen: boolean = !!document.documentElement.requestFullscreen;
 // Phones that allow it are also turned to landscape, which is the only layout.
-export function toggleFullscreen() {
+export function toggleFullscreen(): void {
   if (document.fullscreenElement) document.exitFullscreen();
   else
     document.documentElement
@@ -33,7 +41,7 @@ export function toggleFullscreen() {
       });
 }
 
-export function createTouch(root, player) {
+export function createTouch(root: HTMLElement, player: PlayerHandle) {
   const { me, pad } = player;
   const layer = document.createElement('div');
   layer.className = 'ts-t-layer';
@@ -45,15 +53,15 @@ export function createTouch(root, player) {
     <button class="ts-t-btn ts-t-zoom" aria-label="Zoom the map" aria-pressed="false">Map</button>
     <button class="ts-t-btn ts-t-toy" aria-label="Throw a Mini Biggs">${PLUSH}</button>`;
   root.append(layer);
-  const [stickEl, runBtn, torchBtn, useBtn, phoneBtn, zoomBtn, toyBtn] = /** @type {HTMLCollectionOf<HTMLElement>} */ (layer.children),
-    knob = /** @type {HTMLElement} */ (stickEl.firstChild);
-  let stick = null,
-    drag = null; // the finger on the stick and the finger looking: { id, x, y }
+  const [stickEl, runBtn, torchBtn, useBtn, phoneBtn, zoomBtn, toyBtn] = layer.children as HTMLCollectionOf<HTMLElement>,
+    knob = stickEl.firstChild as HTMLElement;
+  let stick: Finger | null = null,
+    drag: Finger | null = null; // the finger on the stick and the finger looking: { id, x, y }
 
   // Whichever kind of pointer was used last decides whether these controls show.
-  const setTouch = on => {
+  const setTouch = (on: boolean): void => {
     me.touch = on;
-    root.dataset.touch = on;
+    root.dataset.touch = String(on);
   };
   setTouch(matchMedia('(pointer: coarse)').matches);
   addEventListener(
@@ -64,7 +72,7 @@ export function createTouch(root, player) {
     true
   );
 
-  function release() {
+  function release(): void {
     stick = drag = null;
     Object.assign(pad, { fwd: 0, strafe: 0, sprint: false, use: false });
     stickEl.classList.remove('is-held');
@@ -77,7 +85,7 @@ export function createTouch(root, player) {
     unlockAudio();
     layer.setPointerCapture(e.pointerId);
     const r = layer.getBoundingClientRect(),
-      at = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      at: Finger = { id: e.pointerId, x: e.clientX, y: e.clientY };
     if (!stick && e.clientX - r.left < r.width * STICK_ZONE) {
       stick = at;
       // The stick appears under the thumb, wherever that is.
@@ -101,7 +109,7 @@ export function createTouch(root, player) {
     }
   });
   // lostpointercapture covers a finger the browser stopped reporting, so the guard never keeps walking on its own.
-  for (const type of /** @type {const} */ (['pointerup', 'pointercancel', 'lostpointercapture']))
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const)
     layer.addEventListener(type, e => {
       if (stick?.id === e.pointerId) {
         stick = null;
@@ -115,7 +123,7 @@ export function createTouch(root, player) {
   root.addEventListener('contextmenu', e => e.preventDefault());
   addEventListener('blur', release);
 
-  const press = (btn, down, up) => {
+  const press = (btn: HTMLElement, down: () => void, up?: () => void): void => {
     btn.addEventListener('pointerdown', e => {
       e.stopPropagation();
       unlockAudio();
@@ -144,12 +152,12 @@ export function createTouch(root, player) {
     pad.sprint = !pad.sprint;
   });
 
-  const flag = (e, name, v) => {
-    if (e.getAttribute(name) !== String(v)) e.setAttribute(name, v);
+  const flag = (e: Element, name: string, v: boolean): void => {
+    if (e.getAttribute(name) !== String(v)) e.setAttribute(name, String(v));
   };
   return {
     // Once a frame: hide the controls when they do nothing, and show what the buttons would do.
-    sync() {
+    sync(): void {
       const show = me.touch && !me.flat && !me.paused;
       if (layer.hidden === show) {
         layer.hidden = !show;
