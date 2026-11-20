@@ -16,12 +16,13 @@ pnpm build               # build both apps into apps/<app>/dist
 pnpm run deploy          # build and publish the web game (plain `pnpm deploy` is a pnpm command)
 pnpm run deploy:discord  # build and publish the Discord Activity
 pnpm typecheck           # tsc -b over every package's projects
+pnpm test                # Vitest on packages/sim: the map and the floor plan
 pnpm lint                # Biome's lint rules
 pnpm format              # reformat everything with Biome
 pnpm format:check        # fail if anything is not formatted
 ```
 
-`packages/sim` is strict TypeScript. The rest of the code is still JavaScript, and `pnpm typecheck` checks it with `checkJs`, reading types from JSDoc. GitHub Actions runs the typecheck, the lint, the format check, both builds, `tools/check-floor.mjs`, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
+`packages/sim` is strict TypeScript. The rest of the code is still JavaScript, and `pnpm typecheck` checks it with `checkJs`, reading types from JSDoc. GitHub Actions runs the typecheck, the lint, the format check, the tests, both builds, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
 
 Rooms need the Worker. `vite dev` runs it, Durable Object and all, so hosting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server that serves it at the root of a domain runs the game solo. The page loads its scripts from `/assets/`, so it does not work from a sub-path.
 
@@ -53,6 +54,7 @@ packages/sim/           the simulation as plain TypeScript, with no DOM and no t
   src/data.ts           the lamps and the stage, which the picture and the Roblox port share
   src/sim.ts            the night: newSim, startFloorNight, stepFloor, actFloor, adoptFloor
   src/types.ts          the state S and every message net.js sends and receives
+  test/                 the tests (pnpm test)
 apps/
   web/                  the web game
     index.html          the markup and the CDN links, and Vite's entry
@@ -68,7 +70,6 @@ apps/
   roblox/               the Luau port, built with Rojo (apps/roblox/README.md)
 tools/
   balance/floor.mjs     scripted guards played through packages/sim
-  check-floor.mjs       checks nothing in the building is blocked or cut off
   models/               the Blender scripts that build packages/game/public/models
   roblox/               generates the port's data from the game, and checks its sim against the game's
   tsconfig.json         the tools' TypeScript project
@@ -232,7 +233,7 @@ One-shots are counted (`voices()` in `audio.js`) and cut from the graph when the
 - `usable.js` is the breaker boxes (door hanging open, sparks and a red lamp while faulted, and an orange point light on the nearest three open faults), door buttons, generator, charger, batteries, booth doors and wall map. Each is a plain stand-in until its kit model loads.
 - `sight.js` works out which rooms can be seen from the 2 m square of floor the camera is in, by casting a fan of rays over a grid of the walls, and keeps the answer. Props and usable things in every other room are hidden. three.js culls what is outside the view, not what is behind a wall, and without this the booth draws the kitchen.
 
-`packages/sim/src/dressing.ts` is plain data. `map.ts` imports it to fill `OBSTACLES`, which is how the host walks mascots round furniture without loading a model. After moving a prop or a waypoint, run `node tools/check-floor.mjs`. It fails if a doorway, a waypoint, a breaker box, a button, a battery spot, a locker's doors, a resting mark or a spawn point is blocked or cut off. A locker placed anywhere but the booth is a hiding place, so give it a metre of clear floor in front.
+`packages/sim/src/dressing.ts` is plain data. `map.ts` imports it to fill `OBSTACLES`, which is how the host walks mascots round furniture without loading a model. After moving a prop or a waypoint, run `pnpm test`. `packages/sim/test/floor-plan.test.ts` fails if a doorway, a waypoint, a breaker box, a button, a battery spot, a locker's doors, a resting mark or a spawn point is blocked or cut off. A locker placed anywhere but the booth is a hiding place, so give it a metre of clear floor in front.
 
 The building's lamps are not three.js lights. `light.js` bakes them at load into 168 by 176 floor-plan textures, one texel per 25 cm, with the walls casting soft shadows and each room getting some of its own light back as bounce. Every `MeshStandardMaterial` in the scene is patched (`lit`) to look its light up by world position, so mascots, guards and props get it too. The steady lamps are one texture in colour. The second holds four groups, one per channel: two kinds of flicker, a tube that is mostly dead, and the exit signs, which have batteries. A third holds the glow of props with lit screens, baked once the kits have loaded and only for props that did. A group flickers by changing one uniform. With the power out the steady and flickering groups go to zero and the exit signs, the breaker boxes' lamps and the torches are all there is. A fourth texture, two texels a metre, is a mask of how much light each room is getting (`roomMask`): it stutters while a fault in the room is open and drops to almost nothing once `darkRoom` says the room is dark; the exit signs ignore it. To add a lamp, add a row to `LAMPS` in the sim's `data.ts`, which the Roblox port reads too.
 

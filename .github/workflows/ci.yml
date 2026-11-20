@@ -53,15 +53,12 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
-      # Vitest on packages/sim: the map, the floor plan, and seeded nights checked against snapshots.
+      # Vitest on packages/sim: the map and the floor plan.
       - name: Run the tests
         run: pnpm test
 
       - name: Build both apps
         run: pnpm build
-
-      - name: Check the floor plan
-        run: node tools/check-floor.mjs
 
       - name: Check Data.luau is up to date
         run: |

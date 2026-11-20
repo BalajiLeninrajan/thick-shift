@@ -186,10 +186,11 @@ followed by the same `tail` and `lune run`, with `$work` holding only the record
 comments that exist for patch.mjs (in sim3d.js and floor.mjs) go with it. ci.yml runs the same commands and needs
 no change.
 
-### gen-data and check-floor
+### gen-data
 
-Both already import the sim's `config.ts`, `map.ts`, `dressing.ts` and `data.ts` directly. gen-data no longer reads
-`light.js` or `shell.js` as text, and `Data.luau` comes out byte-identical.
+It already imports the sim's `config.ts`, `map.ts`, `dressing.ts` and `data.ts` directly. It no longer reads
+`light.js` or `shell.js` as text, and `Data.luau` comes out byte-identical. The floor-plan checks, which import them
+the same way, are now `test/floor-plan.test.ts`.
 
 ## (f) What has to change
 
@@ -236,7 +237,7 @@ Both already import the sim's `config.ts`, `map.ts`, `dressing.ts` and `data.ts`
 - `tools/roblox/diff/rec.mjs`: `wrapSim(night, sim)` as in (e), wrapping `sim.rng` and computing `dt`.
 - `tools/roblox/diff/patch.mjs`: deleted.
 - `tools/roblox/diff/run.sh`: no scratch copy, as in (e).
-- `tools/roblox/gen-data.mjs`, `tools/check-floor.mjs`: done.
+- `tools/roblox/gen-data.mjs`: done. (The floor-plan checks are now `test/floor-plan.test.ts`.)
 - `tools/tsconfig.json`: nothing, as long as the tools import the sim by relative `.ts` path
   (`allowImportingTsExtensions` is on in tsconfig.base.json).
 - `apps/roblox/test/diff-sim.luau`: nothing; the recording's format does not change.
