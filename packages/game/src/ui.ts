@@ -5,20 +5,23 @@ import { game, client, platform } from './state';
 import { startFloorNight, restartFloor, clockF } from '@thick-shift/sim';
 import { host, join, sim } from './net';
 import { unlockAudio } from './audio';
+import type { State, Tally } from '@thick-shift/sim/types';
+import type { OverlayScreen } from './types';
 
-export const $ = id => document.getElementById(id);
+export const $ = (id: string): HTMLElement => document.getElementById(id);
 const q = new URLSearchParams(location.search);
-export const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
+export const esc = (s: unknown): string => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 
-export const card = (body, footer = '', cls = '') =>
+export const card = (body: string, footer = '', cls = ''): string =>
   `<div class="panel ts-card ${cls}"><div class="panel-body cn-stack cn-gap-16">${body}</div>${footer && `<div class="panel-footer cn-cluster">${footer}</div>`}</div>`;
-const hostAction = label => (game.isHost ? `<button class="btn btn-primary" id="go">${label}</button>` : '<span class="cn-meta">Waiting for the host…</span>');
+const hostAction = (label: string): string =>
+  game.isHost ? `<button class="btn btn-primary" id="go">${label}</button>` : '<span class="cn-meta">Waiting for the host…</span>';
 
 /* ---------- screens ---------- */
 // Each returns { key, html, wire }. The overlay only re-renders when key changes. An app can swap in its own title
 // screen and lobby invite through platform (state.js), built from the exported helpers here.
 
-function titleScreen() {
+function titleScreen(): OverlayScreen {
   let savedName = '';
   try {
     savedName = localStorage.tsName || '';
@@ -37,9 +40,9 @@ function titleScreen() {
       '<button class="btn btn-primary" id="hb">Host a night</button><button class="btn btn-secondary" id="jb">Join room</button>'
     ),
     wire() {
-      const begin = then => () => {
+      const begin = (then: () => void) => (): void => {
         unlockAudio();
-        const name = /** @type {HTMLInputElement} */ ($('nm')).value;
+        const name = ($('nm') as HTMLInputElement).value;
         game.myName = (name || 'Guard').slice(0, 12);
         try {
           localStorage.tsName = game.myName;
@@ -49,12 +52,12 @@ function titleScreen() {
         then();
       };
       $('hb').onclick = begin(host);
-      $('jb').onclick = begin(() => join(/** @type {HTMLInputElement} */ ($('rc')).value));
+      $('jb').onclick = begin(() => join(($('rc') as HTMLInputElement).value));
     },
   };
 }
 
-export function messageScreen(key, title, detail, back) {
+export function messageScreen(key: string, title: string, detail: string, back: boolean): OverlayScreen {
   return {
     key,
     html: card(
@@ -76,9 +79,9 @@ const RULES = [
 ];
 // The night's tallies as a list: S.tally for one night, S.total for the run (see packages/sim/src/sim.ts).
 // Flats are grouped by guard, with who did it for a night and a count for the run.
-function floorStats(t, run) {
-  const group = (list, key, val) => {
-    const by = {};
+function floorStats(t: Tally, run?: boolean): string {
+  const group = <T, V>(list: T[], key: (e: T) => string, val: (e: T) => V): [string, V[]][] => {
+    const by: Record<string, V[]> = {};
     for (const e of list) (by[key(e)] ||= []).push(val(e));
     return Object.entries(by);
   };
@@ -100,14 +103,14 @@ function floorStats(t, run) {
     <dt>Flattened</dt><dd>${flats || 'Nobody'}</dd><dt>Peeled a friend up</dt><dd>${peels || 'Nobody'}</dd></dl>`;
 }
 
-function nightScreen(S) {
+function nightScreen(S: State): OverlayScreen {
   const names = S.players.map(p => p.name),
     who = names.map(esc).join(', ') || esc(game.myName);
   // The catch has the screen until client.holdUntil (see main.js).
   const scaring = performance.now() < client.holdUntil;
   const key = [S.phase, S.night, names.join(','), game.netNote, scaring].join('|');
-  const next = () => (S.phase === 'won' ? restartFloor(sim, S) : startFloorNight(sim, S, S.phase === 'win' ? S.night + 1 : S.night));
-  const wire = () => {
+  const next = (): void => (S.phase === 'won' ? restartFloor(sim, S) : startFloorNight(sim, S, S.phase === 'win' ? S.night + 1 : S.night));
+  const wire = (): void => {
     const go = $('go');
     if (go)
       go.onclick = () => {
@@ -123,7 +126,7 @@ function nightScreen(S) {
       ? invite.html
       : `<div class="stat is-lg"><span>Room code</span><strong>${esc(S.code)}</strong></div>
         <p class="cn-meta cn-m-0">Friends join at<br><span class="cn-code ts-selectable">${esc(link)}</span></p>`;
-    const wireLobby = () => {
+    const wireLobby = (): void => {
       wire();
       invite?.wire?.();
     };
@@ -182,15 +185,15 @@ function nightScreen(S) {
   return { key, html: '' };
 }
 
-function currentScreen() {
+function currentScreen(): OverlayScreen {
   if (game.error) return messageScreen('error:' + game.error.title, game.error.title, game.error.detail, true);
   if (game.S) return nightScreen(game.S);
   if (game.joining) return messageScreen('joining', platform.fixedRoom ? 'Joining the night…' : `Connecting to room ${game.code}…`, '', false);
   return platform.title ? platform.title() : titleScreen();
 }
 
-let shownKey = null;
-export function syncOverlay() {
+let shownKey: string | null = null;
+export function syncOverlay(): void {
   const s = currentScreen();
   if (s.key === shownKey) return;
   shownKey = s.key;

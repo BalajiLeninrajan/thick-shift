@@ -7,7 +7,7 @@
     "./state": "./src/state.ts",
     "./net": "./src/net.ts",
     "./audio": "./src/audio.ts",
-    "./ui": "./src/ui.js",
+    "./ui": "./src/ui.ts",
     "./styles.css": "./src/styles.css",
     "./worker": "./worker/room.js",
     "./vite": "./vite.js"
