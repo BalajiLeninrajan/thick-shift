@@ -3,8 +3,9 @@
 // machinery; this file is the tuning, written from the notes each model
 // carries in packages/game/public/models/<key>.json.
 
-import type { MascotKind } from '@thick-shift/sim/config';
-import type { MascotState } from '@thick-shift/sim/types';
+import { assert } from '@thick-shift/sim/check';
+import type { MascotKey, MascotKind } from '@thick-shift/sim/config';
+import type { MascotState, NonEmpty } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { EYE_PALE } from '../assets';
 import type { Mascot } from './mascot';
@@ -42,8 +43,25 @@ export type Channel = (typeof CH)[number];
 export type PoseLayer = Partial<Record<Channel, number>>;
 // A pose for every state, and for the catch.
 export type PoseName = MascotState | 'scare';
-export const C = Object.fromEntries(CH.map((k, i) => [k, i])) as Record<Channel, number>,
+// A channel's place in CH, from 0 to NCH - 1. (A Partial tuple's length runs from 0 to the full length.)
+export type ChannelIndex = Exclude<Partial<typeof CH>['length'], (typeof CH)['length']>;
+// C.k is channel k's index. Object.fromEntries types what it builds as a string record, hence the cast.
+export const C = Object.fromEntries(CH.map((k, i) => [k, i])) as { readonly [I in ChannelIndex as (typeof CH)[I]]: I },
   NCH: number = CH.length;
+// Every channel's index, in order.
+export const CHANNELS: readonly ChannelIndex[] = Object.values(C);
+// One number per channel: a mascot's ch, RATE, a pose. It is NCH long, so ch[C.k] reads a number.
+export type Channels = Float32Array & Record<ChannelIndex, number>;
+const isChannels = (a: Float32Array): a is Channels => a.length === NCH;
+// a as Channels, or a fresh set of zeros.
+export function channels(a: Float32Array = new Float32Array(NCH)): Channels {
+  assert(isChannels(a), `a pose has ${a.length} channels, not ${NCH}`);
+  return a;
+}
+// The three rot stages, and a table with an entry for each.
+export type Stage = 0 | 1 | 2;
+export type PerStage<T> = readonly [T, T, T];
+export const isStage = (n: number): n is Stage => n === 0 || n === 1 || n === 2;
 // How fast each channel follows its target, per second. Shaking and tracking
 // start at once; weight (lean, sit, drop) takes its time.
 const RATES: Record<Channel, number> = {
@@ -68,10 +86,12 @@ const RATES: Record<Channel, number> = {
   slack: 5,
   legs: 6,
 };
-export const RATE: Float32Array = Float32Array.from(CH, k => RATES[k]);
+export const RATE: Channels = channels(Float32Array.from(CH, k => RATES[k]));
 
 const BASE: PoseLayer = { breath: 1, sway: 1, legs: 1 };
-const LIT_STATES: PoseName[] = ['roam', 'search', 'hunt']; // the states a torch beam can interrupt
+// The states a torch beam can interrupt.
+export type LitState = 'roam' | 'search' | 'hunt';
+export const isLitState = (st: MascotState): st is LitState => st === 'roam' || st === 'search' || st === 'hunt';
 
 // Poses every mascot shares, by rot stage. `lit` is laid over roam, search and hunt while a beam holds it.
 const COMMON: Partial<Record<PoseName, PoseLayer>> = {
@@ -82,7 +102,7 @@ const COMMON: Partial<Record<PoseName, PoseLayer>> = {
   feast: { sit: 1, headX: 0.5, lean: -0.1, armL: -0.35, armR: -0.35, out: 0.4, jaw: 0.35, track: 0.6, breath: 2 },
   scare: { track: 1, lean: 0.3, jaw: 1, armL: -1.5, armR: -1.5, out: 0.5, fore: -0.3, shake: 0.5, reach: 1 },
 };
-const STAGE: Partial<Record<PoseName | 'lit', PoseLayer>>[] = [
+const STAGE: PerStage<Partial<Record<PoseName | 'lit', PoseLayer>>> = [
   // 0: someone in a heavy costume, being friendly
   {
     rest: { breath: 0, sway: 0, headX: 0.1 },
@@ -142,9 +162,10 @@ export interface Limit {
   fore: number;
 }
 export type Gesture = 'wave' | 'hug' | 'tilt';
-// A part only one of them has, run on the links of an extra_N chain each frame: see below.
-export type ChainRun = (a: Mascot, links: Part[], ch: Float32Array, dt: number) => void;
-export type Hook = (a: Mascot, rig: Rig, ch: Float32Array) => void;
+// A part only one of them has, run on the links of an extra_N chain each frame: see below. A chain always has its
+// first link (rig.ts starts each one with it).
+export type ChainRun = (a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number) => void;
+export type Hook = (a: Mascot, rig: Rig, ch: Channels) => void;
 // One stage's entry in a model's manifest (packages/game/public/models/<key>.json), as far as the animator reads it.
 // face: where its face is, in model space.
 export interface StageInfo {
@@ -177,7 +198,7 @@ const LIMIT: Limit = { arm: 2.6, out: 1, fore: 1.3 };
 // Each returns what differs from the defaults at that stage. `states` are laid
 // over the stage's poses; `hook` runs after the shared layers each frame.
 
-const FIT: Record<string, ((rig: Rig, info?: StageInfo) => Fit)[]> = {
+const FIT: Record<MascotKey, PerStage<(rig: Rig, info?: StageInfo | null) => Fit>> = {
   // Madame Flan. Notes: head joint is hidden by the pearls, so the head barely pitches.
   walrus: [
     () => ({
@@ -282,7 +303,7 @@ const FIT: Record<string, ((rig: Rig, info?: StageInfo) => Fit)[]> = {
         feast: { armL: 0, armR: 0, lean: 0 },
         scare: { lean: 0.55, armL: -0.75, armR: -0.75, fore: -0.5, legs: 0 },
       },
-      hook(a, rig, ch) {
+      hook(_a, rig, ch) {
         // the spring: legs straighten as it goes
         const k = Math.max(0, 1 - ch[C.legs]);
         rig.leg_L.rx += 0.65 * k;
@@ -347,7 +368,7 @@ const hash = (n: number): number => {
 export { hash };
 
 // Anything unclaimed hangs and trails: each link lags the one above it.
-function dangle(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
+function dangle(a: Mascot, links: NonEmpty<Part>, _ch: Channels, dt: number): void {
   const tr = a.track;
   for (const l of links)
     lag(
@@ -363,7 +384,7 @@ function dangle(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
 
 // Flan's legs move like a machine with a fault: each holds still, then goes
 // through a burst of hard steps, fourteen a second, and holds again.
-function harvestman(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
+function harvestman(a: Mascot, links: NonEmpty<Part>, ch: Channels, _dt: number): void {
   const n = links[0].seed * 97,
     slotT = a.t / 1.3 + n * 0.37,
     slot = Math.floor(slotT),
@@ -373,9 +394,8 @@ function harvestman(a: Mascot, links: Part[], ch: Float32Array, dt: number): voi
   const busy = Math.min(1, a.track.speed * 0.4 + ch[C.shake] + a.scareW),
     spasm = hash(slot * 5 + n) > 0.6 - busy * 0.5 && into < 0.45 + busy * 0.3;
   const reach = ch[C.reach] * (links[0].at.y > 1.2 ? 1 : 0.3); // the upper pair come forward for you
-  for (let k = 0; k < links.length; k++) {
-    const l = links[k],
-      j1 = spasm ? hash(tick + n * 13 + k * 5) - 0.5 : 0,
+  for (const [k, l] of links.entries()) {
+    const j1 = spasm ? hash(tick + n * 13 + k * 5) - 0.5 : 0,
       j2 = spasm ? hash(tick + n * 29 + k * 3) - 0.5 : 0;
     l.rx += j1 * (0.5 - k * 0.1) - (k === 0 ? reach * 0.55 : k === 1 ? reach * 0.3 : 0);
     l.rz += j2 * 0.4;
@@ -383,16 +403,16 @@ function harvestman(a: Mascot, links: Part[], ch: Float32Array, dt: number): voi
   }
 }
 // The one that no longer works: curled, and it only trembles.
-function deadLeg(a: Mascot, links: Part[]): void {
+function deadLeg(a: Mascot, links: NonEmpty<Part>): void {
   const tick = Math.floor(a.t * 14);
-  for (let k = 0; k < links.length; k++) {
-    links[k].rx += (hash(tick + 77 + k) - 0.5) * 0.05;
-    links[k].rz += (hash(tick + 91 + k) - 0.5) * 0.04;
+  for (const [k, l] of links.entries()) {
+    l.rx += (hash(tick + 77 + k) - 0.5) * 0.05;
+    l.rz += (hash(tick + 91 + k) - 0.5) * 0.04;
   }
 }
 
 // Squish's bare spine trails under it, each link later than the last.
-function spine(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
+function spine(a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number): void {
   const tr = a.track;
   for (const l of links) {
     const k = l.depth + 1;
@@ -411,14 +431,13 @@ function spine(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
 // Tank's worm. A slow travelling sway and a swallowing pulse; the upper links
 // turn the mouth to whoever it is looking at; `rear` curls it back before a
 // charge (and at a door), and below zero throws it forward, mouth first.
-function worm(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
+function worm(a: Mascot, links: NonEmpty<Part>, ch: Channels, _dt: number): void {
   const n = links.length,
     rear = ch[C.rear],
     tk = ch[C.track],
     lunge = a.kLunge + a.scareBite;
-  for (let k = 0; k < n; k++) {
-    const l = links[k],
-      u = k / (n - 1),
+  for (const [k, l] of links.entries()) {
+    const u = k / (n - 1),
       upper = Math.max(0, u - 0.45) / 0.55;
     l.rx += Math.sin(a.t * 0.8 - k * 0.55) * 0.07 + ch[C.shake] * (hash(Math.floor(a.t * 14) + k) - 0.5) * 0.12;
     l.rz += Math.cos(a.t * 0.6 - k * 0.5) * 0.07;
@@ -432,34 +451,39 @@ function worm(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
 // The tooth rings turn against each other, faster when it has someone.
 function ring(rate: number): ChainRun {
   return (a, links, ch, dt) => {
-    links[0].rzSpin = (links[0].rzSpin || 0) + rate * dt * (0.4 + ch[C.track] + a.scareW * 4);
-    links[0].rz += links[0].rzSpin;
+    const [l] = links;
+    l.rzSpin = (l.rzSpin || 0) + rate * dt * (0.4 + ch[C.track] + a.scareW * 4);
+    l.rz += l.rzSpin;
   };
 }
 // The second mouth, down the throat: it comes up when the worm has you.
-function gullet(a: Mascot, links: Part[], ch: Float32Array): void {
+function gullet(a: Mascot, links: NonEmpty<Part>, ch: Channels): void {
   links[0].pz += 0.22 * Math.max(0, Math.min(1, 0.5 * ch[C.reach] * (0.5 + 0.5 * Math.sin(a.t * 2.3)) + a.scareBite));
 }
 
 // The small pale face in Biggs's mouth. It leans out to look at you, and
 // keeps looking when the head turns away.
-function mask(a: Mascot, links: Part[], ch: Float32Array): void {
-  const out = Math.max(ch[C.reach], a.scareW),
-    l = links[0];
+function mask(a: Mascot, links: NonEmpty<Part>, ch: Channels): void {
+  const [l, ...rest] = links,
+    out = Math.max(ch[C.reach], a.scareW);
   l.pz += 0.12 * out + Math.sin(a.t * 0.7) * 0.015;
   l.px += Math.sin(a.t * 0.4) * 0.01;
   l.ry += a.eyeY * 0.9;
   l.rx += a.eyeP * 0.9 + Math.sin(a.t * 0.9) * 0.04;
-  for (let k = 1; k < links.length; k++) {
-    links[k].ry += a.eyeY * 0.4;
-  }
+  for (const r of rest) r.ry += a.eyeY * 0.4;
 }
 
 /* ---------- assembly ---------- */
 
-function poseOf(...layers: PoseLayer[]): Float32Array {
-  const p = new Float32Array(NCH);
-  for (const l of layers) if (l) for (const k in l) p[C[k]] = l[k];
+// Later layers win.
+function poseOf(...layers: (PoseLayer | undefined)[]): Channels {
+  const p = channels();
+  for (const layer of layers)
+    if (layer)
+      for (const k of CH) {
+        const v = layer[k];
+        if (v !== undefined) p[C[k]] = v;
+      }
   return p;
 }
 
@@ -478,18 +502,23 @@ export interface Style {
   looker: number;
   slackArms: boolean;
   floats: boolean;
-  stage: number;
-  chains: { links: Part[]; run: ChainRun }[];
-  poses: Partial<Record<PoseName, Float32Array>> & { lit: Partial<Record<PoseName, Float32Array>> };
+  stage: Stage;
+  chains: { links: NonEmpty<Part>; run: ChainRun }[];
+  poses: Record<PoseName, Channels> & { lit: Record<LitState, Channels> };
 }
 
-export function styleOf(key: string, stage: number, rig: Rig, info?: StageInfo): Style {
+// How fast the head follows, by stage, where the fit does not say.
+const HEAD_RATE: PerStage<number> = [4, 4, 12];
+
+export function styleOf(key: MascotKey, stage: Stage, rig: Rig, info?: StageInfo | null): Style {
   const fit = FIT[key][stage](rig, info),
     own = fit.states || {},
     st = STAGE[stage];
-  const style: Style = {
+  const pose = (name: PoseName): Channels => poseOf(BASE, st[name] || COMMON[name], own[name]),
+    litPose = (name: LitState): Channels => poseOf(BASE, st[name], own[name], st.lit, own.lit);
+  return {
     gait: { ...GAIT, ...fit.gait },
-    head: { ...HEAD, twitch: stage ? 0.1 : 0, rate: [4, 4, 12][stage], ...fit.head },
+    head: { ...HEAD, twitch: stage ? 0.1 : 0, rate: HEAD_RATE[stage], ...fit.head },
     jaw: fit.jaw ?? 0.5,
     sit: fit.sit ?? 0.5,
     swayMax: fit.swayMax ?? 0.35,
@@ -500,14 +529,21 @@ export function styleOf(key: string, stage: number, rig: Rig, info?: StageInfo):
     slackArms: !!fit.slackArms,
     floats: !!info?.floats || fit.gait?.mode === 'float',
     stage,
-    chains: [],
-    poses: { lit: {} },
+    chains: Object.entries(rig.chains).map(([n, links]) => ({ links, run: fit.chains?.[n] || dangle })),
+    poses: {
+      rest: pose('rest'),
+      roam: pose('roam'),
+      search: pose('search'),
+      hunt: pose('hunt'),
+      siege: pose('siege'),
+      windup: pose('windup'),
+      charge: pose('charge'),
+      stun: pose('stun'),
+      feast: pose('feast'),
+      scare: pose('scare'),
+      lit: { roam: litPose('roam'), search: litPose('search'), hunt: litPose('hunt') },
+    },
   };
-  for (const n in rig.chains) style.chains.push({ links: rig.chains[n], run: fit.chains?.[n] || dangle });
-  for (const name of ['rest', 'roam', 'search', 'hunt', 'siege', 'windup', 'charge', 'stun', 'feast', 'scare'])
-    style.poses[name] = poseOf(BASE, st[name] || COMMON[name], own[name]);
-  for (const name of LIT_STATES) style.poses.lit[name] = poseOf(BASE, st[name], own[name], st.lit, own.lit);
-  return style;
 }
 
 /* ---------- the stand-in ---------- */
@@ -530,21 +566,20 @@ const GLINT = new THREE.MeshBasicMaterial({ color: EYE_PALE, fog: false });
 export function standIn(def: MascotKind): THREE.Object3D {
   const mat = new THREE.MeshStandardMaterial({ color: def.col, roughness: 1 }),
     dark = new THREE.MeshStandardMaterial({ color: 0x08080e, roughness: 1 });
+  // x, y, z: where the part's pivot is in the model's space.
   const node = (
     name: string,
-    parent?: THREE.Object3D,
-    x?: number,
-    y?: number,
-    z?: number,
+    parent: THREE.Object3D,
+    x: number,
+    y: number,
+    z: number,
     ...meshes: [geo: THREE.BufferGeometry, material: THREE.Material, x?: number, y?: number, z?: number][]
   ): THREE.Object3D => {
     const o = new THREE.Object3D();
     o.name = name;
-    if (parent) {
-      parent.updateWorldMatrix(true, false);
-      o.position.set(x, y, z).sub(new THREE.Vector3().setFromMatrixPosition(parent.matrixWorld));
-      parent.add(o);
-    }
+    parent.updateWorldMatrix(true, false);
+    o.position.set(x, y, z).sub(new THREE.Vector3().setFromMatrixPosition(parent.matrixWorld));
+    parent.add(o);
     for (const [geo, m, mx = 0, my = 0, mz = 0] of meshes) {
       const mesh = new THREE.Mesh(geo, m);
       mesh.position.set(mx, my, mz);
@@ -554,14 +589,15 @@ export function standIn(def: MascotKind): THREE.Object3D {
     }
     return o;
   };
-  const root = node('root'),
-    body = node('body', root, 0, 0.95, 0, [GEO.hips, mat, 0, 0, -0.1], [GEO.chest, mat, 0, 0.55, 0]);
+  const root = new THREE.Object3D();
+  root.name = 'root';
+  const body = node('body', root, 0, 0.95, 0, [GEO.hips, mat, 0, 0, -0.1], [GEO.chest, mat, 0, 0.55, 0]);
   const head = node('head', body, 0, 1.85, 0, [GEO.head, mat, 0, 0.25, 0.05]);
   node('jaw', head, 0, 1.95, 0.1, [GEO.jaw, dark]);
   for (const [s, sx] of [
     ['L', 1],
     ['R', -1],
-  ] as [string, number][]) {
+  ] as const) {
     node(`eye_${s}`, head, sx * 0.17, 2.2, 0.4, [GEO.eye, dark], [GEO.glint, GLINT]);
     node(`forearm_${s}`, node(`arm_${s}`, body, sx * 0.62, 1.65, 0, [GEO.limb, mat]), sx * 0.62, 1.2, 0, [GEO.limb, mat]);
     node(`shin_${s}`, node(`leg_${s}`, body, sx * 0.4, 0.85, 0, [GEO.thigh, mat]), sx * 0.4, 0.45, 0, [GEO.limb, mat], [GEO.foot, mat]);

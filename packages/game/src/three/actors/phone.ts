@@ -44,7 +44,7 @@ function keypad(): THREE.CanvasTexture {
   c.ellipse(70, 14, 20, 11, 0, 0, 7);
   c.fill();
   ['1', '2 abc', '3 def', '4 ghi', '5 jkl', '6 mno', '7 pqrs', '8 tuv', '9 wxyz', '*', '0', '#'].forEach((k, i) => {
-    key(6 + (i % 3) * 44, 30 + Math.floor(i / 3) * 30, 40, 25, k.split(' ')[0]);
+    key(6 + (i % 3) * 44, 30 + Math.floor(i / 3) * 30, 40, 25, k.charAt(0)); // the digit; the letters are not drawn
   });
   const t = new THREE.CanvasTexture(c.canvas);
   t.colorSpace = THREE.SRGBColorSpace;

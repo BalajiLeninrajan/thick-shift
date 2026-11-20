@@ -3,6 +3,9 @@
 // an amount that depends on speed, so feet slide. Instead each actor keeps its
 // last few snapshots, stamped with the host's clock (S.t), and is drawn a
 // little in the past, between two of them.
+
+import { defined } from '@thick-shift/sim/check';
+
 const KEEP = 8;
 const TELEPORT = 5; // metres between two snapshots that mean a jump, not a walk
 const TAU = Math.PI * 2;
@@ -48,6 +51,11 @@ export const hostClock: HostClock = {
   },
 };
 
+// Snapshot i of one of a track's arrays. Every read is below n, and n never passes KEEP, the arrays' length.
+const at = (a: Float32Array | Float64Array, i: number): number => defined(a[i], 'a track snapshot');
+// u of the way from snapshot a to snapshot i.
+const mix = (arr: Float32Array, a: number, i: number, u: number): number => at(arr, a) + (at(arr, i) - at(arr, a)) * u;
+
 export class Track {
   declare t: Float64Array;
   declare xs: Float32Array;
@@ -83,10 +91,10 @@ export class Track {
     this.moved = 0;
     this.jumped = false;
   }
-  push(t: number, x: number, z: number, yaw: number, pitch = 0) {
+  push(t: number, x: number, z: number, yaw: number, pitch = 0): undefined {
     const n = this.n,
       last = n - 1;
-    if (n && (t < this.t[last] || Math.hypot(x - this.xs[last], z - this.zs[last]) > TELEPORT)) {
+    if (n && (t < at(this.t, last) || Math.hypot(x - at(this.xs, last), z - at(this.zs, last)) > TELEPORT)) {
       this.n = 0;
       return this.push(t, x, z, yaw, pitch);
     }
@@ -103,7 +111,7 @@ export class Track {
     this.xs[i] = x;
     this.zs[i] = z;
     this.pitches[i] = pitch;
-    this.yaws[i] = i ? this.yaws[i - 1] + wrap(yaw - this.yaws[i - 1]) : yaw; // unwrapped, so it never turns the long way
+    this.yaws[i] = i ? at(this.yaws, i - 1) + wrap(yaw - at(this.yaws, i - 1)) : yaw; // unwrapped, so it never turns the long way
     if (!i) {
       this.x = x;
       this.z = z;
@@ -118,14 +126,15 @@ export class Track {
     const n = this.n;
     if (!n) return;
     let i = n - 1;
-    while (i > 0 && this.t[i - 1] > t) i--;
+    while (i > 0 && at(this.t, i - 1) > t) i--;
     const a = Math.max(0, i - 1),
-      span = this.t[i] - this.t[a];
+      ta = at(this.t, a),
+      span = at(this.t, i) - ta;
     // Past the newest snapshot, carry on a quarter of a step and then wait.
-    const u = span > 0 ? Math.max(0, Math.min(i === n - 1 ? 1.25 : 1, (t - this.t[a]) / span)) : 1;
-    const x = this.xs[a] + (this.xs[i] - this.xs[a]) * u,
-      z = this.zs[a] + (this.zs[i] - this.zs[a]) * u,
-      yaw = this.yaws[a] + (this.yaws[i] - this.yaws[a]) * u;
+    const u = span > 0 ? Math.max(0, Math.min(i === n - 1 ? 1.25 : 1, (t - ta) / span)) : 1;
+    const x = mix(this.xs, a, i, u),
+      z = mix(this.zs, a, i, u),
+      yaw = mix(this.yaws, a, i, u);
     if (this.jumped || dt <= 0) {
       this.jumped = false;
       this.moved = this.speed = this.vf = this.vs = this.spin = 0;
@@ -144,6 +153,6 @@ export class Track {
     this.x = x;
     this.z = z;
     this.yaw = yaw;
-    this.pitch = this.pitches[a] + (this.pitches[i] - this.pitches[a]) * u;
+    this.pitch = mix(this.pitches, a, i, u);
   }
 }

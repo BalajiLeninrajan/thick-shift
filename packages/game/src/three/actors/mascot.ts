@@ -5,21 +5,23 @@
 // eyes, the things particular to it, whatever hangs off it, then feet planted.
 
 import { lightsF } from '@thick-shift/sim';
+import { isPlaced } from '@thick-shift/sim/check';
 import type { MascotKind } from '@thick-shift/sim/config';
 import { MASC } from '@thick-shift/sim/config';
 import { EYE, glimpses, MASCOT_R } from '@thick-shift/sim/map';
-import type { MascotState, Mascot as SimMascot, State } from '@thick-shift/sim/types';
+import type { MascotIndex, MascotState, Mascot as SimMascot, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
+import { context2d } from '../../dom';
 import type { View } from '../actors';
 import { EYE_PALE, instance, loadActor, loadJSON } from '../assets';
 import type { Part, Rig } from './rig';
-import { buildRig, lag } from './rig';
-import type { StageInfo, Style } from './styles';
-import { C, hash, NCH, RATE, standIn, styleOf } from './styles';
+import { bounds, buildRig, eachMesh, lag } from './rig';
+import type { Channels, PerStage, Stage, StageInfo, Style } from './styles';
+import { C, CHANNELS, channels, hash, isLitState, isStage, RATE, standIn, styleOf } from './styles';
 import { hostClock, Track, wrap } from './track';
 
 const TAU = Math.PI * 2,
-  clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+  clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 const smooth = (u: number): number => {
   u = clamp(u, 0, 1);
   return u * u * (3 - 2 * u);
@@ -38,21 +40,22 @@ const SEAT_LOCAL = 0.8,
 
 // One soft point, drawn over every eye_glow so the eyes still read as two
 // pale points when the head is twenty metres away and three pixels wide.
-let haloTex: THREE.CanvasTexture = null;
+let haloTex: THREE.CanvasTexture | null = null;
 function haloTexture(): THREE.CanvasTexture {
   if (haloTex) return haloTex;
   const cv = document.createElement('canvas');
   cv.width = cv.height = 32;
-  const c = cv.getContext('2d'),
+  const c = context2d(cv),
     g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
   g.addColorStop(0, '#fff');
   g.addColorStop(0.25, 'rgba(255,255,255,.55)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   c.fillStyle = g;
   c.fillRect(0, 0, 32, 32);
-  return (haloTex = new THREE.CanvasTexture(cv));
+  haloTex = new THREE.CanvasTexture(cv);
+  return haloTex;
 }
-const HALO_SIZE = [0.1, 0.085, 0.05],
+const HALO_SIZE: PerStage<number> = [0.1, 0.085, 0.05],
   HALO_FLOOR = 0.0035; // metres across by stage (pinpricks at 2), and the least it may subtend, as a fraction of its distance
 const MAX_HALOS = 12,
   HALO_NEAR = 2.5; // metres: no points inside this, all of them by twice it
@@ -71,22 +74,22 @@ export interface Fitted {
   haloMat: THREE.SpriteMaterial;
   carrier: Part;
   facePoint: THREE.Vector3;
-  stage: number;
+  stage: Stage;
   real: boolean;
   height: number;
 }
 
 export class Mascot {
-  declare i: number;
+  declare i: MascotIndex;
   declare def: MascotKind;
   declare renderer: THREE.WebGLRenderer;
   declare group: THREE.Group;
   declare pivot: THREE.Group;
   declare track: Track;
-  declare ch: Float32Array;
-  declare cv: Float32Array;
-  declare fits: Fitted[];
-  declare asked: boolean[];
+  declare ch: Channels;
+  declare cv: Channels;
+  declare fits: [Fitted | null, Fitted | null, Fitted | null];
+  declare asked: [boolean, boolean, boolean];
   declare cur: Fitted;
   declare rot: number;
   declare onScreen: THREE.Sphere;
@@ -123,7 +126,7 @@ export class Mascot {
   declare scareW: number;
   declare scareBite: number;
   declare face: THREE.Vector3;
-  constructor(scene: THREE.Scene, i: number, renderer: THREE.WebGLRenderer) {
+  constructor(scene: THREE.Scene, i: MascotIndex, renderer: THREE.WebGLRenderer) {
     this.i = i;
     this.def = MASC[i];
     this.renderer = renderer;
@@ -132,8 +135,8 @@ export class Mascot {
     this.group.add(this.pivot);
     scene.add(this.group);
     this.track = new Track();
-    this.ch = new Float32Array(NCH);
-    this.cv = new Float32Array(NCH);
+    this.ch = channels();
+    this.cv = channels();
     this.fits = [null, null, null];
     this.asked = [false, false, false];
     this.cur = this.fit(standIn(this.def), 0, null, false);
@@ -179,40 +182,47 @@ export class Mascot {
 
   /* ---------- models ---------- */
 
+  // stage: the rot stage wanted; past the last there is nothing to load.
   load(stage: number): void {
-    if (stage > 2 || this.asked[stage]) return;
+    if (!isStage(stage) || this.asked[stage]) return;
     this.asked[stage] = true;
     Promise.all([loadActor(`${this.def.k}_${stage}`), loadJSON(this.def.k)]).then(([src, info]) => {
       if (!src) return; // the stand-in, or the stage before, carries on
-      const fit = (this.fits[stage] = this.fit(instance(src), stage, info?.stages?.[stage], true));
+      const fit = this.fit(instance(src), stage, info?.stages?.[stage], true);
+      this.fits[stage] = fit;
       // Textures go to the GPU now, not in the frame the stage first shows.
-      fit.model.traverse((o: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>) => {
-        if (o.isMesh) for (const k of ['map', 'normalMap', 'roughnessMap', 'emissiveMap']) if (o.material[k]) this.renderer.initTexture(o.material[k]);
+      // GLTFLoader gives standard (or physical) materials; the eye_glows have basic ones (assets.ts).
+      eachMesh(fit.model, ({ material: m }) => {
+        const maps =
+          m instanceof THREE.MeshStandardMaterial ? [m.map, m.normalMap, m.roughnessMap, m.emissiveMap] : m instanceof THREE.MeshBasicMaterial ? [m.map] : [];
+        for (const tex of maps) if (tex) this.renderer.initTexture(tex);
       });
     });
   }
 
-  fit(model: THREE.Object3D, stage: number, info: StageInfo | undefined, real: boolean): Fitted {
+  fit(model: THREE.Object3D, stage: Stage, info: StageInfo | null | undefined, real: boolean): Fitted {
     const rig = buildRig(model),
       style = styleOf(this.def.k, stage, rig, info);
     const haloMat = new THREE.SpriteMaterial({ map: haloTexture(), color: EYE_PALE, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
     const halos: THREE.Sprite[] = [];
-    model.traverse((o: THREE.Mesh) => {
-      if (!o.userData.glow || halos.length >= MAX_HALOS) return;
+    // Only the stand-in's glints and the eye_glow meshes carry userData.glow. The halo hangs from the glint's parent,
+    // so a glint at the root (there are none) would get no halo.
+    eachMesh(model, o => {
+      const parent = o.parent;
+      if (!o.userData.glow || !parent || halos.length >= MAX_HALOS) return;
       // Sit the point just proud of the glint, on the side away from the eyeball's centre.
-      o.geometry.computeBoundingBox();
-      o.geometry.boundingBox.getCenter(v).add(o.position);
+      bounds(o.geometry).getCenter(v).add(o.position);
       const len = v.length(),
         s = new THREE.Sprite(haloMat);
       if (len > 0.005) v.multiplyScalar(1 + 0.02 / len);
       else v.set(0, 0, 0.03);
       s.position.copy(v);
-      o.parent.add(s);
+      parent.add(s);
       halos.push(s);
     });
     // The face: the manifest gives it in model space; keep it in the space of the part that carries it.
     const lookers = style.looker ? rig.chain(style.looker) : null,
-      carrier = lookers?.length ? lookers[lookers.length - 1] : rig.has.head ? rig.head : rig.body;
+      carrier = lookers?.at(-1) ?? (rig.has.head ? rig.head : rig.body);
     const facePoint = new THREE.Vector3(...(info?.face || [0, rig.headH + 0.25, 0.45]));
     model.updateWorldMatrix(true, true);
     if (carrier.o) carrier.o.worldToLocal(model.localToWorld(facePoint));
@@ -232,7 +242,7 @@ export class Mascot {
 
   // Follow m.rot to the next model, but only while this screen cannot see it: it changes behind your back.
   stage(rot: number, hidden: boolean): void {
-    const want = this.fits[rot];
+    const want = isStage(rot) ? this.fits[rot] : null;
     if (want && want !== this.cur && (hidden || !this.cur.real)) this.show(want);
   }
 
@@ -283,13 +293,15 @@ export class Mascot {
     tr.sample(hostClock.now, dt);
     this.rot = m.rot || 0;
     this.load(this.rot);
-    const lit = !!m.lit && (st === 'roam' || st === 'search' || st === 'hunt');
+    const litSt = m.lit && isLitState(st) ? st : null,
+      lit = litSt !== null;
 
     // Can the camera see any of it? Only walls and shut doors count: sees() also stops at furniture, which is the
     // host's rule for hiding, but a table hides none of a mascot from the eye. Lines across its whole width, close
     // enough together that one half in view past a door jamb is not hidden with the rest.
     this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
-    if ((this.lookT -= dt) <= 0) {
+    this.lookT -= dt;
+    if (this.lookT <= 0) {
       this.lookT = LOOK_EVERY;
       const d = this.dist;
       this.seen = d < SEEN_RANGE && (d < 3 || this.scareOn || glimpses(view.x, view.z, tr.x, tr.z, MASCOT_R, S.doors));
@@ -327,8 +339,8 @@ export class Mascot {
     this.kSpot *= decay;
 
     // Channels spring toward the pose of the state (critically damped, so they neither pop nor ring).
-    const pose = this.scareOn ? style.poses.scare : lit ? style.poses.lit[st] : style.poses[st] || style.poses.roam;
-    for (let k = 0; k < NCH; k++) {
+    const pose = this.scareOn ? style.poses.scare : litSt ? style.poses.lit[litSt] : style.poses[st];
+    for (const k of CHANNELS) {
       const w = RATE[k],
         d = ch[k] - pose[k],
         tmp = (cv[k] + w * d) * dt,
@@ -537,7 +549,7 @@ export class Mascot {
       tz = view.z,
       best = view.flat && !this.scareOn && !seat.w ? 1e9 : this.dist;
     for (const q of S.players) {
-      if (q.flat || q.x == null || q.id === view.id) continue;
+      if (!isPlaced(q) || q.flat || q.id === view.id) continue;
       const d = Math.hypot(q.x - x, q.z - z);
       if (d < best) {
         best = d;

@@ -1,13 +1,15 @@
 // A model as the animator sees it: named rigid parts (tools/models/README.md
 // is the contract), each with offsets from its rest pose that the layers of
 // animation add to during a frame and apply() writes once at the end.
+import { defined } from '@thick-shift/sim/check';
+import type { NonEmpty } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 
 const e = new THREE.Euler(0, 0, 0, 'YXZ'),
   q = new THREE.Quaternion();
 
 class Part {
-  declare o: THREE.Object3D;
+  declare o: THREE.Object3D | null; // null only on NONE
   declare name: string;
   declare restP: THREE.Vector3;
   declare restQ: THREE.Quaternion;
@@ -94,57 +96,95 @@ export type Rig = Record<Named, Part> & {
   all: Map<string, Part>;
   list: Part[];
   has: Record<string, boolean>;
-  chains: Record<string, Part[]>;
+  chains: Record<string, NonEmpty<Part>>;
   sways: Part[];
   hipH: number;
   hipX: number;
   headH: number;
   part: (name: string) => Part;
-  chain: (n: number | string) => Part[];
+  chain: (n: number | string) => readonly Part[];
   apply: () => void;
 };
 
+// Calls fn on every mesh under root, root included.
+export function eachMesh(root: THREE.Object3D, fn: (mesh: THREE.Mesh) => void): void {
+  root.traverse(o => {
+    if (o instanceof THREE.Mesh) fn(o);
+  });
+}
+
+// A geometry's bounding box, worked out afresh.
+export function bounds(geometry: THREE.BufferGeometry): THREE.Box3 {
+  geometry.computeBoundingBox();
+  return defined(geometry.boundingBox, 'the bounding box computeBoundingBox sets');
+}
+
 export function buildRig(model: THREE.Object3D): Rig {
   const all = new Map<string, Part>(),
-    rig = { model, all, list: [], has: {}, chains: {}, sways: [] } as Rig;
+    list: Part[] = [],
+    chains: Record<string, NonEmpty<Part>> = {},
+    sways: Part[] = [];
   model.updateWorldMatrix(true, true);
   const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
   model.traverse(o => {
     // GLTFLoader keeps the file's node name in userData.name and may rename the object itself.
-    const name = o.userData.name || ((o as THREE.Mesh).isMesh && o.parent?.userData.name ? '' : o.name);
+    const name = o.userData.name || (o instanceof THREE.Mesh && o.parent?.userData.name ? '' : o.name);
     if (!name || all.has(name)) return;
     const p = new Part(o, name);
     p.at.setFromMatrixPosition(o.matrixWorld).applyMatrix4(inv);
     p.seed = hashStr(name);
     all.set(name, p);
-    rig.list.push(p);
+    list.push(p);
   });
-  for (const n of NAMED) {
-    rig[n] = all.get(n) || NONE;
-    rig.has[n] = all.has(n);
-  }
   // extra_3, extra_3_2, extra_3_3 ... is one chain, root first.
   for (const [name, p] of all) {
-    const m = /^extra_(\d+)$/.exec(name);
-    if (m) {
-      const links = [p];
-      for (let k = 2; all.has(`${name}_${k}`); k++) links.push(all.get(`${name}_${k}`));
-      links.forEach((l, i) => {
-        l.depth = i;
-      });
-      rig.chains[m[1]] = links;
-    } else if (name.startsWith('sway_')) rig.sways.push(p);
+    if (/^extra_\d+$/.test(name)) {
+      const links: [Part, ...Part[]] = [p];
+      for (let k = 2; ; k++) {
+        const next = all.get(`${name}_${k}`);
+        if (!next) break;
+        links.push(next);
+      }
+      for (const [i, l] of links.entries()) l.depth = i;
+      chains[name.slice('extra_'.length)] = links;
+    } else if (name.startsWith('sway_')) sways.push(p);
   }
+  const part = (name: string): Part => all.get(name) || NONE,
+    has = Object.fromEntries(NAMED.map(n => [n, all.has(n)]));
   // What the gait needs to know to keep feet where they land.
-  rig.hipH = rig.has.leg_L ? rig.leg_L.at.y : 1;
-  rig.hipX = rig.has.leg_L ? Math.abs(rig.leg_L.at.x) : 0.3;
-  rig.headH = rig.has.head ? rig.head.at.y : rig.hipH * 2;
-  rig.part = name => all.get(name) || NONE;
-  rig.chain = n => rig.chains[n] || [];
-  rig.apply = () => {
-    for (const p of rig.list) p.apply();
+  const leg = part('leg_L'),
+    hipH = has.leg_L ? leg.at.y : 1;
+  return {
+    model,
+    all,
+    list,
+    has,
+    chains,
+    sways,
+    hipH,
+    hipX: has.leg_L ? Math.abs(leg.at.x) : 0.3,
+    headH: has.head ? part('head').at.y : hipH * 2,
+    part,
+    chain: n => chains[n] || [],
+    apply: () => {
+      for (const p of list) p.apply();
+    },
+    root: part('root'),
+    body: part('body'),
+    neck: part('neck'),
+    head: part('head'),
+    jaw: part('jaw'),
+    eye_L: part('eye_L'),
+    eye_R: part('eye_R'),
+    arm_L: part('arm_L'),
+    arm_R: part('arm_R'),
+    forearm_L: part('forearm_L'),
+    forearm_R: part('forearm_R'),
+    leg_L: leg,
+    leg_R: part('leg_R'),
+    shin_L: part('shin_L'),
+    shin_R: part('shin_R'),
   };
-  return rig;
 }
 
 // A hanging part lags behind what it hangs from: a damped spring pulled by

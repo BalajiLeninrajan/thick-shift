@@ -15,11 +15,11 @@ import { hostClock } from './track';
 
 const SIZE = 1.4; // a big keyring, so it shows across a room in a torch beam
 const HAND = 1.3; // metres off the floor it leaves the hand
-const ARC = [0.6, 0.06]; // how high the throw goes over its run: metres, and metres more per metre thrown
+const ARC = [0.6, 0.06] as const; // how high the throw goes over its run: metres, and metres more per metre thrown
 const SHOW = 30; // metres past which one is not drawn
 const BEAT = 2.6; // times a second it rocks and the light blinks while singing, slowing as the cell runs down
 
-const FUR = new THREE.Color(MASC[0].col),
+const FUR = new THREE.Color(MASC[0].col), // MASC[0] is Big Biggs; the Mini Biggs wears his colour
   BELLY = 0xd9c8ec,
   SNOUT = 0xb7a0d8,
   EYE = 0x141018,
@@ -29,7 +29,7 @@ const FUR = new THREE.Color(MASC[0].col),
 // One part: a geometry with its colour painted into its vertices, so the whole plush is one mesh.
 function paint(geo: THREE.BufferGeometry, col: THREE.ColorRepresentation): THREE.BufferGeometry {
   const c = new THREE.Color(col),
-    n = geo.attributes.position.count,
+    n = geo.getAttribute('position').count, // every geometry three.js builds has positions
     out = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) c.toArray(out, i * 3);
   geo.setAttribute('color', new THREE.BufferAttribute(out, 3));
@@ -86,7 +86,7 @@ export function createPlush(scene: THREE.Scene) {
   }
   return {
     // The group drawn for a toy in S.toys, for the outline (outline.ts).
-    group: (id: number): THREE.Group => toys.get(id)?.g,
+    group: (id: number): THREE.Group | undefined => toys.get(id)?.g,
     // A night began: the floor is swept.
     reset(): void {
       for (const s of toys.values()) scene.remove(s.g);

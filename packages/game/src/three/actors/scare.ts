@@ -3,18 +3,27 @@
 // Tank at the end, the worm's mouth), the mascot plays its scare pose and
 // lunges, then the camera is dropped to the floor and left looking up at it
 // as it sits down. After that player.ts has the camera back, where we left it.
+import type { MascotIndex, PerMascot } from '@thick-shift/sim/types';
 import * as THREE from 'three';
+import { context2d } from '../../dom';
 import type { Me } from '../../types';
 import type { Mascot } from './mascot';
+import type { PerStage } from './styles';
 import { wrap } from './track';
 
-// Seconds from the catch. The sound should hang its stinger on these.
-export const CUES = { grab: 0, face: 0.12, bite: 0.62, drop: 1.05, floor: 1.3, end: 1.5 };
-export type Cue = keyof typeof CUES;
-const ORDER = Object.keys(CUES) as Cue[];
-// How close the camera is held to the face, by mascot and stage: near enough
+// The cues of a catch in the order they come, and the seconds from the catch at which each comes. The sound should hang
+// its stinger on these.
+const ORDER = ['grab', 'face', 'bite', 'drop', 'floor', 'end'] as const;
+export type Cue = (typeof ORDER)[number];
+export const CUES = { grab: 0, face: 0.12, bite: 0.62, drop: 1.05, floor: 1.3, end: 1.5 } satisfies Record<Cue, number>;
+// How close the camera is held to the face, by mascot (Big Biggs, Madame Flan, Squish, Tank) and stage: near enough
 // that the face (or the mouth) is all there is. Tank's worm mouth is small.
-const FILL: Record<string, number[]> = { hippo: [0.95, 0.95, 0.8], walrus: [0.8, 0.8, 0.6], toad: [1.05, 1, 1.1], rhino: [0.9, 0.8, 0.62] };
+const FILL: PerMascot<PerStage<number>> = [
+  [0.95, 0.95, 0.8],
+  [0.8, 0.8, 0.6],
+  [1.05, 1, 1.1],
+  [0.9, 0.8, 0.62],
+];
 const BITE = 0.72; // at the bite it comes this much closer again
 const GLARE = 45; // the torch is forced on through the catch, stuttering, or in a dark building there would be nothing to see
 const FLOOR_Y = 0.22; // where player.ts holds the camera of a flat guard
@@ -26,26 +35,27 @@ const smooth = (u: number): number => {
 };
 
 // fn(cue, by, seconds): see listen() below.
-export type CueListener = (cue: Cue, by: number, at: number) => void;
+export type CueListener = (cue: Cue, by: MascotIndex, at: number) => void;
 
 // The catch in progress. by: the mascot's index. t: seconds since it began. cue: index in ORDER of the last cue passed.
 // yaw0, pitch0, fov0: the guard's view when it began, given back at the end. The rest is worked out as it goes: the
-// view where the drop begins (yawDrop, pitchDrop, px, py, pz) and where it ends (yawEnd, pitchEnd).
+// view where the drop begins (yawDrop, pitchDrop, px, py, pz), set by every frame before the drop, and where it ends
+// (yawEnd, pitchEnd), set by every frame in it. They start as the view the catch began with.
 interface Catch {
-  by: number;
+  by: MascotIndex;
   t: number;
   cue: number;
   mascot: Mascot;
   yaw0: number;
   pitch0: number;
   fov0: number;
-  yawDrop?: number;
-  pitchDrop?: number;
-  px?: number;
-  py?: number;
-  pz?: number;
-  yawEnd?: number;
-  pitchEnd?: number;
+  yawDrop: number;
+  pitchDrop: number;
+  px: number;
+  py: number;
+  pz: number;
+  yawEnd: number;
+  pitchEnd: number;
 }
 
 export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement) {
@@ -56,7 +66,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
   over.hidden = true;
   over.style.cssText = 'position:absolute;inset:0;pointer-events:none;image-rendering:pixelated';
   canvas.after(over);
-  const c = over.getContext('2d'),
+  const c = context2d(over),
     listeners: CueListener[] = [];
   const pos = new THREE.Vector3(),
     hold = new THREE.Vector3(),
@@ -65,7 +75,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
     d = new THREE.Vector3();
   let on: Catch | null = null; // { by, t, cue, mascot, yaw0, pitch0, fov0 }
 
-  const fire = (name: Cue, by: number): void => {
+  const fire = (name: Cue, by: MascotIndex): void => {
     for (const fn of listeners) fn(name, by, CUES[name]);
   };
   function stop(): void {
@@ -85,8 +95,9 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
       listeners.push(fn);
       return () => listeners.splice(listeners.indexOf(fn), 1);
     },
-    // The catch in progress, { by, t, cue } with cue the name of the last one passed, or null.
-    get now(): { by: number; t: number; cue: Cue } | null {
+    // The catch in progress, { by, t, cue } with cue the name of the last one passed, or null. cue is undefined from
+    // start() until the first update(), while on.cue is still -1.
+    get now(): { by: MascotIndex; t: number; cue: Cue | undefined } | null {
       return on && { by: on.by, t: on.t, cue: ORDER[on.cue] };
     },
     get active(): boolean {
@@ -95,8 +106,23 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
     // me: player.ts's guard. Its x and z are where the guard is lying.
     start(mascot: Mascot, me: Me): void {
       stop();
-      on = { by: mascot.i, t: 0, cue: -1, mascot, yaw0: me.yaw, pitch0: me.pitch, fov0: camera.fov };
       from.copy(camera.position);
+      on = {
+        by: mascot.i,
+        t: 0,
+        cue: -1,
+        mascot,
+        yaw0: me.yaw,
+        pitch0: me.pitch,
+        fov0: camera.fov,
+        yawDrop: me.yaw,
+        pitchDrop: me.pitch,
+        px: from.x,
+        py: from.y,
+        pz: from.z,
+        yawEnd: me.yaw,
+        pitchEnd: me.pitch,
+      };
       pos.copy(from);
       mascot.scareOn = mascot.seen = true;
       mascot.sitOn(me.x, me.z, true);
@@ -107,9 +133,16 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
       if (!on) return;
       const a = on,
         m = a.mascot,
-        t = (a.t += dt),
         face = m.face;
-      while (a.cue < ORDER.length - 1 && t >= CUES[ORDER[a.cue + 1]]) fire(ORDER[++a.cue], a.by);
+      a.t += dt;
+      const t = a.t;
+      // Every cue passed since the last frame, in order.
+      for (const cue of ORDER.slice(a.cue + 1)) {
+        if (t < CUES[cue]) break;
+        a.cue++;
+        fire(cue, a.by);
+      }
+      // app.ts caps dt at 0.1 s, shorter than the drop to the end, so a frame in the drop has set yawEnd and pitchEnd.
       if (t >= CUES.end) {
         me.yaw = a.yawEnd;
         me.pitch = a.pitchEnd;
@@ -119,7 +152,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
       if (t >= CUES.drop) m.scareOn = false; // it lets go and sits
 
       // Where the camera is held: straight out in front of the face, a little below it.
-      const fill = FILL[m.def.k][m.cur.style.stage] * (1 - (1 - BITE) * m.scareBite);
+      const fill = FILL[m.i][m.cur.style.stage] * (1 - (1 - BITE) * m.scareBite);
       const facing = m.group.rotation.y;
       d.set(Math.sin(facing), 0, Math.cos(facing));
       hold.copy(face).addScaledVector(d, fill);
@@ -156,6 +189,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
         const fall = Math.min(1, (t - CUES.drop) / (CUES.floor - CUES.drop)),
           g = fall * fall,
           settle = smooth((t - CUES.floor) / (CUES.end - CUES.floor));
+        // With dt capped at 0.1 s (app.ts) the first frame of a catch, which sets px..pz, comes long before the drop.
         pos.set(a.px + (me.x - a.px) * g, a.py + (FLOOR_Y - a.py) * g, a.pz + (me.z - a.pz) * g);
         look.subVectors(face, pos);
         a.yawEnd = Math.atan2(look.x, look.z);

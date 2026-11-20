@@ -10,9 +10,10 @@
 //   phone.ts   your own phone, held in view, with the minimap (app.ts makes it)
 //   plush.ts   the Mini Biggs guards throw, in the air and singing on the floor
 
-import { MASC } from '@thick-shift/sim/config';
+import { defined, isPlaced } from '@thick-shift/sim/check';
+import { perMascot } from '@thick-shift/sim/config';
 import { DOORWAYS } from '@thick-shift/sim/map';
-import type { EventData, SimEvent, State } from '@thick-shift/sim/types';
+import type { SimEvent, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { game } from '../state';
 import type { Me } from '../types';
@@ -46,7 +47,7 @@ export interface View {
 }
 
 export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) {
-  const mascots = MASC.map((_, i) => new Mascot(scene, i, renderer));
+  const mascots = perMascot(i => new Mascot(scene, i, renderer));
   const guards = new Map<string, Guard>(),
     scare = createScare(camera, renderer.domElement),
     hands = createHands(camera),
@@ -54,7 +55,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
   // watch: the guard a flat guard is watching through. frustum: what this screen shows, so a mascot only changes model off it.
   const view: View = { x: 0, y: 0, z: 0, id: '', flat: false, torch: false, watch: null, frustum: new THREE.Frustum() },
     viewProj = new THREE.Matrix4();
-  let lights: THREE.SpotLight[] = null; // made when the first other guard turns up, so a guard alone pays for none
+  let lights: THREE.SpotLight[] | null = null; // made when the first other guard turns up, so a guard alone pays for none
   const lit: Guard[] = [],
     list: Guard[] = []; // list: the guards in the scene, as an array to walk without garbage
 
@@ -67,9 +68,8 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     lit.length = 0;
     for (const g of list) if (g.on && g.seen) lit.push(g);
     lit.sort(nearest);
-    for (let i = 0; i < TORCH_LIGHTS; i++) {
-      const l = lights[i],
-        g = lit[i];
+    for (const [i, l] of lights.entries()) {
+      const g = lit[i];
       l.intensity = g ? TORCH_POWER : 0;
       if (g) {
         l.position.copy(g.hand);
@@ -91,20 +91,22 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     },
     // Every new event from the host comes through here.
     event(e: SimEvent, S: State, me: Me): void {
-      const x = e.x;
       if (e.type === 'flat') {
-        if ((x as EventData['flat']).id === game.myId) scare.start(mascots[(x as EventData['flat']).by], me);
-        else mascots[(x as EventData['flat']).by].sitOn((x as EventData['flat']).x, (x as EventData['flat']).z, false);
+        const { id, by, x, z } = e.x;
+        if (id === game.myId) scare.start(mascots[by], me);
+        else mascots[by].sitOn(x, z, false);
       } else if (e.type === 'bang') {
-        // The hit lands with the sound: whichever of them is at that door.
-        const d = DOORWAYS.find(d => d.key === (x as EventData['bang'])),
+        // The hit lands with the sound: whichever of them is at that door. A bang carries the key of a doorway that has one.
+        const key = e.x,
+          door = DOORWAYS.find(d => d.key === key),
+          d = defined(door, `the doorway ${key}`),
           cx = (d.rect[0] + d.rect[2]) / 2,
           cz = (d.rect[1] + d.rect[3]) / 2;
         for (const m of S.m) if (m.st === 'siege' && Math.hypot(m.x - cx, m.z - cz) < 4) mascots[m.i].bang();
       } else if (e.type === 'crash') {
         for (const m of S.m) if (m.st === 'stun') mascots[m.i].crash();
-      } else if (e.type === 'spot') mascots[(x as EventData['spot']).i].spotted();
-      else if (e.type === 'check' || e.type === 'found') mascots[(x as EventData['check' | 'found']).i].bang(); // the yank on the locker door
+      } else if (e.type === 'spot') mascots[e.x.i].spotted();
+      else if (e.type === 'check' || e.type === 'found') mascots[e.x.i].bang(); // the yank on the locker door
     },
     // me, torch: player.ts's guard and its light. Call after player.update, which has put the camera where the guard is.
     sync(S: State, dt: number, me: Me, torch: THREE.SpotLight): void {
@@ -122,7 +124,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
       for (const m of S.m) mascots[m.i].sync(m, S, dt, view);
       for (const g of list) g.here = false;
       for (const p of S.players) {
-        if (p.id === game.myId || p.x == null) continue;
+        if (p.id === game.myId || !isPlaced(p)) continue;
         let g = guards.get(p.id);
         if (!g || g.name !== p.name) {
           g?.dispose(scene);
@@ -134,12 +136,18 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
         g.here = true;
         g.sync(p, S, dt, view);
       }
-      for (let i = list.length - 1; i >= 0; i--)
-        if (!list[i].here) {
-          list[i].dispose(scene);
-          guards.delete(list[i].id);
-          list.splice(i, 1);
+      // Gone from S.players: list is always guards.values() in order, so it is made again from what is left.
+      let gone = false;
+      for (const g of list)
+        if (!g.here) {
+          g.dispose(scene);
+          guards.delete(g.id);
+          gone = true;
         }
+      if (gone) {
+        list.length = 0;
+        list.push(...guards.values());
+      }
       if (guards.size || lights) lendLights();
       plush.sync(S, view);
       scare.update(me, dt, torch);

@@ -2,17 +2,19 @@
 // props_a.glb, parented to the camera. It sways with the walk, comes up when
 // it is switched on, and its lens lights with the beam. If the model is
 // missing there are simply no hands.
-import type { BufferGeometry, Camera, Mesh, MeshStandardMaterial, Object3D } from 'three';
+import type { Camera, Object3D } from 'three';
+import { MeshStandardMaterial } from 'three';
 import type { Me } from '../../types';
 import { loadPart } from '../assets';
 import { HANDS_ORDER } from '../slats';
+import { eachMesh } from './rig';
 
 const HELD = { x: 0.2, y: -0.2, z: -0.42 },
   LOWERED = 0.1; // metres from the eye; how far it sinks when off
 
 export function createHands(camera: Camera) {
-  let torch: Object3D = null,
-    lens: MeshStandardMaterial = null,
+  let torch: Object3D | null = null,
+    lens: MeshStandardMaterial | null = null,
     up = 0,
     away = 0,
     drop = 0;
@@ -22,13 +24,13 @@ export function createHands(camera: Camera) {
     torch.position.set(HELD.x, HELD.y - LOWERED, HELD.z);
     // It sits a hand's width in front of the beam's own origin; a shadow from it would black out the beam.
     // In a locker it is held inside the doors, so it goes in front of their slats (slats.ts).
-    torch.traverse((m: Mesh<BufferGeometry, MeshStandardMaterial>) => {
-      if (!m.isMesh) return;
+    eachMesh(torch, m => {
       m.castShadow = false;
       m.renderOrder = HANDS_ORDER;
-      if (m.material.name === 'lamp_glow') {
-        m.material = m.material.clone();
-        lens = m.material;
+      if (m.material instanceof MeshStandardMaterial && m.material.name === 'lamp_glow') {
+        const glass = m.material.clone();
+        m.material = glass;
+        lens = glass;
       }
     });
     camera.add(torch);

@@ -5,16 +5,17 @@
 
 import { F } from '@thick-shift/sim';
 import { glimpses, PLAYER_R } from '@thick-shift/sim/map';
-import type { Player, State } from '@thick-shift/sim/types';
+import type { Joined, Guard as SimGuard, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
+import { context2d } from '../../dom';
 import type { View } from '../actors';
 import { instance, loadActor } from '../assets';
 import type { Rig } from './rig';
-import { buildRig } from './rig';
+import { bounds, buildRig, eachMesh } from './rig';
 import { hostClock, Track } from './track';
 
 const TAU = Math.PI * 2,
-  clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+  clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 const TAG_NEAR = 7,
   TAG_FLAT = 25; // metres a name shows from: standing (and in sight), and flat (so someone can find them)
 const THIN = 0.035; // how much of a guard is left, front to back, once flat
@@ -78,10 +79,8 @@ function handOn(model: THREE.Object3D): THREE.Object3D | null {
   if (!arm) return null;
   model.updateWorldMatrix(true, true);
   const back = arm.matrixWorld.clone().invert();
-  arm.traverse((m: THREE.Mesh) => {
-    if (!m.isMesh) return;
-    m.geometry.computeBoundingBox();
-    box.union(part.copy(m.geometry.boundingBox).applyMatrix4(back.clone().multiply(m.matrixWorld)));
+  eachMesh(arm, m => {
+    box.union(part.copy(bounds(m.geometry)).applyMatrix4(back.clone().multiply(m.matrixWorld)));
   });
   const at = new THREE.Object3D();
   if (box.isEmpty()) at.position.set(0, -0.55, 0.05);
@@ -103,10 +102,9 @@ function lensOn(model: THREE.Object3D): THREE.Object3D | null {
   if (!arm) return null;
   model.updateWorldMatrix(true, true);
   const back = arm.matrixWorld.clone().invert();
-  arm.traverse((m: THREE.Mesh<THREE.BufferGeometry, THREE.Material>) => {
-    if (!m.isMesh || m.material.name !== 'lamp_glow') return;
-    m.geometry.computeBoundingBox();
-    box.union(part.copy(m.geometry.boundingBox).applyMatrix4(back.clone().multiply(m.matrixWorld)));
+  eachMesh(arm, m => {
+    if (Array.isArray(m.material) || m.material.name !== 'lamp_glow') return;
+    box.union(part.copy(bounds(m.geometry)).applyMatrix4(back.clone().multiply(m.matrixWorld)));
   });
   const at = new THREE.Object3D();
   if (box.isEmpty())
@@ -116,26 +114,27 @@ function lensOn(model: THREE.Object3D): THREE.Object3D | null {
   return at;
 }
 
-let lensTex: THREE.CanvasTexture = null;
+let lensTex: THREE.CanvasTexture | null = null;
 function lens(): THREE.CanvasTexture {
   if (lensTex) return lensTex;
   const cv = document.createElement('canvas');
   cv.width = cv.height = 32;
-  const c = cv.getContext('2d'),
+  const c = context2d(cv),
     g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
   g.addColorStop(0, '#fff');
   g.addColorStop(0.3, 'rgba(255,240,208,.6)');
   g.addColorStop(1, 'rgba(255,240,208,0)');
   c.fillStyle = g;
   c.fillRect(0, 0, 32, 32);
-  return (lensTex = new THREE.CanvasTexture(cv));
+  lensTex = new THREE.CanvasTexture(cv);
+  return lensTex;
 }
 
 function nameTag(name: string): THREE.Sprite {
   const cv = document.createElement('canvas');
   cv.width = 256;
   cv.height = 64;
-  const c = cv.getContext('2d');
+  const c = context2d(cv);
   c.font = '600 34px system-ui, sans-serif';
   c.textAlign = 'center';
   c.textBaseline = 'middle';
@@ -182,7 +181,7 @@ export class Guard {
   declare aim: THREE.Vector3;
   declare hand: THREE.Vector3;
   declare here: boolean; // still in S.players this frame (actors.ts)
-  constructor(scene: THREE.Scene, p: Player) {
+  constructor(scene: THREE.Scene, p: Joined) {
     this.id = p.id;
     this.name = p.name;
     this.group = new THREE.Group();
@@ -236,13 +235,13 @@ export class Guard {
   }
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
-    this.tag.material.map.dispose();
+    this.tag.material.map?.dispose();
     this.tag.material.dispose();
     this.glow.material.dispose();
     this.screen.material.dispose();
   }
 
-  sync(p: Player, S: State, dt: number, view: View): void {
+  sync(p: SimGuard, S: State, dt: number, view: View): void {
     const tr = this.track,
       rig = this.rig,
       flat = !!p.flat;
@@ -253,7 +252,8 @@ export class Guard {
     this.group.rotation.y = tr.yaw;
     this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
     // Any of them in view past walls and shut doors (see mascot.ts): a shoulder past a door jamb keeps them, and their torch.
-    if ((this.lookT -= dt) <= 0) {
+    this.lookT -= dt;
+    if (this.lookT <= 0) {
       this.lookT = 0.25;
       this.seen = this.dist < 2 || glimpses(view.x, view.z, tr.x, tr.z, PLAYER_R, S.doors);
     }
