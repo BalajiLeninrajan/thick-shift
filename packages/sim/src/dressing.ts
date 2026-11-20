@@ -12,6 +12,7 @@
 // Every locker outside the booth is also a place to hide (HIDES in map.ts), so a locker
 // wants a metre of clear floor in front of its doors.
 // A prop is solid when FOOT has its footprint and it is not marked soft.
+import { defined } from './check.ts';
 import type { Rect } from './types.ts';
 
 export interface PropOptions {
@@ -275,7 +276,8 @@ export const DRESSING: Placed[][] = [
 // The floor a prop covers as [x0, z0, x1, z1]. Turned by anything but a
 // quarter turn, it is the box round the turned footprint.
 export function footprint(name: string, x: number, z: number, yaw = 0, s = 1): Rect {
-  const [w, d, ox = 0, oz = 0] = FOOT[name],
+  // Its callers only ask about the generator and props they found in FOOT.
+  const [w, d, ox = 0, oz = 0] = defined(FOOT[name], `the footprint of ${name}`),
     a = ROUND.has(name) ? 0 : (yaw * Math.PI) / 180,
     c = Math.cos(a),
     sn = Math.sin(a);

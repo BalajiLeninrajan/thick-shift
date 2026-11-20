@@ -2,6 +2,7 @@
 // fits, what a line of sight or an arm crosses, and how routes go round shut doors and the ducts. The expected values
 // are worked out by hand from ROOMS3 and DOORWAYS, so a change to the building that breaks one is worth a look.
 import { describe, expect, it } from 'vitest';
+import { defined } from '../src/check.ts';
 import * as M from '../src/map.ts';
 import type { Doors, Point } from '../src/types.ts';
 
@@ -24,8 +25,8 @@ describe('rooms', () => {
       'Ducts',
       'Security Booth',
     ]);
-    expect(M.ROOMS3[M.BOOTH].name).toBe('Security Booth');
-    expect(M.ROOMS3[M.DUCTS].name).toBe('Ducts');
+    expect(M.ROOMS3[M.BOOTH]?.name).toBe('Security Booth');
+    expect(M.ROOMS3[M.DUCTS]?.name).toBe('Ducts');
   });
 
   it('finds the room a point is in', () => {
@@ -140,12 +141,15 @@ describe('slide', () => {
 
 describe('waypoints', () => {
   const { nodes, links } = M.nav();
+  const node = (i: number) => defined(nodes[i], `waypoint ${i}`);
 
   it('joins every waypoint both ways, by the straight distance', () => {
     links.forEach((ls, i) => {
       for (const l of ls) {
-        expect(l.d).toBeCloseTo(Math.hypot(nodes[i].x - nodes[l.to].x, nodes[i].z - nodes[l.to].z), 10);
-        expect(links[l.to].some(back => back.to === i && back.d === l.d && back.key === l.key && back.duct === l.duct)).toBe(true);
+        const a = node(i),
+          b = node(l.to);
+        expect(l.d).toBeCloseTo(Math.hypot(a.x - b.x, a.z - b.z), 10);
+        expect(links[l.to]?.some(back => back.to === i && back.d === l.d && back.key === l.key && back.duct === l.duct)).toBe(true);
       }
     });
   });
@@ -162,7 +166,7 @@ describe('waypoints', () => {
     for (const k of ['L', 'V', 'R'] as const) expect(links.flat().filter(l => l.key === k)).toHaveLength(2); // one each way
     links.forEach((ls, i) => {
       for (const l of ls) {
-        const ducts = nodes[i].room === M.DUCTS || nodes[l.to].room === M.DUCTS;
+        const ducts = node(i).room === M.DUCTS || node(l.to).room === M.DUCTS;
         expect(l.duct).toBe(ducts);
       }
     });

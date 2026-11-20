@@ -36,7 +36,7 @@ const rec = process.env.REC_OUT ? await import('../roblox/diff/rec.ts') : null;
 // One sim per thread, made once: like the module state it replaces, it carries the last step's time between nights.
 export const sim = newSim({ rng: () => random(), now: 0, shuffle: rec ? 'fisher-yates' : 'sort' });
 const night: Night = { startFloorNight, stepFloor, actFloor };
-const api = rec ? rec.wrapSim(night, sim) : night;
+const api: Night = rec ? rec.wrapSim(night, sim) : night;
 
 /* ---------- the shapes ---------- */
 

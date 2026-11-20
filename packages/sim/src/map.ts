@@ -23,8 +23,9 @@
 // The answers depend only on the building, so the caches below (the obstacle buckets, the waypoint graph and the
 // last rect walkable() found a point in) are kept here rather than by the caller. None of them changes an answer.
 
+import { defined } from './check.ts';
 import { DRESSING, obstacles } from './dressing.ts';
-import type { DoorKey, Doors, Point, Rect } from './types.ts';
+import type { DoorKey, Doors, PerMascot, Point, Rect } from './types.ts';
 
 export const PLAYER_R = 0.35,
   MASCOT_R = 0.7;
@@ -36,7 +37,7 @@ export const EYE = 1.65,
 export interface Room {
   name: string;
   h: number;
-  rects: Rect[];
+  rects: [Rect, ...Rect[]]; // every room has at least one
 }
 // A doorway is the hole through the half-metre wall between two rooms.
 // axis: the direction you walk through it. key: one of the booth's three
@@ -96,7 +97,7 @@ export interface NavNode extends Point {
 export interface NavLink {
   to: number;
   d: number;
-  key?: DoorKey;
+  key?: DoorKey | undefined; // buildNav copies the doorway's key, so a link through an unkeyed doorway has key: undefined
   duct?: boolean;
 }
 export interface Nav {
@@ -105,20 +106,20 @@ export interface Nav {
 }
 // What route() is asked. doors: shut doors block the way. ducts: may it use the ducts. r: the walker's radius.
 export interface RouteOptions {
-  doors?: Doors;
-  ducts?: boolean;
-  r?: number;
+  doors?: Doors | undefined;
+  ducts?: boolean | undefined;
+  r?: number | undefined;
 }
 // What route() answers. blocked: the key of the shut door the route stops in front of.
 export interface Route {
   path: Point[];
-  blocked?: DoorKey;
+  blocked?: DoorKey | undefined; // route() sets it from a lookup that can miss, so it can be present and undefined
 }
 
 // Room indices: 0 to 8 are the rooms outside, 9 is the booth.
 export const BOOTH = 9,
   DUCTS = 8;
-export const ROOMS3: Room[] = [
+export const ROOMS3: [Room, ...Room[]] = [
   { name: 'Storage Stage', h: 5.2, rects: [[10, 0, 27, 11]] },
   { name: 'Backstage', h: 3.8, rects: [[27.5, 0, 42, 11]] },
   { name: 'Arcade', h: 3.8, rects: [[0, 11.5, 11.5, 25]] },
@@ -222,7 +223,7 @@ export const HIDES: Hide[] = DRESSING.flatMap((rows, room) =>
         })
 );
 // Where each mascot stands when it is not walking, by MASC index, and which way it faces.
-export const REST: Pose[] = [
+export const REST: PerMascot<Pose> = [
   { x: 16, z: 3, yaw: 0 },
   { x: 21, z: 3, yaw: 0 },
   { x: 16, z: 28, yaw: Math.PI / 2 },
@@ -241,7 +242,7 @@ export function addObstacle(x0: number, z0: number, x1: number, z1: number): voi
 
 /* ---------- standing and seeing ---------- */
 
-const shutDoor = (d: Doorway, doors?: Doors | null) => d.key && doors && doors[d.key];
+const shutDoor = (d: Doorway, doors?: Doors | null) => d.key && doors?.[d.key];
 
 // The obstacles sorted into two-metre squares of floor, so walkable() only asks about the few near its point.
 // Each is filed under every square within a metre of it, which covers any radius walkable() is asked about.
@@ -252,8 +253,19 @@ function bucketObstacles(): Rect[][] {
   const out: Rect[][] = [];
   for (const o of OBSTACLES)
     for (let cz = ((o[1] - 1) / CELL) | 0; cz <= (((o[3] + 1) / CELL) | 0); cz++)
-      for (let cx = ((o[0] - 1) / CELL) | 0; cx <= (((o[2] + 1) / CELL) | 0); cx++) (out[cz * COLS + cx] ||= []).push(o);
+      for (let cx = ((o[0] - 1) / CELL) | 0; cx <= (((o[2] + 1) / CELL) | 0); cx++) {
+        const at = cz * COLS + cx,
+          bucket = out[at];
+        if (bucket) bucket.push(o);
+        else out[at] = [o];
+      }
   return out;
+}
+
+// The first rect, in room order, that a circle of radius r centred here fits inside.
+function rectAround(x: number, z: number, r: number): Rect | undefined {
+  for (const room of ROOMS3) for (const rect of room.rects) if (x >= rect[0] + r && x <= rect[2] - r && z >= rect[1] + r && z <= rect[3] - r) return rect;
+  return undefined;
 }
 
 let lastRect = ROOMS3[0].rects[0];
@@ -262,13 +274,13 @@ let lastRect = ROOMS3[0].rects[0];
 export function walkable(x: number, z: number, r: number, doors?: Doors | null, over?: boolean): boolean {
   // Most questions are about a point next to the last one asked about, so try the rect that one was in first.
   let inside = x >= lastRect[0] + r && x <= lastRect[2] - r && z >= lastRect[1] + r && z <= lastRect[3] - r;
-  for (let i = 0; i < ROOMS3.length && !inside; i++)
-    for (const rect of ROOMS3[i].rects)
-      if (x >= rect[0] + r && x <= rect[2] - r && z >= rect[1] + r && z <= rect[3] - r) {
-        inside = true;
-        lastRect = rect;
-        break;
-      }
+  if (!inside) {
+    const rect = rectAround(x, z, r);
+    if (rect) {
+      inside = true;
+      lastRect = rect;
+    }
+  }
   if (!inside)
     for (const d of DOORWAYS) {
       if (shutDoor(d, doors)) continue;
@@ -283,7 +295,8 @@ export function walkable(x: number, z: number, r: number, doors?: Doors | null, 
     }
   if (!inside) return false;
   if (over) return true;
-  const near = (buckets ||= bucketObstacles())[((z / CELL) | 0) * COLS + ((x / CELL) | 0)];
+  buckets ||= bucketObstacles();
+  const near = buckets[((z / CELL) | 0) * COLS + ((x / CELL) | 0)];
   if (near) for (const o of near) if (x > o[0] - r && x < o[2] + r && z > o[1] - r && z < o[3] + r) return false;
   return true;
 }
@@ -347,7 +360,8 @@ export function glimpses(ax: number, az: number, bx: number, bz: number, r: numb
 
 // Which room a point is in, or -1. A doorway counts as the room on its `a` side.
 export function roomAt(x: number, z: number): number {
-  for (let i = 0; i < ROOMS3.length; i++) for (const r of ROOMS3[i].rects) if (x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3]) return i;
+  const i = ROOMS3.findIndex(room => room.rects.some(r => x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3]));
+  if (i >= 0) return i;
   for (const d of DOORWAYS) {
     const [x0, z0, x1, z1] = d.rect;
     if (x >= x0 - 0.5 && x <= x1 + 0.5 && z >= z0 - 0.5 && z <= z1 + 0.5) return d.a;
@@ -355,7 +369,7 @@ export function roomAt(x: number, z: number): number {
   return -1;
 }
 export const roomCentre = (i: number): Point => {
-  const [x0, z0, x1, z1] = ROOMS3[i].rects[0];
+  const [x0, z0, x1, z1] = defined(ROOMS3[i], `room ${i}`).rects[0];
   return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
 };
 
@@ -410,11 +424,11 @@ export function walls(): Wall[] {
             horiz ? { x0: a, z0: side, x1: b, z1: side, nx: 0, nz: n, y0, h, room: ri } : { x0: side, z0: a, x1: side, z1: b, nx: n, nz: 0, y0, h, room: ri }
           );
         for (const [a, b] of cut(lo, hi, [...doorSpans, ...open])) seg(a, b, 0, room.h);
-        doors.forEach((d, i) => {
-          const [a, b] = doorSpans[i] || [];
-          const dh = d.h || DOOR_H;
-          if (a != null && room.h > dh) seg(a, b, dh, room.h - dh);
-        });
+        for (const [i, d] of doors.entries()) {
+          const span = doorSpans[i],
+            dh = d.h || DOOR_H;
+          if (span && room.h > dh) seg(span[0], span[1], dh, room.h - dh);
+        }
       }
     });
   });
@@ -501,13 +515,16 @@ function buildNav(): Nav {
       [x1 + gap, z0 - gap],
       [x0 - gap, z1 + gap],
       [x1 + gap, z1 + gap],
-    ])
+    ] as const)
       add(x, z, roomAt(x, z));
   const links: NavLink[][] = nodes.map(() => []);
-  const join = (i: number, j: number, extra: { key?: DoorKey; duct: boolean }) => {
-    const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].z - nodes[j].z);
-    links[i].push({ to: j, d, ...extra });
-    links[j].push({ to: i, d, ...extra });
+  // Every waypoint gets its list of links as it is added, so links[i] is there for every node index i.
+  const join = (i: number, j: number, extra: { key?: DoorKey | undefined; duct: boolean }) => {
+    const a = defined(nodes[i], `waypoint ${i}`),
+      b = defined(nodes[j], `waypoint ${j}`),
+      d = Math.hypot(a.x - b.x, a.z - b.z);
+    defined(links[i], `waypoint ${i}'s links`).push({ to: j, d, ...extra });
+    defined(links[j], `waypoint ${j}'s links`).push({ to: i, d, ...extra });
   };
   const sameRoom = nodes.length;
   for (const d of DOORWAYS) {
@@ -524,10 +541,8 @@ function buildNav(): Nav {
       return lo + sign * 1.5;
     };
     // the lower-coordinate side belongs to whichever room is on that side
-    const lowIsA =
-      d.axis === 'x'
-        ? ROOMS3[d.a].rects.some(r => r[2] <= x0 + 0.01 && r[1] <= cz && r[3] >= cz)
-        : ROOMS3[d.a].rects.some(r => r[3] <= z0 + 0.01 && r[0] <= cx && r[2] >= cx);
+    const { rects } = defined(ROOMS3[d.a], `room ${d.a}`),
+      lowIsA = d.axis === 'x' ? rects.some(r => r[2] <= x0 + 0.01 && r[1] <= cz && r[3] >= cz) : rects.some(r => r[3] <= z0 + 0.01 && r[0] <= cx && r[2] >= cx);
     const lowRoom = lowIsA ? d.a : d.b,
       highRoom = lowIsA ? d.b : d.a;
     if (d.axis === 'x') nodes.push({ x: at(x0, -1), z: cz, room: lowRoom, door: d }, { x: at(x1, 1), z: cz, room: highRoom, door: d });
@@ -535,14 +550,17 @@ function buildNav(): Nav {
     links.push([], []);
     join(first, first + 1, { key: d.key, duct: d.a === DUCTS || d.b === DUCTS });
   }
-  for (let i = 0; i < nodes.length; i++)
-    for (let j = i + 1; j < nodes.length; j++) {
-      if (nodes[i].room !== nodes[j].room || (i >= sameRoom && j >= sameRoom && nodes[i].door === nodes[j].door)) continue;
-      if (clear(nodes[i].x, nodes[i].z, nodes[j].x, nodes[j].z, MASCOT_R)) join(i, j, { duct: nodes[i].room === DUCTS });
+  for (const [i, a] of nodes.entries())
+    for (const [j, b] of nodes.entries()) {
+      if (j <= i || a.room !== b.room || (i >= sameRoom && j >= sameRoom && a.door === b.door)) continue;
+      if (clear(a.x, a.z, b.x, b.z, MASCOT_R)) join(i, j, { duct: a.room === DUCTS });
     }
   return { nodes, links };
 }
-export const nav = (): Nav => NAV || (NAV = buildNav());
+export const nav = (): Nav => {
+  NAV ||= buildNav();
+  return NAV;
+};
 // Props added after the first path was asked for change what is walkable.
 export function resetNav(): void {
   NAV = null;
@@ -556,20 +574,22 @@ function nearestNode(x: number, z: number, doors: Doors | undefined, ducts: bool
     tried: number[] = [];
   for (let k = 0; k < 12; k++) {
     let best = -1,
+      bestNode: NavNode | undefined,
       bd = 1e9;
-    for (let i = 0; i < nodes.length; i++) {
-      const n = nodes[i],
-        d = Math.hypot(n.x - x, n.z - z);
+    for (const [i, n] of nodes.entries()) {
+      const d = Math.hypot(n.x - x, n.z - z);
       if (d < bd && (ducts || n.room !== DUCTS) && !tried.includes(i)) {
         bd = d;
         best = i;
+        bestNode = n;
       }
     }
-    if (best < 0) break;
-    if (clear(x, z, nodes[best].x, nodes[best].z, r, doors)) return best;
+    if (!bestNode) break;
+    if (clear(x, z, bestNode.x, bestNode.z, r, doors)) return best;
     tried.push(best);
   }
-  return tried[0];
+  // The first pass always finds a waypoint, since every room outside the ducts has one, so tried is never empty here.
+  return defined(tried[0], `a waypoint near (${x}, ${z})`);
 }
 
 // A route from one point to another as a list of points to walk to, ending
@@ -584,36 +604,47 @@ export function route(ax: number, az: number, bx: number, bz: number, opts: Rout
   if (clear(ax, az, bx, bz, r, opts.doors)) return { path: [{ x: bx, z: bz }] };
   const from = nearestNode(ax, az, opts.doors, opts.ducts, r),
     goal = nearestNode(bx, bz, opts.doors, opts.ducts, r);
+  const point = (i: number): Point => {
+    const n = defined(nodes[i], 'a waypoint on the route');
+    return { x: n.x, z: n.z };
+  };
+  // dist and prev hold, for each waypoint, how far it is from `from` and the waypoint before it on the way there:
+  // FAR and NONE until the search reaches it. Read past their end, they say the same.
+  const FAR = 1e9,
+    NONE = -1;
   const search = (respectDoors: boolean) => {
     const n = nodes.length,
-      dist = new Float64Array(n).fill(1e9),
-      prev = new Int16Array(n).fill(-1),
+      dist = new Float64Array(n).fill(FAR),
+      prev = new Int16Array(n).fill(NONE),
       via: (NavLink | null)[] = new Array(n).fill(null),
       done = new Uint8Array(n);
     dist[from] = 0;
     for (;;) {
       let u = -1,
-        ud = 1e9;
-      for (let i = 0; i < n; i++)
-        if (!done[i] && dist[i] < ud) {
-          ud = dist[i];
+        ud = FAR;
+      // An index loop: an entries() iterator over the typed array made route() five times slower.
+      for (let i = 0; i < n; i++) {
+        const d = dist[i] ?? FAR;
+        if (!done[i] && d < ud) {
+          ud = d;
           u = i;
         }
+      }
       if (u < 0 || u === goal) break;
       done[u] = 1;
-      for (const l of links[u]) {
+      for (const l of defined(links[u], "a waypoint's links")) {
         if (l.duct && !opts.ducts) continue;
         if (respectDoors && l.key && opts.doors?.[l.key]) continue;
-        if (ud + l.d < dist[l.to]) {
+        if (ud + l.d < (dist[l.to] ?? FAR)) {
           dist[l.to] = ud + l.d;
           prev[l.to] = u;
           via[l.to] = l;
         }
       }
     }
-    if (dist[goal] >= 1e9) return null;
+    if ((dist[goal] ?? FAR) >= FAR) return null;
     const ids: number[] = [];
-    for (let i = goal; i >= 0; i = prev[i]) ids.unshift(i);
+    for (let i = goal; i >= 0; i = prev[i] ?? NONE) ids.unshift(i);
     return { ids, via };
   };
   let found = search(true),
@@ -627,12 +658,14 @@ export function route(ax: number, az: number, bx: number, bz: number, opts: Rout
       const key = via[id]?.key;
       return k > 0 && key && opts.doors?.[key];
     });
-    blocked = via[ids[stop]]?.key;
-    return { path: ids.slice(0, stop).map(i => ({ x: nodes[i].x, z: nodes[i].z })), blocked };
+    // stop is found and above 0: search(true) failed, so this route crosses a shut door, and never at k = 0, where
+    // via[from] is null.
+    blocked = via[defined(ids[stop], 'the shut door on the way')]?.key;
+    return { path: ids.slice(0, stop).map(point), blocked };
   }
-  const path = found.ids.map(i => ({ x: nodes[i].x, z: nodes[i].z }));
+  const path = found.ids.map(point);
   path.push({ x: bx, z: bz });
   // Skip the first waypoints if a later one is already in a straight clear line.
-  while (path.length > 1 && clear(ax, az, path[1].x, path[1].z, r, opts.doors)) path.shift();
+  for (let next = path[1]; next && clear(ax, az, next.x, next.z, r, opts.doors); next = path[1]) path.shift();
   return { path };
 }
