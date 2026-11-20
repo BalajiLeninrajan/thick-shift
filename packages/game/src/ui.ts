@@ -2,14 +2,15 @@
 // Everything here is derived from game/client state once per frame.
 
 import { clockF, restartFloor, startFloorNight } from '@thick-shift/sim';
+import { defined } from '@thick-shift/sim/check';
 import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
 import type { State, Tally } from '@thick-shift/sim/types';
 import { unlockAudio } from './audio';
+import { byId } from './dom';
 import { host, join, sim } from './net';
 import { client, game, platform } from './state';
 import type { OverlayScreen } from './types';
 
-export const $ = (id: string): HTMLElement => document.getElementById(id);
 const q = new URLSearchParams(location.search);
 export const esc = (s: unknown): string => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 
@@ -25,7 +26,7 @@ const hostAction = (label: string): string =>
 function titleScreen(): OverlayScreen {
   let savedName = '';
   try {
-    savedName = localStorage.tsName || '';
+    savedName = localStorage.getItem('tsName') || '';
   } catch {
     /* storage blocked */
   }
@@ -43,17 +44,17 @@ function titleScreen(): OverlayScreen {
     wire() {
       const begin = (then: () => void) => (): void => {
         unlockAudio();
-        const name = ($('nm') as HTMLInputElement).value;
+        const name = byId('nm', HTMLInputElement).value;
         game.myName = (name || 'Guard').slice(0, 12);
         try {
-          localStorage.tsName = game.myName;
+          localStorage.setItem('tsName', game.myName);
         } catch {
           /* storage blocked */
         }
         then();
       };
-      $('hb').onclick = begin(host);
-      $('jb').onclick = begin(() => join(($('rc') as HTMLInputElement).value));
+      byId('hb').onclick = begin(host);
+      byId('jb').onclick = begin(() => join(byId('rc', HTMLInputElement).value));
     },
   };
 }
@@ -66,7 +67,7 @@ export function messageScreen(key: string, title: string, detail: string, back: 
       back ? '<button class="btn btn-secondary" id="back">Back</button>' : ''
     ),
     wire() {
-      if (back) $('back').onclick = () => location.reload();
+      if (back) byId('back').onclick = () => location.reload();
     },
   };
 }
@@ -83,7 +84,12 @@ const RULES = [
 function floorStats(t: Tally, run?: boolean): string {
   const group = <T, V>(list: T[], key: (e: T) => string, val: (e: T) => V): [string, V[]][] => {
     const by: Record<string, V[]> = {};
-    for (const e of list) (by[key(e)] ||= []).push(val(e));
+    for (const e of list) {
+      const k = key(e),
+        vals = by[k];
+      if (vals) vals.push(val(e));
+      else by[k] = [val(e)];
+    }
     return Object.entries(by);
   };
   const flats = group(
@@ -112,7 +118,7 @@ function nightScreen(S: State): OverlayScreen {
   const key = [S.phase, S.night, names.join(','), game.netNote, scaring].join('|');
   const next = (): void => (S.phase === 'won' ? restartFloor(sim, S) : startFloorNight(sim, S, S.phase === 'win' ? S.night + 1 : S.night));
   const wire = (): void => {
-    const go = $('go');
+    const go = document.getElementById('go'); // only the host gets the button
     if (go)
       go.onclick = () => {
         unlockAudio();
@@ -145,16 +151,18 @@ function nightScreen(S: State): OverlayScreen {
     };
   }
   if (S.phase === 'win') {
+    // S.tally is optional only for a lobby state, and from here on S is a night's.
+    const tally = defined(S.tally, "the night's tally");
     const note = S.players.some(p => p.flat)
       ? 'Anyone still down gets back up at dawn.'
-      : S.tally.flats.length
+      : tally.flats.length
         ? 'Everyone made it back up.'
         : 'Nobody got flattened.';
     return {
       key,
       wire,
       html: card(
-        `<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(S.tally)}`,
+        `<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(tally)}`,
         hostAction(`Start night ${S.night + 1}`)
       ),
     };
@@ -168,7 +176,7 @@ function nightScreen(S: State): OverlayScreen {
       <h1 class="ts-logo">Shift over</h1>
       <p class="lede cn-m-0">You walked all ${FINAL_NIGHT} nights at the Mascot Depot.</p>
       <p class="cn-meta cn-m-0">The sun is up and the mascots are back on their stage. Guards: ${who}</p>
-      ${floorStats(S.total, true)}
+      ${floorStats(defined(S.total, "the run's tally"), true)}
       <p class="cn-meta cn-m-0">${S.deaths ? `The whole crew went down ${S.deaths === 1 ? 'once' : `${S.deaths} times`} along the way.` : 'The whole crew never went down at once.'}</p>`,
         hostAction('Start over from night 1')
       ),
@@ -178,7 +186,7 @@ function nightScreen(S: State): OverlayScreen {
       key,
       wire,
       html: card(
-        `<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(S.killer === -1 ? 'Something' : MASC[S.killer].name)} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(S.tally)}`,
+        `<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(S.killer === -1 ? 'Something' : MASC[S.killer].name)} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(defined(S.tally, "the night's tally"))}`,
         hostAction(`Retry night ${S.night}`),
         'ts-card-slow'
       ),
@@ -198,7 +206,7 @@ export function syncOverlay(): void {
   const s = currentScreen();
   if (s.key === shownKey) return;
   shownKey = s.key;
-  const ui = $('ui');
+  const ui = byId('ui'); // the page's overlay, in index.html
   ui.hidden = !s.html;
   ui.innerHTML = s.html;
   if (s.html && s.wire) s.wire();

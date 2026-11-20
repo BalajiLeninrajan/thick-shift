@@ -8,7 +8,7 @@ if (new URLSearchParams(location.search).has('frame_id')) {
   try {
     await import('./activity');
   } catch (err) {
-    game.error = { title: 'Could not reach Discord', detail: String(err.message || err) };
+    game.error = { title: 'Could not reach Discord', detail: err instanceof Error && err.message ? err.message : String(err) };
   }
 }
 start();

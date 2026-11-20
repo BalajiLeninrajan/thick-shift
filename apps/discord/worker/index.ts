@@ -67,12 +67,14 @@ async function discordPage(req: Request, env: Env): Promise<Response> {
 }
 
 async function external(req: Request, rest: string): Promise<Response> {
-  const c = CDN.find(([prefix]) => rest.startsWith(prefix)),
-    tail = c && rest.slice(c[0].length) + new URL(req.url).search;
-  if (!c || !c[2].test(tail)) return new Response('Not found', { status: 404 });
+  const c = CDN.find(([prefix]) => rest.startsWith(prefix));
+  if (!c) return new Response('Not found', { status: 404 });
+  const [prefix, origin, path] = c,
+    tail = rest.slice(prefix.length) + new URL(req.url).search;
+  if (!path.test(tail)) return new Response('Not found', { status: 404 });
   // Google picks the font format from the browser, so it gets the player's user agent.
-  const r = await fetch(c[1] + tail, { headers: { 'User-Agent': req.headers.get('User-Agent') || '' }, cf: { cacheTtl: 86400, cacheEverything: true } });
-  if (c[0] !== 'gfonts/' || !r.ok) return new Response(r.body, r);
+  const r = await fetch(origin + tail, { headers: { 'User-Agent': req.headers.get('User-Agent') || '' }, cf: { cacheTtl: 86400, cacheEverything: true } });
+  if (prefix !== 'gfonts/' || !r.ok) return new Response(r.body, r);
   const css = (await r.text()).replaceAll('https://fonts.gstatic.com/', '/ext/gstatic/');
   return new Response(css, { headers: { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public, max-age=86400' } });
 }

@@ -6,10 +6,11 @@
 // SDK their own chunk, so elsewhere the SDK is never fetched.
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { unlockAudio } from '@thick-shift/game/audio';
+import { byId } from '@thick-shift/game/dom';
 import { host } from '@thick-shift/game/net';
 import { game, platform } from '@thick-shift/game/state';
 import type { Invite, OverlayScreen } from '@thick-shift/game/types';
-import { $, card, esc, messageScreen } from '@thick-shift/game/ui';
+import { card, esc, messageScreen } from '@thick-shift/game/ui';
 
 let sdk: DiscordSDK | null = null;
 const discord = { room: '', name: '' }; // both '' until Discord answers
@@ -17,24 +18,25 @@ const discord = { room: '', name: '' }; // both '' until Discord answers
 async function connect(): Promise<void> {
   const { clientId } = await fetch('/api/discord/config').then(r => r.json() as Promise<{ clientId: string }>);
   if (!clientId) throw new Error('DISCORD_CLIENT_ID is not set on the Worker.');
-  sdk = new DiscordSDK(clientId);
-  await sdk.ready();
+  const ds = new DiscordSDK(clientId);
+  sdk = ds;
+  await ds.ready();
   const room =
     'd-' +
-    String(sdk.instanceId)
+    String(ds.instanceId)
       .replace(/[^\w-]/g, '')
       .slice(0, 80);
-  discord.name = await signIn(clientId);
+  discord.name = await signIn(ds, clientId);
   discord.room = room;
 }
 
 // The player's Discord display name. If they turn down the sign-in, or it fails, they play as Guard.
-async function signIn(clientId: string): Promise<string> {
+async function signIn(ds: DiscordSDK, clientId: string): Promise<string> {
   try {
-    const { code } = await sdk.commands.authorize({ client_id: clientId, response_type: 'code', state: '', prompt: 'none', scope: ['identify'] });
+    const { code } = await ds.commands.authorize({ client_id: clientId, response_type: 'code', state: '', prompt: 'none', scope: ['identify'] });
     const r = await fetch('/api/discord/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
     const { access_token } = (await r.json()) as { access_token: string };
-    const { user } = await sdk.commands.authenticate({ access_token });
+    const { user } = await ds.commands.authenticate({ access_token });
     return user.global_name || user.username || '';
   } catch {
     return '';
@@ -56,7 +58,7 @@ function titleScreen(): OverlayScreen {
       `<button class="btn btn-primary" id="hb">Clock in${name ? ` as ${esc(name)}` : ''}</button>`
     ),
     wire() {
-      $('hb').onclick = () => {
+      byId('hb').onclick = () => {
         unlockAudio();
         game.myName = name || 'Guard';
         host(discord.room);
@@ -69,7 +71,7 @@ function titleScreen(): OverlayScreen {
 const invite = (): Invite => ({
   html: '<p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel joins this night.</p><div class="cn-cluster"><button class="btn btn-secondary" id="inv">Invite someone</button></div>',
   wire() {
-    $('inv').onclick = () =>
+    byId('inv').onclick = () =>
       sdk?.commands.openInviteDialog().catch(() => {
         /* closed, or not allowed in this channel */
       });

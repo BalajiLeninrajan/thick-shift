@@ -17,9 +17,9 @@ export interface RelayEnv {
 }
 
 export function relay(req: Request, env: RelayEnv): Promise<Response> | Response {
-  const m = new URL(req.url).pathname.match(ROOM);
-  if (!m || req.headers.get('Upgrade') !== 'websocket') return new Response('Not found', { status: 404 });
-  return env.ROOMS.get(env.ROOMS.idFromName(m[1])).fetch(req);
+  const code = new URL(req.url).pathname.match(ROOM)?.[1];
+  if (!code || req.headers.get('Upgrade') !== 'websocket') return new Response('Not found', { status: 404 });
+  return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(req);
 }
 
 // One instance per room code. The host's messages go to every guest as they
@@ -40,7 +40,12 @@ interface Attachment {
   hidden?: boolean;
   left?: boolean;
 }
-const att = (ws: WebSocket): Attachment => ws.deserializeAttachment() || {};
+// Every socket in the room gets its attachment as it is accepted (fetch), and only this file writes them.
+function att(ws: WebSocket): Attachment {
+  const a: Attachment | null = ws.deserializeAttachment(); // typed any
+  if (!a) throw new Error('a room socket has no attachment');
+  return a;
+}
 const OPEN = 1;
 
 export class Room extends DurableObject<RelayEnv> {
@@ -64,7 +69,7 @@ export class Room extends DurableObject<RelayEnv> {
     const q = new URL(req.url).searchParams;
     const isHost = q.get('role') === 'host',
       id = isHost ? 'host' : q.get('id') || '';
-    const [client, server] = Object.values(new WebSocketPair());
+    const { 0: client, 1: server } = new WebSocketPair();
     // A refused socket is still accepted first, so the browser sees the close code.
     const refuse = (code: CloseCode | 1008, why: string): Response => {
       server.accept();

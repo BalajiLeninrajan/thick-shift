@@ -3,7 +3,7 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 import { game } from '@thick-shift/game/vite';
 import { defineConfig } from 'vite';
 
-const page = name => fileURLToPath(new URL(name, import.meta.url));
+const page = (name: string): string => fileURLToPath(new URL(name, import.meta.url));
 
 export default defineConfig({
   // The web app's Worker inspector takes 9229, or the next free port above it, so two servers started at once would
