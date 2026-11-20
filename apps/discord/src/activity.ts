@@ -5,14 +5,11 @@
 // state.js) and starts talking to Discord. boot.js imports it only inside Discord, and the build gives it and the
 // SDK their own chunk, so elsewhere the SDK is never fetched.
 import { DiscordSDK } from '@discord/embedded-app-sdk';
-import { game, platform, type Platform } from '@thick-shift/game/state';
+import { game, platform } from '@thick-shift/game/state';
 import { host } from '@thick-shift/game/net';
 import { unlockAudio } from '@thick-shift/game/audio';
 import { $, esc, card, messageScreen } from '@thick-shift/game/ui';
-
-// The screens the platform hooks return. packages/game exports no ./types, so they come from Platform's hooks.
-type OverlayScreen = ReturnType<NonNullable<Platform['title']>>;
-type Invite = ReturnType<NonNullable<Platform['invite']>>;
+import type { Invite, OverlayScreen } from '@thick-shift/game/types';
 
 let sdk: DiscordSDK | null = null;
 const discord = { room: '', name: '' }; // both '' until Discord answers
