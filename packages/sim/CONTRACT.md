@@ -47,7 +47,7 @@ interface Sim {
 
 newSim(opts: SimOptions): Sim
 newState(code: string): State
-startFloorNight(sim: Sim, S: State, n: number): void
+startFloorNight(sim: Sim, S: State, n: number): asserts S is NightState
 restartFloor(sim: Sim, S: State): void
 adoptFloor(sim: Sim, S: State, now: number): void
 stepFloor(sim: Sim, S: State, now: number): void
@@ -126,8 +126,8 @@ treats `a` as untrusted JSON: every field it reads is checked as today (`num()`,
 
 `State` is what goes over the wire: a `LobbyState` (what `newState` returns) with the night's fields optional, because
 the lobby has none of them and a host from before some fields existed may not send them. `NightState` is the state
-once `startFloorNight` has run, with every field present and `players: Guard[]`. Inside a night the sim narrows
-`State` to `NightState`. `Player` is a guard as net.ts adds them (`{ id, name }`) with the body's fields optional;
+once `startFloorNight` has run, with every field present and `players: Guard[]`. `startFloorNight` is an assertion
+function, so after the call the caller's `S` is a `NightState`. Inside a night the sim narrows `State` to `NightState`. `Player` is a guard as net.ts adds them (`{ id, name }`) with the body's fields optional;
 `stepFloor` places one whose `x` is missing. `SimEvent` is a union keyed on `type`, with each event's `x` typed. The
 wire messages are `Action` (guest to host, and the host's own actions), `StateMessage` (`{ t: 's', s }`, host to
 guests), `RelayToGuest` (`{ t: 'host', guests }`, `{ t: 'rehost' }`), `HostInbox` (`{ from, d }`, where `d` is an
