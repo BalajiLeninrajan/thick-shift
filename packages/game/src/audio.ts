@@ -3,16 +3,16 @@
 // synthesised. If a recording has not loaded yet, a synthesised stand-in plays.
 // three/sound.js places each sound in the building, built from these
 // pieces: it plays them into its own nodes with into().
-let ac = null,
-  master = null,
-  ears = null;
+let ac: AudioContext | null = null,
+  master: DynamicsCompressorNode | null = null,
+  ears: BiquadFilterNode | null = null;
 const OPEN_HZ = 20000;
 
 // Browsers only allow audio after a user gesture, so call this from handlers.
-export function unlockAudio() {
+export function unlockAudio(): void {
   if (!ac) {
     try {
-      ac = new (window.AudioContext || /** @type {Window & { webkitAudioContext?: typeof AudioContext }} */ (window).webkitAudioContext)();
+      ac = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
     } catch {
       return;
     }
@@ -34,18 +34,18 @@ export function unlockAudio() {
 
 // The context, but only while it can make sound: null before the first
 // gesture and while the browser has it suspended.
-export const ctx = () => (ac && ac.state === 'running' ? ac : null);
-export const bus = () => master;
+export const ctx = (): AudioContext | null => (ac && ac.state === 'running' ? ac : null);
+export const bus = (): DynamicsCompressorNode | null => master;
 
 // Everything, heard from under something heavy. No argument opens it again.
-export function muffle(hz = OPEN_HZ, at = 0) {
+export function muffle(hz = OPEN_HZ, at = 0): void {
   if (ac) ears.frequency.setTargetAtTime(hz, ac.currentTime + at, 0.12);
 }
 
 // Sounds made inside fn go to this node, not straight to the limiter, and
 // skip their own reverb send: the node is expected to have one.
-let dest = null;
-export function into(node, fn) {
+let dest: AudioNode | null = null;
+export function into(node: AudioNode, fn: () => void): void {
   const was = dest;
   dest = node;
   try {
@@ -54,28 +54,28 @@ export function into(node, fn) {
     dest = was;
   }
 }
-const out = () => dest || master;
+const out = (): AudioNode => dest || master;
 
 // Every one-shot is counted until the time it is due to end, and cut out of
 // the graph when it does, so a long night cannot pile up nodes. Past
 // MAX_VOICES new ones are dropped. The count goes by the clock and not by
 // `ended` events, because a source the browser collects before it starts never sends one.
 const MAX_VOICES = 32;
-let ends = [];
-export function voices() {
+let ends: number[] = [];
+export function voices(): number {
   if (ends.length) ends = ends.filter(t => t > ac.currentTime);
   return ends.length;
 }
-const full = () => !ac || voices() >= MAX_VOICES;
+const full = (): boolean => !ac || voices() >= MAX_VOICES;
 // tail: the last node of this sound's own chain. end: when it will have
 // finished. slice: [offset, seconds] of a buffer to play, in place of all of it.
-function play(src, tail, t0, end, slice) {
+function play(src: AudioScheduledSourceNode, tail: AudioNode, t0: number, end: number, slice?: [number, number] | null): void {
   ends.push(end);
   src.onended = () => {
     src.disconnect();
     tail.disconnect();
   };
-  if (slice) src.start(t0, ...slice);
+  if (slice) (src as AudioBufferSourceNode).start(t0, ...slice);
   else {
     src.start(t0);
     src.stop(end);
@@ -110,9 +110,9 @@ const FILES = [
   'far_growl3',
   'far_growl4',
 ];
-const buffers = {};
+const buffers: Record<string, AudioBuffer> = {};
 
-function loadSamples() {
+function loadSamples(): void {
   for (const name of FILES) {
     fetch(`sfx/${name}.mp3`)
       .then(r => r.arrayBuffer())
@@ -127,8 +127,8 @@ function loadSamples() {
 }
 
 // A generated room: a second and a half of decaying noise, used as a reverb.
-let roomNode = null;
-export function room() {
+let roomNode: ConvolverNode | null = null;
+export function room(): ConvolverNode {
   if (roomNode) return roomNode;
   const len = ac.sampleRate * 1.5,
     ir = ac.createBuffer(2, len, ac.sampleRate);
@@ -152,7 +152,16 @@ export function room() {
 //   at       seconds from now
 //   wet      how much of it goes through the reverb, 0 to 1
 //   from, len  play only this slice of it, in seconds of the recording
-export function sample(name, { gain = 1, rate = 1, lowpass = 0, at = 0, wet = 0, from = 0, len = 0 } = {}) {
+export interface SampleOpts {
+  gain?: number;
+  rate?: number;
+  lowpass?: number;
+  at?: number;
+  wet?: number;
+  from?: number;
+  len?: number;
+}
+export function sample(name: string, { gain = 1, rate = 1, lowpass = 0, at = 0, wet = 0, from = 0, len = 0 }: SampleOpts = {}): boolean {
   if (!ac || !buffers[name]) return false;
   if (full()) return true;
   const src = ac.createBufferSource(),
@@ -161,7 +170,7 @@ export function sample(name, { gain = 1, rate = 1, lowpass = 0, at = 0, wet = 0,
   src.buffer = buffers[name];
   src.playbackRate.value = rate;
   g.gain.value = gain;
-  let node = src;
+  let node: AudioNode = src;
   if (lowpass) {
     const lp = ac.createBiquadFilter();
     lp.type = 'lowpass';
@@ -184,11 +193,11 @@ export function sample(name, { gain = 1, rate = 1, lowpass = 0, at = 0, wet = 0,
   play(src, g, t, end, len ? [from, len] : null);
   return true;
 }
-export const pick = (...names) => names[(Math.random() * names.length) | 0];
+export const pick = <T>(...names: T[]): T => names[(Math.random() * names.length) | 0];
 
 /* ---------- synthesis ---------- */
 
-export function tone(f, d, type = 'sine', v = 0.2, f2, at = 0) {
+export function tone(f: number, d: number, type: OscillatorType = 'sine', v = 0.2, f2?: number, at = 0): void {
   if (full()) return;
   const o = ac.createOscillator(),
     g = ac.createGain(),
@@ -203,8 +212,8 @@ export function tone(f, d, type = 'sine', v = 0.2, f2, at = 0) {
 }
 
 // Two seconds of white noise, made once. Every burst and hiss plays from it.
-let white = null;
-export function whiteNoise() {
+let white: AudioBuffer | null = null;
+export function whiteNoise(): AudioBuffer {
   if (white) return white;
   white = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
   const a = white.getChannelData(0);
@@ -216,7 +225,14 @@ export function whiteNoise() {
 //   band, band2  band-pass it at this many Hz, sweeping to band2 if given
 //   q            how narrow the band is
 //   attack       seconds to fade in; 0 is a hit
-export function noise(d, v = 0.3, { at = 0, band = 0, band2 = 0, q = 1, attack = 0 } = {}) {
+export interface NoiseOpts {
+  at?: number;
+  band?: number;
+  band2?: number;
+  q?: number;
+  attack?: number;
+}
+export function noise(d: number, v = 0.3, { at = 0, band = 0, band2 = 0, q = 1, attack = 0 }: NoiseOpts = {}): void {
   if (full()) return;
   const s = ac.createBufferSource(),
     g = ac.createGain(),
@@ -226,7 +242,7 @@ export function noise(d, v = 0.3, { at = 0, band = 0, band2 = 0, q = 1, attack =
   g.gain.setValueAtTime(attack ? 0 : v, t);
   if (attack) g.gain.linearRampToValueAtTime(v, t + attack);
   g.gain.linearRampToValueAtTime(0, t + d);
-  let node = s;
+  let node: AudioNode = s;
   if (band) {
     const bp = ac.createBiquadFilter();
     bp.type = 'bandpass';
@@ -243,7 +259,7 @@ export function noise(d, v = 0.3, { at = 0, band = 0, band2 = 0, q = 1, attack =
 // A piercing scream: two voices a semitone apart (so they beat against each
 // other), sweeping from about 2.6 kHz up past 6 kHz and cracking on the way
 // down. Everything below 2.8 kHz is cut, so there is no body to it, only edge.
-export function shriek(level = 0.7, at = 0) {
+export function shriek(level = 0.7, at = 0): void {
   if (!ac) return;
   const t0 = ac.currentTime + 0.06 + at,
     dur = 1.5,
@@ -299,8 +315,8 @@ export function shriek(level = 0.7, at = 0) {
 // wakes, then two lines of Happy Birthday from a chip that was never meant to run on a torch battery. A thin pulse
 // wave, crushed to a few bits like a cheap voice box, that drags and sags in pitch as the charge runs out over
 // `secs`, until the last note is a groan. Made once into a buffer, so the whole song is one voice.
-let songBuf = null;
-export function song(gain = 0.5, at = 0, secs = 3) {
+let songBuf: AudioBuffer | null = null;
+export function song(gain = 0.5, at = 0, secs = 3): void {
   if (full()) return;
   songBuf ||= songBuffer(secs);
   const src = ac.createBufferSource(),
@@ -311,7 +327,7 @@ export function song(gain = 0.5, at = 0, secs = 3) {
   src.connect(g).connect(out());
   play(src, g, t, t + songBuf.duration);
 }
-function songBuffer(secs) {
+function songBuffer(secs: number): AudioBuffer {
   const sr = ac.sampleRate,
     start = 0.25,
     len = Math.ceil(sr * (secs + start + 0.4)),
@@ -366,7 +382,13 @@ function songBuffer(secs) {
 }
 
 // The part of a heavy impact you feel more than hear.
-export function boom({ from = 72, to = 30, level = 0.9, at = 0 } = {}) {
+export interface BoomOpts {
+  from?: number;
+  to?: number;
+  level?: number;
+  at?: number;
+}
+export function boom({ from = 72, to = 30, level = 0.9, at = 0 }: BoomOpts = {}): void {
   if (full()) return;
   const o = ac.createOscillator(),
     g = ac.createGain(),
@@ -419,7 +441,7 @@ const BANGS = [
 // Keyed by simulation event type, for the sounds three/sound.js reuses (bang, out, scare) and the win jingle,
 // which main.js plays itself because it has no place in the building.
 export const SFX = {
-  bang() {
+  bang(): void {
     if (!buffers.slam1) {
       noise(0.35, 0.5);
       tone(55, 0.4, 'sine', 0.5, 30);
@@ -427,7 +449,7 @@ export const SFX = {
     }
     BANGS[(Math.random() * BANGS.length) | 0]();
   },
-  scare() {
+  scare(): void {
     // The growl leads. The shriek is quieter than it sounds like it should be,
     // because everything shares one limiter and a loud shriek ducks the growl.
     sample('hit_low', { gain: 0.8 });
@@ -435,10 +457,10 @@ export const SFX = {
     sample('scare_growl', { gain: 0.9, rate: 0.5, lowpass: 900 }); // the same growl an octave down, for body
     shriek(0.42);
   },
-  win() {
+  win(): void {
     [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.5, 'triangle', 0.2), i * 160));
   },
-  out() {
+  out(): void {
     sample('hit_low', { gain: 0.9, rate: 0.7 });
     tone(200, 1.2, 'sawtooth', 0.12, 30);
   },
@@ -448,13 +470,13 @@ export const SFX = {
 
 // Quiet is the default. The hum is barely there, the wind comes in gusts with
 // long gaps, and a background sound happens about once a minute.
-let bed = null,
-  windGain = null,
+let bed: GainNode | null = null,
+  windGain: GainNode | null = null,
   nextBeat = 0,
   nextOdd = 0;
 
 // A low two-note hum and some filtered hiss that run for the whole night.
-function startBed() {
+function startBed(): void {
   const out = ac.createGain();
   out.gain.value = 0;
   out.connect(master);
@@ -484,7 +506,7 @@ function startBed() {
 }
 
 // Wind through the building, looped under the hum once its recording has loaded.
-function startWind() {
+function startWind(): void {
   const src = ac.createBufferSource(),
     lp = ac.createBiquadFilter(),
     g = ac.createGain();
@@ -498,7 +520,7 @@ function startWind() {
   windGain = g;
 }
 
-const farGrowl = () =>
+const farGrowl = (): boolean =>
   sample(pick('far_growl1', 'far_growl2', 'far_growl3', 'far_growl4'), { gain: 0.14, rate: 0.5 + Math.random() * 0.2, lowpass: 380, wet: 0.6 });
 
 // Things you hear from somewhere else in the building.
@@ -519,7 +541,7 @@ const ODD = [
 
 // Call once per frame. threat and dread: 0 to 1 while a night is running.
 // threat = -1 goes quiet.
-export function ambience(threat, dread = 0) {
+export function ambience(threat: number, dread = 0): void {
   if (!ac || ac.state !== 'running') return;
   if (!bed) startBed();
   if (!windGain && buffers.wind) startWind();

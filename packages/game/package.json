@@ -6,7 +6,7 @@
     ".": "./src/main.js",
     "./state": "./src/state.ts",
     "./net": "./src/net.js",
-    "./audio": "./src/audio.js",
+    "./audio": "./src/audio.ts",
     "./ui": "./src/ui.js",
     "./styles.css": "./src/styles.css",
     "./worker": "./worker/room.js",
