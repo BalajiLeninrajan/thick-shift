@@ -14,6 +14,7 @@ use by the game and the tools.
 | `@thick-shift/sim/map` | `src/map.ts` | rooms, doorways, fixtures, `walkable`, `slide`, `clear`, `sees`, `reaches`, `glimpses`, `roomAt`, `route`, `nav`, `walls`, `slabs`, ... |
 | `@thick-shift/sim/dressing` | `src/dressing.ts` | `FOOT`, `GEN_BACK`, `DRESSING`, `footprint`, `obstacles` |
 | `@thick-shift/sim/data` | `src/data.ts` | `LAMPS`, `DEAD_TUBES`, the tube colours, `STAGE` (moved out of `light.js` and `shell.js`) |
+| `@thick-shift/sim/random` | `src/random.ts` | `seeded(seed)`, the seeded `Rng` the balance harness and the tests play with |
 | `@thick-shift/sim/types` | `src/types.ts` | `State`, `NightState`, `Guard`, `Mascot`, `SimEvent`, `Brain`, `Action`, the relay messages, `Rng` |
 | `@thick-shift/sim/sim` | `src/sim.ts` | the night: `newSim`, `newState`, `startFloorNight`, `stepFloor`, `actFloor`, `adoptFloor`, ... |
 
@@ -73,7 +74,7 @@ guests hold an `S` and no `Sim`.
   same after placing them. Callers add and remove guards in `sim.players` (net.js on `join` and `leave`, the harness
   when it sets up a night) and never in `S.players`.
 - `brainOf(sim, i)` returns `sim.brains[i]`. A brain's keys keep today's order: `since`, `was` and `noShort` are
-  added when first set, after the rest, as today. This shows only in `floor.mjs --brains`.
+  added when first set, after the rest, as today. This shows only in `floor.ts --brains`.
 
 ### (b) The random numbers
 
@@ -134,6 +135,11 @@ guests), `RelayToGuest` (`{ t: 'host', guests }`, `{ t: 'rehost' }`), `HostInbox
 (4404 no host, 4409 code taken).
 
 ## (e) Keeping the tools' output byte-identical
+
+PR 4 has since moved the harness to TypeScript: `tools/balance/floor.mjs` is now `floor.ts` (the command line) and
+`harness.ts` (the guards, the scenarios and `play()`), `rec.mjs` is `rec.ts`, and the mulberry32 below is `seeded()`
+in `src/random.ts`, which `seedRandom(seed)` calls. Node runs them by stripping the types. Everything below still
+holds with those names, and `node tools/balance/floor.ts` prints the same bytes `floor.mjs` did.
 
 ### The balance harness (tools/balance/floor.mjs)
 

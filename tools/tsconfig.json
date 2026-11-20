@@ -1,12 +1,17 @@
-// The Node tools. They import packages/sim's TypeScript by relative path (Node strips the types), so tsc checks the
-// parts of the sim they reach as part of this project. None of it needs browser globals.
+// The Node tools. They import packages/sim's TypeScript by relative path, and the TypeScript ones (tools/balance,
+// tools/roblox/diff) are run by Node as they are, by stripping the types. So they use only syntax stripping can erase,
+// and their relative imports name the .ts file. tsc checks the parts of the sim they reach as part of this project.
+// None of it needs browser globals.
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "tsBuildInfoFile": "${configDir}/node_modules/.tmp/tsconfig.tsbuildinfo",
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "types": ["node"]
+    "types": ["node"],
+    "strict": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true
   },
-  "include": ["**/*.mjs", "**/*.js"]
+  "include": ["**/*.ts", "**/*.mjs", "**/*.js"]
 }

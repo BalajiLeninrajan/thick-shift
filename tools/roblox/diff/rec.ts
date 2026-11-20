@@ -1,23 +1,28 @@
-// Loaded by tools/balance/floor.mjs when REC_OUT is set (run.sh sets it). Writes one JSON line per sim call to
+// Loaded by tools/balance/harness.ts when REC_OUT is set (run.sh sets it). Writes one JSON line per sim call to
 // $REC_OUT: the call, the random draws the sim made during it, and after starts and steps the whole state S.
 import { writeFileSync, appendFileSync } from 'node:fs';
+import type { Sim, actFloor, startFloorNight, stepFloor } from '../../../packages/sim/src/sim.ts';
+import type { State } from '../../../packages/sim/src/types.ts';
+
+// The night's entry points, as the harness calls them.
+export interface Night {
+  startFloorNight: typeof startFloorNight;
+  stepFloor: typeof stepFloor;
+  actFloor: typeof actFloor;
+}
 
 // Luau has no hypot; both sides use the plain formula so their arithmetic matches. Nothing calls Math.hypot before
 // the first night, and the sim and the map look it up when they call it, so replacing it here reaches them.
 Math.hypot = (a, b) => Math.sqrt(a * a + b * b);
 
-const out = process.env.REC_OUT;
+const out = process.env.REC_OUT as string; // set, or the harness would not have loaded this
 writeFileSync(out, '');
-const REC = { on: false, rands: [] };
-const snap = S => JSON.parse(JSON.stringify(S, (k, v) => (v === null ? false : v)));
+const REC = { on: false, rands: [] as number[] };
+const snap = (S: State): unknown => JSON.parse(JSON.stringify(S, (k, v) => (v === null ? false : v)));
 
-/**
- * The night's entry points, recording each call. Draws are recorded only inside a sim call, so the harness's own
- * draws, which share the stream, are left out.
- * @param {{ startFloorNight: typeof import('../../../packages/sim/src/sim.ts').startFloorNight, stepFloor: typeof import('../../../packages/sim/src/sim.ts').stepFloor, actFloor: typeof import('../../../packages/sim/src/sim.ts').actFloor }} night
- * @param {import('../../../packages/sim/src/sim.ts').Sim} sim
- */
-export function wrapSim(night, sim) {
+// The night's entry points, recording each call. Draws are recorded only inside a sim call, so the harness's own
+// draws, which share the stream, are left out.
+export function wrapSim(night: Night, sim: Sim): Night {
   const inner = sim.rng;
   sim.rng = () => {
     const v = inner();
@@ -25,7 +30,7 @@ export function wrapSim(night, sim) {
     return v;
   };
   // extra: fields that follow the draws, as the lines have always been laid out. S: the state to record after.
-  const run = (f, entry, extra, S) => {
+  const run = (f: () => void, entry: Record<string, unknown>, extra: Record<string, unknown>, S: State | null) => {
     REC.rands = [];
     REC.on = true;
     try {

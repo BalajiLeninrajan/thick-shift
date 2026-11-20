@@ -1,0 +1,261 @@
+#!/usr/bin/env node
+// Plays the game thousands of times with scripted guards and
+// prints what happened. The numbers in packages/sim/src/sim.ts were tuned
+// against this table. The guards and the scenarios are in harness.ts.
+//
+//   node tools/balance/floor.ts                 every scenario, 40 seeds each
+//   node tools/balance/floor.ts --seeds 200     more seeds
+//   node tools/balance/floor.ts --only turtle,solo   scenarios whose name contains one of these
+//   node tools/balance/floor.ts --workers 2     fewer worker threads, to spare memory
+//   node tools/balance/floor.ts --deaths        also list how each guard was flattened
+//   node tools/balance/floor.ts --trace "solo competent n1" --seed 3   one night's events (--steps adds where everyone is each second, --brains what each mascot is thinking)
+//
+// It exits non-zero if an assertion fails: a softlock (a mascot wedged on
+// geometry, a breaker box nobody can reach, a night that does not end), a guard
+// playing honestly flattened in the first 30 seconds of night 1, or a
+// strategy that should lose doing as well as playing properly.
+//
+// Node runs it as it is by stripping the types, so it uses only TypeScript that stripping can erase.
+import { Worker, isMainThread, parentPort, type MessagePort } from 'node:worker_threads';
+import { cpus } from 'node:os';
+import { checkBuilding, fail, failures, play, scenarios, type Outcome } from './harness.ts';
+
+const argv = process.argv.slice(2),
+  arg = <T>(k: string, d: T): string | T => {
+    const i = argv.indexOf('--' + k);
+    return i < 0 ? d : argv[i + 1];
+  };
+const SEEDS = +arg('seeds', 40),
+  ONLY = arg('only', ''),
+  TRACE = arg('trace', ''),
+  WORKERS = +arg('workers', 12);
+
+const CHUNK = 4; // seeds a worker plays before it reports back
+// A worker's job: scenario i, seeds from to to. What it sends back: the nights and any failures.
+interface Job {
+  i: number;
+  from: number;
+  to: number;
+}
+interface Done {
+  i: number;
+  runs: Outcome[];
+  failures: string[];
+}
+
+if (!isMainThread) {
+  // A worker plays the scenarios it is handed and posts back the nights and any failures.
+  const port = parentPort as MessagePort;
+  port.on('message', ({ i, from, to }: Job) => {
+    failures.length = 0;
+    const runs = [];
+    for (let seed = from; seed <= to; seed++) runs.push(play(scenarios[i], seed));
+    port.postMessage({ i, runs, failures: [...failures] } satisfies Done);
+  });
+} else if (TRACE) {
+  const sc = scenarios.find(s => s.name.includes(TRACE));
+  if (!sc) {
+    console.error('No scenario matches', TRACE);
+    process.exit(2);
+  }
+  console.log(sc.name, 'seed', +arg('seed', 1));
+  console.log(play(sc, +arg('seed', 1), { trace: argv.includes('--steps') ? 2 : 1, brains: argv.includes('--brains') }));
+  console.log(failures.join('\n'));
+} else {
+  const todo = scenarios.map((s, i) => i).filter(i => ONLY.split(',').some(part => scenarios[i].name.includes(part)));
+  const results = new Map(todo.map(i => [i, [] as Outcome[]])),
+    jobs: Job[] = [];
+  for (const i of todo) for (let from = 1; from <= SEEDS; from += CHUNK) jobs.push({ i, from, to: Math.min(SEEDS, from + CHUNK - 1) });
+  await new Promise<void>(done => {
+    let next = 0,
+      live = 0;
+    const count = Math.max(1, Math.min(jobs.length, cpus().length, WORKERS));
+    for (let k = 0; k < count; k++) {
+      const w = new Worker(new URL(import.meta.url), { argv: process.argv.slice(2) });
+      const give = () => {
+        if (next < jobs.length) {
+          live++;
+          w.postMessage(jobs[next++]);
+        } else {
+          w.terminate();
+          if (!live) done();
+        }
+      };
+      w.on('message', (r: Done) => {
+        live--;
+        (results.get(r.i) as Outcome[]).push(...r.runs);
+        failures.push(...r.failures);
+        give();
+      });
+      w.on('error', e => {
+        console.error(e);
+        process.exit(2);
+      });
+      give();
+    }
+  });
+
+  checkBuilding('the building');
+
+  const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : 0);
+  const sum = (runs: Outcome[], f: (r: Outcome) => number) => runs.reduce((s, r) => s + f(r), 0);
+  const median = (list: number[]) => (list.length ? [...list].sort((a, b) => a - b)[list.length >> 1] : NaN);
+  const rate = new Map<string, number>();
+  const head = [
+    'scenario',
+    'win%',
+    'end',
+    'flat/g',
+    'peel',
+    'B F S T %',
+    'warn s',
+    '<1.5s',
+    'hunted',
+    'calms',
+    'torch',
+    'low',
+    'dead',
+    'dry/g',
+    'dry>flat',
+    'flat dark',
+    'burnt',
+    'power',
+    'out%',
+    'crank s',
+    'door s',
+    'bangs',
+    'dock s',
+    'toys/g',
+    'lured',
+  ];
+  const rows: (string | number)[][] = [];
+  const row = (sc: (typeof scenarios)[number], runs: Outcome[]) => {
+    const n = runs.length,
+      warn = runs.flatMap(r => r.warn),
+      flats = sum(runs, r => r.flats),
+      stood = sum(runs, r => r.stood);
+    rate.set(
+      sc.name,
+      pct(
+        sum(runs, r => +r.win),
+        n
+      )
+    );
+    rows.push([
+      sc.name,
+      rate.get(sc.name) as number,
+      Math.round(sum(runs, r => r.t) / n),
+      (flats / n / sc.n).toFixed(2),
+      pct(
+        sum(runs, r => r.peels),
+        flats
+      ),
+      [0, 1, 2, 3]
+        .map(i =>
+          pct(
+            sum(runs, r => r.by[i]),
+            flats
+          )
+        )
+        .join(' '),
+      median(warn).toFixed(1),
+      pct(warn.filter(x => x < 1.5).length, warn.length) + '%',
+      pct(
+        sum(runs, r => r.hunted),
+        stood
+      ) + '%',
+      (sum(runs, r => r.calms) / n).toFixed(1),
+      pct(
+        sum(runs, r => r.lit),
+        stood
+      ) + '%',
+      pct(
+        sum(runs, r => r.low),
+        stood
+      ) + '%',
+      pct(
+        sum(runs, r => r.dead),
+        stood
+      ) + '%',
+      (sum(runs, r => r.dry) / n / sc.n).toFixed(1),
+      pct(
+        sum(runs, r => r.dryFlat),
+        sum(runs, r => r.dry)
+      ) + '%',
+      pct(
+        sum(runs, r => r.darkFlat),
+        flats
+      ) + '%',
+      pct(
+        sum(runs, r => r.burnt),
+        sum(runs, r => r.fixed + r.burnt)
+      ) + '%',
+      Math.round(sum(runs, r => r.power) / n),
+      pct(
+        sum(runs, r => +(r.outs > 0)),
+        n
+      ),
+      Math.round(sum(runs, r => r.cranked) / n),
+      Math.round(sum(runs, r => r.shut) / n),
+      (sum(runs, r => r.bangs) / n).toFixed(1),
+      Math.round(sum(runs, r => r.charging) / n),
+      (sum(runs, r => r.toys) / n / sc.n).toFixed(1),
+      (
+        sum(runs, r => r.lured) /
+        Math.max(
+          1,
+          sum(runs, r => r.toys)
+        )
+      ).toFixed(2),
+    ]);
+    return runs;
+  };
+  for (const i of todo) {
+    const sc = scenarios[i],
+      runs = row(sc, results.get(i) as Outcome[]);
+    if (sc.noMiss && sum(runs, r => r.burnt))
+      fail(sc.name, `${sum(runs, r => r.burnt)} faults burnt with nothing in the way: they come faster than they can be walked to`);
+    if (sc.night === 1 && !sc.worse && !sc.dev) {
+      const early = Math.min(...runs.map(r => r.firstFlat));
+      if (early < 30) fail(sc.name, `a guard was flattened ${early.toFixed(0)} s into night 1`);
+    }
+  }
+  // A strategy that should not work has to win under one night in ten, or under half as often as playing properly.
+  for (const i of todo) {
+    const sc = scenarios[i],
+      won = rate.get(sc.name) as number;
+    if (sc.worse && rate.has(sc.worse) && won > Math.max(10, (rate.get(sc.worse) as number) / 2))
+      fail(sc.name, `wins ${won}% of nights; playing properly wins ${rate.get(sc.worse)}%`);
+  }
+
+  const width = head.map((h, c) => Math.max(h.length, ...rows.map(r => String(r[c]).length)));
+  const line = (cells: (string | number)[]) => cells.map((v, c) => (c ? String(v).padStart(width[c]) : String(v).padEnd(width[c]))).join('  ');
+  console.log(`${SEEDS} seeds per scenario. n1 to n5 is the night.\n`);
+  console.log(line(head));
+  for (const r of rows) console.log(line(r));
+  console.log(`
+win%    nights survived to 6 AM            end     mean second the night ended (420 is 6 AM)
+flat/g  flattenings per guard per night    peel    share of flattened guards who were peeled up
+B F S T share of flattenings by Biggs, Flan, Squish, Tank
+warn s  median seconds between a mascot being there to see or hear and it catching the guard; <1.5s is the share with less
+hunted  share of standing time with something after you    calms   stretches of 20 s or more with nothing after anyone, per night
+torch   share of standing time with the torch on           low, dead   share with it under a quarter, and flat; dry/g is how often it ran out per guard
+dry>flat  share of torches running out that ended in a flattening within 20 s    flat dark  share of flattenings with the torch dead
+burnt   share of faults left to burn    power   mean power at the end    out%    nights the power went out    crank s  seconds cranked    door s  seconds of shut door (two doors for ten seconds is 20)
+bangs   bangs on shut doors    dock s  guard-seconds spent charging at the dock    toys/g  Mini Biggses thrown per guard per night
+lured   mascots that went to look, per one thrown`);
+  if (argv.includes('--deaths'))
+    for (const i of todo)
+      console.log(
+        `\n${scenarios[i].name}\n` +
+          (results.get(i) as Outcome[])
+            .flatMap(r => r.notes)
+            .slice(0, 30)
+            .join('\n')
+      );
+  if (failures.length) {
+    console.log(`\n${failures.length} FAILED\n` + failures.join('\n'));
+    process.exit(1);
+  }
+  console.log('\nNo softlocks, and nothing degenerate beats playing properly.');
+}

@@ -62,7 +62,7 @@ local function compare(js: any, lu: any, at: string, out: { string })
 	end
 end
 
--- rec.mjs writes numbers as "#<number>" strings (see there); turn them back into numbers.
+-- rec.ts writes numbers as "#<number>" strings (see there); turn them back into numbers.
 local function revive(v: any): any
 	if type(v) == "string" and string.sub(v, 1, 1) == "#" then
 		return tonumber(string.sub(v, 2))

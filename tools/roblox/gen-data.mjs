@@ -14,6 +14,11 @@ import * as dressing from '../../packages/sim/src/dressing.ts';
 import { LAMPS, DEAD_TUBES, STAGE } from '../../packages/sim/src/data.ts';
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/**
+ * @param {unknown} v
+ * @param {string} [pad]
+ * @returns {string}
+ */
 function lua(v, pad = '') {
   if (v === null || v === undefined) throw new Error('nil in data');
   if (typeof v === 'number') {

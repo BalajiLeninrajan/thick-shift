@@ -24,8 +24,8 @@
 // sings on a bar of the torch's battery where it lands, and a mascot wandering
 // nearby goes to see whose birthday it is.
 //
-// The numbers here were tuned against scripted guards in tools/balance/floor.mjs
-// (`node tools/balance/floor.mjs`), which plays every night with careless,
+// The numbers here were tuned against scripted guards in tools/balance/floor.ts
+// (`node tools/balance/floor.ts`), which plays every night with careless,
 // competent and expert guards alone and in groups, and with the strategies that
 // should not work. What each number was tuned against is noted beside it. The
 // target: a competent crew of three survives night 1 every time and each later
@@ -193,7 +193,7 @@ const LOCKER_NOISE: [number, number] = [6, 0.5];
 export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3 };
 
 const OPEN = (): Doors => ({ L: false, V: false, R: false });
-// Math.hypot is looked up on every call: tools/roblox/diff/rec.mjs swaps it for the plain formula Luau uses.
+// Math.hypot is looked up on every call: tools/roblox/diff/rec.ts swaps it for the plain formula Luau uses.
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 const angDiff = (a: number, b: number) => {
   let d = (a - b) % (Math.PI * 2);
