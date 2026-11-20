@@ -10,6 +10,54 @@ exports[`adoptFloor > carries the night on from there the same way every time 1`
 }
 `;
 
+exports[`adoptFloor > gives a hunting Biggs half as much wind again as any other hunter 1`] = `10.25`;
+
+exports[`adoptFloor > gives each mascot the timers and wind a seeded stream says 1`] = `
+[
+  {
+    "cool": 0,
+    "st": "hunt",
+    "tgt": "g0",
+    "timer": 7.195,
+    "wind": 15.375,
+  },
+  {
+    "cool": 0,
+    "st": "search",
+    "tgt": null,
+    "timer": 4.595,
+    "wind": 0,
+  },
+  {
+    "cool": 0,
+    "st": "feast",
+    "tgt": null,
+    "timer": 2.703,
+    "wind": 0,
+  },
+  {
+    "cool": 10,
+    "st": "rest",
+    "tgt": null,
+    "timer": 16.777,
+    "wind": 0,
+  },
+]
+`;
+
+exports[`adoptFloor > gives each mascot the timers and wind a seeded stream says 2`] = `
+{
+  "batTimers": [
+    6.628,
+    14.342,
+    24.589,
+    44.621,
+  ],
+  "nextFault": 14.642,
+  "waveAt": 12.364,
+}
+`;
+
 exports[`seeded > gives the same numbers for the same seed, in [0, 1) 1`] = `
 [
   0.5464560757391155,

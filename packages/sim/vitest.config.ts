@@ -7,5 +7,8 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     // A seeded night with scripted guards takes seconds, not milliseconds.
     testTimeout: 120_000,
+    // Vitest picks its minimal reporter when it detects a coding agent, and that one drops console output from
+    // passing tests, which would hide the floor plan's warnings. Keep the default reporter everywhere.
+    reporters: ['default'],
   },
 });

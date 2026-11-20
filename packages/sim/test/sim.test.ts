@@ -143,6 +143,27 @@ describe('adoptFloor', () => {
     expect(sim.crankNoise).toBe(0);
   });
 
+  it('gives a hunting Biggs half as much wind again as any other hunter', () => {
+    const T = guestState();
+    T.m[1].st = 'hunt';
+    const sim = newSim({ rng: seeded(7), now: 0 });
+    for (const p of T.players) sim.players[p.id] = p;
+    adoptFloor(sim, T, 5000);
+    expect(sim.brains[1].wind).toBeGreaterThan(0);
+    expect(sim.brains[0].wind).toBeCloseTo(1.5 * sim.brains[1].wind, 9);
+    expect(sim.brains[1].wind).toMatchSnapshot();
+  });
+
+  it('gives each mascot the timers and wind a seeded stream says', () => {
+    // The idle night below ends before most of these timers play out, so pin them here: the search timer for the
+    // lost charge, the feast timer, the rest timer, Tank's full charge gap (CHARGE_GAP, 10 s) and the hunt's wind.
+    const { sim, T } = adopt(7);
+    const r = (v: number) => Math.round(v * 1000) / 1000;
+    expect(sim.brains[3].cool).toBe(10);
+    expect(sim.brains.map((b, i) => ({ st: T.m[i].st, tgt: b.tgt, timer: r(b.timer), cool: b.cool, wind: r(b.wind) }))).toMatchSnapshot();
+    expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault), waveAt: r(T.waveAt) }).toMatchSnapshot();
+  });
+
   it('carries the night on from there the same way every time', () => {
     const a = adopt(7),
       b = adopt(7);
