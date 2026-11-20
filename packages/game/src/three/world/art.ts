@@ -6,9 +6,18 @@ import * as THREE from 'three';
 import { MASC } from '@thick-shift/sim/config';
 import { ROOMS3 } from '@thick-shift/sim/map';
 import { canvas, rand, mixc, fbm, FIELD } from './tex';
+import type { UV } from './geo';
+
+// A rectangle of a canvas, [x, y, w, h] in pixels.
+export type Px = [x: number, y: number, w: number, h: number];
+// What art() paints: the art and room-name canvases as textures, and how wide each room's name came out, in pixels.
+export interface Pics {
+  art: THREE.CanvasTexture;
+  names: THREE.CanvasTexture;
+  nameWidth: number[];
+}
 
 // [x, y, w, h] in pixels of the 1024 square art canvas.
-/** @satisfies {Record<string, [x: number, y: number, w: number, h: number]>} */
 export const ART = {
   poster0: [0, 0, 224, 320],
   poster1: [224, 0, 224, 320],
@@ -26,7 +35,7 @@ export const ART = {
   scrawl: [832, 864, 192, 96],
   scallop: [224, 960, 512, 64],
   hazard: [736, 960, 256, 32],
-};
+} satisfies Record<string, Px>;
 const POSTER_LINE = ['THERE IS ALWAYS ROOM\nFOR ONE MORE', 'HUGS ARE FREE', 'HE FITS ANYWHERE', 'NO RUNNING\n(EXCEPT TANK)'];
 const NOTES = [
   ['NOTICE', 'CLOSED until further notice. Do not let anyone tell you it is a party.'],
@@ -43,7 +52,7 @@ const INK = '#1a1210';
 
 // One mascot as the venue drew it for children: round, waving, in a party hat.
 // (x, y) is the ground between its feet; k = 1 makes it about 230 px tall.
-function friend(c, i, x, y, k) {
+function friend(c: CanvasRenderingContext2D, i: number, x: number, y: number, k: number): void {
   const m = MASC[i],
     shade = mixc(m.col, '#000000', 0.4);
   c.save();
@@ -52,14 +61,14 @@ function friend(c, i, x, y, k) {
   c.lineWidth = 5;
   c.strokeStyle = INK;
   c.lineJoin = c.lineCap = 'round';
-  const ell = (ex, ey, rx, ry, fill, rot = 0, stroke = true) => {
+  const ell = (ex: number, ey: number, rx: number, ry: number, fill: string, rot = 0, stroke = true): void => {
     c.beginPath();
     c.ellipse(ex, ey, rx, ry, rot, 0, 7);
     c.fillStyle = fill;
     c.fill();
     if (stroke) c.stroke();
   };
-  const eye = (ex, ey, r) => {
+  const eye = (ex: number, ey: number, r: number): void => {
     ell(ex, ey, r, r * 1.15, '#fffdf5');
     ell(ex + r * 0.15, ey + r * 0.2, r * 0.5, r * 0.55, INK, 0, false);
     ell(ex - r * 0.05, ey - r * 0.1, r * 0.18, r * 0.18, '#ffffff', 0, false);
@@ -146,7 +155,7 @@ function friend(c, i, x, y, k) {
 }
 
 // Age a printed thing in place: yellowing, creases, damp, and bites out of the edge.
-function age(c, [x, y, w, h], rnd, torn = 1) {
+function age(c: CanvasRenderingContext2D, [x, y, w, h]: Px, rnd: () => number, torn = 1): void {
   c.save();
   c.beginPath();
   c.rect(x, y, w, h);
@@ -182,7 +191,7 @@ function age(c, [x, y, w, h], rnd, torn = 1) {
   }
   c.restore();
 }
-function lines(c, text, x, y, maxW, lh) {
+function lines(c: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, lh: number): void {
   let line = '',
     n = 0;
   for (const word of text.split(' ')) {
@@ -195,7 +204,7 @@ function lines(c, text, x, y, maxW, lh) {
   c.fillText(line.trim(), x, y + n * lh);
 }
 
-function drawArt() {
+function drawArt(): CanvasRenderingContext2D {
   const c = canvas(1024),
     rnd = rand(77);
   c.textAlign = 'center';
@@ -282,11 +291,11 @@ function drawArt() {
       c.fill();
     }
     [1, 0, 3, 2].forEach((mi, k) => friend(c, mi, x + 150 + k * 240, y + 300, [0.82, 1, 0.9, 0.7][k]));
-    for (const [bx, col] of /** @type {[number, string][]} */ ([
+    for (const [bx, col] of [
       [40, '#d4418e'],
       [520, '#e8c832'],
       [985, '#2ec4c6'],
-    ])) {
+    ] as [number, string][]) {
       c.strokeStyle = INK;
       c.lineWidth = 2;
       c.beginPath();
@@ -461,7 +470,7 @@ function drawArt() {
     c.rotate(-0.06);
     c.fillText('IT WAVED BACK', 0, 0);
     c.restore();
-    let hgt;
+    let hgt: number;
     [x, y, w, hgt] = ART.scallop;
     c.fillStyle = '#5a1418';
     c.fillRect(x, y, w, hgt * 0.45);
@@ -499,11 +508,11 @@ function drawArt() {
 }
 
 // Room names in stencil capitals, two columns of five. Each cell is 512 by 100.
-export const NAME_CELL = [512, 100];
-function drawNames() {
+export const NAME_CELL: [number, number] = [512, 100];
+function drawNames(): { c: CanvasRenderingContext2D; widths: number[] } {
   const c = canvas(1024, 512),
     rnd = rand(5),
-    widths = [];
+    widths: number[] = [];
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   c.fillStyle = '#e6dcc0';
@@ -528,8 +537,8 @@ function drawNames() {
   return { c, widths };
 }
 
-export function art() {
-  const tex = ctx => {
+export function art(): Pics {
+  const tex = (ctx: CanvasRenderingContext2D): THREE.CanvasTexture => {
     const t = new THREE.CanvasTexture(ctx.canvas);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
@@ -539,4 +548,4 @@ export function art() {
   return { art: tex(drawArt()), names: tex(names.c), nameWidth: names.widths };
 }
 // A rectangle of a canvas as [u0, v0, u1, v1].
-export const uvOf = ([x, y, w, h], W = 1024, H = 1024) => [x / W, 1 - (y + h) / H, (x + w) / W, 1 - y / H];
+export const uvOf = ([x, y, w, h]: Px, W = 1024, H = 1024): UV => [x / W, 1 - (y + h) / H, (x + w) / W, 1 - y / H];

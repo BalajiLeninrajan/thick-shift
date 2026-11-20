@@ -5,21 +5,24 @@
 // and the stencilled room names go into two decal meshes.
 import * as THREE from 'three';
 import { ROOMS3, DOORWAYS, DOOR_H, REST, walls, slabs, roomAt } from '@thick-shift/sim/map';
+import type { Doorway } from '@thick-shift/sim/map';
 import { Batch, rgbOf } from './geo';
+import type { UV, Vec3 } from './geo';
 import { SPAN, LOOK } from './surfaces';
+import type { Materials } from './surfaces';
 import { ART, NAME_CELL, uvOf } from './art';
+import type { Pics } from './art';
 // The stage's platform (STAGE) is plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read it too.
 import { STAGE } from '@thick-shift/sim/data';
 
-export const floorY = (x, z) => (roomAt(x, z) === STAGE.room && z < STAGE.edge ? STAGE.rise : 0);
+export const floorY = (x: number, z: number): number => (roomAt(x, z) === STAGE.room && z < STAGE.edge ? STAGE.rise : 0);
 
 const FRAME_W = 0.11,
   FRAME_T = 0.045; // door frames: how wide, and how far proud of the wall
 const OFF = 0.012; // how far a decal sits off its surface
 
 // Things on the walls: [art, x, z, nx, nz, y of its middle, width]. (x, z) is on the wall, (nx, nz) the way it faces.
-/** @type {[art: string, x: number, z: number, nx: number, nz: number, y: number, w: number][]} */
-const ON_WALLS = [
+const ON_WALLS: [art: string, x: number, z: number, nx: number, nz: number, y: number, w: number][] = [
   ['mural', 23.9, 25, 0, -1, 1.95, 5.6],
   ['poster0', 14.6, 11.5, 0, 1, 2.1, 0.84],
   ['poster1', 15.7, 11.5, 0, 1, 2.05, 0.84],
@@ -93,7 +96,8 @@ const PUDDLES = [
 const RUST = '#5a3a22',
   GALV = '#7d8388',
   BLACK = '#101012';
-const PIPES = [
+type Pipe = [from: Vec3, to: Vec3, r: number, col: string];
+const PIPES: Pipe[] = [
   [[2.3, 2.95, 25.6], [2.3, 2.95, 42.4], 0.06, RUST],
   [[2.48, 3.05, 25.6], [2.48, 3.05, 42.4], 0.03, GALV],
   [[2.6, 3, 42.2], [14.4, 3, 42.2], 0.06, RUST],
@@ -107,23 +111,24 @@ const PIPES = [
   [[13.1, 3.4, 25.75], [30.9, 3.4, 25.75], 0.03, GALV],
   [[10.6, 4.5, 2.6], [26.4, 4.5, 2.6], 0.03, BLACK],
   [[10.6, 4.5, 6.2], [26.4, 4.5, 6.2], 0.03, BLACK],
-  ...[12, 18.5, 25].flatMap(x => [2.6, 6.2].map(z => [[x, 4.5, z], [x, 5.2, z], 0.012, BLACK])),
+  ...[12, 18.5, 25].flatMap(x => [2.6, 6.2].map((z): Pipe => [[x, 4.5, z], [x, 5.2, z], 0.012, BLACK])),
 ];
 // Boxes: [x0, y0, z0, x1, y1, z1, colour]. The kitchen's extract duct, and the stage's arch with its gilt edge.
 const BURGUNDY = '#4a1216',
   GILT = '#a8862a';
-const BOXES = [
+type Solid = [x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, col: string];
+const BOXES: Solid[] = [
   [29, 3.05, 11.7, 41, 3.5, 12.5, GALV],
   [30.9, 2.45, 11.7, 33, 3.05, 12.6, GALV],
   [10, 0, STAGE.edge - 0.2, 10.32, 5.2, STAGE.edge + 0.2, BURGUNDY],
   [26.68, 0, STAGE.edge - 0.2, 27, 5.2, STAGE.edge + 0.2, BURGUNDY],
   [10.32, 4.05, STAGE.edge - 0.16, 26.68, 5.2, STAGE.edge + 0.16, BURGUNDY],
   [10.32, 4, STAGE.edge - 0.19, 26.68, 4.05, STAGE.edge + 0.19, GILT],
-  ...[10.32, 26.6].map(x => [x, 0, STAGE.edge - 0.23, x + 0.08, 4, STAGE.edge + 0.23, GILT]),
+  ...[10.32, 26.6].map((x): Solid => [x, 0, STAGE.edge - 0.23, x + 0.08, 4, STAGE.edge + 0.23, GILT]),
 ];
 
 // The room on one side of a doorway. low: the side with the smaller coordinate.
-function sideOf(d, low) {
+function sideOf(d: Doorway, low: boolean): number {
   const [x0, z0, x1, z1] = d.rect,
     cx = (x0 + x1) / 2,
     cz = (z0 + z1) / 2;
@@ -132,9 +137,9 @@ function sideOf(d, low) {
 }
 
 // mats: from surfaces(). pics: from art(). trim: the batch for small solid parts, which the caller turns into a mesh.
-export function buildShell(scene, mats, pics, trim) {
-  const batches = new Map(),
-    on = mat => {
+export function buildShell(scene: THREE.Scene, mats: Materials, pics: Pics, trim: Batch): void {
+  const batches = new Map<THREE.MeshStandardMaterial, Batch>(),
+    on = (mat: THREE.MeshStandardMaterial): Batch => {
       if (!batches.has(mat)) batches.set(mat, new Batch());
       return batches.get(mat);
     };
@@ -144,7 +149,7 @@ export function buildShell(scene, mats, pics, trim) {
   for (const s of slabs()) {
     const room = s.room < 0 ? s.door.a : s.room,
       m = mats.rooms[room],
-      uv = (x0, z0, x1, z1) => [x0 / SPAN, -z1 / SPAN, x1 / SPAN, -z0 / SPAN];
+      uv = (x0: number, z0: number, x1: number, z1: number): UV => [x0 / SPAN, -z1 / SPAN, x1 / SPAN, -z0 / SPAN];
     // the stage platform is the part of that room north of its edge
     const split = s.room === STAGE.room && s.z0 < STAGE.edge && s.z1 > STAGE.edge;
     for (const [z0, z1] of split
@@ -207,10 +212,10 @@ export function buildShell(scene, mats, pics, trim) {
         nz = d.axis === 'x' ? 0 : n,
         face = d.axis === 'x' ? (low ? x0 : x1) : low ? z0 : z1;
       // a point on this face: `a` metres along the wall from the middle of the door, `out` metres off it
-      const pt = (a, out) => (d.axis === 'x' ? [face + n * out, cz + a] : [cx + a, face + n * out]);
+      const pt = (a: number, out: number): [number, number] => (d.axis === 'x' ? [face + n * out, cz + a] : [cx + a, face + n * out]);
       const col = rgbOf(d.key ? LOOK[9].frame : LOOK[here].frame),
         top = Math.min(roomH, h + FRAME_W);
-      const post = (a0, a1, y0, y1) => {
+      const post = (a0: number, a1: number, y0: number, y1: number): void => {
         const [px0, pz0] = pt(a0, 0),
           [px1, pz1] = pt(a1, FRAME_T);
         trim.box(Math.min(px0, px1), y0, Math.min(pz0, pz1), Math.max(px0, px1), y1, Math.max(pz0, pz1), col, 0.5);
@@ -226,7 +231,7 @@ export function buildShell(scene, mats, pics, trim) {
         1024,
         512
       );
-      const size = hgt => [(pics.nameWidth[there] / NAME_CELL[1]) * hgt, hgt];
+      const size = (hgt: number): [number, number] => [(pics.nameWidth[there] / NAME_CELL[1]) * hgt, hgt];
       const rect = ROOMS3[here].rects.find(([a0, b0, a1, b1]) =>
         d.axis === 'x' ? Math.abs((low ? a1 : a0) - face) < 0.01 && b0 <= cz && b1 >= cz : Math.abs((low ? b1 : b0) - face) < 0.01 && a0 <= cx && a1 >= cx
       );
@@ -270,7 +275,7 @@ export function buildShell(scene, mats, pics, trim) {
   // The valance under the arch, front and back.
   for (let i = 0; i < 4; i++) for (const n of [1, -1]) decals.sign(12.37 + i * 4.09, 3.76, STAGE.edge + n * 0.2, 4.09, 0.51, 0, n, uvOf(ART.scallop));
 
-  const aspect = key => ART[key][3] / ART[key][2];
+  const aspect = (key: string): number => ART[key][3] / ART[key][2];
   for (const [key, x, z, nx, nz, y, w] of ON_WALLS) decals.sign(x + nx * OFF, y, z + nz * OFF, w, w * aspect(key), nx, nz, uvOf(ART[key]));
   for (const [x, z, size] of HOLES) {
     const y = ROOMS3[roomAt(x, z)].h;
@@ -296,7 +301,7 @@ export function buildShell(scene, mats, pics, trim) {
     m.castShadow = true;
     scene.add(m);
   }
-  const stuck = map =>
+  const stuck = (map: THREE.Texture): THREE.MeshStandardMaterial =>
     new THREE.MeshStandardMaterial({
       map,
       transparent: true,
@@ -309,7 +314,7 @@ export function buildShell(scene, mats, pics, trim) {
   for (const [batch, map] of [
     [decals, pics.art],
     [names, pics.names],
-  ]) {
+  ] satisfies [Batch, THREE.Texture][]) {
     const m = batch.mesh(stuck(map));
     m.receiveShadow = true;
     scene.add(m);
