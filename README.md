@@ -6,6 +6,8 @@ Midnight at the Mascot Depot. A co-op night-shift survival game in first person:
 
 The repo is a pnpm workspace. The game is plain ES modules in `packages/game/src/`, and each app in `apps/` runs it somewhere: the web, a Discord Activity, or Roblox. The web and Discord apps are Vite builds. three.js and the Discord SDK come from npm and are bundled, and Cloudflare's Vite plugin runs each app's Worker inside the dev server.
 
+It needs Node 22.18 or later (`.node-version` names the one CI uses) and the pnpm that `packageManager` in `package.json` pins. `corepack enable` sets that pnpm up.
+
 ```sh
 pnpm install
 pnpm dev                 # the web game and its Worker, on localhost:5173
@@ -13,7 +15,13 @@ pnpm dev:discord         # the Discord Activity and its Worker, on 5173 too (the
 pnpm build               # build both apps into apps/<app>/dist
 pnpm run deploy          # build and publish the web game (plain `pnpm deploy` is a pnpm command)
 pnpm run deploy:discord  # build and publish the Discord Activity
+pnpm typecheck           # tsc -b over every package's projects
+pnpm lint                # Biome's lint rules
+pnpm format              # reformat everything with Biome
+pnpm format:check        # fail if anything is not formatted
 ```
+
+The code is still JavaScript. `pnpm typecheck` checks it with `checkJs`, reading types from JSDoc. GitHub Actions runs the typecheck, the lint, the format check, both builds, `tools/check-floor.mjs`, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
 
 Rooms need the Worker. `vite dev` runs it, Durable Object and all, so hosting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server that serves it at the root of a domain runs the game solo. The page loads its scripts from `/assets/`, so it does not work from a sub-path.
 
@@ -57,7 +65,12 @@ tools/
   check-floor.mjs       checks nothing in the building is blocked or cut off
   models/               the Blender scripts that build packages/game/public/models
   roblox/               generates the port's data from the game, and checks its sim against the game's
+  tsconfig.json         the tools' TypeScript project
+tsconfig.base.json      the compiler options every project shares
+tsconfig.json           the solution file: every project, for tsc -b
 ```
+
+`packages/game`, `apps/web` and `apps/discord` each have three TypeScript projects: `tsconfig.json` for the browser code, `tsconfig.worker.json` for the Worker and `tsconfig.node.json` for the Vite config, which runs in Node.
 
 An app imports the game only by the names `packages/game/package.json` exports (`@thick-shift/game`, `@thick-shift/game/state` and so on), never by a path into `packages/`. The Node tools are the exception: they import `packages/game/src/` by path. An app changes how the game starts and what its title screen and lobby offer through `platform` in `state.js`, set by its own `src/boot.js` before `start()`. `fixedRoom` means the room comes from outside: everyone tries to host it, and whoever finds it taken joins instead (`becomeGuest` in `net.js`). `title` replaces the title screen, and `invite` replaces the room code and link in the lobby. The web game leaves all three alone.
 
