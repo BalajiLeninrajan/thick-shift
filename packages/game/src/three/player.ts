@@ -10,7 +10,7 @@ import { unlockAudio } from '../audio';
 import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, slide, walkable } from '@thick-shift/sim/map';
 import { F, TOY } from '@thick-shift/sim';
 import { FAULT_NAME } from './task';
-import type { DoorKey, GuardAct, NightState, Player, State } from '@thick-shift/sim/types';
+import type { DoorKey, GuardAct, NightState, Player, State, UseWhat } from '@thick-shift/sim/types';
 import type { Me, Prefs, Target, Task } from '../types';
 
 // What drives the guard besides the keys: touch.js (pad) and the gamepad (gp, which also keeps the stick's last
@@ -386,7 +386,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     if (usedTap) return;
     me.hold += dt;
     if (me.hold >= t.hold) {
-      send({ t: 'use', what: t.what, i: t.i, k: t.k, id: t.id });
+      send({ t: 'use', what: t.what as UseWhat, i: t.i, k: t.k, id: t.id });
       me.hold = 0;
       usedTap = true;
     }

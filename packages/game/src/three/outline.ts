@@ -24,15 +24,14 @@ const NEAR = 6,
 const GOLD: OutlineMark['col'] = [1, 0.78, 0.28],
   RED: OutlineMark['col'] = [1, 0.32, 0.28];
 
-// parts: world/usable.js's. Its panels take any string key, as usable.js builds them today; WorldParts once that is typed.
-export function createOutlines(parts: Omit<WorldParts, 'panels'> & { panels: Record<string, Object3D> }, actors: Actors) {
+export function createOutlines(parts: WorldParts, actors: Actors) {
   const marks: OutlineMark[] = [];
   const add = (obj: Object3D, col: OutlineMark['col'], a: number): void => {
     if (obj) marks.push({ obj, col, a });
   };
   return {
     // The marks for this frame: [{ obj, col, a }]. Empty with the switch off or nobody standing.
-    pick(S: State, me: Pick<Me, 'x' | 'z' | 'flat' | 'target' | 'task'>, t: number): OutlineMark[] {
+    pick(S: State, me: Me, t: number): OutlineMark[] {
       marks.length = 0;
       if (!prefs.outline || S.phase !== 'play' || me.flat) return marks;
       const near = (at: Point): boolean => Math.hypot(at.x - me.x, at.z - me.z) < NEAR;
@@ -52,9 +51,9 @@ export function createOutlines(parts: Omit<WorldParts, 'panels'> & { panels: Rec
                   : aim.what === 'door'
                     ? parts.panels[aim.k]
                     : aim.what === 'peel'
-                      ? actors.guards.get(aim.id)?.group
+                      ? actors.guards.get(aim.id as string)?.group
                       : aim.what === 'toy'
-                        ? actors.plush.group(aim.id)
+                        ? actors.plush.group(aim.id as number)
                         : null;
         add(obj, aim.what === 'peel' ? RED : GOLD, 1);
         aimed.add(obj);

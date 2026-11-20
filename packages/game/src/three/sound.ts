@@ -182,8 +182,6 @@ interface GuardVoice {
   walked: number;
   on: boolean;
 }
-// What update() reads of player.me.
-type Ears = Pick<Me, 'x' | 'z' | 'yaw' | 'flat' | 'hid' | 'bob' | 'moving' | 'sp' | 'stam' | 'on' | 'hold' | 'target'>;
 
 export function createSound() {
   let ac: AudioContext = null,
@@ -658,7 +656,7 @@ export function createSound() {
   }
 
   // This guard's own body and kit. None of it is placed: it is all at your ears.
-  function self(me: Ears, bat: number, dt: number): void {
+  function self(me: Me, bat: number, dt: number): void {
     const step = Math.floor(me.bob / Math.PI); // the same wave that bobs the camera
     if (step !== steps) {
       steps = step;
@@ -781,7 +779,7 @@ export function createSound() {
       cut();
     },
     // Call once per frame while a night on the floor is drawn. me: player.me.
-    update(S: State, me: Ears, dt: number): void {
+    update(S: State, me: Me, dt: number): void {
       ac = ctx();
       // A night already under way: what has happened has happened.
       if (lastEv < 0) lastEv = S.evId;

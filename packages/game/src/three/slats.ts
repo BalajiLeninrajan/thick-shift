@@ -50,7 +50,7 @@ export function createSlats(scene: THREE.Scene) {
   let show = 0;
   return {
     // me: player.js's guard (hid, flat). busy: the catch has the camera.
-    update(S: State, me: Pick<Me, 'hid' | 'flat'>, dt: number, busy: boolean): void {
+    update(S: State, me: Me, dt: number, busy: boolean): void {
       const on = S.phase === 'play' && me.hid >= 0 && !me.flat && !busy;
       show += ((on ? 1 : 0) - show) * Math.min(1, dt * FADE);
       slats.visible = show > 0.01;
