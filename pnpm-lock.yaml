@@ -67,6 +67,9 @@ importers:
 
   packages/game:
     dependencies:
+      '@thick-shift/sim':
+        specifier: workspace:*
+        version: link:../sim
       three:
         specifier: 0.187.0
         version: 0.187.0
@@ -80,6 +83,8 @@ importers:
       '@types/three':
         specifier: 0.187.0
         version: 0.187.0
+
+  packages/sim: {}
 
 packages:
 

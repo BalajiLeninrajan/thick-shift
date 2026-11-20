@@ -2,6 +2,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/sim" },
     { "path": "packages/game" },
     { "path": "packages/game/tsconfig.worker.json" },
     { "path": "packages/game/tsconfig.node.json" },

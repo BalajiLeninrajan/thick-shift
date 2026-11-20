@@ -8,10 +8,9 @@ import { ROOMS3, DOORWAYS, DOOR_H, REST, walls, slabs, roomAt } from '../map.js'
 import { Batch, rgbOf } from './geo.js';
 import { SPAN, LOOK } from './surfaces.js';
 import { ART, NAME_CELL, uvOf } from './art.js';
+// The stage's platform (STAGE) is plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read it too.
+import { STAGE } from '@thick-shift/sim/data';
 
-// The north end of the stage room is a low platform. Mascots and guards do
-// not climb it (the game is flat), so it is only as high as a foot can hide.
-export const STAGE = { room: 0, edge: 8.2, rise: 0.12 };
 export const floorY = (x, z) => (roomAt(x, z) === STAGE.room && z < STAGE.edge ? STAGE.rise : 0);
 
 const FRAME_W = 0.11,

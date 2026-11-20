@@ -13,6 +13,8 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/packages/game" "$work/tools"
 cp -r "$root/packages/game/src" "$work/packages/game/src"
+# The copy imports @thick-shift/sim, which it finds through the game's own node_modules.
+ln -s "$root/packages/game/node_modules" "$work/packages/game/node_modules"
 cp -r "$root/tools/balance" "$work/tools/balance"
 cp "$root/tools/roblox/diff/rec.mjs" "$work/tools/roblox-rec.mjs"
 node "$root/tools/roblox/diff/patch.mjs" "$work"

@@ -1,0 +1,14 @@
+{
+  "name": "@thick-shift/sim",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./map": "./src/map.ts",
+    "./dressing": "./src/dressing.ts",
+    "./data": "./src/data.ts",
+    "./types": "./src/types.ts",
+    "./sim": "./src/sim.ts"
+  }
+}

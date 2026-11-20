@@ -13,6 +13,7 @@
     "./vite": "./vite.js"
   },
   "dependencies": {
+    "@thick-shift/sim": "workspace:*",
     "three": "0.187.0"
   },
   "devDependencies": {

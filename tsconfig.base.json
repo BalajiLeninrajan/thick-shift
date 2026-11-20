@@ -15,6 +15,9 @@
     "allowJs": true,
     "checkJs": true,
     "noEmit": true,
+    // packages/sim is TypeScript that Node runs by stripping the types, so its imports name the .ts files. Every
+    // project that reaches it (the game, the tools) checks those files too.
+    "allowImportingTsExtensions": true,
     // Off until PR 6 of the TS migration (issue #7) turns it on. TS 7 has it on by default.
     "strict": false,
     "skipLibCheck": true,

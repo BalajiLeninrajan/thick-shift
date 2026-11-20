@@ -1,41 +1,17 @@
 #!/usr/bin/env node
-// Writes apps/roblox/src/shared/Data.luau: the building and the cast, read from the web game's own modules so the
-// Roblox port stands in the same rooms. Run it after changing config.js, three/map.js or three/world/dressing.js:
+// Writes apps/roblox/src/shared/Data.luau: the building and the cast, read from @thick-shift/sim so the Roblox port
+// stands in the same rooms as the web game. Run it after changing packages/sim/src (config.ts, map.ts, dressing.ts or
+// data.ts):
 //
 //   node tools/roblox/gen-data.mjs
 //
 // Index-valued fields (a room, a box, a mascot) stay 0-based, as the web game has them. Luau code adds 1 to look
 // one up.
-import { writeFileSync, readFileSync } from 'node:fs';
-
-const src = new URL('../../packages/game/src/', import.meta.url);
-const config = await import(new URL('config.js', src).href);
-const map = await import(new URL('three/map.js', src).href);
-const dressing = await import(new URL('three/world/dressing.js', src).href);
-
-// light.js and shell.js import three.js, so their plain-data tables are read out of the source instead.
-const source = file => readFileSync(new URL(file, src), 'utf8');
-function table(text, start, consts = '') {
-  const at = text.indexOf(start);
-  if (at < 0) throw new Error(`not found: ${start}`);
-  let depth = 0,
-    i = text.indexOf('=', at) + 1;
-  const from = i;
-  for (; i < text.length; i++) {
-    const c = text[i];
-    if (c === '[' || c === '{') depth++;
-    else if (c === ']' || c === '}') {
-      depth--;
-      if (!depth) break;
-    }
-  }
-  return new Function(consts + 'return (' + text.slice(from, i + 1) + ');')();
-}
-const light = source('three/world/light.js');
-const colours = light.match(/^const TUBE = .*$/m)[0];
-const LAMPS = table(light, 'export const LAMPS', colours);
-const DEAD_TUBES = table(light, 'const DEAD_TUBES', colours);
-const STAGE = table(source('three/world/shell.js'), 'export const STAGE');
+import { writeFileSync } from 'node:fs';
+import * as config from '../../packages/sim/src/config.ts';
+import * as map from '../../packages/sim/src/map.ts';
+import * as dressing from '../../packages/sim/src/dressing.ts';
+import { LAMPS, DEAD_TUBES, STAGE } from '../../packages/sim/src/data.ts';
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function lua(v, pad = '') {
