@@ -1465,8 +1465,12 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
         if (e.type === 'flat') {
           const { by } = e.x,
             gi = S.players.findIndex(p => p.id === e.x.id),
-            bot = defined(team.bots[gi], `the flattened guard ${e.x.id}`),
-            m = defined(S.m[by], `mascot ${by}`),
+            bot = team.bots[gi];
+          if (!bot) {
+            fail(sc.name, `seed ${seed}: ${e.x.id}, who is not playing, was flattened`);
+            continue;
+          }
+          const m = defined(S.m[by], `mascot ${by}`),
             first = bot.firstSeen[by];
           out.flats++;
           out.by[by]++;
