@@ -18,8 +18,15 @@
     // packages/sim is TypeScript that Node runs by stripping the types, so its imports name the .ts files. Every
     // project that reaches it (the game, the tools) checks those files too.
     "allowImportingTsExtensions": true,
-    // Off until PR 6 of the TS migration (issue #7) turns it on. TS 7 has it on by default.
-    "strict": false,
+    "strict": true,
+    // A parameter that is never read is named with a leading _, which keeps a shared signature (every strategy hook
+    // takes S) without hiding a mistake. Biome's noUnusedFunctionParameters asks the same.
+    "noUnusedParameters": true,
+    // An index into an array or record may be undefined, so a read through one has to say why the value is there.
+    "noUncheckedIndexedAccess": true,
+    // An optional property that is absent differs from one set to undefined (`'k' in o`, Object.keys, spreads), so
+    // the types keep the two apart.
+    "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
     // Each project names the ambient types it wants, so Node's and the Workers' globals do not leak into browser code.
     "types": []
