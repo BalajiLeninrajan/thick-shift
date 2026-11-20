@@ -168,6 +168,25 @@ describe('adoptFloor', () => {
     expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault), waveAt: r(T.waveAt) }).toMatchSnapshot();
   });
 
+  it('starts an empty S.bats for a host from before it, so batteries can be dropped and picked up', () => {
+    const T = guestState();
+    delete T.bats;
+    const sim = newSim({ rng: seeded(7), now: 0 });
+    for (const p of T.players) sim.players[p.id] = p;
+    adoptFloor(sim, T, 5000);
+    const S = T as NightState;
+    expect(S.bats).toEqual([]);
+    // Every battery of the night is due back: five for two guards, as batN is guessed too.
+    expect(sim.batTimers).toHaveLength(5);
+    const g = defined(S.players[0], 'g0'),
+      spot = defined(BATTERY_SPOTS[0], 'battery spot 0');
+    Object.assign(g, { x: spot.x, z: spot.z, bat: 0.5 });
+    expect(() => actFloor(sim, S, g.id, { t: 'use', what: 'bat', i: 0 })).not.toThrow();
+    // The first one back lands within 50 s.
+    idle(sim, S, 5000, 500);
+    expect(S.bats.length).toBeGreaterThan(0);
+  });
+
   it('walks a searching mascot to where it lost the guard when it means to check a locker that is not there', () => {
     // adoptFloor turns mascot 1's lost charge into a search. Point its next check past the end of HIDES: it skips
     // the check and heads for b.last, as it would with no checks left.

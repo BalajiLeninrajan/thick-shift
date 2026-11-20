@@ -475,8 +475,10 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
     return b;
   });
   // Batteries taken are back in 30 to 50 s. How long ago these went is lost, so they come back any time in that.
-  // A host from before S.batN and S.waveAt existed did not send them, so guess those from the crew and the wave.
-  const missing = (state.batN ?? Math.min(BATTERY_SPOTS.length, 3 + S.players.length)) - (state.bats || []).length;
+  // A host from before S.batN and S.waveAt existed did not send them, so guess those from the crew and the wave. One
+  // from before S.bats sent no batteries lying about, so they are all due back.
+  state.bats ??= [];
+  const missing = (state.batN ?? Math.min(BATTERY_SPOTS.length, 3 + S.players.length)) - state.bats.length;
   sim.batTimers = Array.from({ length: Math.max(0, missing) }, () => rnd(sim, 5, 50)).sort((a, b) => a - b);
   state.waveAt ??= S.t + rnd(sim, 0.2, 1) * (S.stir ? rnd(sim, ...STIR) * (1 + h) : rnd(sim, ...CALM) * (1 - 0.7 * h));
   // A host from before the toys sent none: everyone has theirs in hand.
