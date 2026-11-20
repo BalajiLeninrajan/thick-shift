@@ -5,6 +5,10 @@
 import * as THREE from 'three';
 import { EYE_PALE } from '../assets';
 import { lag } from './rig';
+import type { Part, Rig } from './rig';
+import type { Mascot } from './mascot';
+import type { MascotKind } from '@thick-shift/sim/config';
+import type { MascotState } from '@thick-shift/sim/types';
 
 /* ---------- pose channels ---------- */
 // A pose is one number per channel. Every state has a pose, and a mascot's
@@ -31,12 +35,17 @@ export const CH = [
   'reach',
   'slack',
   'legs',
-];
-export const C = Object.fromEntries(CH.map((k, i) => [k, i])),
-  NCH = CH.length;
+] as const;
+export type Channel = (typeof CH)[number];
+// One layer of a pose: the channels it sets, in radians (or as each channel reads it).
+export type PoseLayer = Partial<Record<Channel, number>>;
+// A pose for every state, and for the catch.
+export type PoseName = MascotState | 'scare';
+export const C = Object.fromEntries(CH.map((k, i) => [k, i])) as Record<Channel, number>,
+  NCH: number = CH.length;
 // How fast each channel follows its target, per second. Shaking and tracking
 // start at once; weight (lean, sit, drop) takes its time.
-const RATES = {
+const RATES: Record<Channel, number> = {
   lean: 6,
   drop: 7,
   headX: 8,
@@ -58,13 +67,13 @@ const RATES = {
   slack: 5,
   legs: 6,
 };
-export const RATE = Float32Array.from(CH, k => RATES[k]);
+export const RATE: Float32Array = Float32Array.from(CH, k => RATES[k]);
 
-const BASE = { breath: 1, sway: 1, legs: 1 };
-const LIT_STATES = ['roam', 'search', 'hunt']; // the states a torch beam can interrupt
+const BASE: PoseLayer = { breath: 1, sway: 1, legs: 1 };
+const LIT_STATES: PoseName[] = ['roam', 'search', 'hunt']; // the states a torch beam can interrupt
 
 // Poses every mascot shares, by rot stage. `lit` is laid over roam, search and hunt while a beam holds it.
-const COMMON = {
+const COMMON: Partial<Record<PoseName, PoseLayer>> = {
   siege: { lean: -0.14, armL: -2.3, armR: -2.3, fore: -0.5, jaw: 0.5, headX: -0.1 }, // drawn back for the next hit
   windup: { lean: 0.42, drop: 0.14, headX: 0.4, armL: 0.7, armR: 0.7, track: 1, shake: 0.4, rear: 1, jaw: 0.4 },
   charge: { lean: 0.55, headX: 0.35, armL: 0.9, armR: 0.9, jaw: 1, track: 0.4, rear: -1 },
@@ -72,7 +81,7 @@ const COMMON = {
   feast: { sit: 1, headX: 0.5, lean: -0.1, armL: -0.35, armR: -0.35, out: 0.4, jaw: 0.35, track: 0.6, breath: 2 },
   scare: { track: 1, lean: 0.3, jaw: 1, armL: -1.5, armR: -1.5, out: 0.5, fore: -0.3, shake: 0.5, reach: 1 },
 };
-const STAGE = [
+const STAGE: Partial<Record<PoseName | 'lit', PoseLayer>>[] = [
   // 0: someone in a heavy costume, being friendly
   {
     rest: { breath: 0, sway: 0, headX: 0.1 },
@@ -99,16 +108,75 @@ const STAGE = [
   },
 ];
 
-const GAIT = { mode: 'walk', min: 0.14, max: 0.5, fast: 4, knee: 0.6, hipYaw: 0.2, hipRoll: 0.07, shift: 0.05, arm: 0.3 };
-const HEAD = { yaw: 0.6, pitch: 0.3, rate: 4, step: 0, eye: 0.5, twitch: 0, neck: 0.35 };
+// How it gets about. mode: walk, float (nothing to stand on), crawl (on all fours), hop, or glide (nothing steps).
+// min, max: how far a leg swings, in radians, from standing to fast (metres a second). knee: how far a knee bends as
+// the foot comes forward. hipYaw, hipRoll, shift: the hips turning, rolling onto the standing leg, and moving over
+// it. arm: the arm swing.
+export interface Gait {
+  mode: 'walk' | 'float' | 'crawl' | 'hop' | 'glide';
+  min: number;
+  max: number;
+  fast: number;
+  knee: number;
+  hipYaw: number;
+  hipRoll: number;
+  shift: number;
+  arm: number;
+}
+// How its head moves: how far it turns (yaw, pitch, radians), how fast it follows (rate, per second), steps a second
+// at stage 1 (step, 0 for smooth), how far the eyes turn (eye), how often it looks away (twitch, 0 to 1), and the
+// neck's share of the turn (neck).
+export interface Head {
+  yaw: number;
+  pitch: number;
+  rate: number;
+  step: number;
+  eye: number;
+  twitch: number;
+  neck: number;
+}
+export interface Limit {
+  arm: number;
+  out: number;
+  fore: number;
+}
+export type Gesture = 'wave' | 'hug' | 'tilt';
+// A part only one of them has, run on the links of an extra_N chain each frame: see below.
+export type ChainRun = (a: Mascot, links: Part[], ch: Float32Array, dt: number) => void;
+export type Hook = (a: Mascot, rig: Rig, ch: Float32Array) => void;
+// One stage's entry in a model's manifest (packages/game/public/models/<key>.json), as far as the animator reads it.
+// face: where its face is, in model space.
+export interface StageInfo {
+  face?: [number, number, number];
+  height?: number;
+  floats?: boolean;
+}
+// What a mascot changes from the defaults at one stage.
+interface Fit {
+  gait?: Partial<Gait>;
+  head?: Partial<Head>;
+  limit?: Partial<Limit>;
+  gestures?: Gesture[];
+  jaw?: number;
+  sit?: number;
+  swayMax?: number;
+  looker?: number;
+  slackArms?: boolean;
+  states?: Partial<Record<PoseName | 'lit', PoseLayer>>;
+  chains?: Record<string, ChainRun>;
+  hook?: Hook;
+}
+
+const GAIT: Gait = { mode: 'walk', min: 0.14, max: 0.5, fast: 4, knee: 0.6, hipYaw: 0.2, hipRoll: 0.07, shift: 0.05, arm: 0.3 };
+const HEAD: Head = { yaw: 0.6, pitch: 0.3, rate: 4, step: 0, eye: 0.5, twitch: 0, neck: 0.35 };
 // How far a joint may turn before the mesh opens, from each model's notes. The poses ask for what they want and are held to this.
-const LIMIT = { arm: 2.6, out: 1, fore: 1.3 };
+const LIMIT: Limit = { arm: 2.6, out: 1, fore: 1.3 };
 
 /* ---------- the four ---------- */
 // Each returns what differs from the defaults at that stage. `states` are laid
 // over the stage's poses; `hook` runs after the shared layers each frame.
 
-const FIT = {
+const FIT: Record<string, ((rig: Rig, info?: StageInfo) => Fit)[]> = {
   // Madame Flan. Notes: head joint is hidden by the pearls, so the head barely pitches.
   walrus: [
     () => ({
@@ -270,14 +338,14 @@ const FIT = {
 // Each is (a, links, ch, dt): a the mascot (a.t its clock, a.i its index,
 // a.track its motion, a.aimY/aimP where its target is), links the chain.
 
-const hash = n => {
+const hash = (n: number): number => {
   const s = Math.sin(n * 127.1) * 43758.5453;
   return s - Math.floor(s);
 };
 export { hash };
 
 // Anything unclaimed hangs and trails: each link lags the one above it.
-function dangle(a, links, ch, dt) {
+function dangle(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
   const tr = a.track;
   for (const l of links)
     lag(
@@ -293,7 +361,7 @@ function dangle(a, links, ch, dt) {
 
 // Flan's legs move like a machine with a fault: each holds still, then goes
 // through a burst of hard steps, fourteen a second, and holds again.
-function harvestman(a, links, ch, dt) {
+function harvestman(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
   const n = links[0].seed * 97,
     slotT = a.t / 1.3 + n * 0.37,
     slot = Math.floor(slotT),
@@ -313,7 +381,7 @@ function harvestman(a, links, ch, dt) {
   }
 }
 // The one that no longer works: curled, and it only trembles.
-function deadLeg(a, links) {
+function deadLeg(a: Mascot, links: Part[]): void {
   const tick = Math.floor(a.t * 14);
   for (let k = 0; k < links.length; k++) {
     links[k].rx += (hash(tick + 77 + k) - 0.5) * 0.05;
@@ -322,7 +390,7 @@ function deadLeg(a, links) {
 }
 
 // Squish's bare spine trails under it, each link later than the last.
-function spine(a, links, ch, dt) {
+function spine(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
   const tr = a.track;
   for (const l of links) {
     const k = l.depth + 1;
@@ -341,7 +409,7 @@ function spine(a, links, ch, dt) {
 // Tank's worm. A slow travelling sway and a swallowing pulse; the upper links
 // turn the mouth to whoever it is looking at; `rear` curls it back before a
 // charge (and at a door), and below zero throws it forward, mouth first.
-function worm(a, links, ch, dt) {
+function worm(a: Mascot, links: Part[], ch: Float32Array, dt: number): void {
   const n = links.length,
     rear = ch[C.rear],
     tk = ch[C.track],
@@ -360,20 +428,20 @@ function worm(a, links, ch, dt) {
   }
 }
 // The tooth rings turn against each other, faster when it has someone.
-function ring(rate) {
+function ring(rate: number): ChainRun {
   return (a, links, ch, dt) => {
     links[0].rzSpin = (links[0].rzSpin || 0) + rate * dt * (0.4 + ch[C.track] + a.scareW * 4);
     links[0].rz += links[0].rzSpin;
   };
 }
 // The second mouth, down the throat: it comes up when the worm has you.
-function gullet(a, links, ch) {
+function gullet(a: Mascot, links: Part[], ch: Float32Array): void {
   links[0].pz += 0.22 * Math.max(0, Math.min(1, 0.5 * ch[C.reach] * (0.5 + 0.5 * Math.sin(a.t * 2.3)) + a.scareBite));
 }
 
 // The small pale face in Biggs's mouth. It leans out to look at you, and
 // keeps looking when the head turns away.
-function mask(a, links, ch) {
+function mask(a: Mascot, links: Part[], ch: Float32Array): void {
   const out = Math.max(ch[C.reach], a.scareW),
     l = links[0];
   l.pz += 0.12 * out + Math.sin(a.t * 0.7) * 0.015;
@@ -387,7 +455,7 @@ function mask(a, links, ch) {
 
 /* ---------- assembly ---------- */
 
-function poseOf(...layers) {
+function poseOf(...layers: PoseLayer[]): Float32Array {
   const p = new Float32Array(NCH);
   for (const l of layers) if (l) for (const k in l) p[C[k]] = l[k];
   return p;
@@ -395,11 +463,29 @@ function poseOf(...layers) {
 
 // Everything the animator needs for one mascot at one stage. info is that
 // stage's entry in the manifest, or nothing if the manifest has not loaded.
-export function styleOf(key, stage, rig, info) {
+// Everything mascot.js needs to animate one mascot at one stage: see styleOf().
+export interface Style {
+  gait: Gait;
+  head: Head;
+  jaw: number;
+  sit: number;
+  swayMax: number;
+  gestures: Gesture[];
+  hook: Hook | null;
+  limit: Limit;
+  looker: number;
+  slackArms: boolean;
+  floats: boolean;
+  stage: number;
+  chains: { links: Part[]; run: ChainRun }[];
+  poses: Partial<Record<PoseName, Float32Array>> & { lit: Partial<Record<PoseName, Float32Array>> };
+}
+
+export function styleOf(key: string, stage: number, rig: Rig, info?: StageInfo): Style {
   const fit = FIT[key][stage](rig, info),
     own = fit.states || {},
     st = STAGE[stage];
-  const style = {
+  const style: Style = {
     gait: { ...GAIT, ...fit.gait },
     head: { ...HEAD, twitch: stage ? 0.1 : 0, rate: [4, 4, 12][stage], ...fit.head },
     jaw: fit.jaw ?? 0.5,
@@ -439,18 +525,17 @@ const GEO = {
 };
 const GLINT = new THREE.MeshBasicMaterial({ color: EYE_PALE, fog: false });
 
-export function standIn(def) {
+export function standIn(def: MascotKind): THREE.Object3D {
   const mat = new THREE.MeshStandardMaterial({ color: def.col, roughness: 1 }),
     dark = new THREE.MeshStandardMaterial({ color: 0x08080e, roughness: 1 });
-  /**
-   * @param {string} name
-   * @param {THREE.Object3D} [parent]
-   * @param {number} [x]
-   * @param {number} [y]
-   * @param {number} [z]
-   * @param {...[geo: THREE.BufferGeometry, material: THREE.Material, x?: number, y?: number, z?: number]} meshes
-   */
-  const node = (name, parent, x, y, z, ...meshes) => {
+  const node = (
+    name: string,
+    parent?: THREE.Object3D,
+    x?: number,
+    y?: number,
+    z?: number,
+    ...meshes: [geo: THREE.BufferGeometry, material: THREE.Material, x?: number, y?: number, z?: number][]
+  ): THREE.Object3D => {
     const o = new THREE.Object3D();
     o.name = name;
     if (parent) {
@@ -471,10 +556,10 @@ export function standIn(def) {
     body = node('body', root, 0, 0.95, 0, [GEO.hips, mat, 0, 0, -0.1], [GEO.chest, mat, 0, 0.55, 0]);
   const head = node('head', body, 0, 1.85, 0, [GEO.head, mat, 0, 0.25, 0.05]);
   node('jaw', head, 0, 1.95, 0.1, [GEO.jaw, dark]);
-  for (const [s, sx] of /** @type {[string, number][]} */ ([
+  for (const [s, sx] of [
     ['L', 1],
     ['R', -1],
-  ])) {
+  ] as [string, number][]) {
     node('eye_' + s, head, sx * 0.17, 2.2, 0.4, [GEO.eye, dark], [GEO.glint, GLINT]);
     node('forearm_' + s, node('arm_' + s, body, sx * 0.62, 1.65, 0, [GEO.limb, mat]), sx * 0.62, 1.2, 0, [GEO.limb, mat]);
     node('shin_' + s, node('leg_' + s, body, sx * 0.4, 0.85, 0, [GEO.thigh, mat]), sx * 0.4, 0.45, 0, [GEO.limb, mat], [GEO.foot, mat]);
