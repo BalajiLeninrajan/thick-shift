@@ -4,9 +4,10 @@
 // who has been there longest the host, and the night carries on (takeOver).
 // When an app fixes the room (platform.fixedRoom, as the Discord Activity does), nobody
 // chooses to host: everyone tries to, and whoever finds it taken joins instead (becomeGuest).
-import { game, platform } from './state';
-import { newSim, newState, stepFloor, actFloor, adoptFloor } from '@thick-shift/sim';
+
+import { actFloor, adoptFloor, newSim, newState, stepFloor } from '@thick-shift/sim';
 import type { Action, GuestInbox, HostInbox, Player } from '@thick-shift/sim/types';
+import { game, platform } from './state';
 
 const TICK_MS = 100;
 const NO_HOST = 4404,

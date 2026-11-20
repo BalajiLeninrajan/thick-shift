@@ -7,15 +7,16 @@
 // Biggs in hand. Everything else shows only while
 // it matters (a prompt in reach, stamina while winded, the flat and pause
 // states).
-import { MASC, FINAL_NIGHT } from '@thick-shift/sim/config';
-import { game } from '../state';
-import { ROOMS3, BOXES, CHARGER, GENERATOR, roomAt, route } from '@thick-shift/sim/map';
-import { F, TOY, clockF, faultLeft } from '@thick-shift/sim';
-import { FAULT_NAME } from './task';
-import { prefs, savePrefs } from './player';
-import { createTouch, toggleFullscreen, canFullscreen } from './touch';
+
+import { clockF, F, faultLeft, TOY } from '@thick-shift/sim';
+import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
+import { BOXES, CHARGER, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
 import type { NightState, Player, Point, State } from '@thick-shift/sim/types';
+import { game } from '../state';
 import type { Me, PlayerHandle } from '../types';
+import { prefs, savePrefs } from './player';
+import { FAULT_NAME } from './task';
+import { canFullscreen, createTouch, toggleFullscreen } from './touch';
 
 // A row of the pause screen's lists: what, the keys or buttons, and an optional note. A group: its title and rows.
 type ControlRow = [what: string, how: string[], note?: string];

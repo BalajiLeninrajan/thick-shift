@@ -3,17 +3,18 @@
 // Floors, walls and ceilings go into one mesh per material; skirting, door
 // frames, pipes and the stage's arch go into the trim batch; posters, stains
 // and the stencilled room names go into two decal meshes.
-import * as THREE from 'three';
-import { ROOMS3, DOORWAYS, DOOR_H, REST, walls, slabs, roomAt } from '@thick-shift/sim/map';
-import type { Doorway } from '@thick-shift/sim/map';
-import { Batch, rgbOf } from './geo';
-import type { UV, Vec3 } from './geo';
-import { SPAN, LOOK } from './surfaces';
-import type { Materials } from './surfaces';
-import { ART, NAME_CELL, uvOf } from './art';
-import type { Pics } from './art';
+
 // The stage's platform (STAGE) is plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read it too.
 import { STAGE } from '@thick-shift/sim/data';
+import type { Doorway } from '@thick-shift/sim/map';
+import { DOOR_H, DOORWAYS, REST, ROOMS3, roomAt, slabs, walls } from '@thick-shift/sim/map';
+import * as THREE from 'three';
+import type { Pics } from './art';
+import { ART, NAME_CELL, uvOf } from './art';
+import type { UV, Vec3 } from './geo';
+import { Batch, rgbOf } from './geo';
+import type { Materials } from './surfaces';
+import { LOOK, SPAN } from './surfaces';
 
 export const floorY = (x: number, z: number): number => (roomAt(x, z) === STAGE.room && z < STAGE.edge ? STAGE.rise : 0);
 

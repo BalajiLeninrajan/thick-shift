@@ -1,22 +1,23 @@
 // The renderer and the frame. main.ts imports this file the first time a
 // night is drawn, so the title screen and lobby never wait on three.js.
-import * as THREE from 'three';
-import { MASC } from '@thick-shift/sim/config';
-import { game, client } from '../state';
-import { buildWorld } from './world';
-import { createPlayer, prefs } from './player';
-import { createActors } from './actors';
-import { createHud, where } from './hud';
-import { createTask } from './task';
-import { EYE, BOXES, ROOMS3, roomAt, reaches } from '@thick-shift/sim/map';
-import { createSound } from './sound';
-import { createPost } from './post';
-import { createPhone } from './actors/phone';
-import { createSlats } from './slats';
-import { createOutlines } from './outline';
+
 import { dreadF } from '@thick-shift/sim';
+import { MASC } from '@thick-shift/sim/config';
+import { BOXES, EYE, ROOMS3, reaches, roomAt } from '@thick-shift/sim/map';
 import type { Player, State } from '@thick-shift/sim/types';
+import * as THREE from 'three';
+import { client, game } from '../state';
 import type { EventOf } from '../types';
+import { createActors } from './actors';
+import { createPhone } from './actors/phone';
+import { createHud, where } from './hud';
+import { createOutlines } from './outline';
+import { createPlayer, prefs } from './player';
+import { createPost } from './post';
+import { createSlats } from './slats';
+import { createSound } from './sound';
+import { createTask } from './task';
+import { buildWorld } from './world';
 
 let app: ReturnType<typeof create> | null = null;
 const FOG = 0.037,

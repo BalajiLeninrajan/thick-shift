@@ -2,13 +2,14 @@
 // pose it takes in each state, and the parts only it has. mascot.ts runs the
 // machinery; this file is the tuning, written from the notes each model
 // carries in packages/game/public/models/<key>.json.
-import * as THREE from 'three';
-import { EYE_PALE } from '../assets';
-import { lag } from './rig';
-import type { Part, Rig } from './rig';
-import type { Mascot } from './mascot';
+
 import type { MascotKind } from '@thick-shift/sim/config';
 import type { MascotState } from '@thick-shift/sim/types';
+import * as THREE from 'three';
+import { EYE_PALE } from '../assets';
+import type { Mascot } from './mascot';
+import type { Part, Rig } from './rig';
+import { lag } from './rig';
 
 /* ---------- pose channels ---------- */
 // A pose is one number per channel. Every state has a pose, and a mascot's
@@ -342,6 +343,7 @@ const hash = (n: number): number => {
   const s = Math.sin(n * 127.1) * 43758.5453;
   return s - Math.floor(s);
 };
+
 export { hash };
 
 // Anything unclaimed hangs and trails: each link lags the one above it.

@@ -2,11 +2,12 @@
 // a mural of the mascots in their friendly days, staff notices, stains, the
 // room names stencilled by the doors. Two canvases, cut up by the rectangles
 // in ART and NAMES; shell.ts puts the pieces on the walls.
-import * as THREE from 'three';
+
 import { MASC } from '@thick-shift/sim/config';
 import { ROOMS3 } from '@thick-shift/sim/map';
-import { canvas, rand, mixc, fbm, FIELD } from './tex';
+import * as THREE from 'three';
 import type { UV } from './geo';
+import { canvas, FIELD, fbm, mixc, rand } from './tex';
 
 // A rectangle of a canvas, [x, y, w, h] in pixels.
 export type Px = [x: number, y: number, w: number, h: number];

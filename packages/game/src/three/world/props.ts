@@ -4,14 +4,15 @@
 // is a handful of draw calls, and rooms that cannot be seen from where the
 // guard stands are not drawn at all.
 // A kit that is missing leaves its props out and nothing else changes.
+
+import { DRESSING } from '@thick-shift/sim/dressing';
+import { ROOMS3 } from '@thick-shift/sim/map';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { loadGLB } from '../assets';
-import { ROOMS3 } from '@thick-shift/sim/map';
-import { DRESSING } from '@thick-shift/sim/dressing';
-import { floorY } from './shell';
-import { lit } from './light';
 import type { Levels } from './light';
+import { lit } from './light';
+import { floorY } from './shell';
 
 // A node of a kit model as traverse() hands it over: a mesh when isMesh is set, wearing the kit's own material or, once
 // dressed, the one dressMaterial gave it.

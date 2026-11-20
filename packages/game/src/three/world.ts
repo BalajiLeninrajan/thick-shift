@@ -7,16 +7,17 @@
 //   props.ts              furniture from the prop kits, stood where the sim's dressing.ts says
 //   usable.ts             breaker boxes, door buttons, generator, charger, batteries, doors, wall map
 //   sight.ts              which rooms can be seen from which, so the rest are not drawn
-import type { BufferGeometry, Camera, Material, Mesh, Scene } from 'three';
+
 import type { State } from '@thick-shift/sim/types';
-import { surfaces } from './world/surfaces';
+import type { BufferGeometry, Camera, Material, Mesh, Scene } from 'three';
 import { art } from './world/art';
 import { Batch } from './world/geo';
-import { buildShell } from './world/shell';
 import { createLight, lit, torchCookie } from './world/light';
 import { createProps } from './world/props';
-import { createUsables } from './world/usable';
+import { buildShell } from './world/shell';
 import { roomsSeenFrom } from './world/sight';
+import { surfaces } from './world/surfaces';
+import { createUsables } from './world/usable';
 
 export function buildWorld(scene: Scene) {
   const mats = surfaces(),

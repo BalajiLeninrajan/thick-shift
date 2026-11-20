@@ -2,15 +2,16 @@
 // the host says they are, looking where they look, with their torch, their
 // phone when they have it up, a name tag, and the two things that happen to
 // guards: being flattened and being peeled back up.
-import * as THREE from 'three';
-import { loadActor, instance } from '../assets';
-import { glimpses, PLAYER_R } from '@thick-shift/sim/map';
+
 import { F } from '@thick-shift/sim';
-import { Track, hostClock } from './track';
-import { buildRig } from './rig';
-import type { Rig } from './rig';
+import { glimpses, PLAYER_R } from '@thick-shift/sim/map';
 import type { Player, State } from '@thick-shift/sim/types';
+import * as THREE from 'three';
 import type { View } from '../actors';
+import { instance, loadActor } from '../assets';
+import type { Rig } from './rig';
+import { buildRig } from './rig';
+import { hostClock, Track } from './track';
 
 const TAU = Math.PI * 2,
   clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);

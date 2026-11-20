@@ -23,7 +23,7 @@
 // The answers depend only on the building, so the caches below (the obstacle buckets, the waypoint graph and the
 // last rect walkable() found a point in) are kept here rather than by the caller. None of them changes an answer.
 
-import { obstacles, DRESSING } from './dressing.ts';
+import { DRESSING, obstacles } from './dressing.ts';
 import type { DoorKey, Doors, Point, Rect } from './types.ts';
 
 export const PLAYER_R = 0.35,

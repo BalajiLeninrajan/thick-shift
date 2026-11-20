@@ -1,7 +1,8 @@
 // Building one mesh out of many flat pieces. Everything static in the Depot
 // that shares a material goes into one Batch and so into one draw call.
-import * as THREE from 'three';
+
 import type { RGB } from '@thick-shift/sim/data';
+import * as THREE from 'three';
 
 // A point or a direction in the building, [x, y, z].
 export type Vec3 = [number, number, number];

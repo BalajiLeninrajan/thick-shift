@@ -5,11 +5,12 @@
 // are shut, the guards (a cross for a flat one), the open faults,
 // the generator and the charger, spare batteries, and every mascot that is
 // off its mark, as the booth's wall map does.
-import * as THREE from 'three';
-import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, BATTERY_SPOTS, roomAt } from '@thick-shift/sim/map';
-import { canvas } from './world/tex';
+
+import { BATTERY_SPOTS, BOXES, CHARGER, DOORWAYS, GENERATOR, ROOMS3, roomAt } from '@thick-shift/sim/map';
 import type { State } from '@thick-shift/sim/types';
+import * as THREE from 'three';
 import type { Me } from '../types';
+import { canvas } from './world/tex';
 
 export const MAP_W = 288,
   MAP_H = 224; // canvas pixels: the 4:3-ish shape of the phone's glass

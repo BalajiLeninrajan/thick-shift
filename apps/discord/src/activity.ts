@@ -5,11 +5,11 @@
 // state.ts) and starts talking to Discord. boot.ts imports it only inside Discord, and the build gives it and the
 // SDK their own chunk, so elsewhere the SDK is never fetched.
 import { DiscordSDK } from '@discord/embedded-app-sdk';
-import { game, platform } from '@thick-shift/game/state';
-import { host } from '@thick-shift/game/net';
 import { unlockAudio } from '@thick-shift/game/audio';
-import { $, esc, card, messageScreen } from '@thick-shift/game/ui';
+import { host } from '@thick-shift/game/net';
+import { game, platform } from '@thick-shift/game/state';
 import type { Invite, OverlayScreen } from '@thick-shift/game/types';
+import { $, card, esc, messageScreen } from '@thick-shift/game/ui';
 
 let sdk: DiscordSDK | null = null;
 const discord = { room: '', name: '' }; // both '' until Discord answers

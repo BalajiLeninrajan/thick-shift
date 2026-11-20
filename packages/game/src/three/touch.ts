@@ -3,9 +3,10 @@
 // zoom, a Mini Biggs to throw, running and using things. They drive the guard
 // through player.pad, player.look, player.toggleTorch, player.togglePhone,
 // player.toggleZoom and player.throwToy, and show only while a finger is the pointer.
-import { game } from '../state';
+
 import { TOY } from '@thick-shift/sim';
 import { unlockAudio } from '../audio';
+import { game } from '../state';
 import type { PlayerHandle } from '../types';
 
 const STICK_R = 48; // pixels the knob travels for full speed

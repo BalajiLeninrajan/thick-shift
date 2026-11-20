@@ -3,9 +3,9 @@
 // it is switched on, and its lens lights with the beam. If the model is
 // missing there are simply no hands.
 import type { BufferGeometry, Camera, Mesh, MeshStandardMaterial, Object3D } from 'three';
+import type { Me } from '../../types';
 import { loadPart } from '../assets';
 import { HANDS_ORDER } from '../slats';
-import type { Me } from '../../types';
 
 const HELD = { x: 0.2, y: -0.2, z: -0.42 },
   LOWERED = 0.1; // metres from the eye; how far it sinks when off

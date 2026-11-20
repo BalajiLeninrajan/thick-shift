@@ -7,14 +7,15 @@
 // noise, the room reverb, the one limiter), played into an emitter with
 // into(). Nothing here runs until the audio context is running, and events
 // that happen before then are dropped, not queued.
-import { MASC, DOORS } from '@thick-shift/sim/config';
-import { game, rnd } from '../state';
-import { SFX, ctx, bus, room, into, muffle, voices, sample, tone, noise, boom, pick, whiteNoise, shriek, song } from '../audio';
-import { ROOMS3, DOORWAYS, PANELS, BOXES, GENERATOR, CHARGER, DUCTS, EYE, sees, roomAt } from '@thick-shift/sim/map';
+
 import { lightsF, TOY } from '@thick-shift/sim';
-import { CUES } from './actors/scare';
+import { DOORS, MASC } from '@thick-shift/sim/config';
+import { BOXES, CHARGER, DOORWAYS, DUCTS, EYE, GENERATOR, PANELS, ROOMS3, roomAt, sees } from '@thick-shift/sim/map';
 import type { DoorKey, Doors, EventData, Mascot, Player, Point, State } from '@thick-shift/sim/types';
+import { boom, bus, ctx, into, muffle, noise, pick, room, SFX, sample, shriek, song, tone, voices, whiteNoise } from '../audio';
+import { game, rnd } from '../state';
 import type { EventOf, Me } from '../types';
+import { CUES } from './actors/scare';
 
 const HEAR = 28; // metres past which a footstep is not worth a voice
 const BUSY = 18; // with this many voices sounding, footsteps and other texture are skipped

@@ -1,8 +1,8 @@
 // Loading models from models/ (packages/game/public/models, served as-is). A model
 // that is missing or fails to load resolves to null, and whoever asked draws a stand-in.
 import * as THREE from 'three';
+import { DRACO_GLTF_CONFIG, DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader, DRACO_GLTF_CONFIG } from 'three/addons/loaders/DRACOLoader.js';
 
 // three's own glTF-only Draco decoder. DRACOLoader names its files with import.meta.url,
 // so the bundler serves them in dev and copies them, hashed, into the build. Given these

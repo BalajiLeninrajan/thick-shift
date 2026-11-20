@@ -2,10 +2,11 @@
 // its own so a guard can tell where they are from one torch-lit patch of it.
 // Every texture covers SPAN metres across; a wall texture covers the whole
 // height of its room, so the dado and the damp sit at real heights.
-import * as THREE from 'three';
-import { paint, fbm, mixc } from './tex';
-import type { Look, Maps, Painter } from './tex';
+
 import { ROOMS3 } from '@thick-shift/sim/map';
+import * as THREE from 'three';
+import type { Look, Maps, Painter } from './tex';
+import { fbm, mixc, paint } from './tex';
 
 // Which surfaces a room wears (LOOK). skirt and frame are trim colours; dado: a corridor wall's lower colour.
 export interface RoomLook {

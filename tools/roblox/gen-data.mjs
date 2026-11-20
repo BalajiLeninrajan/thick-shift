@@ -9,9 +9,9 @@
 // one up.
 import { writeFileSync } from 'node:fs';
 import * as config from '../../packages/sim/src/config.ts';
-import * as map from '../../packages/sim/src/map.ts';
+import { DEAD_TUBES, LAMPS, STAGE } from '../../packages/sim/src/data.ts';
 import * as dressing from '../../packages/sim/src/dressing.ts';
-import { LAMPS, DEAD_TUBES, STAGE } from '../../packages/sim/src/data.ts';
+import * as map from '../../packages/sim/src/map.ts';
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /**

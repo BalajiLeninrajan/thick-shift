@@ -3,8 +3,9 @@
 // the guard's own hands (HANDS_ORDER), so the phone and torch held inside the
 // locker stay in front of its doors. A page element over the canvas could
 // not do that: it covers the hands as well.
-import * as THREE from 'three';
+
 import type { State } from '@thick-shift/sim/types';
+import * as THREE from 'three';
 import type { Me } from '../types';
 
 // Render orders. Everything else is 0. The slats are drawn without a depth test, so whatever comes after them is on top.

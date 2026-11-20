@@ -3,13 +3,14 @@
 // screen showing the map (minimap.ts). It comes up while me.ph is on and
 // drops out of view when it is not. Built here from boxes; there is no
 // model for it.
+
+import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { game } from '../../state';
-import { canvas } from '../world/tex';
+import type { Me } from '../../types';
 import { createMinimap } from '../minimap';
 import { HANDS_ORDER } from '../slats';
-import type { State } from '@thick-shift/sim/types';
-import type { Me } from '../../types';
+import { canvas } from '../world/tex';
 
 const HELD = { x: -0.15, y: -0.088, z: -0.235 },
   DROP = 0.2; // metres from the eye, and how far below that it sits when put away

@@ -2,16 +2,17 @@
 // the charger, spare batteries, the booth's three doors and its wall map.
 // Each starts as a plain stand-in and is swapped for its model from the prop
 // kit when that arrives; if it never does, the stand-ins are the game.
-import * as THREE from 'three';
-import { MASC, DOORS } from '@thick-shift/sim/config';
-import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, WALL_MAP, PANELS, BATTERY_SPOTS, DOOR_H, BOOTH, roomAt } from '@thick-shift/sim/map';
+
 import { lightsF } from '@thick-shift/sim';
+import { DOORS, MASC } from '@thick-shift/sim/config';
+import { GEN_BACK } from '@thick-shift/sim/dressing';
+import { BATTERY_SPOTS, BOOTH, BOXES, CHARGER, DOOR_H, DOORWAYS, GENERATOR, PANELS, ROOMS3, roomAt, WALL_MAP } from '@thick-shift/sim/map';
 import type { DoorKey, Point, State } from '@thick-shift/sim/types';
+import * as THREE from 'three';
 import type { WorldParts } from '../../types';
+import { prop } from './props';
 import { floorY } from './shell';
 import { canvas } from './tex';
-import { prop } from './props';
-import { GEN_BACK } from '@thick-shift/sim/dressing';
 
 const AMBER = 0xffb040,
   SPARK = 0xff7a20,

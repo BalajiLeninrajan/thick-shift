@@ -3,6 +3,7 @@
 // /index.html reach it before the static files (run_worker_first in wrangler.jsonc), so it can rewrite those
 // links; every other static file is served before this code runs.
 import { type RelayEnv, relay } from '@thick-shift/game/worker';
+
 export { Room } from '@thick-shift/game/worker';
 
 // The Worker's bindings (wrangler.jsonc). DISCORD_CLIENT_SECRET is a secret, set with wrangler secret put.

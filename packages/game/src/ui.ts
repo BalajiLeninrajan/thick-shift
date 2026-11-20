@@ -1,11 +1,12 @@
 // The overlay screens around a night: title, lobby, and the cards between nights.
 // Everything here is derived from game/client state once per frame.
-import { MASC, FINAL_NIGHT } from '@thick-shift/sim/config';
-import { game, client, platform } from './state';
-import { startFloorNight, restartFloor, clockF } from '@thick-shift/sim';
-import { host, join, sim } from './net';
-import { unlockAudio } from './audio';
+
+import { clockF, restartFloor, startFloorNight } from '@thick-shift/sim';
+import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
 import type { State, Tally } from '@thick-shift/sim/types';
+import { unlockAudio } from './audio';
+import { host, join, sim } from './net';
+import { client, game, platform } from './state';
 import type { OverlayScreen } from './types';
 
 export const $ = (id: string): HTMLElement => document.getElementById(id);

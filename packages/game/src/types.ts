@@ -5,8 +5,9 @@
 //
 // A handle (what a create...() function returns) is typed from the function itself, so it follows the code as it
 // changes. The data shapes are written out, because two modules have to agree on them.
-import type { Object3D } from 'three';
+
 import type { DoorKey, EventType, GuardAct, Point, SimEvent, UseWhat } from '@thick-shift/sim/types';
+import type { Object3D } from 'three';
 import type { createActors } from './three/actors';
 import type { createPhone } from './three/actors/phone';
 import type { createHud } from './three/hud';

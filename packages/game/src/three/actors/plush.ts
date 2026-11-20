@@ -3,14 +3,15 @@
 // gone out of it until somebody picks it up. A palm-sized plush of Big Biggs in his friendly days, purple,
 // with a party hat and a keyring loop, and a red light in its tummy that
 // blinks with the voice box. Built here from a few shapes; there is no model for it.
+
+import { TOY } from '@thick-shift/sim';
+import { MASC } from '@thick-shift/sim/config';
+import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { MASC } from '@thick-shift/sim/config';
-import { TOY } from '@thick-shift/sim';
+import type { View } from '../actors';
 import { floorY } from '../world/shell';
 import { hostClock } from './track';
-import type { State } from '@thick-shift/sim/types';
-import type { View } from '../actors';
 
 const SIZE = 1.4; // a big keyring, so it shows across a room in a torch beam
 const HAND = 1.3; // metres off the floor it leaves the hand

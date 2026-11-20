@@ -26,9 +26,9 @@
   "css": { "formatter": { "enabled": false } },
   "html": { "formatter": { "enabled": false } },
   "markdown": { "formatter": { "enabled": false } },
-  // Sorting imports would move side-effect imports (styles, audio) ahead of the modules that must load first. Off until
-  // PR 5 of #7, when the client is ported to TS and its import order can be checked file by file.
-  "assist": { "enabled": false },
+  // Imports are sorted. A bare import (the stylesheet in each boot.ts) ends a run of imports, so nothing moves across
+  // it. `pnpm lint` checks the order, and `pnpm lint --write` fixes it.
+  "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
     "enabled": true,
     "rules": {

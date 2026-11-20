@@ -3,19 +3,20 @@
 // keyframed. In order: the gait (driven by the distance actually covered, so
 // feet stay where they land), the pose of its state (styles.ts), its head and
 // eyes, the things particular to it, whatever hangs off it, then feet planted.
-import * as THREE from 'three';
-import { MASC } from '@thick-shift/sim/config';
-import { loadActor, loadJSON, instance, EYE_PALE } from '../assets';
-import { glimpses, MASCOT_R, EYE } from '@thick-shift/sim/map';
+
 import { lightsF } from '@thick-shift/sim';
-import { Track, hostClock, wrap } from './track';
-import { buildRig, lag } from './rig';
-import { C, NCH, RATE, styleOf, standIn, hash } from './styles';
-import type { StageInfo, Style } from './styles';
-import type { Part, Rig } from './rig';
 import type { MascotKind } from '@thick-shift/sim/config';
-import type { Mascot as SimMascot, MascotState, State } from '@thick-shift/sim/types';
+import { MASC } from '@thick-shift/sim/config';
+import { EYE, glimpses, MASCOT_R } from '@thick-shift/sim/map';
+import type { MascotState, Mascot as SimMascot, State } from '@thick-shift/sim/types';
+import * as THREE from 'three';
 import type { View } from '../actors';
+import { EYE_PALE, instance, loadActor, loadJSON } from '../assets';
+import type { Part, Rig } from './rig';
+import { buildRig, lag } from './rig';
+import type { StageInfo, Style } from './styles';
+import { C, hash, NCH, RATE, standIn, styleOf } from './styles';
+import { hostClock, Track, wrap } from './track';
 
 const TAU = Math.PI * 2,
   clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);

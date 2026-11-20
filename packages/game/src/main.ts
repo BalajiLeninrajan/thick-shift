@@ -1,10 +1,11 @@
 // Entry point: the per-frame loop that ties state, sound, UI and drawing together.
-import { game, client } from './state';
-import { SFX, ambience } from './audio';
+
 import { dreadF } from '@thick-shift/sim';
-import { syncOverlay } from './ui';
 import type { State } from '@thick-shift/sim/types';
+import { ambience, SFX } from './audio';
+import { client, game } from './state';
 import type { FloorModule } from './types';
+import { syncOverlay } from './ui';
 
 // window.ts, the ?debug handle for poking at the game from the console.
 const debugWindow = window as Window & { ts?: { game: object; client: object; floor?: object } };

@@ -3,15 +3,16 @@
 // (a 'p' action); everything else about the guard comes back in S.
 // Keyboard (WASD to walk, and arrow keys to look for anyone without a mouse), mouse and gamepad are read here. Touch is in touch.ts, which
 // drives the same guard through pad, look(), toggleTorch(), togglePhone(), toggleZoom() and throwToy().
-import * as THREE from 'three';
-import { game } from '../state';
-import { send } from '../net';
-import { unlockAudio } from '../audio';
-import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, slide, walkable } from '@thick-shift/sim/map';
+
 import { F, TOY } from '@thick-shift/sim';
-import { FAULT_NAME } from './task';
+import { BATTERY_SPOTS, BOXES, CHARGER, EYE, GENERATOR, HIDES, PANELS, PLAYER_R, slide, walkable } from '@thick-shift/sim/map';
 import type { DoorKey, GuardAct, NightState, Player, State, UseWhat } from '@thick-shift/sim/types';
+import * as THREE from 'three';
+import { unlockAudio } from '../audio';
+import { send } from '../net';
+import { game } from '../state';
 import type { Me, Prefs, Target, Task } from '../types';
+import { FAULT_NAME } from './task';
 
 // What drives the guard besides the keys: touch.ts (pad) and the gamepad (gp, which also keeps the stick's last
 // direction for a breaker box). fwd and strafe: -1 to 1.

@@ -17,7 +17,7 @@ pnpm run deploy          # build and publish the web game (plain `pnpm deploy` i
 pnpm run deploy:discord  # build and publish the Discord Activity
 pnpm typecheck           # tsc -b over every package's projects
 pnpm test                # Vitest on packages/sim: the map, the floor plan and seeded nights
-pnpm lint                # Biome's lint rules
+pnpm lint                # Biome's lint rules and import order (--write to fix)
 pnpm format              # reformat everything with Biome
 pnpm format:check        # fail if anything is not formatted
 ```

@@ -8,18 +8,19 @@
 // The same patch adds the two things a torch needs that a spotlight cannot
 // give: a little spill round the beam, so a mascot standing beside it is a
 // shape, and a trace of night vision, so the dark is not one flat black.
-import * as THREE from 'three';
-import { ROOMS3, BOXES } from '@thick-shift/sim/map';
+
 import { darkRoom } from '@thick-shift/sim';
-import type { NightState, State } from '@thick-shift/sim/types';
-import { roomOf, open, sees, reach } from './sight';
-import { Batch } from './geo';
-import type { UV, Vec3 } from './geo';
-import { ART, uvOf } from './art';
-import { canvas } from './tex';
-// The lamps and the dead fittings are plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read them too.
-import { TUBE, GREEN, LAMPS, DEAD_TUBES } from '@thick-shift/sim/data';
 import type { Lamp, RGB } from '@thick-shift/sim/data';
+// The lamps and the dead fittings are plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read them too.
+import { DEAD_TUBES, GREEN, LAMPS, TUBE } from '@thick-shift/sim/data';
+import { BOXES, ROOMS3 } from '@thick-shift/sim/map';
+import type { NightState, State } from '@thick-shift/sim/types';
+import * as THREE from 'three';
+import { ART, uvOf } from './art';
+import type { UV, Vec3 } from './geo';
+import { Batch } from './geo';
+import { open, reach, roomOf, sees } from './sight';
+import { canvas } from './tex';
 
 // How bright each lamp group is this frame, 0 to 1 (createLight's level): the props' glow materials follow these too.
 export interface Levels {

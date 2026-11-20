@@ -9,19 +9,20 @@
 //   hands.ts   your own torch, held in view
 //   phone.ts   your own phone, held in view, with the minimap (app.ts makes it)
 //   plush.ts   the Mini Biggs guards throw, in the air and singing on the floor
-import * as THREE from 'three';
+
 import { MASC } from '@thick-shift/sim/config';
-import { game } from '../state';
 import { DOORWAYS } from '@thick-shift/sim/map';
+import type { EventData, SimEvent, State } from '@thick-shift/sim/types';
+import * as THREE from 'three';
+import { game } from '../state';
+import type { Me } from '../types';
+import { Guard } from './actors/guard';
+import { createHands } from './actors/hands';
+import { Mascot } from './actors/mascot';
+import { createPlush } from './actors/plush';
+import { createScare } from './actors/scare';
 import { hostClock } from './actors/track';
 import { prefs } from './player';
-import { Mascot } from './actors/mascot';
-import { Guard } from './actors/guard';
-import { createScare } from './actors/scare';
-import { createHands } from './actors/hands';
-import { createPlush } from './actors/plush';
-import type { EventData, SimEvent, State } from '@thick-shift/sim/types';
-import type { Me } from '../types';
 
 // Other guards' torches are real lights, but every light costs every pixel, so
 // there are only this many: the nearest lit torches get them and the rest make do with a glowing lens.
