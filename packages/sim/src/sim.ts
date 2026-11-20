@@ -1298,61 +1298,79 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
     return;
   }
   if (a.t !== 'use' || p.flat) return;
-  // i and k come off the wire unchecked. One that indexes nothing does nothing, but a numeric string such as "0"
-  // indexes like the number and is kept as a string (in p.hid and the event), as sim3d.js did. Checking them
-  // changes behaviour, so it waits for a later PR.
-  const i = a.i as number,
-    k = a.k as DoorKey;
-  const near = (thing: Point | undefined) => thing && dist(p, thing) < F.REACH;
-  const box = a.what === 'fix' ? BOXES[i] : undefined;
-  if (box && S.faults[i] && near(box)) {
-    S.faults[i] = null;
-    count(S, 'fixed', 1);
-    emit(S, 'fix', { i, by: p.id, x: box.x, z: box.z });
-    noise(sim, S, p.x, p.z, 16, 0.5); // the clunk of the lights coming back
-  } else if (a.what === 'door' && DOORS.includes(k) && lightsF(S) && near(PANELS[k])) {
-    // A door will not shut on someone standing in it.
-    const [x0, z0, x1, z1] = defined(
-      DOORWAYS.find(d => d.key === k),
-      `door ${k}`
-    ).rect;
-    const inWay = (q: Point, r: number) => q.x > x0 - r && q.x < x1 + r && q.z > z0 - r && q.z < z1 + r;
-    if (!S.doors[k] && (S.players.some(q => inWay(q, PLAYER_R)) || S.m.some(m => inWay(m, MASCOT_R)))) {
-      emit(S, 'fumble', { k, by: p.id });
+  // i indexes the table the action names (BOXES, BATTERY_SPOTS or HIDES), so only a whole number will do: a string
+  // "0" would index like 0 and end up in p.hid and the event as a string. k is one of DOORS; id is a toy's number or
+  // a flat guard's id. An action with any of these wrong does nothing.
+  const i = typeof a.i === 'number' && Number.isInteger(a.i) ? a.i : undefined,
+    k = DOORS.find(d => d === a.k);
+  const near = (thing: Point) => dist(p, thing) < F.REACH;
+  switch (a.what) {
+    case 'fix': {
+      const box = i === undefined ? undefined : BOXES[i];
+      if (i === undefined || !box || !S.faults[i] || !near(box)) return;
+      S.faults[i] = null;
+      count(S, 'fixed', 1);
+      emit(S, 'fix', { i, by: p.id, x: box.x, z: box.z });
+      noise(sim, S, p.x, p.z, 16, 0.5); // the clunk of the lights coming back
       return;
     }
-    S.doors[k] = !S.doors[k];
-    emit(S, 'door', S.doors[k]);
-  } else if (a.what === 'bat' && S.bats.includes(i) && near(BATTERY_SPOTS[i]) && p.bat < 1) {
-    S.bats = S.bats.filter(j => j !== i);
-    sim.batTimers.push(rnd(sim, 30, 50));
-    p.bat = Math.min(1, p.bat + F.BAT_PICKUP);
-    emit(S, 'bat', { by: p.id });
-  } else if (a.what === 'toy' && !p.toy && !hidden(p)) {
-    // A Mini Biggs on the floor, anyone's, into empty hands. Not one still in the air.
-    const t = S.toys.find(t => t.id === a.id);
-    if (!t || S.t < t.land || !near(t)) return;
-    S.toys = S.toys.filter(o => o !== t);
-    p.toy = true;
-    emit(S, 'grab', { by: p.id, x: t.x, z: t.z });
-  } else if (a.what === 'hide' && HIDES[i]) {
-    const h = HIDES[i];
-    if (p.hid === i) {
-      p.hid = -1;
-      emit(S, 'locker', { i, id: p.id, in: false, x: h.x, z: h.z });
-      noise(sim, S, h.at.x, h.at.z, ...LOCKER_NOISE);
-    } else if (!hidden(p) && near(h.at) && !S.players.some(q => q.hid === i)) {
-      Object.assign(p, { hid: i, x: h.at.x, z: h.at.z, on: false, sp: false, act: '' });
-      emit(S, 'locker', { i, id: p.id, in: true, x: h.x, z: h.z });
-      seenHiding(sim, S, p);
-      noise(sim, S, h.at.x, h.at.z, ...LOCKER_NOISE);
+    case 'door': {
+      const door = k && DOORWAYS.find(d => d.key === k);
+      if (!k || !door || !lightsF(S) || !near(PANELS[k])) return;
+      // A door will not shut on someone standing in it.
+      const [x0, z0, x1, z1] = door.rect;
+      const inWay = (q: Point, r: number) => q.x > x0 - r && q.x < x1 + r && q.z > z0 - r && q.z < z1 + r;
+      if (!S.doors[k] && (S.players.some(q => inWay(q, PLAYER_R)) || S.m.some(m => inWay(m, MASCOT_R)))) {
+        emit(S, 'fumble', { k, by: p.id });
+        return;
+      }
+      S.doors[k] = !S.doors[k];
+      emit(S, 'door', S.doors[k]);
+      return;
     }
-  } else if (a.what === 'peel') {
-    const other = S.players.find(q => q.id === a.id);
-    if (other?.flat && near(other)) {
-      Object.assign(other, { flat: false, flatBy: -1, safe: S.t + 4 });
-      recordPeel(S, p.name);
-      emit(S, 'peel', { id: other.id, by: p.id, x: other.x, z: other.z });
+    case 'bat': {
+      const spot = i === undefined ? undefined : BATTERY_SPOTS[i];
+      if (i === undefined || !spot || !S.bats.includes(i) || !near(spot) || p.bat >= 1) return;
+      S.bats = S.bats.filter(j => j !== i);
+      sim.batTimers.push(rnd(sim, 30, 50));
+      p.bat = Math.min(1, p.bat + F.BAT_PICKUP);
+      emit(S, 'bat', { by: p.id });
+      return;
+    }
+    case 'toy': {
+      // A Mini Biggs on the floor, anyone's, into empty hands. Not one still in the air.
+      if (p.toy || hidden(p) || typeof a.id !== 'number') return;
+      const t = S.toys.find(t => t.id === a.id);
+      if (!t || S.t < t.land || !near(t)) return;
+      S.toys = S.toys.filter(o => o !== t);
+      p.toy = true;
+      emit(S, 'grab', { by: p.id, x: t.x, z: t.z });
+      return;
+    }
+    case 'hide': {
+      const h = i === undefined ? undefined : HIDES[i];
+      if (i === undefined || !h) return;
+      if (p.hid === i) {
+        p.hid = -1;
+        emit(S, 'locker', { i, id: p.id, in: false, x: h.x, z: h.z });
+        noise(sim, S, h.at.x, h.at.z, ...LOCKER_NOISE);
+      } else if (!hidden(p) && near(h.at) && !S.players.some(q => q.hid === i)) {
+        Object.assign(p, { hid: i, x: h.at.x, z: h.at.z, on: false, sp: false, act: '' });
+        emit(S, 'locker', { i, id: p.id, in: true, x: h.x, z: h.z });
+        seenHiding(sim, S, p);
+        noise(sim, S, h.at.x, h.at.z, ...LOCKER_NOISE);
+      }
+      return;
+    }
+    case 'peel': {
+      if (typeof a.id !== 'string') return;
+      const other = S.players.find(q => q.id === a.id);
+      if (other?.flat && near(other)) {
+        Object.assign(other, { flat: false, flatBy: -1, safe: S.t + 4 });
+        recordPeel(S, p.name);
+        emit(S, 'peel', { id: other.id, by: p.id, x: other.x, z: other.z });
+      }
+      return;
     }
   }
 }

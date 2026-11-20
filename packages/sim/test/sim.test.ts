@@ -1,10 +1,10 @@
 // The night's entry points called directly, without the harness's guards: the clock, starting a night, a guest taking
-// over as host (adoptFloor) and starting the run again (restartFloor).
+// over as host (adoptFloor), starting the run again (restartFloor) and a guard's actions (actFloor).
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
-import { BATTERY_SPOTS, HIDES, REST, spawnPoint } from '../src/map.ts';
+import { BATTERY_SPOTS, BOXES, HIDES, PANELS, REST, spawnPoint } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
-import { adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor } from '../src/sim.ts';
+import { actFloor, adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor } from '../src/sim.ts';
 import type { Guard, NightState, SimEvent, State } from '../src/types.ts';
 import { countEvents, digest, eventsSince } from './nights.ts';
 
@@ -211,5 +211,92 @@ describe('restartFloor', () => {
     expect(restarted).toEqual(started);
     expect(sim.brains).toEqual(fresh.sim.brains);
     expect([sim.nextFault, sim.batTimers, sim.crankNoise]).toEqual([fresh.sim.nextFault, fresh.sim.batTimers, fresh.sim.crankNoise]);
+  });
+});
+
+describe('actFloor', () => {
+  // Each kind of use: a night set up so that the action does something for g0, the field it reads, and wrong values
+  // for that field, as JSON from a guest's browser can carry.
+  const box = defined(BOXES[0], 'box 0'),
+    spot = defined(BATTERY_SPOTS[0], 'battery spot 0'),
+    locker = defined(HIDES[0], 'locker 0');
+  const USES: { what: string; set: (S: NightState, p: Guard) => void; good: string; bad: string[] }[] = [
+    {
+      what: 'fix',
+      set: (S, p) => {
+        Object.assign(p, { x: box.x, z: box.z });
+        S.faults[0] = { k: 0, at: 0, burnt: false };
+      },
+      good: '"i":0',
+      bad: ['"i":"0"', '"i":0.5', '"i":-1', '"i":[0]', '"i":null', `"i":${BOXES.length}`],
+    },
+    {
+      what: 'bat',
+      set: (S, p) => {
+        Object.assign(p, { x: spot.x, z: spot.z, bat: 0.5 });
+        S.bats = [0];
+      },
+      good: '"i":0',
+      bad: ['"i":"0"', '"i":0.5', '"i":true'],
+    },
+    {
+      what: 'hide',
+      set: (_S, p) => Object.assign(p, { x: locker.at.x, z: locker.at.z }),
+      good: '"i":0',
+      bad: ['"i":"0"', '"i":0.5', '"i":-1', '"i":{}', `"i":${HIDES.length}`],
+    },
+    {
+      what: 'door',
+      set: (_S, p) => Object.assign(p, { x: PANELS.L.x, z: PANELS.L.z }),
+      good: '"k":"L"',
+      bad: ['"k":"l"', '"k":"toString"', '"k":0', '"k":["L"]'],
+    },
+    {
+      what: 'toy',
+      set: (S, p) => {
+        p.toy = false;
+        S.toys = [{ id: 1, by: 'g1', x0: p.x, z0: p.z, x: p.x, z: p.z, at: 0, land: 0, heard: true }];
+      },
+      good: '"id":1',
+      bad: ['"id":"1"', '"id":[1]'],
+    },
+    {
+      what: 'peel',
+      set: (S, p) => Object.assign(defined(S.players[1], 'g1'), { x: p.x, z: p.z, flat: true }),
+      good: '"id":"g1"',
+      bad: ['"id":["g1"]', '"id":1'],
+    },
+  ];
+  // g0 sends {"t":"use","what":what,field} to a two-guard night set up by set. What changed, and what was there before.
+  function use(what: string, set: (S: NightState, p: Guard) => void, field: string) {
+    const { sim, S } = start(1, 2, 1);
+    set(S, defined(S.players[0], 'g0'));
+    const before = structuredClone({ S, batTimers: sim.batTimers });
+    actFloor(sim, S, 'g0', JSON.parse(`{"t":"use","what":"${what}",${field}}`));
+    return { after: { S, batTimers: sim.batTimers }, before };
+  }
+
+  for (const { what, set, good, bad } of USES) {
+    it(`does a ${what} with ${good}`, () => {
+      const { after, before } = use(what, set, good);
+      expect(after).not.toEqual(before);
+    });
+
+    it(`ignores a ${what} with ${bad.join(' or ')}`, () => {
+      for (const field of bad) {
+        const { after, before } = use(what, set, field);
+        expect(after, field).toEqual(before);
+      }
+    });
+  }
+
+  it('steps into a locker named by a number, and keeps p.hid a number', () => {
+    const hide = defined(
+      USES.find(u => u.what === 'hide'),
+      'the hide use'
+    );
+    const { S } = use('hide', hide.set, '"i":0').after;
+    expect(S.players[0]?.hid).toBe(0);
+    expect(S.evs.at(-1)).toMatchObject({ type: 'locker', x: { i: 0, in: true } });
   });
 });
