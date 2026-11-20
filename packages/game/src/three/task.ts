@@ -13,8 +13,8 @@
 // touch (tap the parts). The host is told only when the job is done.
 import { BOXES, ROOMS3 } from '@thick-shift/sim/map';
 
-const KIND = ['Reset the breaker', 'Reconnect the wires', 'Bleed the valve'];
-export const FAULT_NAME = KIND;
+const KIND: string[] = ['Reset the breaker', 'Reconnect the wires', 'Bleed the valve'];
+export const FAULT_NAME: string[] = KIND;
 const WIRES = [
   ['#f38ba8', 'red'],
   ['#f9e2af', 'yellow'],
@@ -23,7 +23,7 @@ const WIRES = [
 ];
 const VALVE = { rise: 0.9, fall: 1.1, wobble: 0.35, band: [0.58, 0.8], need: 1.3 }; // per second; the green band; seconds in it
 
-const shuffle = list => {
+const shuffle = <T>(list: T[]): T[] => {
   for (let i = list.length - 1; i > 0; i--) {
     const j = (Math.random() * (i + 1)) | 0;
     [list[i], list[j]] = [list[j], list[i]];
@@ -31,7 +31,19 @@ const shuffle = list => {
   return list;
 };
 
-export function createTask(root) {
+// One minigame while it is up. Each kind fills in its own fields (sel, next, held, ...) besides these.
+interface Job {
+  done: boolean;
+  help: string;
+  draw(): void;
+  move(dx: number, dy: number): void;
+  pick(i: number): void;
+  act(down: boolean): void;
+  tap(e: MouseEvent): void;
+  tick?(dt: number): void;
+}
+
+export function createTask(root: HTMLElement) {
   const panel = document.createElement('div');
   panel.className = 'ts-f-task';
   panel.hidden = true;
@@ -41,11 +53,11 @@ export function createTask(root) {
     where = panel.querySelector('.ts-f-task-head > span'),
     body = panel.querySelector('.ts-f-task-body'),
     help = panel.querySelector('.ts-f-task-help');
-  let job = null,
-    onDone = null,
-    onQuit = null;
+  let job: Job | null = null,
+    onDone: (() => void) | null = null,
+    onQuit: (() => void) | null = null;
 
-  const buzz = () => {
+  const buzz = (): void => {
     panel.classList.remove('is-wrong');
     void panel.offsetWidth;
     panel.classList.add('is-wrong');
@@ -54,13 +66,13 @@ export function createTask(root) {
   /* ---------- the three jobs ---------- */
 
   // Each returns { draw(), move(dx, dy), pick(n), act(down), tick(dt), done }.
-  function breaker() {
+  function breaker(): Job {
     const n = 5,
       tripped = shuffle([0, 1, 2, 3, 4]).slice(0, 3),
       order = shuffle(tripped.slice());
     const up = Array.from({ length: n }, (_, i) => !tripped.includes(i));
     const j = { sel: 0, next: 0, done: false };
-    const flip = i => {
+    const flip = (i: number): void => {
       if (up[i]) return;
       if (i === order[j.next]) {
         up[i] = true;
@@ -73,47 +85,47 @@ export function createTask(root) {
       } // the wrong one trips them all again
       draw();
     };
-    function draw() {
+    function draw(): void {
       body.innerHTML = `<div class="ts-tk-breaker">${up.map((on, i) => `<button class="ts-tk-switch${on ? ' is-up' : ''}${i === j.sel ? ' is-sel' : ''}" data-i="${i}"><i></i><span>${on ? '' : order.indexOf(i) + 1}</span><small>${i + 1}</small></button>`).join('')}</div>`;
     }
     return Object.assign(j, {
       help: 'Flip the tripped switches up in the order on their tags. <kbd class="ts-key">A</kbd><kbd class="ts-key">D</kbd> or <kbd class="ts-key">1</kbd>–<kbd class="ts-key">5</kbd> to choose, <kbd class="ts-key">E</kbd> to flip.',
       draw,
-      move(dx) {
+      move(dx: number) {
         if (dx) {
           j.sel = (j.sel + dx + n) % n;
           draw();
         }
       },
-      pick(i) {
+      pick(i: number) {
         if (i < n) {
           j.sel = i;
           flip(i);
         }
       },
-      act(down) {
+      act(down: boolean) {
         if (down) flip(j.sel);
       },
-      tap(e) {
-        const b = e.target.closest('[data-i]');
+      tap(e: MouseEvent) {
+        const b = (e.target as Element).closest<HTMLElement>('[data-i]');
         if (b) this.pick(+b.dataset.i);
       },
     });
   }
 
-  function wires() {
+  function wires(): Job {
     const right = shuffle([0, 1, 2, 3]),
-      joined = new Set();
+      joined = new Set<number>();
     const j = { sel: 0, done: false };
-    const live = () => [0, 1, 2, 3].find(w => !joined.has(w));
-    const join = slot => {
+    const live = (): number => [0, 1, 2, 3].find(w => !joined.has(w));
+    const join = (slot: number): void => {
       if (right[slot] === live()) {
         joined.add(right[slot]);
         j.done = joined.size === 4;
       } else buzz();
       draw();
     };
-    function draw() {
+    function draw(): void {
       const now = live();
       body.innerHTML = `<div class="ts-tk-wires"><div>${WIRES.map(([c], w) => `<span class="ts-tk-end${joined.has(w) ? ' is-joined' : w === now ? ' is-live' : ''}" style="--c:${c}"></span>`).join('')}</div>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${[...joined].map(w => `<path d="M0 ${12.5 + w * 25} C50 ${12.5 + w * 25} 50 ${12.5 + right.indexOf(w) * 25} 100 ${12.5 + right.indexOf(w) * 25}" stroke="${WIRES[w][0]}" stroke-width="5" fill="none" vector-effect="non-scaling-stroke"/>`).join('')}</svg>
@@ -122,36 +134,36 @@ export function createTask(root) {
     return Object.assign(j, {
       help: 'Join the lit wire to its colour. <kbd class="ts-key">W</kbd><kbd class="ts-key">S</kbd> or <kbd class="ts-key">1</kbd>–<kbd class="ts-key">4</kbd> to choose, <kbd class="ts-key">E</kbd> to join.',
       draw,
-      move(dx, dy) {
+      move(dx: number, dy: number) {
         if (dy) {
           j.sel = (j.sel + dy + 4) % 4;
           draw();
         }
       },
-      pick(s) {
+      pick(s: number) {
         if (s < 4) {
           j.sel = s;
           join(s);
         }
       },
-      act(down) {
+      act(down: boolean) {
         if (down) join(j.sel);
       },
-      tap(e) {
-        const b = e.target.closest('[data-s]');
+      tap(e: MouseEvent) {
+        const b = (e.target as Element).closest<HTMLElement>('[data-s]');
         if (b) this.pick(+b.dataset.s);
       },
     });
   }
 
-  function valve() {
+  function valve(): Job {
     const j = { p: 0, held: false, inBand: 0, t: Math.random() * 9, done: false };
-    let needle, fill, dial;
-    function draw() {
+    let needle: HTMLElement, fill: HTMLElement, dial: HTMLElement;
+    function draw(): void {
       body.innerHTML = `<div class="ts-tk-valve"><div class="ts-tk-dial"><i class="ts-tk-band" style="--a:${VALVE.band[0]};--b:${VALVE.band[1]}"></i><i class="ts-tk-needle"></i></div><div class="ts-tk-fill"><i></i></div><button class="btn btn-secondary ts-tk-hold" data-hold>Hold</button></div>`;
-      dial = body.querySelector('.ts-tk-dial');
-      needle = body.querySelector('.ts-tk-needle');
-      fill = body.querySelector('.ts-tk-fill i');
+      dial = body.querySelector<HTMLElement>('.ts-tk-dial');
+      needle = body.querySelector<HTMLElement>('.ts-tk-needle');
+      fill = body.querySelector<HTMLElement>('.ts-tk-fill i');
       const hold = body.querySelector('[data-hold]');
       hold.addEventListener('pointerdown', e => {
         e.preventDefault();
@@ -167,11 +179,11 @@ export function createTask(root) {
       draw,
       move() {},
       pick() {},
-      act(down) {
+      act(down: boolean) {
         j.held = down;
       },
       tap() {},
-      tick(dt) {
+      tick(dt: number) {
         j.t += dt;
         j.p += (j.held ? VALVE.rise : -VALVE.fall) * dt + Math.sin(j.t * 7.3) * Math.sin(j.t * 2.1) * VALVE.wobble * dt;
         if (j.p > 1) {
@@ -192,11 +204,11 @@ export function createTask(root) {
 
   /* ---------- input ---------- */
 
-  const KEY_DIR = { KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0] };
+  const KEY_DIR: Record<string, [number, number]> = { KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0] };
   addEventListener(
     'keydown',
     e => {
-      if (!job || /** @type {Element} */ (e.target).closest?.('input, textarea, select')) return;
+      if (!job || (e.target as Element).closest?.('input, textarea, select')) return;
       const c = e.code;
       if (c === 'KeyX' || c === 'Escape') {
         e.preventDefault();
@@ -223,7 +235,7 @@ export function createTask(root) {
     true
   );
   panel.addEventListener('click', e => {
-    if (/** @type {Element} */ (e.target).closest('[data-task="quit"]')) {
+    if ((e.target as Element).closest('[data-task="quit"]')) {
       quit();
       return;
     }
@@ -233,19 +245,19 @@ export function createTask(root) {
     }
   });
 
-  function check() {
+  function check(): void {
     if (job?.done) {
       const done = onDone;
       close();
       done?.();
     }
   }
-  function quit() {
+  function quit(): void {
     const q = onQuit;
     close();
     q?.();
   }
-  function close() {
+  function close(): void {
     job = null;
     onDone = onQuit = null;
     panel.hidden = true;
@@ -253,11 +265,11 @@ export function createTask(root) {
   }
 
   return {
-    get active() {
+    get active(): boolean {
       return !!job;
     },
     // i: the box; k: the kind. done: called once the job is finished; quit: when the guard lets go.
-    open(i, k, done, quit_) {
+    open(i: number, k: number, done: () => void, quit_: () => void): void {
       job = [breaker, wires, valve][k]();
       onDone = done;
       onQuit = quit_;
@@ -269,7 +281,7 @@ export function createTask(root) {
     },
     close,
     // Gamepad: dir is [dx, dy] on a fresh press; a: the A button held; b: pressed this frame.
-    pad(dir, a, aWas, b) {
+    pad(dir: [number, number] | null, a: boolean, aWas: boolean, b: boolean): void {
       if (!job) return;
       if (b) {
         quit();
@@ -279,7 +291,7 @@ export function createTask(root) {
       if (a !== aWas) job.act(a);
       check();
     },
-    tick(dt) {
+    tick(dt: number): void {
       if (job?.tick) {
         job.tick(dt);
         check();
