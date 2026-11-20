@@ -4,5 +4,6 @@ export * from './config.ts';
 export * from './data.ts';
 export * from './dressing.ts';
 export * from './map.ts';
+export * from './random.ts';
 export * from './sim.ts';
 export type * from './types.ts';

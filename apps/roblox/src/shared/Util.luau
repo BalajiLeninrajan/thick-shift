@@ -80,8 +80,8 @@ function Util.includes<T>(list: { T }, x: T): boolean
 	return table.find(list, x) ~= nil
 end
 
--- A seeded random source that returns the same numbers as the balance harness's seedRandom in
--- tools/balance/floor.mjs, for the differential test. The game itself uses Random.new().
+-- A seeded random source that returns the same numbers as seeded() in packages/sim/src/random.ts,
+-- for the differential test. The game itself uses Random.new().
 local U32 = 4294967296
 local function imul(a: number, b: number): number
 	-- The low 32 bits of a * b, without the product passing 2^53.
