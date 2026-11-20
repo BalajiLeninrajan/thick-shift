@@ -1,0 +1,103 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`odd nights > empty building x2 n1, seed 1 1`] = `
+{
+  "burnt": 0,
+  "events": "bat 3, calm 5, fault 15, fix 15, hour 6, stir 6, win 1",
+  "eventsDigest": "01ef6dff2df2edc7",
+  "failures": [],
+  "fixed": 15,
+  "flats": 0,
+  "outcome": "win",
+  "peels": 0,
+  "power": "67.468",
+  "stateDigest": "c1960d8b59bebc94",
+  "t": "420.000",
+  "ticks": 4200,
+}
+`;
+
+exports[`odd nights > x1 sit in a locker all night n1, seed 2 1`] = `
+{
+  "burnt": 4,
+  "events": "burn 4, calm 3, fault 5, flat 1, found 1, hour 3, locker 1, out 1, scare 1, stir 4",
+  "eventsDigest": "0f82079d96211cc2",
+  "failures": [],
+  "fixed": 0,
+  "flats": 1,
+  "outcome": "dead",
+  "peels": 0,
+  "power": "0.000",
+  "stateDigest": "6b6fc6d4faf49030",
+  "t": "218.000",
+  "ticks": 2180,
+}
+`;
+
+exports[`odd nights > x4 camp the charger n3, seed 1 1`] = `
+{
+  "burnt": 2,
+  "events": "burn 2, call 10, calm 1, fault 6, flat 4, hour 1, out 1, quit 4, scare 1, spot 10, stir 2",
+  "eventsDigest": "5f181f71d593d746",
+  "failures": [],
+  "fixed": 0,
+  "flats": 4,
+  "outcome": "dead",
+  "peels": 0,
+  "power": "0.000",
+  "stateDigest": "32b74e05ee600051",
+  "t": "113.900",
+  "ticks": 1139,
+}
+`;
+
+exports[`odd nights > x4 sit in the ducts n1, seed 3 1`] = `
+{
+  "burnt": 0,
+  "events": "call 12, fault 2, flat 4, quit 1, scare 1, spot 5, stir 1",
+  "eventsDigest": "4d6e81ccd4c8263d",
+  "failures": [],
+  "fixed": 0,
+  "flats": 4,
+  "outcome": "dead",
+  "peels": 0,
+  "power": "97.170",
+  "stateDigest": "8231c995159ddc80",
+  "t": "52.400",
+  "ticks": 524,
+}
+`;
+
+exports[`odd nights > x4 turtle, toys at the doors n1, seed 2 1`] = `
+{
+  "burnt": 4,
+  "events": "arrive 1, bang 3, burn 4, call 6, calm 1, door 3, fault 10, flat 4, hour 2, out 1, scare 1, spot 4, stir 2",
+  "eventsDigest": "c78effcf00153ef6",
+  "failures": [],
+  "fixed": 0,
+  "flats": 4,
+  "outcome": "dead",
+  "peels": 0,
+  "power": "0.000",
+  "stateDigest": "7b601c9ea2bcf166",
+  "t": "141.200",
+  "ticks": 1412,
+}
+`;
+
+exports[`odd nights > x4 turtle: doors shut, nobody moves n3, seed 1 1`] = `
+{
+  "burnt": 5,
+  "events": "arrive 1, bang 4, burn 5, call 6, calm 1, door 3, fault 10, flat 4, hour 1, out 1, roar 1, scare 1, spot 5, stir 2",
+  "eventsDigest": "08ff6bd6e63ad7e5",
+  "failures": [],
+  "fixed": 0,
+  "flats": 4,
+  "outcome": "dead",
+  "peels": 0,
+  "power": "0.000",
+  "stateDigest": "f8e5e12538ffe496",
+  "t": "130.800",
+  "ticks": 1308,
+}
+`;

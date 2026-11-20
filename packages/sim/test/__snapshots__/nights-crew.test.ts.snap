@@ -1,0 +1,86 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`crew nights > crew of 2 competent n2, seed 1 1`] = `
+{
+  "burnt": 6,
+  "events": "bat 4, burn 6, call 25, calm 6, check 1, crash 2, door 15, fault 17, fix 12, flat 3, grab 2, hour 5, out 1, peel 1, quit 10, roar 3, scare 1, spot 24, stir 7, toy 4",
+  "eventsDigest": "da2b7b5b6d2414cd",
+  "failures": [],
+  "fixed": 12,
+  "flats": 3,
+  "outcome": "dead",
+  "peels": 1,
+  "power": "0.000",
+  "stateDigest": "1856996c2f9feb9f",
+  "t": "419.000",
+  "ticks": 4190,
+}
+`;
+
+exports[`crew nights > crew of 3 competent n4, seed 1 1`] = `
+{
+  "burnt": 7,
+  "events": "arrive 4, bang 16, bat 3, burn 7, call 69, calm 5, check 3, crash 5, door 34, fault 29, fix 20, flat 4, grab 2, hour 5, out 1, peel 1, quit 12, roar 6, scare 1, spot 29, stir 6, toy 4",
+  "eventsDigest": "a7f951a0082054d9",
+  "failures": [],
+  "fixed": 20,
+  "flats": 4,
+  "outcome": "dead",
+  "peels": 1,
+  "power": "0.000",
+  "stateDigest": "0294fe3ff5a8a1f6",
+  "t": "409.900",
+  "ticks": 4099,
+}
+`;
+
+exports[`crew nights > crew of 4 careless n1, seed 1 1`] = `
+{
+  "burnt": 3,
+  "events": "bat 6, burn 3, call 77, calm 6, fault 29, fix 22, flat 4, hour 6, peel 1, quit 17, spot 21, stir 6, win 1",
+  "eventsDigest": "c8ae0db90160e98f",
+  "failures": [],
+  "fixed": 22,
+  "flats": 4,
+  "outcome": "win",
+  "peels": 1,
+  "power": "69.512",
+  "stateDigest": "cac25bcddcf8ae03",
+  "t": "420.000",
+  "ticks": 4200,
+}
+`;
+
+exports[`crew nights > crew of 4 competent n5, seed 2 1`] = `
+{
+  "burnt": 9,
+  "events": "arrive 2, bang 8, bat 1, burn 9, call 49, calm 3, check 3, crash 1, door 20, fault 22, fix 12, flat 4, fumble 2, grab 1, hour 3, quit 5, roar 2, scare 1, spot 22, stir 4, toy 4",
+  "eventsDigest": "a1d3437fa165ebcc",
+  "failures": [],
+  "fixed": 12,
+  "flats": 4,
+  "outcome": "dead",
+  "peels": 0,
+  "power": "10.759",
+  "stateDigest": "0551f814bf1c9d00",
+  "t": "238.600",
+  "ticks": 2386,
+}
+`;
+
+exports[`crew nights > crew of 6 competent n1, seed 3 1`] = `
+{
+  "burnt": 2,
+  "events": "arrive 1, bang 3, bat 14, burn 2, calm 5, door 46, fault 44, fix 42, fumble 2, grab 9, hour 6, quit 16, spot 21, stir 6, toy 10, win 1",
+  "eventsDigest": "fa0461f759e6ce57",
+  "failures": [],
+  "fixed": 42,
+  "flats": 0,
+  "outcome": "win",
+  "peels": 0,
+  "power": "66.571",
+  "stateDigest": "9b44a0055c013c13",
+  "t": "420.000",
+  "ticks": 4200,
+}
+`;

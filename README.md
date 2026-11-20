@@ -16,7 +16,7 @@ pnpm build               # build both apps into apps/<app>/dist
 pnpm run deploy          # build and publish the web game (plain `pnpm deploy` is a pnpm command)
 pnpm run deploy:discord  # build and publish the Discord Activity
 pnpm typecheck           # tsc -b over every package's projects
-pnpm test                # Vitest on packages/sim: the map and the floor plan
+pnpm test                # Vitest on packages/sim: the map, the floor plan and seeded nights
 pnpm lint                # Biome's lint rules
 pnpm format              # reformat everything with Biome
 pnpm format:check        # fail if anything is not formatted
@@ -54,7 +54,7 @@ packages/sim/           the simulation as plain TypeScript, with no DOM and no t
   src/data.ts           the lamps and the stage, which the picture and the Roblox port share
   src/sim.ts            the night: newSim, startFloorNight, stepFloor, actFloor, adoptFloor
   src/types.ts          the state S and every message net.js sends and receives
-  test/                 the tests (pnpm test)
+  test/                 the tests (pnpm test); __snapshots__ holds what seeded nights came to
 apps/
   web/                  the web game
     index.html          the markup and the CDN links, and Vite's entry
@@ -162,6 +162,8 @@ The booth has three doors, and each button works from both sides of the wall, so
 ## Balance
 
 `node tools/balance/floor.ts` plays every scenario 40 times through the real sim and map in `packages/sim` and prints a table (`--seeds`, `--only`, `--deaths` and `--trace` are explained at the top of the file). It is TypeScript that Node 22 runs by stripping the types; the guards and scenarios are in `harness.ts`. The guards walk with `route()` and `slide()` at the game's speeds, react a quarter to most of a second late, and only know what a person could: what is lit and in front of them, what is close enough to hear, the HUD, the wall map from the booth and a flat teammate's call. Careless, competent and expert guards play alone and in crews of 2, 3, 4 and 6. Then come the strategies that must lose: the booth sealed, one cranking while the rest hide, torches from a corner, ignoring the faults, one runner for three who stay in, camping the charger, kiting a loop, standing in the ducts or the vent doorway, and sitting in lockers all night. The `hides` scenarios are competent guards who also step into a free locker within five metres when something is after them and nothing they know of can see them, and come out after four quiet seconds. They show what the lockers are worth, and nothing asserts on them. It exits non-zero on a softlock (a mascot standing still for 30 seconds, a guard who cannot move, a night that does not end), a guard flattened in the first 30 seconds of night 1, or a bad strategy winning more than one night in ten and more than half as often as playing properly.
+
+The tests in `packages/sim/test` play seventeen of these nights on fixed seeds and compare a summary of each (how it ended, when, the count of each event, and digests of every event and of the final state) with a snapshot. A change to the sim that changes how any of them goes fails `pnpm test`. When the change is meant, `pnpm test -u` rewrites the snapshots, and their diff shows which nights moved and how.
 
 Where the rules stand, over 40 nights a row:
 

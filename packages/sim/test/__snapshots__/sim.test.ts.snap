@@ -1,0 +1,20 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`adoptFloor > carries the night on from there the same way every time 1`] = `
+{
+  "events": "fault 1, flat 2, scare 1, spot 2, stir 1",
+  "phase": "dead",
+  "power": "98.189",
+  "state": "4a95b67da1326607",
+  "t": "29.500",
+}
+`;
+
+exports[`seeded > gives the same numbers for the same seed, in [0, 1) 1`] = `
+[
+  0.5464560757391155,
+  0.45955629041418433,
+  0.2470416973810643,
+  0.5192999374121428,
+]
+`;

@@ -139,7 +139,8 @@ guests), `RelayToGuest` (`{ t: 'host', guests }`, `{ t: 'rehost' }`), `HostInbox
 PR 4 has since moved the harness to TypeScript: `tools/balance/floor.mjs` is now `floor.ts` (the command line) and
 `harness.ts` (the guards, the scenarios and `play()`), `rec.mjs` is `rec.ts`, and the mulberry32 below is `seeded()`
 in `src/random.ts`, which `seedRandom(seed)` calls. Node runs them by stripping the types. Everything below still
-holds with those names, and `node tools/balance/floor.ts` prints the same bytes `floor.mjs` did.
+holds with those names, and `node tools/balance/floor.ts` prints the same bytes `floor.mjs` did. The tests in
+`test/` play seeded nights through `harness.ts` the same way.
 
 ### The balance harness (tools/balance/floor.mjs)
 
