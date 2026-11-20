@@ -53,6 +53,8 @@ const POSTER_BG: PerMascot<string> = ['#e8c832', '#2ec4c6', '#e86a2a', '#d4418e'
 const POSTER_LINE: PerMascot<string> = ['THERE IS ALWAYS ROOM\nFOR ONE MORE', 'HUGS ARE FREE', 'HE FITS ANYWHERE', 'NO RUNNING\n(EXCEPT TANK)'];
 // The party hat each mascot wears in the venue's drawings.
 const HAT: PerMascot<string> = ['#e8c832', '#d4418e', '#2ec4c6', '#e86a2a'];
+// The paler patch on each mascot's front, and the walrus's muzzle.
+const BELLY: PerMascot<string> = ['#e6c8ee', '#f5e0dc', '#cfe2a8', '#a6adc8'];
 const BUNTING = ['#d4418e', '#e8c832', '#2ec4c6', '#e86a2a'];
 // The staff notes, each with the rectangle of ART it is painted in.
 const NOTES: [at: NoteKey, title: string, body: string][] = [
@@ -72,19 +74,18 @@ const INK = '#1a1210';
 // (x, y) is the ground between its feet; k = 1 makes it about 230 px tall.
 function friend(c: CanvasRenderingContext2D, i: MascotIndex, x: number, y: number, k: number): void {
   const m = MASC[i],
-    shade = mixc(m.col, '#000000', 0.4);
+    shade = mixc(m.col, '#000000', 0.4),
+    belly = BELLY[i];
   c.save();
   c.translate(x, y);
   c.scale(k, k);
   c.lineWidth = 5;
   c.strokeStyle = INK;
   c.lineJoin = c.lineCap = 'round';
-  // fill is undefined for the belly of a mascot without one, and the shape is then filled with whatever colour was
-  // set before it.
-  const ell = (ex: number, ey: number, rx: number, ry: number, fill: string | undefined, rot = 0, stroke = true): void => {
+  const ell = (ex: number, ey: number, rx: number, ry: number, fill: string, rot = 0, stroke = true): void => {
     c.beginPath();
     c.ellipse(ex, ey, rx, ry, rot, 0, 7);
-    if (fill !== undefined) c.fillStyle = fill;
+    c.fillStyle = fill;
     c.fill();
     if (stroke) c.stroke();
   };
@@ -98,7 +99,7 @@ function friend(c: CanvasRenderingContext2D, i: MascotIndex, x: number, y: numbe
   ell(-64, -82, 15, 32, m.col, 0.45);
   ell(70, -124, 15, 34, m.col, -0.75);
   ell(0, -72, 64, 68, m.col);
-  ell(0, -60, 41, 44, m.belly);
+  ell(0, -60, 41, 44, belly);
   const hy = -158;
   if (m.k === 'toad') {
     ell(-30, hy - 30, 19, 19, m.col);
@@ -142,8 +143,8 @@ function friend(c: CanvasRenderingContext2D, i: MascotIndex, x: number, y: numbe
         c.fill();
         c.stroke();
       }
-      ell(-16, hy + 18, 19, 14, m.belly);
-      ell(16, hy + 18, 19, 14, m.belly);
+      ell(-16, hy + 18, 19, 14, belly);
+      ell(16, hy + 18, 19, 14, belly);
       ell(0, hy + 8, 7, 5, INK, 0, false);
     }
     if (m.k === 'rhino') {

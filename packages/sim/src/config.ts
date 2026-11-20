@@ -12,8 +12,6 @@ export interface MascotKind {
   k: MascotKey;
   name: string;
   col: string;
-  // The game's art.ts paints a belly in this colour on the posters. No mascot has one yet, so it paints with none.
-  belly?: string;
 }
 
 // The mascots, by MascotIndex.
