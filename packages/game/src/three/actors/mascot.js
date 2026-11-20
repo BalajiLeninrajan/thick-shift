@@ -4,10 +4,10 @@
 // feet stay where they land), the pose of its state (styles.js), its head and
 // eyes, the things particular to it, whatever hangs off it, then feet planted.
 import * as THREE from 'three';
-import { MASC } from '../../config.js';
+import { MASC } from '@thick-shift/sim/config';
 import { loadActor, loadJSON, instance, EYE_PALE } from '../assets.js';
-import { glimpses, MASCOT_R, EYE } from '../map.js';
-import { lightsF } from '../sim3d.js';
+import { glimpses, MASCOT_R, EYE } from '@thick-shift/sim/map';
+import { lightsF } from '@thick-shift/sim';
 import { Track, hostClock, wrap } from './track.js';
 import { buildRig, lag } from './rig.js';
 import { C, NCH, RATE, styleOf, standIn, hash } from './styles.js';

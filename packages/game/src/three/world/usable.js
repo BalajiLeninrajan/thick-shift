@@ -3,13 +3,13 @@
 // Each starts as a plain stand-in and is swapped for its model from the prop
 // kit when that arrives; if it never does, the stand-ins are the game.
 import * as THREE from 'three';
-import { MASC, DOORS } from '../../config.js';
-import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, WALL_MAP, PANELS, BATTERY_SPOTS, DOOR_H, BOOTH, roomAt } from '../map.js';
-import { lightsF } from '../sim3d.js';
+import { MASC, DOORS } from '@thick-shift/sim/config';
+import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, WALL_MAP, PANELS, BATTERY_SPOTS, DOOR_H, BOOTH, roomAt } from '@thick-shift/sim/map';
+import { lightsF } from '@thick-shift/sim';
 import { floorY } from './shell.js';
 import { canvas } from './tex.js';
 import { prop } from './props.js';
-import { GEN_BACK } from './dressing.js';
+import { GEN_BACK } from '@thick-shift/sim/dressing';
 
 const AMBER = 0xffb040,
   SPARK = 0xff7a20,
@@ -27,7 +27,7 @@ function box(w, h, d, color) {
 }
 const lampMat = () => new THREE.MeshBasicMaterial({ color: OFF });
 const placed = []; // every usable's group
-// A group standing at one of map.js's wall things, turned to face out of the wall.
+// A group standing at one of map.ts's wall things, turned to face out of the wall.
 // room: which room it is in, so it can be skipped when that room is out of sight.
 function mount(scene, name, at, y) {
   const g = new THREE.Group();

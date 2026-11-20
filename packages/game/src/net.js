@@ -5,12 +5,17 @@
 // When an app fixes the room (platform.fixedRoom, as the Discord Activity does), nobody
 // chooses to host: everyone tries to, and whoever finds it taken joins instead (becomeGuest).
 import { game, platform } from './state.js';
-import { newState, stepFloor, actFloor, adoptFloor } from './three/sim3d.js';
+import { newSim, newState, stepFloor, actFloor, adoptFloor } from '@thick-shift/sim';
 
 const TICK_MS = 100;
 const NO_HOST = 4404,
   CODE_TAKEN = 4409; // close codes from the relay
 const MAX_BACKLOG = 256 * 1024; // bytes queued before the host skips a state
+
+// The host's side of the night, which S does not carry: the guards in the room (sim.players, peer id -> that guard's
+// record in S.players) and what the mascots are thinking. Made at import, so the first step measures its time from
+// when the page loaded. A guest's stays empty until a takeover makes it the host. The game's draws are not seeded.
+export const sim = newSim({ rng: Math.random, now: performance.now() });
 let ws = null,
   loop = 0;
 
@@ -27,7 +32,7 @@ const parse = text => {
 const guard = (id, name = 'Guard') => ({ id, name });
 
 function broadcast() {
-  const guests = Object.keys(game.players).length - 1;
+  const guests = Object.keys(sim.players).length - 1;
   if (guests > 0 && ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < MAX_BACKLOG) ws.send(JSON.stringify({ t: 's', s: game.S }));
 }
 
@@ -40,7 +45,7 @@ document.addEventListener('visibilitychange', showing);
 
 const run = () => {
   loop ||= setInterval(() => {
-    stepFloor();
+    stepFloor(sim, game.S, performance.now());
     broadcast();
   }, TICK_MS);
 };
@@ -57,9 +62,9 @@ function hostRoom(sock, opened) {
       id = m?.from,
       d = m?.d;
     if (typeof id !== 'string' || id === game.myId || !d) return;
-    if (d.t === 'join') game.players[id] = guard(id);
-    else if (d.t === 'leave') delete game.players[id];
-    else actFloor(id, d);
+    if (d.t === 'join') sim.players[id] = guard(id);
+    else if (d.t === 'leave') delete sim.players[id];
+    else actFloor(sim, game.S, id, d);
   };
   ws.onclose = e => {
     // Someone else is hosting under this code. In a fixed room that is everyone else, so go and join them.
@@ -69,7 +74,7 @@ function hostRoom(sock, opened) {
       game.code = game.S.code = newCode();
       return openRoom();
     }
-    for (const id in game.players) if (id !== game.myId) delete game.players[id];
+    for (const id in sim.players) if (id !== game.myId) delete sim.players[id];
     game.netNote = opened ? 'Lost the connection to the room. You can keep playing solo.' : 'Multiplayer unavailable. You can still play solo.';
   };
 }
@@ -84,7 +89,7 @@ export function host(code = newCode()) {
   game.code = code;
   game.S = newState(game.code);
   game.myId = 'host';
-  game.players = { host: guard('host', game.myName) };
+  sim.players = { host: guard('host', game.myName) };
   run();
   openRoom();
 }
@@ -94,7 +99,7 @@ function becomeGuest() {
   clearInterval(loop);
   loop = 0;
   game.S = null;
-  game.players = {};
+  sim.players = {};
   join(game.code);
 }
 
@@ -105,12 +110,12 @@ function takeOver(guests) {
   game.joining = false;
   game.S ||= newState(game.code); // the old host left before it sent us anything
   const was = Object.fromEntries((game.S.players || []).map(p => [p.id, p]));
-  game.players = {};
-  for (const id of [game.myId, ...guests.filter(g => typeof g === 'string')]) game.players[id] = was[id] || guard(id);
-  game.players[game.myId].name = game.myName;
-  game.S.players = Object.values(game.players);
+  sim.players = {};
+  for (const id of [game.myId, ...guests.filter(g => typeof g === 'string')]) sim.players[id] = was[id] || guard(id);
+  sim.players[game.myId].name = game.myName;
+  game.S.players = Object.values(sim.players);
   game.netNote = 'The host left, so you are hosting now.';
-  if (game.S.phase !== 'lobby') adoptFloor(); // rebuild the mascots' thinking, which the old host kept to itself
+  if (game.S.phase !== 'lobby') adoptFloor(sim, game.S, performance.now()); // rebuild the mascots' thinking, which the old host kept to itself
   hostRoom(ws, true);
   run();
 }
@@ -153,6 +158,6 @@ export function join(code) {
 
 // Route an action to the simulation, locally if we are the host.
 export function send(a) {
-  if (game.isHost) actFloor(game.myId, a);
+  if (game.isHost) actFloor(sim, game.S, game.myId, a);
   else if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(a));
 }

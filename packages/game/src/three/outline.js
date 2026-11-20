@@ -12,8 +12,8 @@
 //   flat teammates       red, wherever they can be seen
 // The switch is in the pause panel (prefs.outline in player.js), on by default.
 import { game } from '../state.js';
-import { GENERATOR, CHARGER, PANELS, BATTERY_SPOTS } from './map.js';
-import { faultLeft } from './sim3d.js';
+import { GENERATOR, CHARGER, PANELS, BATTERY_SPOTS } from '@thick-shift/sim/map';
+import { faultLeft } from '@thick-shift/sim';
 import { prefs } from './player.js';
 
 const NEAR = 6,

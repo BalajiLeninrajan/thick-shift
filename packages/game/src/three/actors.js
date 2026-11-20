@@ -10,9 +10,9 @@
 //   phone.js   your own phone, held in view, with the minimap (app.js makes it)
 //   plush.js   the Mini Biggs guards throw, in the air and singing on the floor
 import * as THREE from 'three';
-import { MASC } from '../config.js';
+import { MASC } from '@thick-shift/sim/config';
 import { game } from '../state.js';
-import { DOORWAYS } from './map.js';
+import { DOORWAYS } from '@thick-shift/sim/map';
 import { hostClock } from './actors/track.js';
 import { prefs } from './player.js';
 import { Mascot } from './actors/mascot.js';

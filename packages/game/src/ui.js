@@ -1,9 +1,9 @@
 // The overlay screens around a night: title, lobby, and the cards between nights.
 // Everything here is derived from game/client state once per frame.
-import { MASC, FINAL_NIGHT } from './config.js';
+import { MASC, FINAL_NIGHT } from '@thick-shift/sim/config';
 import { game, client, platform } from './state.js';
-import { startFloorNight, restartFloor, clockF } from './three/sim3d.js';
-import { host, join } from './net.js';
+import { startFloorNight, restartFloor, clockF } from '@thick-shift/sim';
+import { host, join, sim } from './net.js';
 import { unlockAudio } from './audio.js';
 
 export const $ = id => document.getElementById(id);
@@ -74,7 +74,7 @@ const RULES = [
   '<b>Torch the mascots.</b> The beam holds them back while the battery lasts.',
   "<b>Don't get touched.</b> A friend can peel you up. Everyone flat ends the night.",
 ];
-// The night's tallies as a list: S.tally for one night, S.total for the run (see three/sim3d.js).
+// The night's tallies as a list: S.tally for one night, S.total for the run (see packages/sim/src/sim.ts).
 // Flats are grouped by guard, with who did it for a night and a count for the run.
 function floorStats(t, run) {
   const group = (list, key, val) => {
@@ -106,7 +106,7 @@ function nightScreen(S) {
   // The catch has the screen until client.holdUntil (see main.js).
   const scaring = performance.now() < client.holdUntil;
   const key = [S.phase, S.night, names.join(','), game.netNote, scaring].join('|');
-  const next = () => (S.phase === 'won' ? restartFloor() : startFloorNight(S.phase === 'win' ? S.night + 1 : S.night));
+  const next = () => (S.phase === 'won' ? restartFloor(sim, S) : startFloorNight(sim, S, S.phase === 'win' ? S.night + 1 : S.night));
   const wire = () => {
     const go = $('go');
     if (go)

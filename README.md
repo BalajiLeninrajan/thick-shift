@@ -39,14 +39,20 @@ packages/game/          the game, shared by the web and Discord apps (@thick-shi
     models/             the mascots, the guard and the prop kits (built by tools/models/)
   src/
     styles.css          stage layout and the HUD; everything else comes from catppuccin-neu
-    config.js           the mascot roster, the doors, the number of nights
     state.js            the shared mutable objects: game (session), client (this browser) and platform (app hooks)
     net.js              hosting and joining rooms; the host broadcasts the whole state
     audio.js            recorded and synthesised sound, and the ambience
     ui.js               overlay screens: title, lobby, and the cards between nights
     dev.js              dev menu, loaded only with ?dev
     main.js             start() and the frame loop
-    three/              the game: simulation, building, actors, HUD, input, sound and picture (below)
+    three/              the game: building, actors, HUD, input, sound and picture (below)
+packages/sim/           the simulation as plain TypeScript, with no DOM and no three.js (@thick-shift/sim, CONTRACT.md)
+  src/config.ts         the mascot roster, the doors, the number of nights
+  src/map.ts            the building as data: rooms, doorways, walking, sight lines, routes
+  src/dressing.ts       where the furniture stands
+  src/data.ts           the lamps and the stage, which the picture and the Roblox port share
+  src/sim.ts            the night: newSim, startFloorNight, stepFloor, actFloor, adoptFloor
+  src/types.ts          the state S and every message net.js sends and receives
 apps/
   web/                  the web game
     index.html          the markup and the CDN links, and Vite's entry
@@ -72,7 +78,7 @@ tsconfig.json           the solution file: every project, for tsc -b
 
 `packages/game`, `apps/web` and `apps/discord` each have three TypeScript projects: `tsconfig.json` for the browser code, `tsconfig.worker.json` for the Worker and `tsconfig.node.json` for the Vite config, which runs in Node.
 
-An app imports the game only by the names `packages/game/package.json` exports (`@thick-shift/game`, `@thick-shift/game/state` and so on), never by a path into `packages/`. The Node tools are the exception: they import `packages/game/src/` by path. An app changes how the game starts and what its title screen and lobby offer through `platform` in `state.js`, set by its own `src/boot.js` before `start()`. `fixedRoom` means the room comes from outside: everyone tries to host it, and whoever finds it taken joins instead (`becomeGuest` in `net.js`). `title` replaces the title screen, and `invite` replaces the room code and link in the lobby. The web game leaves all three alone.
+An app imports the game only by the names `packages/game/package.json` exports (`@thick-shift/game`, `@thick-shift/game/state` and so on), never by a path into `packages/`. The game imports the simulation the same way, as `@thick-shift/sim` and its subpaths. The Node tools are the exception: they import `packages/sim/src/` by path, since `tools/` is not a package. An app changes how the game starts and what its title screen and lobby offer through `platform` in `state.js`, set by its own `src/boot.js` before `start()`. `fixedRoom` means the room comes from outside: everyone tries to host it, and whoever finds it taken joins instead (`becomeGuest` in `net.js`). `title` replaces the title screen, and `invite` replaces the room code and link in the lobby. The web game leaves all three alone.
 
 ## Discord Activity
 
@@ -92,19 +98,19 @@ To test from your own machine, run `pnpm dev:discord` behind a tunnel such as `c
 
 ## How the pieces talk
 
-The host runs `three/sim3d.js` ten times a second and sends the full state `S` to every guest. Both sides hold a WebSocket to `/room/CODE` on the same origin, and the `Room` Durable Object in `packages/game/worker/room.js` passes messages between them. Nothing is peer to peer, so it works on any network that allows WebSockets. The relay keeps no game state. If the host leaves, the relay hands the room to the guest who has been there longest, and `adoptFloor` rebuilds what the old host's mascots were thinking from `S`. Guests never change `S`. They send actions (`p` for where they are, `use`, `call`, `name`) to the host through `net.send`.
+The host runs the night (`stepFloor` in `packages/sim/src/sim.ts`) ten times a second and sends the full state `S` to every guest. Both sides hold a WebSocket to `/room/CODE` on the same origin, and the `Room` Durable Object in `packages/game/worker/room.js` passes messages between them. Nothing is peer to peer, so it works on any network that allows WebSockets. The relay keeps no game state. If the host leaves, the relay hands the room to the guest who has been there longest, and `adoptFloor` rebuilds what the old host's mascots were thinking from `S`. Guests never change `S`. They send actions (`p` for where they are, `use`, `call`, `name`) to the host through `net.send`.
 
 `main.js` loads `three/app.js`, and with it three.js, the first time a night is drawn, so the title screen and lobby come up without waiting for it. Vite builds it, and `dev.js`, as chunks of their own.
 
 ## Winning
 
-A run is five nights (`FINAL_NIGHT` in `config.js`). Surviving a night sets `S.phase` to `'win'` and offers the next one; surviving the last sets it to `'won'`, which shows the run's tallies (`S.total`, `S.deaths`). Everyone flat at once sets `'dead'` and retries the same night, so the tallies carry across attempts.
+A run is five nights (`FINAL_NIGHT` in the sim's `config.ts`). Surviving a night sets `S.phase` to `'win'` and offers the next one; surviving the last sets it to `'won'`, which shows the run's tallies (`S.total`, `S.deaths`). Everyone flat at once sets `'dead'` and retries the same night, so the tallies carry across attempts.
 
 ## The rules
 
-Everything in this section is in `three/sim3d.js` unless it says otherwise. `three/map.js` is the building as data, and the host uses it too: rooms, doorways, where the breaker boxes and batteries are, what can be walked on and seen through, and how to get from one place to another.
+Everything in this section is in `packages/sim/src/sim.ts` unless it says otherwise. `map.ts` beside it is the building as data, and the host uses it too: rooms, doorways, where the breaker boxes and batteries are, what can be walked on and seen through, and how to get from one place to another.
 
-A night is six hours of 70 seconds (`F.HOUR`). Faults break out in the twelve breaker boxes round the building (`BOXES` in `map.js`, `breakOut` and `stepFaults`, tuning in `FAULT`). A guard alone gets one about every 50 seconds, a little sooner each night and each hour; each extra guard adds 70% of that again (`FAULT.crew`). A fault never breaks out within 4 metres of a standing guard, and a mascot banging on a shut booth door shorts the box in the room outside that door a third of the time, so hiding in the booth makes work. `S.faults` has one entry per box: `null`, or `{ k, at, burnt }`. Any guard can fix any fault. (Giving each fault to one guard was tried in the harness: alone it made no difference, and crews of two to six won a third to half as often, because they crossed the building past each other instead of each taking the nearest.)
+A night is six hours of 70 seconds (`F.HOUR`). Faults break out in the twelve breaker boxes round the building (`BOXES` in `map.ts`, `breakOut` and `stepFaults`, tuning in `FAULT`). A guard alone gets one about every 50 seconds, a little sooner each night and each hour; each extra guard adds 70% of that again (`FAULT.crew`). A fault never breaks out within 4 metres of a standing guard, and a mascot banging on a shut booth door shorts the box in the room outside that door a third of the time, so hiding in the booth makes work. `S.faults` has one entry per box: `null`, or `{ k, at, burnt }`. Any guard can fix any fault. (Giving each fault to one guard was tried in the harness: alone it made no difference, and crews of two to six won a third to half as often, because they crossed the building past each other instead of each taking the nearest.)
 
 An open fault does three things, worse the longer it is left:
 
@@ -135,11 +141,11 @@ Each is a different problem:
 
 Alone, Biggs and Flan are there from night 1, Squish from 3 AM that night and Tank from night 4 (`WAKE`). Each extra guard brings them two hours sooner. They are slowest on night 1 (`KEEN`).
 
-A mascot within 1.25 metres with no wall between has you (`F.CATCH`). Furniture does not count as a wall, and one that is stuck behind furniture within 2.6 metres of the guard it is after reaches over after 1.2 seconds (`F.GRAB`), so there is nowhere in the building to stand that they cannot get to. The harness checks that against the furniture in `world/dressing.js`.
+A mascot within 1.25 metres with no wall between has you (`F.CATCH`). Furniture does not count as a wall, and one that is stuck behind furniture within 2.6 metres of the guard it is after reaches over after 1.2 seconds (`F.GRAB`), so there is nowhere in the building to stand that they cannot get to. The harness checks that against the furniture in the sim's `dressing.ts`.
 
 A flattened guard stays on the floor until another guard stands over them and holds use for three seconds, and then has four seconds in which nothing can touch them. The mascot that did it sits on them for three and a half seconds (`FEAST`), then stays and looks round for whoever comes to peel them up. Everyone flat at once ends the night, which for a guard alone is the first touch.
 
-Lockers are the one place to hide. Every locker outside the booth is one (`HIDES` in `map.js`, read from the lockers in `dressing.js`): two backstage, two in the West Hall, and one each in the Arcade, the Kitchen, the Snack Bar and the East Hall. Holding use for half a second at one (`F.HIDE_HOLD`) steps a guard in, and a tap steps them out. One guard to a locker. Inside, the guard cannot move, the torch is off, the phone still works, and the view is out through the door slats, turned no more than about 50 degrees either way. Stamina comes back. Nothing sees, hears, lights or walks into a guard in a locker, and the wanderers do not head for one. A mascot does find them four ways (`openLockers`, `seenHiding` and `lockersNear` in `sim3d.js`):
+Lockers are the one place to hide. Every locker outside the booth is one (`HIDES` in `map.ts`, read from the lockers in `dressing.ts`): two backstage, two in the West Hall, and one each in the Arcade, the Kitchen, the Snack Bar and the East Hall. Holding use for half a second at one (`F.HIDE_HOLD`) steps a guard in, and a tap steps them out. One guard to a locker. Inside, the guard cannot move, the torch is off, the phone still works, and the view is out through the door slats, turned no more than about 50 degrees either way. Stamina comes back. Nothing sees, hears, lights or walks into a guard in a locker, and the wanderers do not head for one. A mascot does find them four ways (`openLockers`, `seenHiding` and `lockersNear` in `sim.ts`):
 
 - It saw them get in: one that could see the guard at that moment (`canSee`), or one hunting them that still knew where they were, which is the 1.2 seconds after losing sight that any of them keeps, and eight for Biggs (`RELENT`). It goes to the locker's doors and opens them as soon as it arrives.
 - It checks. One that loses the guard it was hunting searches, and first looks in lockers within eight metres of where it last knew they were: each one at even odds, nearest first, two at most (`CHECK`). It walks to the doors and yanks them open, empty or not (the `check` event for an empty one). So hide further than that from where it lost you, or wait until it has run out of wind and gone home.
@@ -174,7 +180,7 @@ Where the rules stand, over 40 nights a row:
 
 - Top left: the hour, the night, and building power. The bar turns yellow under 25% and red under 10%, and reads "Power out" at zero.
 - Top left, under the power: the task list. One row per open fault, nearest first: the room, the job and the seconds before it burns. A row turns red for the last 15 seconds and says "burning" after that. The row of the box your hands are in has a green edge. With no faults open it says so.
-- Top centre: a compass. Each open fault is a yellow mark with its walking distance, the nearest one filled, red and blinking in its last 15 seconds. A mark points at the next corner of the route there (`route` in `map.js`), not through the walls, because nobody knows the building on their first night. Flat teammates are red marks with a name, and a blue mark leads to the booth charger once the torch is under 25%. A mark past the end of the strip sits at that end with an arrow. Labels that would overlap are laid side by side under their marks (`spread` in `hud.js`).
+- Top centre: a compass. Each open fault is a yellow mark with its walking distance, the nearest one filled, red and blinking in its last 15 seconds. A mark points at the next corner of the route there (`route` in `map.ts`), not through the walls, because nobody knows the building on their first night. Flat teammates are red marks with a name, and a blue mark leads to the booth charger once the torch is under 25%. A mark past the end of the strip sits at that end with an arrow. Labels that would overlap are laid side by side under their marks (`spread` in `hud.js`).
 - Under the compass: toasts for events. Each kind has its own icon and colour (`TOAST_ICON` in `hud.js`, the `.ts-f-toast.is-*` rules in the stylesheet), and the lines are in the `SAY` table in `app.js`.
 - Top right: the other guards and the room each is in. A flat one is red and tagged, and one in a locker is tagged `locker`.
 - Bottom left: the torch as a five-bar battery. Grey is off, yellow is on (the torch or the phone), red and blinking with a red glow in the corner is under 25%. Stamina is a thin bar above it that shows only while it is not full. Under the torch, whether your Mini Biggs is in hand, what a throw costs (a bar) and the key, greyed out with empty hands or less than a bar left.
@@ -189,7 +195,7 @@ Input is in `three/player.js`. The mouse is captured on the first click. Esc rel
 
 The lobby lists the rules, where every guard reads them while the others join. In the night there are no tutorial tips: the toasts only say what just happened, and the controls are on the click-to-play panel and the pause screen.
 
-The end screens are in `ui.js`. They read `S.tally` (this night) and `S.total` (the run), which `sim3d.js` fills: faults fixed and faults left to burn, who was flattened and by which mascot, and who peeled someone up.
+The end screens are in `ui.js`. They read `S.tally` (this night) and `S.total` (the run), which `sim.ts` fills: faults fixed and faults left to burn, who was flattened and by which mascot, and who peeled someone up.
 
 ## Sound in the building
 
@@ -221,12 +227,12 @@ One-shots are counted (`voices()` in `audio.js`) and cut from the graph when the
 
 - `surfaces.js` and `tex.js` paint every floor, wall and ceiling with the 2D canvas when the game loads: a colour map, a normal map from a height canvas, and a roughness map. Each room has its own set (`LOOK`), so one torch-lit patch of floor says which room you are in. A wall texture covers the full height of its room, so dados and damp sit at real heights.
 - `art.js` draws what is stuck on the walls: the posters and the mural of the mascots in their friendly days, staff notices, stains, and the room names. `shell.js` stencils the name of the next room over each doorway, beside it in a low room, or on the floor where the door fills the wall.
-- `shell.js` builds the geometry from `walls()`, `slabs()` and `DOORWAYS` in `map.js`, so the picture cannot drift from the collision. Skirting, door frames, pipes, the stage's arch and the lamp housings go into one mesh (`geo.js`). The stage platform is 12 cm high and nobody climbs it. The game is flat.
-- `props.js` stands the two prop kits (`models/props_a.glb`, `props_b.glb`) where `dressing.js` says. Static props in a room that share a material are merged into one mesh. A kit that has not been built leaves its props out.
+- `shell.js` builds the geometry from `walls()`, `slabs()` and `DOORWAYS` in the sim's `map.ts`, so the picture cannot drift from the collision. Skirting, door frames, pipes, the stage's arch and the lamp housings go into one mesh (`geo.js`). The stage platform is 12 cm high and nobody climbs it. The game is flat.
+- `props.js` stands the two prop kits (`models/props_a.glb`, `props_b.glb`) where the sim's `dressing.ts` says. Static props in a room that share a material are merged into one mesh. A kit that has not been built leaves its props out.
 - `usable.js` is the breaker boxes (door hanging open, sparks and a red lamp while faulted, and an orange point light on the nearest three open faults), door buttons, generator, charger, batteries, booth doors and wall map. Each is a plain stand-in until its kit model loads.
 - `sight.js` works out which rooms can be seen from the 2 m square of floor the camera is in, by casting a fan of rays over a grid of the walls, and keeps the answer. Props and usable things in every other room are hidden. three.js culls what is outside the view, not what is behind a wall, and without this the booth draws the kitchen.
 
-`dressing.js` is plain data. `map.js` imports it to fill `OBSTACLES`, which is how the host walks mascots round furniture without loading a model. After moving a prop or a waypoint, run `node tools/check-floor.mjs`. It fails if a doorway, a waypoint, a breaker box, a button, a battery spot, a locker's doors, a resting mark or a spawn point is blocked or cut off. A locker placed anywhere but the booth is a hiding place, so give it a metre of clear floor in front.
+`packages/sim/src/dressing.ts` is plain data. `map.ts` imports it to fill `OBSTACLES`, which is how the host walks mascots round furniture without loading a model. After moving a prop or a waypoint, run `node tools/check-floor.mjs`. It fails if a doorway, a waypoint, a breaker box, a button, a battery spot, a locker's doors, a resting mark or a spawn point is blocked or cut off. A locker placed anywhere but the booth is a hiding place, so give it a metre of clear floor in front.
 
 The building's lamps are not three.js lights. `light.js` bakes them at load into 168 by 176 floor-plan textures, one texel per 25 cm, with the walls casting soft shadows and each room getting some of its own light back as bounce. Every `MeshStandardMaterial` in the scene is patched (`lit`) to look its light up by world position, so mascots, guards and props get it too. The steady lamps are one texture in colour. The second holds four groups, one per channel: two kinds of flicker, a tube that is mostly dead, and the exit signs, which have batteries. A third holds the glow of props with lit screens, baked once the kits have loaded and only for props that did. A group flickers by changing one uniform. With the power out the steady and flickering groups go to zero and the exit signs, the breaker boxes' lamps and the torches are all there is. A fourth texture, two texels a metre, is a mask of how much light each room is getting (`roomMask`): it stutters while a fault in the room is open and drops to almost nothing once `darkRoom` says the room is dark; the exit signs ignore it. To add a lamp, add a row to `LAMPS`.
 

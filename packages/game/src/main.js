@@ -1,7 +1,7 @@
 // Entry point: the per-frame loop that ties state, sound, UI and drawing together.
 import { game, client } from './state.js';
 import { SFX, ambience } from './audio.js';
-import { dreadF } from './three/sim3d.js';
+import { dreadF } from '@thick-shift/sim';
 import { syncOverlay } from './ui.js';
 
 // window.ts, the ?debug handle for poking at the game from the console.

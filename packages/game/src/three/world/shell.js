@@ -1,10 +1,10 @@
 // The building itself, built from the same data the collision uses (walls(),
-// slabs() and DOORWAYS in map.js), so what you see is what you bump into.
+// slabs() and DOORWAYS in the sim's map.ts), so what you see is what you bump into.
 // Floors, walls and ceilings go into one mesh per material; skirting, door
 // frames, pipes and the stage's arch go into the trim batch; posters, stains
 // and the stencilled room names go into two decal meshes.
 import * as THREE from 'three';
-import { ROOMS3, DOORWAYS, DOOR_H, REST, walls, slabs, roomAt } from '../map.js';
+import { ROOMS3, DOORWAYS, DOOR_H, REST, walls, slabs, roomAt } from '@thick-shift/sim/map';
 import { Batch, rgbOf } from './geo.js';
 import { SPAN, LOOK } from './surfaces.js';
 import { ART, NAME_CELL, uvOf } from './art.js';

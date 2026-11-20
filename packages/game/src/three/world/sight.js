@@ -2,7 +2,7 @@
 // which rooms can be seen from where a guard stands. Nothing in three.js culls
 // what is behind a wall, so without this a guard in the booth facing north
 // would draw the furniture of every room north of it.
-import { ROOMS3, DOORWAYS } from '../map.js';
+import { ROOMS3, DOORWAYS } from '@thick-shift/sim/map';
 
 const G = 4,
   W = 42 * G,

@@ -4,8 +4,8 @@
 // guards: being flattened and being peeled back up.
 import * as THREE from 'three';
 import { loadActor, instance } from '../assets.js';
-import { glimpses, PLAYER_R } from '../map.js';
-import { F } from '../sim3d.js';
+import { glimpses, PLAYER_R } from '@thick-shift/sim/map';
+import { F } from '@thick-shift/sim';
 import { Track, hostClock } from './track.js';
 import { buildRig } from './rig.js';
 

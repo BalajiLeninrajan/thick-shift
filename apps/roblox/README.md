@@ -1,6 +1,6 @@
 # Thick Shift on Roblox
 
-A port of the 3D floor mode to Roblox, built with [Rojo](https://rojo.space). The web game in `packages/game/src/` is still the original: the Roblox sim is a line-for-line port of it, checked against it tick by tick, and the building's data is generated from it.
+A port of the 3D floor mode to Roblox, built with [Rojo](https://rojo.space). The web game's simulation in `packages/sim/src/` is still the original: the Roblox sim is a line-for-line port of it, checked against it tick by tick, and the building's data is generated from it.
 
 ## Layout
 
@@ -8,8 +8,8 @@ A port of the 3D floor mode to Roblox, built with [Rojo](https://rojo.space). Th
 default.project.json   where each folder goes in the place
 src/shared/            ReplicatedStorage.Shared: what both sides need
   Data.luau            generated from the web game by tools/roblox/gen-data.mjs; do not edit
-  Map.luau             three/map.js: walking, sight lines, routes, walls and floors
-  Sim.luau             three/sim3d.js: the night. The server owns one
+  Map.luau             packages/sim/src/map.ts: walking, sight lines, routes, walls and floors
+  Sim.luau             packages/sim/src/sim.ts: the night. The server owns one
   Units.luau           metres to studs (3 to a metre) and yaw to CFrame
   Util.luau, Text.luau
 src/server/Main.server.luau   steps the sim ten times a second and sends every client the state
@@ -37,7 +37,7 @@ rojo serve                                                  # live sync into Stu
 stylua src test && selene src                               # format and lint
 (cd ../.. && lune run apps/roblox/test/smoke.luau)          # client code against the sim, no Studio (from the repo root)
 ../../tools/roblox/diff/run.sh "crew of 3 competent n4" 1   # web sim vs Luau sim, one night
-node ../../tools/roblox/gen-data.mjs                        # after changing config.js, map.js, dressing.js or light.js
+node ../../tools/roblox/gen-data.mjs                        # after changing the sim's config.ts, map.ts, dressing.ts or data.ts
 ```
 
 ## How close it is

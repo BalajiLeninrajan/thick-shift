@@ -1,5 +1,5 @@
 // Furniture and clutter from the two prop kits (models/props_a.glb and
-// props_b.glb), stood where dressing.js says. Everything static in a room
+// props_b.glb), stood where the sim's dressing.ts says. Everything static in a room
 // that shares a material is merged into one mesh, so a room full of chairs
 // is a handful of draw calls, and rooms that cannot be seen from where the
 // guard stands are not drawn at all.
@@ -7,8 +7,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { loadGLB } from '../assets.js';
-import { ROOMS3 } from '../map.js';
-import { DRESSING } from './dressing.js';
+import { ROOMS3 } from '@thick-shift/sim/map';
+import { DRESSING } from '@thick-shift/sim/dressing';
 import { floorY } from './shell.js';
 import { lit } from './light.js';
 

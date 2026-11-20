@@ -1,7 +1,7 @@
 // The fault minigames: a panel over the bottom half of the screen while a
 // guard has their hands in a breaker box. The room stays in view above it and
 // the mouse still looks round, but the guard cannot walk and their torch hangs
-// at the floor (sim3d.js beamOn), so the room is something you glance at.
+// at the floor (sim.ts beamOn), so the room is something you glance at.
 //
 // Three kinds, by the fault's k (F.FIX gives the seconds each is tuned to):
 //   0 breaker: flip the tripped switches back in the order on their tags
@@ -11,7 +11,7 @@
 // Everything works from the keyboard (W A S D or the number keys to choose,
 // E or Space to act, X or Esc to let go), a gamepad (stick or d-pad, A, B) and
 // touch (tap the parts). The host is told only when the job is done.
-import { BOXES, ROOMS3 } from './map.js';
+import { BOXES, ROOMS3 } from '@thick-shift/sim/map';
 
 const KIND = ['Reset the breaker', 'Reconnect the wires', 'Bleed the valve'];
 export const FAULT_NAME = KIND;

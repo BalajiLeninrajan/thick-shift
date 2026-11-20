@@ -9,8 +9,8 @@
 // give: a little spill round the beam, so a mascot standing beside it is a
 // shape, and a trace of night vision, so the dark is not one flat black.
 import * as THREE from 'three';
-import { ROOMS3, BOXES } from '../map.js';
-import { darkRoom } from '../sim3d.js';
+import { ROOMS3, BOXES } from '@thick-shift/sim/map';
+import { darkRoom } from '@thick-shift/sim';
 import { roomOf, open, sees, reach } from './sight.js';
 import { Batch } from './geo.js';
 import { ART, uvOf } from './art.js';
@@ -119,7 +119,7 @@ function bake(lamps) {
 /* ---------- rooms with a fault ---------- */
 
 // A floor-plan mask, two texels a metre, of how much of its lamps' light each room is getting: 1 normally, flickering
-// while a fault in it is open, and nearly nothing once the fault has had its room's lights (sim3d.js darkRoom).
+// while a fault in it is open, and nearly nothing once the fault has had its room's lights (sim.ts darkRoom).
 const MASK_PER_M = 2,
   MW = 42 * MASK_PER_M,
   MH = 44 * MASK_PER_M;

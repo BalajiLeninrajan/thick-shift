@@ -2,9 +2,9 @@
 // a guard can use. The parts are in world/; this file puts them together.
 //   surfaces.js, tex.js   painted textures for every floor, wall and ceiling
 //   art.js                posters, notices, stains, stencilled room names
-//   shell.js, geo.js      geometry from map.js: rooms, frames, pipes, the stage
+//   shell.js, geo.js      geometry from the sim's map.ts: rooms, frames, pipes, the stage
 //   light.js              baked lamp light, flicker, torch spill, dust
-//   props.js, dressing.js furniture from the prop kits, and where it stands
+//   props.js              furniture from the prop kits, stood where the sim's dressing.ts says
 //   usable.js             breaker boxes, door buttons, generator, charger, batteries, doors, wall map
 //   sight.js              which rooms can be seen from which, so the rest are not drawn
 import { surfaces } from './world/surfaces.js';

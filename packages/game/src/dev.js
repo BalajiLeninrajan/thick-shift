@@ -1,12 +1,13 @@
 // Dev menu. Loaded only when the URL has ?dev (see main.js). Toggle with ` or
 // the Dev button beside pause and in the touch menu.
 //
-// Cheats that change the simulation live in S.dev, so three/sim3d.js can read
+// Cheats that change the simulation live in S.dev, so packages/sim/src/sim.ts can read
 // them and guests see their effects. Only the host can set them.
-import { MASC, FINAL_NIGHT } from './config.js';
+import { MASC, FINAL_NIGHT } from '@thick-shift/sim/config';
 import { game } from './state.js';
-import { F, hourF, clockF, dreadF, startFloorNight } from './three/sim3d.js';
-import { REST } from './three/map.js';
+import { F, hourF, clockF, dreadF, startFloorNight } from '@thick-shift/sim';
+import { REST } from '@thick-shift/sim/map';
+import { sim } from './net.js';
 
 // The menu's controls are inputs and buttons. Typed as inputs, so .value and .checked check.
 const $ = id => /** @type {HTMLInputElement} */ (document.getElementById(id));
@@ -64,10 +65,10 @@ const ACTIONS = {
     S.t = 6 * F.HOUR;
   },
   'dv-next'(S) {
-    startFloorNight(S.night + 1);
+    startFloorNight(sim, S, S.night + 1);
   },
-  'dv-final'() {
-    startFloorNight(FINAL_NIGHT);
+  'dv-final'(S) {
+    startFloorNight(sim, S, FINAL_NIGHT);
   },
   'dv-out'(S) {
     S.power = 0.01;

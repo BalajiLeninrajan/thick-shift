@@ -4,7 +4,7 @@
 // through player.pad, player.look, player.toggleTorch, player.togglePhone,
 // player.toggleZoom and player.throwToy, and show only while a finger is the pointer.
 import { game } from '../state.js';
-import { TOY } from './sim3d.js';
+import { TOY } from '@thick-shift/sim';
 import { unlockAudio } from '../audio.js';
 
 const STICK_R = 48; // pixels the knob travels for full speed

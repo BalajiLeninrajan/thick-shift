@@ -6,7 +6,7 @@
 // the generator and the charger, spare batteries, and every mascot that is
 // off its mark, as the booth's wall map does.
 import * as THREE from 'three';
-import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, BATTERY_SPOTS, roomAt } from './map.js';
+import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, BATTERY_SPOTS, roomAt } from '@thick-shift/sim/map';
 import { canvas } from './world/tex.js';
 
 export const MAP_W = 288,

@@ -1,20 +1,20 @@
 // The renderer and the frame. main.js imports this file the first time a
 // night is drawn, so the title screen and lobby never wait on three.js.
 import * as THREE from 'three';
-import { MASC } from '../config.js';
+import { MASC } from '@thick-shift/sim/config';
 import { game, client } from '../state.js';
 import { buildWorld } from './world.js';
 import { createPlayer, prefs } from './player.js';
 import { createActors } from './actors.js';
 import { createHud, where } from './hud.js';
 import { createTask } from './task.js';
-import { EYE, BOXES, ROOMS3, roomAt, reaches } from './map.js';
+import { EYE, BOXES, ROOMS3, roomAt, reaches } from '@thick-shift/sim/map';
 import { createSound } from './sound.js';
 import { createPost } from './post.js';
 import { createPhone } from './actors/phone.js';
 import { createSlats } from './slats.js';
 import { createOutlines } from './outline.js';
-import { dreadF } from './sim3d.js';
+import { dreadF } from '@thick-shift/sim';
 
 let app = null;
 const FOG = 0.037,

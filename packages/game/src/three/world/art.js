@@ -3,8 +3,8 @@
 // room names stencilled by the doors. Two canvases, cut up by the rectangles
 // in ART and NAMES; shell.js puts the pieces on the walls.
 import * as THREE from 'three';
-import { MASC } from '../../config.js';
-import { ROOMS3 } from '../map.js';
+import { MASC } from '@thick-shift/sim/config';
+import { ROOMS3 } from '@thick-shift/sim/map';
 import { canvas, rand, mixc, fbm, FIELD } from './tex.js';
 
 // [x, y, w, h] in pixels of the 1024 square art canvas.

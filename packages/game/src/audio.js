@@ -295,7 +295,7 @@ export function shriek(level = 0.7, at = 0) {
   mix.connect(cut1).connect(cut2).connect(bite).connect(chop).connect(amp).connect(out());
 }
 
-// A Mini Biggs singing where it came down (TOY in three/sim3d.js): a thump on the floor, a click as the voice box
+// A Mini Biggs singing where it came down (TOY in packages/sim/src/sim.ts): a thump on the floor, a click as the voice box
 // wakes, then two lines of Happy Birthday from a chip that was never meant to run on a torch battery. A thin pulse
 // wave, crushed to a few bits like a cheap voice box, that drags and sags in pitch as the charge runs out over
 // `secs`, until the last note is a groan. Made once into a buffer, so the whole song is one voice.

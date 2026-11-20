@@ -7,8 +7,8 @@ import * as THREE from 'three';
 import { game } from '../state.js';
 import { send } from '../net.js';
 import { unlockAudio } from '../audio.js';
-import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, slide, walkable } from './map.js';
-import { F, TOY } from './sim3d.js';
+import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, slide, walkable } from '@thick-shift/sim/map';
+import { F, TOY } from '@thick-shift/sim';
 import { FAULT_NAME } from './task.js';
 
 const SENS = 0.0022,
@@ -133,7 +133,7 @@ export function createPlayer(camera, canvas) {
   }
   // The guard's Mini Biggs, thrown where they are looking: as far as the floor the view meets, or as far as one goes
   // when looking level or up. It sings on a bar of the torch's battery, so it needs that much, and it has to be picked
-  // up again before the next throw. The host works out where it comes down (landing in sim3d.js) and takes the
+  // up again before the next throw. The host works out where it comes down (landing in sim.ts) and takes the
   // battery. Not from a locker, and not with both hands in a breaker box.
   function throwToy() {
     if (!playing() || me.flat || me.paused || me.hid >= 0 || me.task) return;
@@ -510,7 +510,7 @@ export function createPlayer(camera, canvas) {
       const bat = mine.bat ?? 1,
         weak = bat < 0.15 ? (Math.sin(now * 0.05) > -0.2 ? 0.5 : 0.1) : 1;
       torch.intensity = me.on && bat > 0 ? 60 * weak * (0.55 + 0.45 * Math.min(1, bat * 3)) : 0;
-      // With the phone up, or hands in a box, the torch hangs, lighting the floor a step ahead (and holding nothing: sim3d.js beamOn).
+      // With the phone up, or hands in a box, the torch hangs, lighting the floor a step ahead (and holding nothing: sim.ts beamOn).
       drop += ((me.ph || me.task ? 1 : 0) - drop) * Math.min(1, dt * 8);
       torch.target.position.set(0.05, -0.05 - 2.4 * drop, -3 + 1.2 * drop);
       const y = me.flat ? 0.22 : EYE + Math.sin(me.bob) * 0.045;

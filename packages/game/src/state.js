@@ -5,7 +5,6 @@
 export const game = {
   S: null,
   isHost: false,
-  players: {}, // host only: peer id -> that guard's record in S.players
   code: '',
   myName: '',
   myId: '', // this player's id in S.players: 'host', or the guest's peer id

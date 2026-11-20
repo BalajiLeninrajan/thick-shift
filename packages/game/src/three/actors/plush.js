@@ -1,12 +1,12 @@
-// Mini Biggs (TOY in sim3d.js): every one in S.toys, lobbed from the
+// Mini Biggs (TOY in sim.ts): every one in S.toys, lobbed from the
 // thrower's hand, then singing where it fell, then lying there with the song
 // gone out of it until somebody picks it up. A palm-sized plush of Big Biggs in his friendly days, purple,
 // with a party hat and a keyring loop, and a red light in its tummy that
 // blinks with the voice box. Built here from a few shapes; there is no model for it.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { MASC } from '../../config.js';
-import { TOY } from '../sim3d.js';
+import { MASC } from '@thick-shift/sim/config';
+import { TOY } from '@thick-shift/sim';
 import { floorY } from '../world/shell.js';
 import { hostClock } from './track.js';
 

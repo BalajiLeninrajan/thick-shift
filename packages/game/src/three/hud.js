@@ -7,10 +7,10 @@
 // Biggs in hand. Everything else shows only while
 // it matters (a prompt in reach, stamina while winded, the flat and pause
 // states).
-import { MASC, FINAL_NIGHT } from '../config.js';
+import { MASC, FINAL_NIGHT } from '@thick-shift/sim/config';
 import { game } from '../state.js';
-import { ROOMS3, BOXES, CHARGER, GENERATOR, roomAt, route } from './map.js';
-import { F, TOY, clockF, faultLeft } from './sim3d.js';
+import { ROOMS3, BOXES, CHARGER, GENERATOR, roomAt, route } from '@thick-shift/sim/map';
+import { F, TOY, clockF, faultLeft } from '@thick-shift/sim';
 import { FAULT_NAME } from './task.js';
 import { prefs, savePrefs } from './player.js';
 import { createTouch, toggleFullscreen, canFullscreen } from './touch.js';
