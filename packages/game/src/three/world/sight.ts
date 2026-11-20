@@ -3,7 +3,8 @@
 // what is behind a wall, so without this a guard in the booth facing north
 // would draw the furniture of every room north of it.
 
-import type { Doorway } from '@thick-shift/sim/map';
+import { defined } from '@thick-shift/sim/check';
+import type { Doorway, Room } from '@thick-shift/sim/map';
 import { DOORWAYS, ROOMS3 } from '@thick-shift/sim/map';
 
 const G = 4,
@@ -12,8 +13,12 @@ const G = 4,
 const FAR = 30; // fog and the torch's reach leave nothing to see past this many metres
 const RAYS = 180; // directions looked in from each point: two degrees apart
 
+// Room r of ROOMS3, for an index that names a room by the map's own rules (a fixture's room, a table kept per room).
+export const roomData = (r: number): Room => defined(ROOMS3[r], `room ${r}`);
+
+// The room a point is in, or -1 outside every room.
 export const roomOf = (x: number, z: number): number => {
-  for (let i = 0; i < ROOMS3.length; i++) for (const [x0, z0, x1, z1] of ROOMS3[i].rects) if (x >= x0 && x <= x1 && z >= z0 && z <= z1) return i;
+  for (const [i, room] of ROOMS3.entries()) for (const [x0, z0, x1, z1] of room.rects) if (x >= x0 && x <= x1 && z >= z0 && z <= z1) return i;
   return -1;
 };
 const doorAt = (x: number, z: number, pad = 0): Doorway | undefined =>
@@ -61,7 +66,8 @@ export function roomsSeenFrom(x: number, z: number): Set<number> {
   const cx = Math.floor(x / CELL),
     cz = Math.floor(z / CELL),
     key = cx * 64 + cz;
-  if (cells.has(key)) return cells.get(key);
+  const known = cells.get(key);
+  if (known) return known;
   let mask = 0;
   for (const [u, v] of [
     [0.5, 0.5],
@@ -69,7 +75,7 @@ export function roomsSeenFrom(x: number, z: number): Set<number> {
     [0.9, 0.1],
     [0.1, 0.9],
     [0.9, 0.9],
-  ]) {
+  ] as const) {
     const ax = (cx + u) * CELL,
       az = (cz + v) * CELL,
       door = doorAt(ax, az, 0.4);

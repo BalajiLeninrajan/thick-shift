@@ -4,6 +4,7 @@
 // kit when that arrives; if it never does, the stand-ins are the game.
 
 import { lightsF } from '@thick-shift/sim';
+import { isPlaced } from '@thick-shift/sim/check';
 import { DOORS, MASC } from '@thick-shift/sim/config';
 import { GEN_BACK } from '@thick-shift/sim/dressing';
 import { BATTERY_SPOTS, BOOTH, BOXES, CHARGER, DOOR_H, DOORWAYS, GENERATOR, PANELS, ROOMS3, roomAt, WALL_MAP } from '@thick-shift/sim/map';
@@ -12,6 +13,7 @@ import * as THREE from 'three';
 import type { WorldParts } from '../../types';
 import { prop } from './props';
 import { floorY } from './shell';
+import { roomData } from './sight';
 import { canvas } from './tex';
 
 const AMBER = 0xffb040,
@@ -33,6 +35,20 @@ function box(w: number, h: number, d: number, color: THREE.ColorRepresentation):
 }
 const lampMat = (): THREE.MeshBasicMaterial => new THREE.MeshBasicMaterial({ color: OFF });
 const placed: THREE.Group[] = []; // every usable's group
+// A door button: its group, its lamp, and the model's button with where it rests, once the model is in.
+interface Panel {
+  g: THREE.Group;
+  lamp: THREE.MeshBasicMaterial;
+  button: THREE.Object3D | null;
+  rest: number;
+}
+// A booth door's shutter: its group, the height it drops from, and how far down it is, 0 to 1.
+interface Shutter {
+  g: THREE.Group;
+  h: number;
+  at: number;
+}
+
 // A group standing at one of map.ts's wall things, turned to face out of the wall.
 // room: which room it is in, so it can be skipped when that room is out of sight.
 function mount(scene: THREE.Scene, name: string, at: Point & { face: number; room?: number }, y: number): THREE.Group {
@@ -128,7 +144,7 @@ function wallMap(scene: THREE.Scene): (S: State, t: number) => void {
           c.stroke();
         }
       for (const p of S.players)
-        if (p.x != null) {
+        if (isPlaced(p)) {
           c.fillStyle = p.flat ? '#6c7086' : '#a6e3a1';
           c.fillRect(p.x * k - 4, p.z * k - 4, 8, 8);
         }
@@ -146,7 +162,7 @@ function wallMap(scene: THREE.Scene): (S: State, t: number) => void {
       c.fillStyle = due.length ? '#f38ba8' : '#7fbf8a';
       c.fillText(due.length ? 'FAULTS' : 'NO FAULTS', 400, 160);
       due.forEach((cl, i) => {
-        c.fillText(`  ${ROOMS3[cl.room].name}`, 400 + (i > 6 ? 200 : 0), 188 + (i % 7) * 26);
+        c.fillText(`  ${roomData(cl.room).name}`, 400 + (i > 6 ? 200 : 0), 188 + (i % 7) * 26);
       });
     }
     tex.needsUpdate = glbTex.needsUpdate = true;
@@ -160,7 +176,7 @@ export function createUsables(scene: THREE.Scene): {
   // Breaker boxes: a grey cabinet with a status lamp on top and its door hanging open while it has a fault, sparks
   // spitting out of it. Seen from down a corridor by the light it throws.
   const sparkMat = new THREE.SpriteMaterial({ color: SPARK, blending: THREE.AdditiveBlending, depthWrite: false, map: haloTexture() });
-  const boxes = BOXES.map(cl => {
+  const boxes = BOXES.map((cl, i) => {
     const g = mount(scene, 'breaker box', cl, 1.3),
       lamp = lampMat(),
       body = box(0.5, 0.7, 0.16, 0x5a5f66),
@@ -181,7 +197,7 @@ export function createUsables(scene: THREE.Scene): {
       g.add(s);
       return s;
     });
-    return { g, lamp, door, sparks, at: new THREE.Vector3(cl.x + Math.sin(cl.face) * 0.5, 1.4, cl.z + Math.cos(cl.face) * 0.5) };
+    return { i, g, lamp, door, sparks, at: new THREE.Vector3(cl.x + Math.sin(cl.face) * 0.5, 1.4, cl.z + Math.cos(cl.face) * 0.5) };
   });
   const faultLights = Array.from({ length: FAULT_LIGHTS }, () => {
     const l = new THREE.PointLight(SPARK, 0, 9, 1.6);
@@ -189,24 +205,24 @@ export function createUsables(scene: THREE.Scene): {
     return l;
   });
 
-  const panels = Object.fromEntries(
-    DOORS.map(k => {
-      const g = mount(scene, 'door button', PANELS[k], 1.3),
-        lamp = lampMat(),
-        body = box(0.25, 0.4, 0.1, 0x3b3f4a),
-        btn = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 16), lamp);
-      body.position.z = 0.05;
-      btn.rotation.x = Math.PI / 2;
-      btn.position.z = 0.12;
-      g.add(body, btn);
-      const p: { g: THREE.Group; lamp: THREE.MeshBasicMaterial; button: THREE.Object3D | null; rest: number } = { g, lamp, button: null, rest: 0 };
-      upgrade(g, 'door_panel', lamp).then(model => {
-        p.button = model?.getObjectByName('button') || null;
-        p.rest = p.button?.position.z || 0;
-      });
-      return [k, p];
-    })
-  );
+  const panel = (k: DoorKey): Panel => {
+    const g = mount(scene, 'door button', PANELS[k], 1.3),
+      lamp = lampMat(),
+      body = box(0.25, 0.4, 0.1, 0x3b3f4a),
+      btn = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 16), lamp);
+    body.position.z = 0.05;
+    btn.rotation.x = Math.PI / 2;
+    btn.position.z = 0.12;
+    g.add(body, btn);
+    const p: Panel = { g, lamp, button: null, rest: 0 };
+    upgrade(g, 'door_panel', lamp).then(model => {
+      p.button = model?.getObjectByName('button') || null;
+      p.rest = p.button?.position.z || 0;
+    });
+    return p;
+  };
+  // made in the order of DOORS
+  const panels: Record<DoorKey, Panel> = { L: panel('L'), V: panel('V'), R: panel('R') };
 
   const gen = mount(scene, 'generator', GENERATOR, floorY(GENERATOR.x, GENERATOR.z)),
     genBody = box(1.4, 1, 0.8, 0x7a5c2e);
@@ -259,28 +275,31 @@ export function createUsables(scene: THREE.Scene): {
   });
 
   // The booth's doors: shutters that drop from above the doorway.
-  const doors = Object.fromEntries(
-    DOORWAYS.filter(d => d.key).map(d => {
-      const [x0, z0, x1, z1] = d.rect,
-        h = d.h || DOOR_H,
-        wide = d.axis === 'x' ? z1 - z0 : x1 - x0;
-      const g = new THREE.Group(),
-        slab = box(wide, h, 0.16, 0x565a66);
-      slab.position.y = h / 2;
-      g.add(slab);
-      g.name = 'booth door';
-      g.position.set((x0 + x1) / 2, h, (z0 + z1) / 2);
-      // the model's clawed face looks out of the booth
-      const out = d.a === BOOTH ? 1 : -1;
-      g.rotation.y = d.axis === 'x' ? (out * Math.PI) / 2 : out > 0 ? 0 : Math.PI;
-      scene.add(g);
-      upgrade(g, 'booth_door', null, true).then(model => model?.scale.set(wide / 2.6, h / 3, 1));
-      return [d.key, { g, h, at: 0 }];
-    })
-  );
+  const shutter = (k: DoorKey): Shutter => {
+    const d = DOORWAYS.find(w => w.key === k);
+    if (!d) throw new Error(`door ${k} has no doorway`);
+    const [x0, z0, x1, z1] = d.rect,
+      h = d.h || DOOR_H,
+      wide = d.axis === 'x' ? z1 - z0 : x1 - x0;
+    const g = new THREE.Group(),
+      slab = box(wide, h, 0.16, 0x565a66);
+    slab.position.y = h / 2;
+    g.add(slab);
+    g.name = 'booth door';
+    g.position.set((x0 + x1) / 2, h, (z0 + z1) / 2);
+    // the model's clawed face looks out of the booth
+    const out = d.a === BOOTH ? 1 : -1;
+    g.rotation.y = d.axis === 'x' ? (out * Math.PI) / 2 : out > 0 ? 0 : Math.PI;
+    scene.add(g);
+    upgrade(g, 'booth_door', null, true).then(model => model?.scale.set(wide / 2.6, h / 3, 1));
+    return { g, h, at: 0 };
+  };
+  // made in the order DOORWAYS lists them
+  const doors: Record<DoorKey, Shutter> = { V: shutter('V'), L: shutter('L'), R: shutter('R') };
 
+  // the boxes, nearest the camera first as of the last frame
   const updateMap = wallMap(scene),
-    order = boxes.map((_, i) => i);
+    order = boxes.slice();
   return {
     // The groups that can be outlined (outline.ts), by what a guard would use them for.
     parts: {
@@ -288,7 +307,7 @@ export function createUsables(scene: THREE.Scene): {
       bats: bats.map(b => b.g),
       gen,
       dock,
-      panels: Object.fromEntries(DOORS.map(k => [k, panels[k].g])) as Record<DoorKey, THREE.Group>,
+      panels: { L: panels.L.g, V: panels.V.g, R: panels.R.g },
     },
     // inView: the rooms that might be seen from the camera (sight.ts).
     update(S: State, t: number, dt: number, camera: THREE.Camera, inView: Set<number>): void {
@@ -306,11 +325,12 @@ export function createUsables(scene: THREE.Scene): {
           if (s.visible) s.position.set(Math.sin(t * 17 + k * 2) * 0.18, Math.cos(t * 13 + k * 5) * 0.25, 0.2 + k * 0.03);
         });
       });
-      order.sort((a, b) => boxes[a].at.distanceToSquared(camera.position) - boxes[b].at.distanceToSquared(camera.position));
-      const open = order.filter(i => S.faults?.[i]);
+      order.sort((a, b) => a.at.distanceToSquared(camera.position) - b.at.distanceToSquared(camera.position));
+      const open = order.filter(b => S.faults?.[b.i]);
       faultLights.forEach((l, k) => {
-        l.intensity = k < open.length ? 2.2 * crackle(open[k]) : 0;
-        if (k < open.length) l.position.copy(boxes[open[k]].at);
+        const b = open[k];
+        l.intensity = b ? 2.2 * crackle(b.i) : 0;
+        if (b) l.position.copy(b.at);
       });
       for (const k of DOORS) {
         const p = panels[k],

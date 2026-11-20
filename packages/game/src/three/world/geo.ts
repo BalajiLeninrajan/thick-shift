@@ -10,6 +10,13 @@ export type Vec3 = [number, number, number];
 export type UV = [number, number, number, number];
 
 const WHITE: RGB = [1, 1, 1];
+// The axes of a Vec3, and for each the two that run across it, in the order a bar's ring goes round.
+const AXES = [0, 1, 2] as const;
+const ACROSS = [
+  [1, 2],
+  [2, 0],
+  [0, 1],
+] as const;
 export const rgbOf = (hex: THREE.ColorRepresentation): RGB => {
   const c = new THREE.Color(hex);
   return [c.r, c.g, c.b];
@@ -91,9 +98,9 @@ export class Batch {
   }
   // A round bar of radius r from a to b, which must differ along one axis only.
   bar(a: Vec3, b: Vec3, r: number, col?: RGB, sides = 8, flatUv?: UV): void {
-    const ax = [0, 1, 2].find(k => a[k] !== b[k]),
-      p = (ax + 1) % 3,
-      q = (ax + 2) % 3,
+    const ax = AXES.find(k => a[k] !== b[k]);
+    if (ax === undefined) throw new Error(`a bar from [${a}] to [${b}] has no length`);
+    const [p, q] = ACROSS[ax],
       len = Math.abs(b[ax] - a[ax]);
     for (let i = 0; i < sides; i++) {
       const t0 = (i / sides) * Math.PI * 2,

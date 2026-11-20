@@ -3,20 +3,18 @@
 // Every texture covers SPAN metres across; a wall texture covers the whole
 // height of its room, so the dado and the damp sit at real heights.
 
-import { ROOMS3 } from '@thick-shift/sim/map';
+import { defined } from '@thick-shift/sim/check';
 import * as THREE from 'three';
+import { roomData } from './sight';
 import type { Look, Maps, Painter } from './tex';
-import { fbm, mixc, paint } from './tex';
+import { cycle, fbm, mixc, paint } from './tex';
 
-// Which surfaces a room wears (LOOK). skirt and frame are trim colours; dado: a corridor wall's lower colour.
-export interface RoomLook {
-  floor: string;
-  wall: string;
-  dado?: string;
-  ceil: string;
-  skirt: string | null;
-  frame: string;
-}
+// Which surfaces a room wears (LOOK): sheet metal all over, or a painter from FLOOR, WALL and CEIL for each. skirt and
+// frame are trim colours; dado: a corridor wall's lower colour.
+export type RoomLook = { dado?: string; skirt: string | null; frame: string } & (
+  | { floor: 'metal'; wall: 'metal'; ceil: 'metal' }
+  | { floor: keyof typeof FLOOR; wall: keyof typeof WALL; ceil: keyof typeof CEIL }
+);
 // One room's materials, from surfaces().
 export interface RoomMaterials {
   floor: THREE.MeshStandardMaterial;
@@ -38,7 +36,7 @@ const BROAD = fbm(256, 3, 5, 11),
   PATCH = fbm(256, 2, 3, 37),
   FINE = fbm(256, 110, 1, 51);
 // Flaking: small chips that gather where the broad field is high, so wear comes in clusters and not evenly.
-const FLAKE = fbm(256, 16, 3, 71).map((v, i) => v * 0.55 + BROAD[i] * 0.45);
+const FLAKE = fbm(256, 16, 3, 71).map((v, i) => v * 0.55 + defined(BROAD[i], 'a noise texel') * 0.45);
 
 // The dirt every surface has: ground-in grime in patches and a fine speckle.
 function dirt(p: Painter, k = 1): void {
@@ -85,7 +83,7 @@ function cracks(p: Painter, n: number, col = '#07070a'): void {
   }
 }
 
-const FLOOR: Record<string, () => Maps> = {
+const FLOOR = {
   // Stage: dark varnished boards, worn pale where people stood.
   boards: () =>
     paint({ col: '#5a3d22', rough: 0.6, bump: 2.4, seed: 1 }, p => {
@@ -127,7 +125,7 @@ const FLOOR: Record<string, () => Maps> = {
       p.wash(FLAKE, 0.6, 0.63, '#7a6242', 0.9, 0.38, 0.95);
       for (const x of [0, s / 2]) p.fill(x, 0, 2, s, '#050505', 0.1, 1);
       p.fill(0, s * 0.3, s, 2, '#050505', 0.1, 1);
-      for (let i = 0; i < 10; i++) p.blob(p.rnd() * s, p.rnd() * s, 2 + p.rnd() * 6, ['#d8d0c0', '#b03a30', '#3d6fa8', '#d6b23c'][i % 4], 0.8, null, 0.5); // paint drips from years of scenery
+      for (let i = 0; i < 10; i++) p.blob(p.rnd() * s, p.rnd() * s, 2 + p.rnd() * 6, cycle(['#d8d0c0', '#b03a30', '#3d6fa8', '#d6b23c'], i), 0.8, null, 0.5); // paint drips from years of scenery
       scuffs(p, 50, '#4a4a52', 70);
       dirt(p, 0.6);
     }),
@@ -148,7 +146,7 @@ const FLOOR: Record<string, () => Maps> = {
             c.translate(x + ox, y + oy);
             c.rotate(a);
             c.globalAlpha = 0.75;
-            c.fillStyle = c.strokeStyle = cols[i % 5];
+            c.fillStyle = c.strokeStyle = cycle(cols, i);
             c.lineWidth = 4;
             c.lineCap = 'round';
             const kind = i % 4;
@@ -190,7 +188,7 @@ const FLOOR: Record<string, () => Maps> = {
           p.fill(x * t, y * t, t, 1.5, '#0b0a09', 0.3, 0.9);
           p.fill(x * t, y * t, 1.5, t, '#0b0a09', 0.3, 0.9);
         }
-      const lifted = [
+      const lifted: [number, number][] = [
         [2, 5],
         [6, 1],
       ]; // tiles that came up, leaving the black glue
@@ -300,7 +298,7 @@ const FLOOR: Record<string, () => Maps> = {
       for (let i = 0; i < 5; i++) p.blob(rnd() * s, rnd() * s, 10 + rnd() * 20, '#1a120a', 0.7, null, 0.8); // coffee
       dirt(p, 0.35);
     }),
-};
+} satisfies Record<string, () => Maps>;
 
 // Sheet metal: the ducts are made of it on every side.
 const metal = (): Maps =>
@@ -376,7 +374,7 @@ const band = (p: Painter, Y: (m: number) => number, a: number, b: number, col: s
   p.fill(0, Y(b), p.s, Y(a) - Y(b), col, null, rough);
 };
 
-const WALL: Record<string, (H: number, dado?: string) => Maps> = {
+const WALL = {
   // Stage: a painted night sky over timber panelling.
   stage: H =>
     wall({ col: '#2a4470', rough: 0.9, bump: 1.8, seed: 21 }, H, (p, Y) => {
@@ -434,7 +432,7 @@ const WALL: Record<string, (H: number, dado?: string) => Maps> = {
     wall({ col: '#3c2860', rough: 0.9, bump: 1.6, seed: 23 }, H, (p, Y) => {
       const { s, c } = p;
       p.wash(BROAD, 0.3, 0.7, '#4c3478', 0.7, null, null);
-      const zig = (y0, amp, col, w) => {
+      const zig = (y0: number, amp: number, col: string, w: number) => {
         c.strokeStyle = col;
         c.lineWidth = w;
         c.lineJoin = 'miter';
@@ -495,7 +493,7 @@ const WALL: Record<string, (H: number, dado?: string) => Maps> = {
     wall({ col: '#99917a', rough: 0.85, bump: 1.8, seed: 26 }, H, (p, Y) => {
       const { s } = p;
       p.wash(BROAD, 0.3, 0.7, '#a8a088', 0.6, null, null);
-      band(p, Y, 0, 1.45, dado, 0.6);
+      band(p, Y, 0, 1.45, defined(dado, "a corridor's dado"), 0.6);
       p.wash(BROAD, 0.4, 0.8, '#000000', 0.25, null, null);
       p.fill(0, Y(1.5), s, Y(1.45) - Y(1.5), '#15140f', null, 0.5);
       peel(p, 0.6, '#7c7868');
@@ -538,11 +536,11 @@ const WALL: Record<string, (H: number, dado?: string) => Maps> = {
       }
       wallDirt(p, Y, H, 0.6);
     }),
-};
+} satisfies Record<string, (H: number, dado?: string) => Maps>;
 
 /* ---------- ceilings ---------- */
 
-const CEIL: Record<string, () => Maps> = {
+const CEIL = {
   // Suspended tiles in a metal grid: sagging, water-stained.
   tiles: () =>
     paint({ col: '#8f8c80', rough: 0.95, bump: 2, seed: 41 }, p => {
@@ -587,7 +585,7 @@ const CEIL: Record<string, () => Maps> = {
       p.wash(BROAD, 0.4, 0.8, '#1c1c20', 0.7, null, null);
       p.wash(FINE, 0.6, 0.9, '#2a2a2a', 0.3, null, null);
     }),
-};
+} satisfies Record<string, () => Maps>;
 
 // Small parts (skirting, door frames, pipes, fittings) share one worn-paint
 // texture and take their colour from the mesh.
@@ -621,11 +619,15 @@ export function surfaces(): Materials {
   const sheet = std(metal(), 0.55),
     made = new Map<string, THREE.MeshStandardMaterial>();
   const once = (key: string, make: () => THREE.MeshStandardMaterial): THREE.MeshStandardMaterial => {
-    if (!made.has(key)) made.set(key, make());
-    return made.get(key);
+    const known = made.get(key);
+    if (known) return known;
+    const mat = make();
+    made.set(key, mat);
+    return mat;
   };
+  // LOOK has one entry for each room
   const rooms = LOOK.map((look, i) => {
-    const H = ROOMS3[i].h;
+    const H = roomData(i).h;
     if (look.floor === 'metal') return { floor: sheet, wall: sheet, ceil: sheet };
     return {
       floor: once(`f${look.floor}`, () => std(FLOOR[look.floor]())),

@@ -2,7 +2,9 @@
 // side by side: colour, height (turned into a normal map) and roughness.
 // Colour is 512 px and the other two 256, which is what an integrated GPU can
 // hold for twenty-odd surfaces.
+import { defined } from '@thick-shift/sim/check';
 import * as THREE from 'three';
+import { context2d } from '../../dom';
 
 // What paint() is given. look: { col, rough, bump (normal strength), seed, tall }.
 export interface Look {
@@ -39,24 +41,24 @@ export const rand = (seed: number) => (): number => {
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
-const rgb = (hex: string): number[] => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+const rgb = (hex: string): [number, number, number] => {
+  const byte = (at: number): number => parseInt(hex.slice(at, at + 2), 16);
+  return [byte(1), byte(3), byte(5)];
+};
+// Entry i of a list that repeats: list[i % list.length].
+export const cycle = <T>(list: readonly T[], i: number): T => defined(list[i % list.length], 'an entry of an empty list');
 export const grey = (v: number): string => {
   const g = Math.round(Math.max(0, Math.min(1, v)) * 255);
   return `rgb(${g},${g},${g})`;
 };
 export const mixc = (a: string, b: string, t: number): string => {
-  const p = rgb(a),
-    q = rgb(b);
-  return (
-    '#' +
-    p
-      .map((v, i) =>
-        Math.round(v + (q[i] - v) * t)
-          .toString(16)
-          .padStart(2, '0')
-      )
-      .join('')
-  );
+  const [r0, g0, b0] = rgb(a),
+    [r1, g1, b1] = rgb(b),
+    hex = (u: number, v: number): string =>
+      Math.round(u + (v - u) * t)
+        .toString(16)
+        .padStart(2, '0');
+  return `#${hex(r0, r1)}${hex(g0, g1)}${hex(b0, b1)}`;
 };
 
 // Fractal noise that tiles, n by n, values 0 to 1. cells: lumps across the tile at the coarsest octave.
@@ -67,7 +69,9 @@ export function fbm(n: number, cells: number, octaves: number, seed: number): Fl
     total = 0;
   for (let o = 0; o < octaves; o++, cells *= 2, amp *= 0.5) {
     const g = Float32Array.from({ length: cells * cells }, r),
-      k = cells / n;
+      k = cells / n,
+      // x0, x1 < cells and y0, y1 < cells, so every lattice point asked for is inside g
+      at = (x: number, y: number): number => defined(g[y * cells + x], 'a noise lattice point');
     for (let y = 0; y < n; y++)
       for (let x = 0; x < n; x++) {
         const fx = x * k,
@@ -80,15 +84,16 @@ export function fbm(n: number, cells: number, octaves: number, seed: number): Fl
           ty = fy - y0,
           sx = tx * tx * (3 - 2 * tx),
           sy = ty * ty * (3 - 2 * ty);
-        const a = g[y0 * cells + x0],
-          b = g[y0 * cells + x1],
-          c = g[y1 * cells + x0],
-          d = g[y1 * cells + x1];
-        out[y * n + x] += amp * (a + (b - a) * sx + (c + (d - c) * sx - a - (b - a) * sx) * sy);
+        const a = at(x0, y0),
+          b = at(x1, y0),
+          c = at(x0, y1),
+          d = at(x1, y1),
+          i = y * n + x;
+        out[i] = defined(out[i], 'a noise texel') + amp * (a + (b - a) * sx + (c + (d - c) * sx - a - (b - a) * sx) * sy);
       }
     total += amp;
   }
-  for (let i = 0; i < out.length; i++) out[i] /= total;
+  for (const [i, v] of out.entries()) out[i] = v / total;
   return out;
 }
 export const FIELD = 256; // the size every noise field is made at
@@ -97,7 +102,7 @@ export function canvas(w: number, h = w): CanvasRenderingContext2D {
   const cv = document.createElement('canvas');
   cv.width = w;
   cv.height = h;
-  return cv.getContext('2d', { willReadFrequently: true });
+  return context2d(cv, { willReadFrequently: true });
 }
 
 // Lay a colour over a canvas wherever a noise field is between lo and hi,
@@ -109,7 +114,7 @@ function wash(ctx: CanvasRenderingContext2D, field: Float32Array, lo: number, hi
     d = img.data,
     [r, g, b] = rgb(col);
   for (let i = 0; i < field.length; i++) {
-    const t = Math.max(0, Math.min(1, (field[(i + roll) % field.length] - lo) / (hi - lo)));
+    const t = Math.max(0, Math.min(1, (defined(field[(i + roll) % field.length], 'a noise texel') - lo) / (hi - lo)));
     d[i * 4] = r;
     d[i * 4 + 1] = g;
     d[i * 4 + 2] = b;
@@ -145,7 +150,7 @@ function normalFrom(h: CanvasRenderingContext2D, strength: number, wrapT: THREE.
     out = canvas(n),
     img = out.createImageData(n, n),
     d = img.data;
-  const at = (x: number, y: number): number => src[(((y + n) % n) * n + ((x + n) % n)) * 4];
+  const at = (x: number, y: number): number => defined(src[(((y + n) % n) * n + ((x + n) % n)) * 4], 'a height pixel');
   for (let y = 0; y < n; y++)
     for (let x = 0; x < n; x++) {
       // canvas y runs down and texture v runs up, hence the sign of the second term
@@ -245,7 +250,7 @@ export function paint(look: Look, draw: (p: Painter) => void): Maps {
     speck(n, cols, size, alpha) {
       for (let i = 0; i < n; i++) {
         c.globalAlpha = alpha * (0.4 + p.rnd() * 0.6);
-        c.fillStyle = cols[i % cols.length];
+        c.fillStyle = cycle(cols, i);
         const d = size * (0.4 + p.rnd());
         c.fillRect(p.rnd() * s, p.rnd() * s, d, d);
       }

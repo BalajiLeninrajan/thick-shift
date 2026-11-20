@@ -3,11 +3,13 @@
 // room names stencilled by the doors. Two canvases, cut up by the rectangles
 // in ART and NAMES; shell.ts puts the pieces on the walls.
 
-import { MASC } from '@thick-shift/sim/config';
+import { defined } from '@thick-shift/sim/check';
+import { MASC, MASCOTS } from '@thick-shift/sim/config';
 import { ROOMS3 } from '@thick-shift/sim/map';
+import type { MascotIndex, PerMascot } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { UV } from './geo';
-import { canvas, FIELD, fbm, mixc, rand } from './tex';
+import { canvas, cycle, FIELD, fbm, mixc, rand } from './tex';
 
 // A rectangle of a canvas, [x, y, w, h] in pixels.
 export type Px = [x: number, y: number, w: number, h: number];
@@ -18,6 +20,8 @@ export interface Pics {
   nameWidth: number[];
 }
 
+// The staff notes' keys in ART, one for each of NOTES.
+type NoteKey = `note${0 | 1 | 2 | 3 | 4 | 5 | 6 | 7}`;
 // [x, y, w, h] in pixels of the 1024 square art canvas.
 export const ART = {
   poster0: [0, 0, 224, 320],
@@ -26,7 +30,14 @@ export const ART = {
   poster3: [672, 0, 224, 320],
   height: [896, 0, 128, 320],
   mural: [0, 320, 1024, 320],
-  ...Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`note${i}`, [i * 128, 640, 128, 160]])),
+  note0: [0, 640, 128, 160],
+  note1: [128, 640, 128, 160],
+  note2: [256, 640, 128, 160],
+  note3: [384, 640, 128, 160],
+  note4: [512, 640, 128, 160],
+  note5: [640, 640, 128, 160],
+  note6: [768, 640, 128, 160],
+  note7: [896, 640, 128, 160],
   damp: [0, 800, 224, 224],
   hand: [224, 800, 160, 160],
   hole: [384, 800, 160, 160],
@@ -37,23 +48,29 @@ export const ART = {
   scallop: [224, 960, 512, 64],
   hazard: [736, 960, 256, 32],
 } satisfies Record<string, Px>;
-const POSTER_LINE = ['THERE IS ALWAYS ROOM\nFOR ONE MORE', 'HUGS ARE FREE', 'HE FITS ANYWHERE', 'NO RUNNING\n(EXCEPT TANK)'];
-const NOTES = [
-  ['NOTICE', 'CLOSED until further notice. Do not let anyone tell you it is a party.'],
-  ['NIGHT STAFF', 'Sparks mean a fault. Fix it before it fixes you. The wiring does not care how you feel.'],
-  ['COSTUME CARE', 'Heads on the shelf. Bodies on the rack. Count both. Count again.'],
-  ['LOST CHILD?', 'Bring them to the booth. Do not hand them to a mascot.'],
-  ['REMINDER', 'Nobody is inside the suits. Please stop asking.'],
-  ['HYGIENE', 'Wash your hands after handling Madame Flan.'],
-  ['DAYS SINCE LAST FLATTENING', '0'],
-  ['TORCHES', 'Charge yours at the booth. Spare batteries are where you left them. Probably.'],
+// Each mascot's poster: its background and its line.
+const POSTER_BG: PerMascot<string> = ['#e8c832', '#2ec4c6', '#e86a2a', '#d4418e'];
+const POSTER_LINE: PerMascot<string> = ['THERE IS ALWAYS ROOM\nFOR ONE MORE', 'HUGS ARE FREE', 'HE FITS ANYWHERE', 'NO RUNNING\n(EXCEPT TANK)'];
+// The party hat each mascot wears in the venue's drawings.
+const HAT: PerMascot<string> = ['#e8c832', '#d4418e', '#2ec4c6', '#e86a2a'];
+const BUNTING = ['#d4418e', '#e8c832', '#2ec4c6', '#e86a2a'];
+// The staff notes, each with the rectangle of ART it is painted in.
+const NOTES: [at: NoteKey, title: string, body: string][] = [
+  ['note0', 'NOTICE', 'CLOSED until further notice. Do not let anyone tell you it is a party.'],
+  ['note1', 'NIGHT STAFF', 'Sparks mean a fault. Fix it before it fixes you. The wiring does not care how you feel.'],
+  ['note2', 'COSTUME CARE', 'Heads on the shelf. Bodies on the rack. Count both. Count again.'],
+  ['note3', 'LOST CHILD?', 'Bring them to the booth. Do not hand them to a mascot.'],
+  ['note4', 'REMINDER', 'Nobody is inside the suits. Please stop asking.'],
+  ['note5', 'HYGIENE', 'Wash your hands after handling Madame Flan.'],
+  ['note6', 'DAYS SINCE LAST FLATTENING', '0'],
+  ['note7', 'TORCHES', 'Charge yours at the booth. Spare batteries are where you left them. Probably.'],
 ];
 const FONT = "'Arial Narrow', 'Liberation Sans Narrow', 'Helvetica Neue', Arial, sans-serif";
 const INK = '#1a1210';
 
 // One mascot as the venue drew it for children: round, waving, in a party hat.
 // (x, y) is the ground between its feet; k = 1 makes it about 230 px tall.
-function friend(c: CanvasRenderingContext2D, i: number, x: number, y: number, k: number): void {
+function friend(c: CanvasRenderingContext2D, i: MascotIndex, x: number, y: number, k: number): void {
   const m = MASC[i],
     shade = mixc(m.col, '#000000', 0.4);
   c.save();
@@ -62,10 +79,12 @@ function friend(c: CanvasRenderingContext2D, i: number, x: number, y: number, k:
   c.lineWidth = 5;
   c.strokeStyle = INK;
   c.lineJoin = c.lineCap = 'round';
-  const ell = (ex: number, ey: number, rx: number, ry: number, fill: string, rot = 0, stroke = true): void => {
+  // fill is undefined for the belly of a mascot without one, and the shape is then filled with whatever colour was
+  // set before it.
+  const ell = (ex: number, ey: number, rx: number, ry: number, fill: string | undefined, rot = 0, stroke = true): void => {
     c.beginPath();
     c.ellipse(ex, ey, rx, ry, rot, 0, 7);
-    c.fillStyle = fill;
+    if (fill !== undefined) c.fillStyle = fill;
     c.fill();
     if (stroke) c.stroke();
   };
@@ -91,7 +110,7 @@ function friend(c: CanvasRenderingContext2D, i: number, x: number, y: number, k:
       [-40, 6],
       [44, -2],
       [-12, -18],
-    ])
+    ] as const)
       ell(sx, hy + sy, 6, 5, shade, 0, false);
     c.beginPath();
     c.arc(0, hy - 6, 40, 0.25, Math.PI - 0.25);
@@ -143,7 +162,7 @@ function friend(c: CanvasRenderingContext2D, i: number, x: number, y: number, k:
     }
   }
   // the hat
-  c.fillStyle = ['#e8c832', '#d4418e', '#2ec4c6', '#e86a2a'][i];
+  c.fillStyle = HAT[i];
   c.beginPath();
   c.moveTo(-20, hy - 40);
   c.lineTo(20, hy - 40);
@@ -210,10 +229,11 @@ function drawArt(): CanvasRenderingContext2D {
     rnd = rand(77);
   c.textAlign = 'center';
   c.textBaseline = 'middle';
-  MASC.forEach((m, i) => {
-    const r = ART[`poster${i}`],
+  // a poster, a background and a line for each of MASC
+  for (const i of MASCOTS) {
+    const r = ART[`poster${i}` as const],
       [x, y, w, h] = r,
-      bg = ['#e8c832', '#2ec4c6', '#e86a2a', '#d4418e'][i];
+      bg = POSTER_BG[i];
     c.save();
     c.beginPath();
     c.rect(x, y, w, h);
@@ -233,14 +253,14 @@ function drawArt(): CanvasRenderingContext2D {
     c.fillRect(x, y + 262, w, 58);
     c.fillStyle = '#fffdf5';
     c.font = `bold 34px ${FONT}`;
-    c.fillText(m.name.toUpperCase(), x + w / 2, y + 27, w - 24);
+    c.fillText(MASC[i].name.toUpperCase(), x + w / 2, y + 27, w - 24);
     c.font = `bold 17px ${FONT}`;
     POSTER_LINE[i].split('\n').forEach((l, k, all) => {
       c.fillText(l, x + w / 2, y + 291 + (k - (all.length - 1) / 2) * 20);
     });
     c.restore();
     age(c, r, rnd);
-  });
+  }
   {
     // the height chart every venue had, with the wrong question on it
     const r = ART.height,
@@ -286,21 +306,28 @@ function drawArt(): CanvasRenderingContext2D {
       const t = (k + 0.5) / 20,
         bx = x + t * w,
         by = y + 20 + 70 * 2 * t * (1 - t);
-      c.fillStyle = ['#d4418e', '#e8c832', '#2ec4c6', '#e86a2a'][k % 4];
+      c.fillStyle = cycle(BUNTING, k);
       c.beginPath();
       c.moveTo(bx - 16, by);
       c.lineTo(bx + 16, by);
       c.lineTo(bx, by + 34);
       c.fill();
     }
-    [1, 0, 3, 2].forEach((mi, k) => {
-      friend(c, mi, x + 150 + k * 240, y + 300, [0.82, 1, 0.9, 0.7][k]);
-    });
+    // who stands where along the mural, left to right, and how big
+    for (const [k, [mi, size]] of (
+      [
+        [1, 0.82],
+        [0, 1],
+        [3, 0.9],
+        [2, 0.7],
+      ] as const
+    ).entries())
+      friend(c, mi, x + 150 + k * 240, y + 300, size);
     for (const [bx, col] of [
       [40, '#d4418e'],
       [520, '#e8c832'],
       [985, '#2ec4c6'],
-    ] as [number, string][]) {
+    ] satisfies [number, string][]) {
       c.strokeStyle = INK;
       c.lineWidth = 2;
       c.beginPath();
@@ -321,21 +348,25 @@ function drawArt(): CanvasRenderingContext2D {
     c.fillText('EVERY DAY IS YOUR BIRTHDAY', x + w / 2, y + 122);
     c.restore();
     // painted straight on the wall, so it flakes instead of tearing
+    // Every index below is inside its array, as py < h and px < w.
     const flake = fbm(FIELD, 9, 3, 5),
       img = c.getImageData(x, y, w, h),
-      d = img.data;
+      d = img.data,
+      dim = (i: number, k: number): void => {
+        d[i] = defined(d[i], 'a mural pixel') * k;
+      };
     for (let py = 0; py < h; py++)
       for (let px = 0; px < w; px++) {
-        const f = flake[(((py * FIELD) / h) | 0) * FIELD + ((((px * FIELD) / w) | 0) % FIELD)],
+        const f = defined(flake[(((py * FIELD) / h) | 0) * FIELD + ((((px * FIELD) / w) | 0) % FIELD)], 'a flaking texel'),
           i = (py * w + px) * 4;
-        d[i] *= 0.62;
-        d[i + 1] *= 0.6;
-        d[i + 2] *= 0.55;
+        dim(i, 0.62);
+        dim(i + 1, 0.6);
+        dim(i + 2, 0.55);
         if (f > 0.6) d[i + 3] = 0;
         else if (f > 0.57) {
-          d[i] *= 0.5;
-          d[i + 1] *= 0.5;
-          d[i + 2] *= 0.5;
+          dim(i, 0.5);
+          dim(i + 1, 0.5);
+          dim(i + 2, 0.5);
         }
       }
     c.putImageData(img, x, y);
@@ -344,16 +375,15 @@ function drawArt(): CanvasRenderingContext2D {
     for (const [ex, ey] of [
       [374, 128],
       [404, 130],
-    ]) {
+    ] as const) {
       c.beginPath();
       c.arc(x + ex, y + ey, 13, 0, 7);
       c.fill();
       c.fillRect(x + ex - 2, y + ey, 4, 40 + rnd() * 30);
     }
   }
-  NOTES.forEach(([title, body], i) => {
-    const r = ART[`note${i}`],
-      [x, y, w, h] = r;
+  NOTES.forEach(([at, title, body], i) => {
+    const [x, y, w, h] = ART[at];
     c.fillStyle = i % 3 === 1 ? '#e8e0a8' : '#eeeade';
     c.fillRect(x + 4, y + 6, w - 8, h - 10);
     c.fillStyle = INK;
@@ -373,7 +403,7 @@ function drawArt(): CanvasRenderingContext2D {
     for (const [tx, ty] of [
       [x + 2, y + 2],
       [x + w - 30, y + 2],
-    ])
+    ] as const)
       c.fillRect(tx, ty, 28, 12); // tape
   });
   {
@@ -395,7 +425,7 @@ function drawArt(): CanvasRenderingContext2D {
     for (const [hx, hy, a] of [
       [50, 60, -0.2],
       [108, 84, 0.25],
-    ]) {
+    ] as const) {
       c.save();
       c.translate(x + hx, y + hy);
       c.rotate(a);

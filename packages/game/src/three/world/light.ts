@@ -10,7 +10,8 @@
 // shape, and a trace of night vision, so the dark is not one flat black.
 
 import { darkRoom } from '@thick-shift/sim';
-import type { Lamp, RGB } from '@thick-shift/sim/data';
+import { defined } from '@thick-shift/sim/check';
+import type { Lamp, LampGroup, RGB } from '@thick-shift/sim/data';
 // The lamps and the dead fittings are plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read them too.
 import { DEAD_TUBES, GREEN, LAMPS, TUBE } from '@thick-shift/sim/data';
 import { BOXES, ROOMS3 } from '@thick-shift/sim/map';
@@ -19,7 +20,7 @@ import * as THREE from 'three';
 import { ART, uvOf } from './art';
 import type { UV, Vec3 } from './geo';
 import { Batch } from './geo';
-import { open, reach, roomOf, sees } from './sight';
+import { open, reach, roomData, roomOf, sees } from './sight';
 import { canvas } from './tex';
 
 // How bright each lamp group is this frame, 0 to 1 (createLight's level): the props' glow materials follow these too.
@@ -37,20 +38,36 @@ export interface Levels {
 const PER_M = 4,
   LW = 42 * PER_M,
   LH = 44 * PER_M; // lightmap texels per metre, and its size
-const GROUPS = ['fa', 'fb', 'exit', 'fc']; // the channels of the second texture
+// The lamp groups that flicker or outlast the power, each with its channel of the second texture. The steady group,
+// 'on', bakes into the first along with the glow lamps, which have no group.
+const CHANNEL = { fa: 0, fb: 1, exit: 2, fc: 3 } as const satisfies Partial<Record<LampGroup, number>>;
+type Channel = (typeof CHANNEL)[keyof typeof CHANNEL];
+const channelOf = (l: Lamp): Channel | undefined => (l.g === undefined || l.g === 'on' ? undefined : CHANNEL[l.g]);
+// Every lamp group, in the order fittings() adds their glow meshes to the scene.
+const LAMP_GROUPS = ['on', 'fa', 'fb', 'exit', 'fc'] as const satisfies readonly LampGroup[];
+const RGBA = [0, 1, 2, 3] as const;
+type Quad = [number, number, number, number];
 const BOUNCE = 0.14; // how much of a room's light comes back off its walls
 // A torch held up to a wall bleaches it. The picture stops down as the lit
 // surface gets nearer than GLARE_FROM metres, to no less than GLARE_MIN.
 const GLARE_FROM = 5,
   GLARE_MIN = 0.3;
 
-const ceilingAt = (x: number, z: number): number => ROOMS3[Math.max(0, roomOf(x, z))].h;
+const ceilingAt = (x: number, z: number): number => roomData(Math.max(0, roomOf(x, z))).h;
 
-// lamps: the ones to bake. Returns two textures: the steady lamps in colour, and the four groups of GROUPS, one per channel.
+// A lightmap holds four floats for every texel, and every index the bake makes is inside it.
+const slot = (map: Float32Array, i: number): number => defined(map[i], 'a lightmap slot');
+const add = (map: Float32Array, i: number, v: number): void => {
+  map[i] = slot(map, i) + v;
+};
+
+// lamps: the ones to bake. Returns two textures: the steady lamps in colour, and the four groups of CHANNEL, one per channel.
 function bake(lamps: Lamp[]): [THREE.DataTexture, THREE.DataTexture] {
   const a = new Float32Array(LW * LH * 4),
     b = new Float32Array(LW * LH * 4),
     room = new Int8Array(LW * LH);
+  // a wall lamp shines from just in front of its wall
+  const fitted = lamps.map(l => ({ l, lx: l.x + (l.n?.[0] || 0) * 0.3, lz: l.z + (l.n?.[1] || 0) * 0.3, ch: channelOf(l) }));
   for (let j = 0; j < LH; j++)
     for (let i = 0; i < LW; i++) {
       const x = (i + 0.5) / PER_M,
@@ -58,11 +75,8 @@ function bake(lamps: Lamp[]): [THREE.DataTexture, THREE.DataTexture] {
         at = j * LW + i;
       room[at] = open(x, z) ? roomOf(x, z) : -2;
       if (room[at] === -2) continue;
-      for (const l of lamps) {
-        // a wall lamp shines from just in front of its wall
-        const lx = l.x + (l.n?.[0] || 0) * 0.3,
-          lz = l.z + (l.n?.[1] || 0) * 0.3,
-          d = Math.hypot(x - lx, z - lz);
+      for (const { l, lx, lz, ch } of fitted) {
+        const d = Math.hypot(x - lx, z - lz);
         if (d >= l.reach) continue;
         // four points round the lamp, so shadows have soft edges
         let lit = 0;
@@ -71,29 +85,29 @@ function bake(lamps: Lamp[]): [THREE.DataTexture, THREE.DataTexture] {
           [-0.35, 0],
           [0, 0.35],
           [0, -0.35],
-        ])
+        ] as const)
           if (open(lx + ox, lz + oz) && sees(x, z, lx + ox, lz + oz)) lit += 0.25;
         if (!lit) continue;
         const h = l.y ?? ceilingAt(lx, lz) - 0.2,
           fade = 1 - (d / l.reach) ** 2;
         const v = l.pow * lit * ((h * h) / (d * d + h * h)) ** 1.5 * fade * fade;
-        if (!GROUPS.includes(l.g)) for (let k = 0; k < 3; k++) a[at * 4 + k] += v * l.col[k];
-        else b[at * 4 + GROUPS.indexOf(l.g)] += v;
+        if (ch === undefined) for (const [k, c] of l.col.entries()) add(a, at * 4 + k, v * c);
+        else add(b, at * 4 + ch, v);
       }
     }
   // Each room gets back a share of its own light from everywhere at once.
   for (const map of [a, b]) {
-    const sum = ROOMS3.map(() => [0, 0, 0, 0, 0]);
-    for (let at = 0; at < room.length; at++)
-      if (room[at] >= 0) {
-        const s = sum[room[at]];
-        s[4]++;
-        for (let k = 0; k < 4; k++) s[k] += map[at * 4 + k];
+    const sum = ROOMS3.map((): { n: number; c: Quad } => ({ n: 0, c: [0, 0, 0, 0] }));
+    for (const [at, r] of room.entries())
+      if (r >= 0) {
+        const s = defined(sum[r], "a room's light");
+        s.n++;
+        for (const k of RGBA) s.c[k] += slot(map, at * 4 + k);
       }
-    for (let at = 0; at < room.length; at++)
-      if (room[at] >= 0) {
-        const s = sum[room[at]];
-        for (let k = 0; k < 4; k++) map[at * 4 + k] += (s[k] / s[4]) * BOUNCE;
+    for (const [at, r] of room.entries())
+      if (r >= 0) {
+        const s = defined(sum[r], "a room's light");
+        for (const k of RGBA) add(map, at * 4 + k, (s.c[k] / s.n) * BOUNCE);
       }
   }
   // A wall's surface sits on the edge between a lit texel and one inside the
@@ -105,20 +119,20 @@ function bake(lamps: Lamp[]): [THREE.DataTexture, THREE.DataTexture] {
         const at = j * LW + i;
         if (room[at] !== -2) continue;
         let n = 0;
-        const acc = [0, 0, 0, 0];
+        const acc: Quad = [0, 0, 0, 0];
         for (const [di, dj] of [
           [1, 0],
           [-1, 0],
           [0, 1],
           [0, -1],
-        ]) {
+        ] as const) {
           const q = (j + dj) * LW + i + di;
           if (i + di >= 0 && i + di < LW && j + dj >= 0 && j + dj < LH && room[q] !== -2) {
             n++;
-            for (let k = 0; k < 4; k++) acc[k] += src[q * 4 + k];
+            for (const k of RGBA) acc[k] += slot(src, q * 4 + k);
           }
         }
-        if (n) for (let k = 0; k < 4; k++) map[at * 4 + k] = acc[k] / n;
+        if (n) for (const k of RGBA) map[at * 4 + k] = acc[k] / n;
       }
   }
   const tex = (f: Float32Array): THREE.DataTexture => {
@@ -152,7 +166,7 @@ function roomMask(): { tex: THREE.DataTexture; update(S: State, t: number, dt: n
           [-d, 0],
           [0, d],
           [0, -d],
-        ])
+        ] as const)
           if (r < 0) r = roomOf(x + dx, z + dz);
       ids[j * MW + i] = r;
     }
@@ -164,19 +178,20 @@ function roomMask(): { tex: THREE.DataTexture; update(S: State, t: number, dt: n
     tex,
     update(S: State, t: number, dt: number): void {
       let changed = false;
-      ROOMS3.forEach((_, r) => {
-        const open = S.faults?.some((f, i) => f && BOXES[i].room === r),
+      for (const [r, was] of level.entries()) {
+        const open = BOXES.some((box, i) => S.faults?.[i] && box.room === r),
           dark = !S.out && darkRoom(S as NightState, r);
         // Open: the room's tubes stutter. Dark: they have given up, with the odd attempt to strike.
         const want = dark ? (jump(t, 3, r) > 0.93 ? 0.35 : 0.04) : open ? (jump(t, 11, r + 20) > 0.8 ? 0.3 : 1) : 1;
-        const v = level[r] + (want - level[r]) * Math.min(1, dt * 14);
-        if (Math.abs(v - level[r]) > 0.004) {
+        const v = was + (want - was) * Math.min(1, dt * 14);
+        if (Math.abs(v - was) > 0.004) {
           level[r] = v;
           changed = true;
         }
-      });
+      }
       if (!changed) return;
-      for (let k = 0; k < ids.length; k++) if (ids[k] >= 0) data[k * 4] = 255 * level[ids[k]];
+      // ids holds room indices, and level has an entry for each room
+      for (const [k, r] of ids.entries()) if (r >= 0) data[k * 4] = 255 * defined(level[r], "a room's light level");
       tex.needsUpdate = true;
     },
   };
@@ -282,11 +297,14 @@ const CORE: UV = [0.5, 0.5, 0.5, 0.5],
   HOUSING: RGB = [0.5, 0.5, 0.48],
   dim = (c: RGB, k: number): RGB => c.map(v => v * k) as RGB;
 
-// trim: the batch that housings go into. Returns the meshes that glow, by group.
-function fittings(scene: THREE.Scene, trim: Batch, artTex: THREE.Texture): Record<string, THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>> {
-  const glow = Object.fromEntries(['on', ...GROUPS].map(g => [g, new Batch()])),
+type GlowMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+// trim: the batch that housings go into. Returns the meshes that glow: one for each group that has a lamp, and the
+// exit signs' faces.
+function fittings(scene: THREE.Scene, trim: Batch, artTex: THREE.Texture): { groups: Partial<Record<LampGroup, GlowMesh>>; face: GlowMesh } {
+  const glow: Record<LampGroup, Batch> = { on: new Batch(), fa: new Batch(), fb: new Batch(), exit: new Batch(), fc: new Batch() },
     face = new Batch();
-  const tube = (x: number, z: number, dir: 'x' | 'z', col?: RGB, into?: Batch): void => {
+  // on: the tube's colour and the batch it glows in; a dead tube has neither.
+  const tube = (x: number, z: number, dir: 'x' | 'z', on?: { col: RGB; into: Batch }): void => {
     const y = ceilingAt(x, z),
       dx = dir === 'x' ? 0.65 : 0.09,
       dz = dir === 'x' ? 0.09 : 0.65;
@@ -295,26 +313,28 @@ function fittings(scene: THREE.Scene, trim: Batch, artTex: THREE.Texture): Recor
       const o = s * 0.045,
         a: Vec3 = dir === 'x' ? [x - 0.6, y - 0.09, z + o] : [x + o, y - 0.09, z - 0.6],
         b: Vec3 = dir === 'x' ? [x + 0.6, y - 0.09, z + o] : [x + o, y - 0.09, z + 0.6];
-      if (into) into.bar(a, b, 0.018, col, 6, CORE);
+      if (on) on.into.bar(a, b, 0.018, on.col, 6, CORE);
       else trim.bar(a, b, 0.018, [0.3, 0.3, 0.28], 6);
     }
-    if (into) into.decal(x, y - 0.012, z, dir === 'x' ? 3.2 : 1.8, dir === 'x' ? 1.8 : 3.2, 0, false, HALO, dim(col, 0.3));
+    if (on) on.into.decal(x, y - 0.012, z, dir === 'x' ? 3.2 : 1.8, dir === 'x' ? 1.8 : 3.2, 0, false, HALO, dim(on.col, 0.3));
   };
+  // Lamp says which fields each kind has. Only the glow lamps have no group g, and they have no fitting to draw.
   for (const l of LAMPS) {
-    const into = glow[l.g];
-    if (l.kind === 'tube') tube(l.x, l.z, l.dir, l.col, into);
+    if (l.kind === 'tube') tube(l.x, l.z, l.dir, { col: l.col, into: glow[l.g] });
     if (l.kind === 'bulb') {
+      const into = glow[l.g];
       trim.bar([l.x, l.y, l.z], [l.x, ceilingAt(l.x, l.z), l.z], 0.008, [0.05, 0.05, 0.05], 4);
       trim.box(l.x - 0.02, l.y - 0.06, l.z - 0.02, l.x + 0.02, l.y, l.z + 0.02, [0.3, 0.25, 0.15]);
       into.box(l.x - 0.03, l.y - 0.15, l.z - 0.03, l.x + 0.03, l.y - 0.06, l.z + 0.03, l.col, 1, CORE);
       for (const [nx, nz] of [
         [1, 0],
         [0, 1],
-      ])
+      ] as const)
         for (const s of [-1, 1]) into.sign(l.x, l.y - 0.1, l.z, 0.9, 0.9, nx * s, nz * s, HALO, dim(l.col, 0.35));
     }
     if (l.kind === 'red') {
-      const [nx, nz] = l.n,
+      const into = glow[l.g],
+        [nx, nz] = l.n,
         x = l.x + nx * 0.05,
         z = l.z + nz * 0.05,
         y = 2.45;
@@ -326,7 +346,8 @@ function fittings(scene: THREE.Scene, trim: Batch, artTex: THREE.Texture): Recor
       into.sign(l.x + nx * 0.12, y, l.z + nz * 0.12, 0.6, 0.5, nx, nz, HALO, dim(l.col, 0.6));
     }
     if (l.kind === 'exit') {
-      const [nx, nz] = l.n,
+      const into = glow[l.g],
+        [nx, nz] = l.n,
         x = l.x + nx * 0.04,
         z = l.z + nz * 0.04,
         w = 0.56,
@@ -346,15 +367,17 @@ function fittings(scene: THREE.Scene, trim: Batch, artTex: THREE.Texture): Recor
   }
   for (const [x, z, dir] of DEAD_TUBES) tube(x, z, dir);
   const map = glowTexture(),
-    out: Record<string, THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>> = {};
-  for (const g in glow)
-    if (!glow[g].empty) {
-      out[g] = glow[g].mesh(new THREE.MeshBasicMaterial({ map, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
-      scene.add(out[g]);
-    }
-  out.face = face.mesh(new THREE.MeshBasicMaterial({ map: artTex }));
-  scene.add(out.face);
-  return out;
+    groups: Partial<Record<LampGroup, GlowMesh>> = {};
+  for (const g of LAMP_GROUPS) {
+    const batch = glow[g];
+    if (batch.empty) continue;
+    const mesh = batch.mesh(new THREE.MeshBasicMaterial({ map, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+    groups[g] = mesh;
+    scene.add(mesh);
+  }
+  const signs = face.mesh(new THREE.MeshBasicMaterial({ map: artTex }));
+  scene.add(signs);
+  return { groups, face: signs };
 }
 
 /* ---------- the torch ---------- */
@@ -376,7 +399,7 @@ export function torchCookie(): THREE.CanvasTexture {
     [0.74, 106],
     [0.9, 63],
     [1, 36],
-  ])
+  ] as const)
     g.addColorStop(at, `rgb(${v},${v},${v})`);
   c.fillStyle = g;
   c.fillRect(0, 0, s, s);
@@ -396,14 +419,17 @@ export function torchCookie(): THREE.CanvasTexture {
   return t;
 }
 
-// Dust that only shows where the beam passes through it.
-function dust(scene: THREE.Scene, count: number): THREE.ShaderMaterial {
+// Dust that only shows where the beam passes through it. Returns the uniforms the frame sets: the time, and how
+// bright the beam is.
+function dust(scene: THREE.Scene, count: number): { uTime: THREE.IUniform<number>; uBeam: THREE.IUniform<number> } {
   const g = new THREE.BufferGeometry(),
     seed = new Float32Array(count * 3);
   for (let i = 0; i < seed.length; i++) seed[i] = Math.random() * 8;
   g.setAttribute('position', new THREE.BufferAttribute(seed, 3));
+  const uTime = { value: 0 },
+    uBeam = { value: 0 };
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uEye: U.uEye, uTorch: U.uTorch, uTime: { value: 0 }, uBeam: { value: 0 } },
+    uniforms: { uEye: U.uEye, uTorch: U.uTorch, uTime, uBeam },
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
@@ -423,7 +449,7 @@ function dust(scene: THREE.Scene, count: number): THREE.ShaderMaterial {
   const pts = new THREE.Points(g, mat);
   pts.frustumCulled = false;
   scene.add(pts);
-  return mat;
+  return { uTime, uBeam };
 }
 
 /* ---------- the night ---------- */
@@ -447,7 +473,7 @@ export function createLight(scene: THREE.Scene, trim: Batch, artTex: THREE.Textu
     stop: 1, // how far the picture is stopped down against torch glare, GLARE_MIN to 1
     // The props have loaded: light the floor round the ones that glow. has(name): is that prop there.
     glows(has: (name: string) => boolean): void {
-      [U.uLmC.value] = bake(LAMPS.filter(l => l.kind === 'glow' && has(l.by)));
+      [U.uLmC.value] = bake(LAMPS.filter(l => l.kind === 'glow' && has(l.by))); // every glow lamp names its prop in by
     },
     // dread and threat: 0 to 1. torch: the local guard's torch brightness, 0 to 1.
     update(S: State, t: number, dt: number, camera: THREE.Camera, torch: number, dread: number, threat: number): void {
@@ -470,7 +496,7 @@ export function createLight(scene: THREE.Scene, trim: Batch, artTex: THREE.Textu
       U.uCc.value.copy(tubeCol).multiplyScalar(fc);
       U.uCe.value.copy(exitCol).multiplyScalar(exit);
       const level: Levels = { on, fa, fb, fc, exit, screen: U.uGlow.value };
-      for (const g in level) glow[g]?.material.color.setScalar(level[g]);
+      for (const g of LAMP_GROUPS) glow.groups[g]?.material.color.setScalar(level[g]);
       this.level = level;
       glow.face.material.color.setScalar(0.35 + exit * 0.65);
       camera.getWorldDirection(dir);
@@ -486,13 +512,15 @@ export function createLight(scene: THREE.Scene, trim: Batch, artTex: THREE.Textu
       U.uEye.value.copy(camera.position);
       U.uTorch.value.set(dir.x, dir.y, dir.z, torch * 0.05);
       U.uAdapt.value.setRGB(0.012, 0.015, 0.022);
-      motes.uniforms.uTime.value = t;
-      motes.uniforms.uBeam.value = torch;
+      motes.uTime.value = t;
+      motes.uBeam.value = torch;
       // Models arrive late and belong to other files; give anything new the building's light.
       if (t - swept > 1) {
         swept = t;
         scene.traverse(o => {
-          if ((o as THREE.Mesh).isMesh) for (const m of [].concat((o as THREE.Mesh).material)) lit(m);
+          if (!(o as THREE.Mesh).isMesh) return;
+          const { material } = o as THREE.Mesh;
+          for (const m of Array.isArray(material) ? material : [material]) lit(m);
         });
       }
     },

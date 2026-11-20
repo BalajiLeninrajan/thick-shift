@@ -5,6 +5,7 @@
 // guard stands are not drawn at all.
 // A kit that is missing leaves its props out and nothing else changes.
 
+import { defined } from '@thick-shift/sim/check';
 import { DRESSING } from '@thick-shift/sim/dressing';
 import { ROOMS3 } from '@thick-shift/sim/map';
 import * as THREE from 'three';
@@ -13,6 +14,7 @@ import { loadGLB } from '../assets';
 import type { Levels } from './light';
 import { lit } from './light';
 import { floorY } from './shell';
+import { roomData } from './sight';
 
 // A node of a kit model as traverse() hands it over: a mesh when isMesh is set, wearing the kit's own material or, once
 // dressed, the one dressMaterial gave it.
@@ -54,13 +56,14 @@ function dressMaterial(m: THREE.MeshStandardMaterial, dead?: boolean): THREE.Mes
   const level = GLOW[m.name];
   if (!level) return lit(m);
   if (dead) return DEAD;
-  if (!glowing.has(m)) {
-    // a glow with a picture shows the picture; one without shows its colour
-    const map = m.emissiveMap || m.map,
-      base = map ? new THREE.Color(1, 1, 1) : m.emissive.getHex() ? m.emissive.clone() : m.color.clone();
-    glowing.set(m, { mat: new THREE.MeshBasicMaterial({ map, name: m.name }), base, level });
-  }
-  return glowing.get(m).mat;
+  const known = glowing.get(m);
+  if (known) return known.mat;
+  // a glow with a picture shows the picture; one without shows its colour
+  const map = m.emissiveMap || m.map,
+    base = map ? new THREE.Color(1, 1, 1) : m.emissive.getHex() ? m.emissive.clone() : m.color.clone(),
+    mat = new THREE.MeshBasicMaterial({ map, name: m.name });
+  glowing.set(m, { mat, base, level });
+  return mat;
 }
 
 // A copy of one prop, standing at the origin, ready to add to the scene. Null if its kit has not been built.
@@ -82,8 +85,7 @@ export async function prop(name: string): Promise<THREE.Object3D | null> {
 // Geometries from different props only merge if they carry the same attributes in the same form.
 function plain(geo: THREE.BufferGeometry, names: string[]): THREE.BufferGeometry {
   const g = geo.index ? geo.toNonIndexed() : geo.clone();
-  for (const name of Object.keys(g.attributes)) {
-    const a = g.attributes[name];
+  for (const [name, a] of Object.entries(g.attributes)) {
     if (!names.includes(name)) {
       g.deleteAttribute(name);
       continue;
@@ -93,7 +95,7 @@ function plain(geo: THREE.BufferGeometry, names: string[]): THREE.BufferGeometry
     for (let i = 0; i < a.count; i++) for (let k = 0; k < a.itemSize; k++) out[i * a.itemSize + k] = a.getComponent(i, k);
     g.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize));
   }
-  const n = g.attributes.position.count;
+  const n = defined(g.attributes.position, "a kit mesh's positions").count;
   if (names.includes('color') && !g.attributes.color) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
   rgb(g);
   if (names.includes('uv') && !g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
@@ -116,19 +118,25 @@ export function createProps(scene: THREE.Scene) {
       up = new THREE.Vector3(0, 1, 0),
       one = new THREE.Vector3();
     DRESSING.forEach((rows, room) => {
-      const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>(); // the material it will be drawn with -> geometries
+      // DRESSING has a list for each room
+      const group = defined(rooms[room], `room ${room}'s props`),
+        buckets = new Map<THREE.Material, THREE.BufferGeometry[]>(); // the material it will be drawn with -> geometries
       for (const [name, x, z, yaw = 0, opt = {}] of rows) {
         const node = byName.get(name);
         if (!node) continue;
-        const y = opt.y ?? (opt.hang ? ROOMS3[room].h : floorY(x, z));
+        const y = opt.y ?? (opt.hang ? roomData(room).h : floorY(x, z));
         m.compose(new THREE.Vector3(x, y, z), q.setFromAxisAngle(up, (yaw * Math.PI) / 180), one.setScalar(opt.s || 1));
-        if (SPIN[name]) {
-          const at = m.clone();
-          prop(name).then(model => {
+        const spin = SPIN[name];
+        if (spin) {
+          const at = m.clone(),
+            [partName, speed] = spin;
+          prop(name).then(found => {
+            // prop() copies from the same byName that holds node
+            const model = defined(found, `prop ${name}`);
             model.applyMatrix4(at);
-            rooms[room].add(model);
-            const part = model.getObjectByName(SPIN[name][0]);
-            if (part) spinning.push([part, SPIN[name][1]]);
+            group.add(model);
+            const part = model.getObjectByName(partName);
+            if (part) spinning.push([part, speed]);
           });
           continue;
         }
@@ -138,8 +146,10 @@ export function createProps(scene: THREE.Scene) {
         copy.traverse(o => {
           if (!(o as KitMesh).isMesh) return;
           const mat = dressMaterial((o as KitMesh).material as THREE.MeshStandardMaterial, opt.dead);
-          if (!buckets.has(mat)) buckets.set(mat, []);
-          buckets.get(mat).push((o as KitMesh).geometry.clone().applyMatrix4(m.clone().multiply(o.matrixWorld)));
+          const geo = (o as KitMesh).geometry.clone().applyMatrix4(m.clone().multiply(o.matrixWorld)),
+            list = buckets.get(mat);
+          if (list) list.push(geo);
+          else buckets.set(mat, [geo]);
         });
       }
       for (const [mat, geos] of buckets) {
@@ -147,14 +157,14 @@ export function createProps(scene: THREE.Scene) {
         const mesh = new THREE.Mesh(mergeGeometries(geos.map(g => plain(g, names))), mat);
         mesh.castShadow = !mat.transparent && !(mat as THREE.MeshBasicMaterial).isMeshBasicMaterial;
         mesh.receiveShadow = true;
-        rooms[room].add(mesh);
+        group.add(mesh);
       }
     });
   });
 
   return {
     // Resolves, once the kits have loaded or failed to, with a test for whether a prop exists.
-    ready: nodes.then(byName => name => byName.has(name)),
+    ready: nodes.then(byName => (name: string) => byName.has(name)),
     // inView: the rooms that might be seen from the camera (sight.ts). level: the building's light levels from light.ts, by group.
     update(inView: Set<number>, level: Levels, dt: number): void {
       rooms.forEach((g, i) => {
