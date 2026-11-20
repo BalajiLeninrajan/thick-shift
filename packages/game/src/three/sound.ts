@@ -9,9 +9,10 @@
 // that happen before then are dropped, not queued.
 
 import { lightsF, TOY } from '@thick-shift/sim';
-import { DOORS, MASC } from '@thick-shift/sim/config';
+import { defined, isPlaced } from '@thick-shift/sim/check';
+import { DOORS, perMascot } from '@thick-shift/sim/config';
 import { BOXES, CHARGER, DOORWAYS, DUCTS, EYE, GENERATOR, PANELS, ROOMS3, roomAt, sees } from '@thick-shift/sim/map';
-import type { DoorKey, Doors, EventData, Mascot, Player, Point, State } from '@thick-shift/sim/types';
+import type { DoorKey, Doors, EventData, EventType, Mascot, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
 import { boom, bus, ctx, into, muffle, noise, pick, room, SFX, sample, shriek, song, tone, voices, whiteNoise } from '../audio';
 import { game, rnd } from '../state';
 import type { EventOf, Me } from '../types';
@@ -24,9 +25,11 @@ const FIZZ: [number, number] = [1.6, 3.2]; // seconds between the crackles of an
 const MAX_GUARDS = 5; // other guards whose footsteps are placed
 const MUFFLED = 420; // Hz the whole mix is cut to while this guard is flat
 const IN_LOCKER = 2600; // and while they stand in a locker, behind its doors
-// What walls do to a sound, as [gain, low-pass Hz]: in sight, in the same room
+// What walls do to a sound, as [gain, low-pass Hz], by Occlusion: in sight, in the same room
 // but round a corner, then one, two, and three or more doorways away.
-const OCC = [
+type Occlusion = 0 | 1 | 2 | 3 | 4;
+type Muffling = readonly [gain: number, hz: number];
+const OCC: readonly [Muffling, Muffling, Muffling, Muffling, Muffling] = [
   [1, 18000],
   [0.8, 4500],
   [0.55, 1400],
@@ -36,18 +39,18 @@ const OCC = [
 const LOOK = 0.13; // seconds between line-of-sight checks for one emitter
 
 // By MASC index. Each mascot has to be tellable from the others in the dark.
-const STRIDE = [1.5, 0.75, 1.7, 1.2]; // metres per footfall
+const STRIDE: PerMascot<number> = [1.5, 0.75, 1.7, 1.2]; // metres per footfall
 // Breath: a band of noise that swells and falls. sharp: higher is more of a snort.
-const BREATH = [
+const BREATH: PerMascot<{ hz: number; q: number; rate: number; level: number; sharp: number }> = [
   { hz: 260, q: 1.2, rate: 0.28, level: 0.5, sharp: 2 }, // Biggs: slow and deep
   { hz: 900, q: 3, rate: 0.4, level: 0.16, sharp: 2 }, // Flan: a thin wheeze
   { hz: 420, q: 6, rate: 0.7, level: 0.3, sharp: 3 }, // Squish: quick, through something wet
   { hz: 180, q: 1, rate: 0.45, level: 0.6, sharp: 6 }, // Tank: snorts
 ];
-const GROWL_RATE = [0.7, 1.3, 1.1, 0.85]; // how each one's voice is pitched
+const GROWL_RATE: PerMascot<number> = [0.7, 1.3, 1.1, 0.85]; // how each one's voice is pitched
 
 // One footstep cut from the step recordings, which hold five each.
-const STEPS: [name: string, from: number][] = [
+const STEPS: NonEmpty<readonly [name: string, from: number]> = [
   ['steps1', 0.08],
   ['steps1', 0.99],
   ['steps1', 1.59],
@@ -60,7 +63,7 @@ const STEPS: [name: string, from: number][] = [
   ['steps2', 2.8],
 ];
 function footfall(rate: number, gain: number, lowpass?: number): void {
-  const [name, from] = STEPS[(Math.random() * STEPS.length) | 0];
+  const [name, from] = defined(STEPS[(Math.random() * STEPS.length) | 0], 'a footstep');
   sample(name, { from, len: 0.26, rate, gain, lowpass }) || tone(70, 0.1, 'sine', gain * 0.5, 40);
 }
 // Something soft and wet being pressed on.
@@ -70,7 +73,7 @@ const squelch = (level: number, at = 0): void => {
 };
 
 // m: the mascot, for its rot (0 to 2) and state. Each is played into that mascot's emitter.
-const MASCOT_STEP: ((m: Mascot) => void)[] = [
+const MASCOT_STEP: PerMascot<(m: Mascot) => void> = [
   // Biggs: you feel it in the floor before you hear the foot.
   m => {
     boom({ from: 58 - m.rot * 6, to: 30, level: 0.4 + m.rot * 0.07 });
@@ -98,7 +101,7 @@ const MASCOT_STEP: ((m: Mascot) => void)[] = [
   },
 ];
 // What each does the moment it sees a guard.
-const SPOT: (() => void)[] = [
+const SPOT: PerMascot<() => void> = [
   () => {
     sample('far_growl1', { rate: 0.6, gain: 0.5 }) || tone(60, 0.8, 'sawtooth', 0.3, 40);
     boom({ level: 0.35 });
@@ -129,21 +132,30 @@ const squeeze = (level: number): void => {
 const squeak = (level: number): void => tone(1100, 0.1, 'triangle', 0.07 * level, 1500);
 
 const doorAt = (key: DoorKey): Point => {
-  const [x0, z0, x1, z1] = DOORWAYS.find(d => d.key === key).rect;
+  const way = defined(
+    DOORWAYS.find(d => d.key === key),
+    `the doorway of door ${key}`
+  );
+  const [x0, z0, x1, z1] = way.rect;
   return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
 };
-// Doorways between two rooms by the shortest way, a shut door counting double. 9 is "a long way".
+// Doorways between two rooms by the shortest way, a shut door counting double. FAR is "a long way".
+const FAR = 9;
 function doorwaysBetween(a: number, b: number, doors: Doors): number {
-  const d = ROOMS3.map(() => 9);
+  const d = ROOMS3.map(() => FAR); // one per room, and a, b, w.a and w.b are rooms, so no read below falls back to FAR
   d[a] = 0;
   for (let pass = 0; pass < 4; pass++)
     for (const w of DOORWAYS) {
-      const cost = doors[w.key] ? 2 : 1;
-      d[w.b] = Math.min(d[w.b], d[w.a] + cost);
-      d[w.a] = Math.min(d[w.a], d[w.b] + cost);
+      // A doorway with no door has no key, and costs 1.
+      const cost = w.key && doors[w.key] ? 2 : 1;
+      const toB = Math.min(d[w.b] ?? FAR, (d[w.a] ?? FAR) + cost);
+      d[w.b] = toB;
+      d[w.a] = Math.min(d[w.a] ?? FAR, toB + cost);
     }
-  return d[b];
+  return d[b] ?? FAR;
 }
+// How muffled a sound n doorways away is: one step per doorway, three or more counting as three.
+const throughDoorways = (n: number): Occlusion => (n === 0 ? 1 : n === 1 ? 2 : n === 2 ? 3 : 4);
 // Bigger rooms have a lower, louder tone and more echo. 0 for the ducts, 1 for the stage.
 const SIZE = ROOMS3.map(r => {
   const [x0, z0, x1, z1] = r.rects[0];
@@ -157,7 +169,7 @@ interface Emitter {
   pan: PannerNode;
   send: GainNode;
   wet: number;
-  occ: number; // OCC index
+  occ: Occlusion;
   look: number; // the audio clock's time of the next line-of-sight check
 }
 // One mascot's emitter, breath and timers, by MASC index. x: null until mascot() first places it.
@@ -185,17 +197,18 @@ interface GuardVoice {
 }
 
 export function createSound() {
-  let ac: AudioContext = null,
-    now = 0,
-    rig: ReturnType<typeof build> = null,
+  // rig is the audio graph, which update() builds the first time the context is running. Everything that plays into
+  // it is handed it as r, so nothing here can reach for it before it exists.
+  let now = 0,
+    rig: Rig | null = null,
     lastEv = -1,
     stingAt = -9,
-    sting: GainNode = null,
+    sting: GainNode | null = null,
     wasPlay = false,
     under = 0,
     echo = 1;
   let head = { x: 0, z: 0, fx: 0, fz: 1 },
-    doors: Doors = null,
+    doors: Doors | null = null,
     torchOn = false,
     sources = 0,
     steps = 0,
@@ -207,26 +220,6 @@ export function createSound() {
 
   /* ---------- the graph ---------- */
 
-  const gain = (v = 0): GainNode => {
-    const g = ac.createGain();
-    g.gain.value = v;
-    return g;
-  };
-  const filter = (type: BiquadFilterType, hz: number, q = 1): BiquadFilterNode => {
-    const f = ac.createBiquadFilter();
-    f.type = type;
-    f.frequency.value = hz;
-    f.Q.value = q;
-    return f;
-  };
-  const osc = (type: OscillatorType, hz: number): OscillatorNode => {
-    const o = ac.createOscillator();
-    o.type = type;
-    o.frequency.value = hz;
-    o.start();
-    sources++;
-    return o;
-  };
   const chain = (...nodes: AudioNode[]): AudioNode =>
     nodes.reduce((a, b) => {
       a.connect(b);
@@ -235,7 +228,8 @@ export function createSound() {
   // Glide a parameter to a value. Asking for the value it already has queues nothing.
   const aimed = new WeakMap<AudioParam, number>();
   function aim(param: AudioParam, v: number, over = 0.08): void {
-    if (Math.abs(aimed.get(param) - v) < 1e-4 * (1 + Math.abs(v))) return;
+    const was = aimed.get(param);
+    if (was !== undefined && Math.abs(was - v) < 1e-4 * (1 + Math.abs(v))) return;
     aimed.set(param, v);
     param.setTargetAtTime(v, now, over);
   }
@@ -248,29 +242,11 @@ export function createSound() {
     } else node.setPosition(x, EYE, z);
   };
 
-  // A place a sound comes from. Play into `in`. wet: how much reverb it gets.
-  // The panning is the cheap left-right kind. The head-shaped kind (HRTF)
-  // measured about twenty times the cost per source, sounding or not.
-  function emitter(wet: number): Emitter {
-    const e: Emitter = { in: gain(1), lp: filter('lowpass', OCC[0][1], 0.5), pan: ac.createPanner(), send: gain(0), wet, occ: 0, look: 0 };
-    e.pan.panningModel = 'equalpower';
-    e.pan.distanceModel = 'inverse';
-    e.pan.refDistance = 2.5;
-    e.pan.rolloffFactor = 1.2;
-    chain(e.in, e.lp, e.pan, bus());
-    chain(e.lp, e.send, room());
-    return e;
-  }
-  const unplug = (e: Emitter): void => {
-    e.pan.disconnect();
-    e.send.disconnect();
-  };
-
-  function occlusion(S: State, x: number, z: number): number {
+  function occlusion(S: State, x: number, z: number): Occlusion {
     if (sees(head.x, head.z, x, z, S.doors)) return 0;
     const a = roomAt(head.x, head.z),
       b = roomAt(x, z);
-    return a < 0 || b < 0 ? 2 : Math.min(4, 1 + doorwaysBetween(a, b, S.doors));
+    return a < 0 || b < 0 ? 2 : throughDoorways(doorwaysBetween(a, b, S.doors));
   }
   // Put an emitter somewhere and work out how it sounds from here. snap: it
   // was somewhere else a moment ago, so set the filter and levels outright.
@@ -308,7 +284,43 @@ export function createSound() {
     }
   }
 
-  function build() {
+  // The graph of a running context: the loops that go on sounding behind gains update() rides, an emitter for each
+  // mascot, the generator and the charger, a pool for one-off sounds, and the makers of more. out: the mix (audio.ts).
+  function wire(ac: AudioContext, out: AudioNode) {
+    const gain = (v = 0): GainNode => {
+      const g = ac.createGain();
+      g.gain.value = v;
+      return g;
+    };
+    const filter = (type: BiquadFilterType, hz: number, q = 1): BiquadFilterNode => {
+      const f = ac.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = hz;
+      f.Q.value = q;
+      return f;
+    };
+    const osc = (type: OscillatorType, hz: number): OscillatorNode => {
+      const o = ac.createOscillator();
+      o.type = type;
+      o.frequency.value = hz;
+      o.start();
+      sources++;
+      return o;
+    };
+    // A place a sound comes from. Play into `in`. wet: how much reverb it gets.
+    // The panning is the cheap left-right kind. The head-shaped kind (HRTF)
+    // measured about twenty times the cost per source, sounding or not.
+    const emitter = (wet: number): Emitter => {
+      const e: Emitter = { in: gain(1), lp: filter('lowpass', OCC[0][1], 0.5), pan: ac.createPanner(), send: gain(0), wet, occ: 0, look: 0 };
+      e.pan.panningModel = 'equalpower';
+      e.pan.distanceModel = 'inverse';
+      e.pan.refDistance = 2.5;
+      e.pan.rolloffFactor = 1.2;
+      chain(e.in, e.lp, e.pan, out);
+      chain(e.lp, e.send, room());
+      return e;
+    };
+
     const hiss = ac.createBufferSource(),
       quiet: GainNode[] = [];
     hiss.buffer = whiteNoise();
@@ -322,7 +334,7 @@ export function createSound() {
       quiet.push(g);
       return g;
     };
-    const mascots = MASC.map((_, i): MascotVoice => {
+    const mascots = perMascot((i): MascotVoice => {
       const e = emitter(0.2),
         band = filter('bandpass', BREATH[i].hz, BREATH[i].q);
       return { e, band, breath: loop(e.in, hiss, band), x: null, z: 0, walked: 0, phase: Math.random() * 6, lit: false, creak: 0, strain: 0, chew: 0, glup: 2 };
@@ -335,6 +347,9 @@ export function createSound() {
       tube = osc('triangle', 200.7),
       air = filter('lowpass', 500, 0.5);
     return {
+      gain,
+      emitter,
+      out,
       mascots,
       gen,
       charger,
@@ -348,16 +363,21 @@ export function createSound() {
       guards: new Map<string, GuardVoice>(),
       whineG: loop(gen.in, whine, filter('lowpass', 420)),
       buzzG: loop(charger.in, buzz),
-      tone: loop(bus(), hiss, air),
+      tone: loop(out, hiss, air),
       // Mains hum from the lights: two notes a hair apart, so it beats slowly.
-      hum: loop(bus(), mains),
-      humHigh: loop(bus(), tube),
+      hum: loop(out, mains),
+      humHigh: loop(out, tube),
     };
   }
+  type Rig = ReturnType<typeof wire>;
+  const unplug = (e: Emitter): void => {
+    e.pan.disconnect();
+    e.send.disconnect();
+  };
 
   // Play a one-off sound at a point.
-  function at(S: State, p: Point, fn: () => void): void {
-    const e = rig.pool[rig.next++ % POOL];
+  function at(r: Rig, S: State, p: Point, fn: () => void): void {
+    const e = defined(r.pool[r.next++ % POOL], 'a pooled emitter');
     place(e, S, p.x, p.z, true);
     into(e.in, fn);
   }
@@ -379,10 +399,12 @@ export function createSound() {
     tone(f, 0.9, 'sine', level, 0, when);
     tone(f * 2.4, 0.35, 'sine', level * 0.35, 0, when);
   };
+  // Each event type's sound, given the data of that type. r: the graph, for an emitter.
+  type Handlers = { [K in EventType]?: (x: EventData[K], S: State, r: Rig) => void };
   const ON = {
     // A breaker going: a pop and a thud where it is, and the hum of the building catching for a moment.
-    fault(x: EventData['fault'], S: State): void {
-      at(S, x, () => {
+    fault(x: EventData['fault'], S: State, r: Rig): void {
+      at(r, S, x, () => {
         noise(0.06, 0.5, { band: 3200, q: 1 });
         sample('hit_low', { gain: 0.4, rate: 1.3, at: 0.03 });
         fizz();
@@ -415,15 +437,15 @@ export function createSound() {
       for (let k = 0; k < 4; k++) tone(rnd(2400, 4200), 0.05, 'sine', 0.04, 0, 0.15 + k * rnd(0.1, 0.2));
     },
     // Fixed: the breaker's clunk, then the relay and the lights catching.
-    fix(x: EventData['fix'], S: State): void {
-      at(S, x, () => {
+    fix(x: EventData['fix'], S: State, r: Rig): void {
+      at(r, S, x, () => {
         sample('knock1', { rate: 0.9, gain: 0.7 }) || tone(90, 0.1, 'square', 0.25, 50);
         tone(120, 0.08, 'square', 0.12, 60, 0.08);
         for (let k = 0; k < 3; k++) tone(rnd(2400, 4200), 0.05, 'sine', 0.04, 0, 0.2 + k * rnd(0.08, 0.16));
         BELL(1568, 0.15, 0.45);
       });
     },
-    bat(x: EventData['bat'], S: State): void {
+    bat(x: EventData['bat'], S: State, r: Rig): void {
       const pickUp = () => {
         sample('knock1', { rate: 2, gain: 0.4 }) || tone(300, 0.03, 'square', 0.1);
         tone(660, 0.08, 'square', 0.06, 0, 0.09);
@@ -431,46 +453,46 @@ export function createSound() {
       };
       const who = S.players.find(p => p.id === x.by);
       if (mine(x.by)) pickUp();
-      else if (who?.x != null) at(S, who as Point, pickUp);
+      else if (who && isPlaced(who)) at(r, S, who, pickUp);
     },
-    spot(x: EventData['spot']): void {
-      into(rig.mascots[x.i].e.in, SPOT[x.i]);
+    spot(x: EventData['spot'], _S: State, r: Rig): void {
+      into(r.mascots[x.i].e.in, SPOT[x.i]);
       if (mine(x.id)) sample('hit_long', { gain: 0.3, rate: 1.2 }); // it is you it has seen
     },
-    roar(x: EventData['roar']): void {
-      into(rig.mascots[x.i].e.in, () => {
+    roar(x: EventData['roar'], _S: State, r: Rig): void {
+      into(r.mascots[x.i].e.in, () => {
         sample('scare_growl', { rate: 0.75, gain: 1 }) || noise(1, 0.6, { band: 300 });
         sample('far_growl2', { rate: 0.6, gain: 0.5 });
         boom({ level: 0.5 });
       });
     },
-    crash(x: EventData['crash'], S: State): void {
-      at(S, x, () => {
+    crash(x: EventData['crash'], S: State, r: Rig): void {
+      at(r, S, x, () => {
         boom({ level: 1 });
         sample('slam2', { rate: 0.45 }) || noise(0.4, 0.6);
         sample('sheet3', { rate: 0.5, gain: 0.8, at: 0.02 });
         sample('hit_long', { gain: 0.5 });
       });
     },
-    bang(key: EventData['bang'], S: State): void {
-      at(S, doorAt(key), SFX.bang);
+    bang(key: EventData['bang'], S: State, r: Rig): void {
+      at(r, S, doorAt(key), SFX.bang);
     },
-    arrive(key: EventData['arrive'], S: State): void {
-      at(S, doorAt(key), () => {
+    arrive(key: EventData['arrive'], S: State, r: Rig): void {
+      at(r, S, doorAt(key), () => {
         sample(pick('creak1', 'creak2'), { gain: 1.2, rate: 0.8 });
         tone(70, 0.6, 'sawtooth', 0.05, 50);
       });
     },
-    fumble(x: EventData['fumble'], S: State): void {
-      at(S, PANELS[x.k], () => {
+    fumble(x: EventData['fumble'], S: State, r: Rig): void {
+      at(r, S, PANELS[x.k], () => {
         tone(180, 0.08, 'square', 0.12);
         tone(140, 0.1, 'square', 0.1, 0, 0.09);
       });
     },
-    flat(x: EventData['flat'], S: State): void {
+    flat(x: EventData['flat'], S: State, r: Rig): void {
       if (!mine(x.id)) {
         // Awful, and a bit funny: a splat, the air going out, bubbles.
-        at(S, x, () => {
+        at(r, S, x, () => {
           boom({ from: 90, to: 28, level: 0.7 });
           sample('thud', { rate: 0.6, gain: 0.7 });
           noise(0.4, 0.45, { band: 2600, band2: 260, q: 1.2 });
@@ -487,8 +509,8 @@ export function createSound() {
         c = CUES;
       cut();
       stingAt = now;
-      sting = gain(1);
-      sting.connect(bus());
+      sting = r.gain(1);
+      sting.connect(r.out);
       into(sting, () => {
         sample('hit_low', { gain: 0.8, at: c.grab });
         boom({ level: 0.6, at: c.grab });
@@ -506,13 +528,13 @@ export function createSound() {
       if (S.phase === 'play') sting.gain.setTargetAtTime(0, now + c.end, 0.3);
     },
     // A flat guard calling for help: two notes from where they lie.
-    call(x: EventData['call'], S: State): void {
+    call(x: EventData['call'], S: State, r: Rig): void {
       const notes = (v: number): void => {
         tone(880, 0.12, 'triangle', v);
         tone(660, 0.2, 'triangle', v, 0, 0.13);
       };
       if (mine(x.id)) notes(0.08);
-      else at(S, x, () => notes(0.3));
+      else at(r, S, x, () => notes(0.3));
     },
     // The mascots stirring, and settling again. Nothing on screen says so; this is the only tell.
     // Both come through the reverb alone, so they are in the building and nowhere in it.
@@ -526,48 +548,54 @@ export function createSound() {
       into(room(), () => sample(pick('creak1', 'creak2'), { rate: 0.5, gain: 0.5 }));
     },
     // It has run out of wind and given up the chase: a long breath out.
-    quit(x: EventData['quit']): void {
-      into(rig.mascots[x.i].e.in, () => noise(0.8, 1.2, { band: BREATH[x.i].hz * 2, band2: BREATH[x.i].hz, q: 1, attack: 0.12 }));
+    quit(x: EventData['quit'], _S: State, r: Rig): void {
+      into(r.mascots[x.i].e.in, () => noise(0.8, 1.2, { band: BREATH[x.i].hz * 2, band2: BREATH[x.i].hz, q: 1, attack: 0.12 }));
     },
     // A locker door: a sheet-metal clank and the latch. Pulled open, it is wrenched.
-    locker(x: EventData['locker'], S: State): void {
+    locker(x: EventData['locker'], S: State, r: Rig): void {
       const clank = () => {
         sample('sheet3', { rate: x.in ? 1.7 : 1.5, gain: 0.45 }) || noise(0.18, 0.35, { band: 2400, q: 3 });
         tone(x.in ? 1400 : 1200, 0.03, 'square', 0.05, 0, 0.12);
       };
       if (mine(x.id)) clank();
-      else at(S, x, clank);
+      else at(r, S, x, clank);
     },
     // A mascot yanking open a locker that turned out empty.
-    check(x: EventData['check'], S: State): void {
-      at(S, x, () => {
+    check(x: EventData['check'], S: State, r: Rig): void {
+      at(r, S, x, () => {
         sample('sheet3', { rate: 1.2, gain: 0.6 }) || noise(0.25, 0.45, { band: 1800, q: 2 });
         sample('knock1', { rate: 0.9, gain: 0.4, at: 0.35 });
       });
     },
-    found(x: EventData['found'], S: State): void {
-      at(S, x, () => {
+    found(x: EventData['found'], S: State, r: Rig): void {
+      at(r, S, x, () => {
         sample('slam2', { rate: 1.3, gain: 0.8 }) || noise(0.3, 0.6, { band: 1500 });
         sample('sheet3', { rate: 1.1, gain: 0.7, at: 0.02 });
       });
     },
     // A Mini Biggs coming down and singing, from where it landed, so it can be found by ear as the mascots find it.
-    toy(x: EventData['toy'], S: State): void {
-      at(S, x, () => song(0.5, 0, TOY.sing));
+    toy(x: EventData['toy'], S: State, r: Rig): void {
+      at(r, S, x, () => song(0.5, 0, TOY.sing));
     },
-    grab(x: EventData['grab'], S: State): void {
+    grab(x: EventData['grab'], S: State, r: Rig): void {
       if (mine(x.by)) squeak(1);
-      else at(S, x, () => squeak(1));
+      else at(r, S, x, () => squeak(1));
     },
-    peel(x: EventData['peel'], S: State): void {
+    peel(x: EventData['peel'], S: State, r: Rig): void {
       const rip = () => {
         noise(0.5, 0.6, { band: 600, band2: 3600, q: 2.5, attack: 0.3 });
         tone(300, 0.08, 'sine', 0.4, 900, 0.46);
       };
       if (mine(x.id)) rip();
-      else at(S, x, rip);
+      else at(r, S, x, rip);
     },
-  };
+  } satisfies Handlers;
+  // Play an event's sound. play is generic in the event type so that TS can match ON's handler for that type to its
+  // data; indexing ON with a plain EventType could not.
+  function play<K extends EventType>(type: K, x: EventData[K], S: State, r: Rig): void {
+    const on: Handlers = ON;
+    on[type]?.(x, S, r);
+  }
 
   /* ---------- things that go on sounding ---------- */
 
@@ -597,14 +625,18 @@ export function createSound() {
     aim(v.band.frequency, b.hz * (1 - m.rot * 0.15));
     // Held in a beam it strains against it: its own growl in short overlapping
     // pulls, louder and lower the less the light can hold it.
-    if (m.lit && (v.strain -= dt) <= 0 && far < HEAR) {
-      v.strain = rnd(0.3, 0.45);
-      into(
-        v.e.in,
-        () =>
-          sample('far_growl1', { from: rnd(0.15, 0.4), len: 0.5, rate: GROWL_RATE[m.i] * (0.9 - m.rot * 0.1), gain: 0.2 + m.rot * 0.08 }) ||
-          tone(60 * GROWL_RATE[m.i], 0.4, 'sawtooth', 0.15, 50 * GROWL_RATE[m.i])
-      );
+    if (m.lit) {
+      v.strain -= dt;
+      if (v.strain <= 0 && far < HEAR) {
+        v.strain = rnd(0.3, 0.45);
+        const growl = GROWL_RATE[m.i];
+        into(
+          v.e.in,
+          () =>
+            sample('far_growl1', { from: rnd(0.15, 0.4), len: 0.5, rate: growl * (0.9 - m.rot * 0.1), gain: 0.2 + m.rot * 0.08 }) ||
+            tone(60 * growl, 0.4, 'sawtooth', 0.15, 50 * growl)
+        );
+      }
     }
     v.creak -= dt;
     if (far < 10 && !busy && v.creak <= 0 && (m.lit !== v.lit || (moved > 0 && Math.random() < dt * 0.4))) {
@@ -613,26 +645,32 @@ export function createSound() {
       into(v.e.in, () => sample(pick('creak1', 'creak2'), { from: rnd(0, 0.4), len: 0.5, rate: rnd(1.2, 1.6), gain: m.lit ? 0.5 : 0.25 }));
     }
     v.lit = m.lit;
-    if (m.st === 'feast' && (v.chew -= dt) <= 0 && far < HEAR) {
-      v.chew = rnd(0.22, 0.38);
-      into(v.e.in, () => squelch(0.5));
+    if (m.st === 'feast') {
+      v.chew -= dt;
+      if (v.chew <= 0 && far < HEAR) {
+        v.chew = rnd(0.22, 0.38);
+        into(v.e.in, () => squelch(0.5));
+      }
     }
     // Squish gulps now and then, wherever it is.
-    if (m.i === 2 && awake && (v.glup -= dt) <= 0) {
-      v.glup = rnd(1.5, 3.5);
-      if (far < 14 && !busy) into(v.e.in, () => tone(300, 0.09, 'sine', 0.2, 140));
+    if (m.i === 2 && awake) {
+      v.glup -= dt;
+      if (v.glup <= 0) {
+        v.glup = rnd(1.5, 3.5);
+        if (far < 14 && !busy) into(v.e.in, () => tone(300, 0.09, 'sine', 0.2, 140));
+      }
     }
   }
 
-  function otherGuards(S: State): void {
+  function otherGuards(S: State, r: Rig): void {
     const here = new Set<string>();
     for (const p of S.players) {
-      if (mine(p.id) || p.x == null) continue;
-      let g = rig.guards.get(p.id);
+      if (mine(p.id) || !isPlaced(p)) continue;
+      let g = r.guards.get(p.id);
       if (!g) {
-        if (rig.guards.size >= MAX_GUARDS) continue;
-        g = { e: emitter(0.2), x: p.x, z: p.z, walked: 0, on: p.on };
-        rig.guards.set(p.id, g);
+        if (r.guards.size >= MAX_GUARDS) continue;
+        g = { e: r.emitter(0.2), x: p.x, z: p.z, walked: 0, on: p.on };
+        r.guards.set(p.id, g);
       }
       here.add(p.id);
       const moved = Math.hypot(p.x - g.x, p.z - g.z);
@@ -649,10 +687,10 @@ export function createSound() {
         into(g.e.in, () => tone(p.on ? 1400 : 900, 0.04, 'square', 0.12));
       }
     }
-    for (const [id, g] of rig.guards)
+    for (const [id, g] of r.guards)
       if (!here.has(id)) {
         unplug(g.e);
-        rig.guards.delete(id);
+        r.guards.delete(id);
       }
   }
 
@@ -664,10 +702,13 @@ export function createSound() {
       if (me.moving > 0.2) footfall(rnd(1.1, 1.3), me.sp ? 0.34 : 0.2, 2400);
     }
     // Out of breath below 40% stamina, in and out, quicker the emptier you are.
-    if (me.stam < 0.4 && !me.flat && (pant -= dt) <= 0) {
-      pant = 0.3 + me.stam * 0.6;
-      gasp = !gasp;
-      noise(0.24, 0.05 + (0.4 - me.stam) * 0.22, { band: gasp ? 1900 : 1100, q: 1.2, attack: 0.07 });
+    if (me.stam < 0.4 && !me.flat) {
+      pant -= dt;
+      if (pant <= 0) {
+        pant = 0.3 + me.stam * 0.6;
+        gasp = !gasp;
+        noise(0.24, 0.05 + (0.4 - me.stam) * 0.22, { band: gasp ? 1900 : 1100, q: 1.2, attack: 0.07 });
+      }
     }
     if (me.on !== torchOn) {
       torchOn = me.on;
@@ -689,8 +730,8 @@ export function createSound() {
 
   // A Mini Biggs just thrown (a new entry in S.toys): squeezed and let go, from whoever threw it. Yours is at your ears.
   // The first look only counts what is already there: those were thrown before this guard could hear them.
-  let thrown: Set<number> = null;
-  function throws(S: State): void {
+  let thrown: Set<number> | null = null;
+  function throws(S: State, r: Rig): void {
     const list = S.toys || [],
       fresh = !thrown;
     thrown ||= new Set();
@@ -699,62 +740,69 @@ export function createSound() {
       thrown.add(t.id);
       if (fresh) continue;
       if (mine(t.by)) squeeze(1);
-      else at(S, { x: t.x0, z: t.z0 }, () => squeeze(2));
+      else at(r, S, { x: t.x0, z: t.z0 }, () => squeeze(2));
     }
     // Forget the ones picked up since, so the set stays small through a long night.
     if (thrown.size > 32) thrown = new Set(list.map(t => t.id));
   }
 
   // An open fault spits and crackles, now and then, from its box.
-  const fizzAt = BOXES.map(() => 0);
+  // wait: seconds to its box's next crackle.
+  const crackles = BOXES.map(box => ({ box, wait: 0 }));
   function fizz(): void {
     for (let k = 0; k < 4; k++) noise(0.02 + Math.random() * 0.03, 0.22, { band: rnd(2500, 6000), q: 2, at: k * rnd(0.04, 0.12) });
   }
-  function faults(S: State, dt: number): void {
-    S.faults?.forEach((f, i) => {
-      if (!f) {
-        fizzAt[i] = 0;
-        return;
+  function faults(S: State, dt: number, r: Rig): void {
+    const open = S.faults;
+    if (!open) return;
+    // S.faults has one entry per box.
+    for (const [i, c] of crackles.entries()) {
+      if (!open[i]) {
+        c.wait = 0;
+        continue;
       }
-      if ((fizzAt[i] -= dt) > 0) return;
-      fizzAt[i] = rnd(...FIZZ);
-      const b = BOXES[i];
-      if (Math.hypot(b.x - head.x, b.z - head.z) < HEAR) at(S, b, fizz);
-    });
+      c.wait -= dt;
+      if (c.wait > 0) continue;
+      c.wait = rnd(...FIZZ);
+      if (Math.hypot(c.box.x - head.x, c.box.z - head.z) < HEAR) at(r, S, c.box, fizz);
+    }
   }
 
-  function building(S: State, dt: number): void {
+  function building(S: State, dt: number, r: Rig): void {
     const lit = lightsF(S),
       here = roomAt(head.x, head.z),
       size = SIZE[here] ?? 0.5;
     echo = 0.4 + size * 0.6;
-    aim(rig.tone.gain, 0.09 + size * 0.09, 0.6);
-    aim(rig.air.frequency, 700 - size * 450, 0.6);
+    aim(r.tone.gain, 0.09 + size * 0.09, 0.6);
+    aim(r.air.frequency, 700 - size * 450, 0.6);
     // With the power out the hum sags and stops, and the building is only its own air.
-    aim(rig.hum.gain, lit ? 0.022 : 0, 0.35);
-    aim(rig.humHigh.gain, lit ? 0.012 : 0, 0.35);
-    aim(rig.mains.frequency, lit ? 100 : 35, 0.5);
+    aim(r.hum.gain, lit ? 0.022 : 0, 0.35);
+    aim(r.humHigh.gain, lit ? 0.012 : 0, 0.35);
+    aim(r.mains.frequency, lit ? 100 : 35, 0.5);
     // The generator: a handle on a ratchet, and a dynamo that spins up while someone keeps at it.
-    place(rig.gen, S, GENERATOR.x, GENERATOR.z);
-    place(rig.charger, S, CHARGER.x, CHARGER.z);
-    aim(rig.whineG.gain, S.crank ? 0.14 : 0, 0.3);
-    aim(rig.whine.frequency, S.crank ? 95 : 45, 0.8);
-    if (S.crank && (crank -= dt) <= 0) {
-      crank = 0.17;
-      into(rig.gen.in, () => {
-        noise(0.04, 0.3, { band: 1100, q: 3 });
-        if (Math.random() < 0.25) sample('knock1', { rate: 0.7, gain: 0.5 });
-      });
+    place(r.gen, S, GENERATOR.x, GENERATOR.z);
+    place(r.charger, S, CHARGER.x, CHARGER.z);
+    aim(r.whineG.gain, S.crank ? 0.14 : 0, 0.3);
+    aim(r.whine.frequency, S.crank ? 95 : 45, 0.8);
+    if (S.crank) {
+      crank -= dt;
+      if (crank <= 0) {
+        crank = 0.17;
+        into(r.gen.in, () => {
+          noise(0.04, 0.3, { band: 1100, q: 3 });
+          if (Math.random() < 0.25) sample('knock1', { rate: 0.7, gain: 0.5 });
+        });
+      }
     }
     // The charger ticks over while there is power and whines with a torch on it.
     const charging = lit && S.players.some(p => p.act === 'charge' && !p.flat);
-    aim(rig.buzzG.gain, charging ? 0.1 : lit ? 0.02 : 0, 0.2);
-    aim(rig.buzz.frequency, charging ? 150 : 100, 0.3);
+    aim(r.buzzG.gain, charging ? 0.1 : lit ? 0.02 : 0, 0.2);
+    aim(r.buzz.frequency, charging ? 150 : 100, 0.3);
     // A door that changed since the last frame: its motor, at the door.
     if (doors)
       for (const k of DOORS)
         if (S.doors[k] !== doors[k])
-          at(S, doorAt(k), () => {
+          at(r, S, doorAt(k), () => {
             sample(S.doors[k] ? 'door_shut' : 'door_open', { gain: 1.8, rate: 0.9 }) || tone(90, 0.25, 'square', 0.3, 40);
             tone(64, 0.5, 'sawtooth', 0.15, 44);
           });
@@ -762,7 +810,7 @@ export function createSound() {
   }
 
   function quiet(): void {
-    ac = ctx();
+    const ac = ctx();
     if (!ac || !rig) return;
     now = ac.currentTime;
     for (const g of rig.loops) aim(g.gain, 0, 0.1);
@@ -781,14 +829,17 @@ export function createSound() {
     },
     // Call once per frame while a night on the floor is drawn. me: player.me.
     update(S: State, me: Me, dt: number): void {
-      ac = ctx();
+      const ac = ctx();
       // A night already under way: what has happened has happened.
       if (lastEv < 0) lastEv = S.evId;
       const fresh = S.evs.filter(e => e.id > lastEv);
-      if (fresh.length) lastEv = fresh[fresh.length - 1].id;
+      const newest = fresh.at(-1);
+      if (newest) lastEv = newest.id;
       if (!ac) return;
       now = ac.currentTime;
-      rig ||= build();
+      // audio.ts makes the mix with the context, so a running context has one.
+      rig ??= wire(ac, defined(bus(), 'the audio mix'));
+      const r = rig;
       if (S.phase !== 'play') {
         // The night is over and the screens take it from here. A guard caught
         // last gets the night's end in the same tick as their catch, so their
@@ -797,7 +848,7 @@ export function createSound() {
         quiet();
         wasPlay = false;
         const caught = fresh.find((e): e is EventOf<'flat'> => e.type === 'flat' && mine(e.x.id));
-        if (caught) ON.flat(caught.x, S);
+        if (caught) ON.flat(caught.x, S, r);
         else if (fresh.some(e => e.type === 'scare') && now - stingAt > CUES.end) {
           cut();
           SFX.scare();
@@ -809,8 +860,7 @@ export function createSound() {
         wasPlay = true;
         cut();
       }
-      const mate: Partial<Player> = S.players.find(p => mine(p.id)) || {},
-        l = ac.listener;
+      const l = ac.listener;
       if (Number.isFinite(me.x + me.z + me.yaw)) head = { x: me.x, z: me.z, fx: Math.sin(me.yaw), fz: Math.cos(me.yaw) };
       if (l.positionX) {
         l.positionX.value = head.x;
@@ -823,13 +873,13 @@ export function createSound() {
         l.setPosition(head.x, EYE, head.z);
         l.setOrientation(head.fx, 0, head.fz, 0, 1, 0);
       }
-      building(S, dt);
-      faults(S, dt);
-      throws(S);
-      for (const m of S.m) mascot(S, m, rig.mascots[m.i], dt);
-      otherGuards(S);
-      self(me, mate.bat ?? 1, dt);
-      for (const e of fresh) ON[e.type]?.(e.x, S);
+      building(S, dt, r);
+      faults(S, dt, r);
+      throws(S, r);
+      for (const m of S.m) mascot(S, m, r.mascots[m.i], dt);
+      otherGuards(S, r);
+      self(me, S.players.find(p => mine(p.id))?.bat ?? 1, dt);
+      for (const e of fresh) play(e.type, e.x, S, r);
       // Flat on the floor the world is somewhere above you, from the moment the catch drops you there.
       const down = me.flat && now - stingAt > CUES.floor,
         shut = !me.flat && me.hid >= 0;

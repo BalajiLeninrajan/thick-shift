@@ -2,11 +2,13 @@
 // night is drawn, so the title screen and lobby never wait on three.js.
 
 import { dreadF } from '@thick-shift/sim';
+import { defined, isPlaced } from '@thick-shift/sim/check';
 import { MASC } from '@thick-shift/sim/config';
 import { BOXES, EYE, ROOMS3, reaches, roomAt } from '@thick-shift/sim/map';
-import type { Player, State } from '@thick-shift/sim/types';
+import type { EventType, Player, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
-import { client, game } from '../state';
+import { query } from '../dom';
+import { client, currentState, game } from '../state';
 import type { EventOf } from '../types';
 import { createActors } from './actors';
 import { createPhone } from './actors/phone';
@@ -25,7 +27,7 @@ const FOG = 0.037,
 const TORCH_FULL = 60; // the torch's intensity on a full battery (player.ts)
 
 function create() {
-  const stage = document.querySelector<HTMLDivElement>('.ts-stage');
+  const stage = query(document, '.ts-stage', HTMLDivElement); // in each app's index.html
   const canvas = document.createElement('canvas');
   canvas.id = 'c3';
   stage.append(canvas);
@@ -34,7 +36,8 @@ function create() {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x030305);
-  scene.fog = new THREE.FogExp2(0x030305, FOG);
+  const fog = new THREE.FogExp2(0x030305, FOG);
+  scene.fog = fog;
   const camera = new THREE.PerspectiveCamera(72, 16 / 9, 0.06, 90);
   scene.add(camera);
 
@@ -73,8 +76,9 @@ function create() {
     ABOVE = 2.2,
     AIM = 1.4; // third person: metres behind, camera height, and the height looked at
   function spectate(S: State, dt: number): void {
+    // watchNext only picks a guard the night has placed.
     const p = S.players.find(q => q.id === player.me.watch);
-    if (!p) {
+    if (!p || !isPlaced(p)) {
       seat = null;
       return;
     }
@@ -103,19 +107,22 @@ function create() {
 
   // What each new event means on this screen, beyond its sound (sound.ts plays
   // those). hud.say takes the line, its kind (which sets icon and colour) and seconds.
-  const guard = (id: string): Player => game.S.players.find(p => p.id === id),
-    isMe = (id: string): boolean => id === game.myId;
+  // Everything below runs from tick, which main.ts calls only while there is a room. A fault or fix event comes
+  // from a night, which has S.faults, and its i is a BOXES index.
+  const guard = (id: string): Player | undefined => currentState().players.find(p => p.id === id),
+    isMe = (id: string): boolean => id === game.myId,
+    roomOfBox = (i: number): string | undefined => ROOMS3[defined(BOXES[i], `box ${i}`).room]?.name;
+  type Sayings = { [K in EventType]?: (e: EventOf<K>) => void };
   const SAY = {
     // A fault broke out, and where.
     fault(e: EventOf<'fault'>): void {
-      const f = game.S.faults[e.x.i];
-      if (!f) return;
-      hud.say(`Fault in the ${ROOMS3[BOXES[e.x.i].room]?.name}.`, 'fault', 4);
+      if (!currentState().faults?.[e.x.i]) return;
+      hud.say(`Fault in the ${roomOfBox(e.x.i)}.`, 'fault', 4);
     },
     fix(e: EventOf<'fix'>): void {
-      const left = game.S.faults.filter(Boolean).length,
+      const left = defined(currentState().faults, "a night's faults").filter(Boolean).length,
         rest = left ? `${left} still open.` : 'All clear.';
-      hud.say(isMe(e.x.by) ? `Fixed. ${rest}` : `${guard(e.x.by)?.name || 'Someone'} fixed the ${ROOMS3[BOXES[e.x.i].room]?.name}. ${rest}`, 'fixed', 3);
+      hud.say(isMe(e.x.by) ? `Fixed. ${rest}` : `${guard(e.x.by)?.name || 'Someone'} fixed the ${roomOfBox(e.x.i)}. ${rest}`, 'fixed', 3);
     },
     burn: (): void => hud.say('A fault is burning. Max power is dropping.', 'burnt', 6),
     out: (): void => hud.say('Power out. Every door is open.', 'out', 7),
@@ -148,11 +155,17 @@ function create() {
     grab(e: EventOf<'grab'>): void {
       if (isMe(e.x.by)) hud.say('Mini Biggs in hand.', 'toy', 2.5);
     },
-  };
+  } satisfies Sayings;
+  // say is generic in the event type so that TS can match SAY's handler for that type to the event; indexing SAY
+  // with a plain EventType could not.
+  function say<K extends EventType>(type: K, e: EventOf<K>): void {
+    const sayings: Sayings = SAY;
+    sayings[type]?.(e);
+  }
 
   // How scared this guard should be right now, 0 to 1: something hunting, close.
   function threat(): number {
-    const S = game.S,
+    const S = currentState(),
       me = player.me;
     let worst = 0;
     for (const m of S.m)
@@ -164,7 +177,7 @@ function create() {
   return {
     show,
     tick(now: number): void {
-      const S = game.S,
+      const S = currentState(), // main.ts calls frame() only while there is a room
         dt = Math.min(0.1, (now - last) / 1000),
         t = now / 1000;
       last = now;
@@ -179,14 +192,14 @@ function create() {
       for (const e of S.evs)
         if (e.id > lastEv) {
           lastEv = e.id;
-          SAY[e.type]?.(e);
+          say(e.type, e);
           actors.event(e, S, player.me);
         }
       player.update(S, dt, now);
       spectate(S, dt);
       const dread = dreadF(S),
         fear = threat();
-      (scene.fog as THREE.FogExp2).density = FOG + FOG_DREAD * dread;
+      fog.density = FOG + FOG_DREAD * dread;
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch); // also runs the catch, which takes the camera
       // The end card (ui.ts) waits until LINGER after the catch is over, however long a slow machine takes over it.
@@ -212,7 +225,8 @@ function create() {
 }
 
 export function frame(now: number): ReturnType<typeof create> {
-  (app ||= create()).tick(now);
+  app ??= create();
+  app.tick(now);
   return app;
 }
 export function hide(): void {

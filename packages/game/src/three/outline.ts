@@ -13,11 +13,13 @@
 // The switch is in the pause panel (prefs.outline in player.ts), on by default.
 
 import { faultLeft } from '@thick-shift/sim';
+import { defined, isNight } from '@thick-shift/sim/check';
+import { DOORS } from '@thick-shift/sim/config';
 import { BATTERY_SPOTS, CHARGER, GENERATOR, PANELS } from '@thick-shift/sim/map';
-import type { NightState, Point, State } from '@thick-shift/sim/types';
+import type { Point, State } from '@thick-shift/sim/types';
 import type { Object3D } from 'three';
 import { game } from '../state';
-import type { Actors, Me, OutlineMark, WorldParts } from '../types';
+import type { Actors, Me, OutlineMark, Target, WorldParts } from '../types';
 import { prefs } from './player';
 
 const NEAR = 6,
@@ -27,8 +29,30 @@ const GOLD: OutlineMark['col'] = [1, 0.78, 0.28],
 
 export function createOutlines(parts: WorldParts, actors: Actors) {
   const marks: OutlineMark[] = [];
-  const add = (obj: Object3D, col: OutlineMark['col'], a: number): void => {
+  // obj is missing when a part or a guard's model has not been built; add skips it.
+  const add = (obj: Object3D | null | undefined, col: OutlineMark['col'], a: number): void => {
     if (obj) marks.push({ obj, col, a });
+  };
+  // The thing the use key would act on. A locker has no part of its own to edge.
+  const partFor = (aim: Target): Object3D | null | undefined => {
+    switch (aim.what) {
+      case 'fix':
+        return parts.boxes[aim.i];
+      case 'bat':
+        return parts.bats[aim.i];
+      case 'crank':
+        return parts.gen;
+      case 'charge':
+        return parts.dock;
+      case 'door':
+        return parts.panels[aim.k];
+      case 'peel':
+        return actors.guards.get(aim.id)?.group;
+      case 'toy':
+        return actors.plush.group(aim.id);
+      case 'hide':
+        return null;
+    }
   };
   return {
     // The marks for this frame: [{ obj, col, a }]. Empty with the switch off or nobody standing.
@@ -37,46 +61,32 @@ export function createOutlines(parts: WorldParts, actors: Actors) {
       if (!prefs.outline || S.phase !== 'play' || me.flat) return marks;
       const near = (at: Point): boolean => Math.hypot(at.x - me.x, at.z - me.z) < NEAR;
       const aim = me.target,
-        aimed = new Set<Object3D>();
-      // The thing the use key would act on.
+        aimed = new Set<Object3D | null | undefined>();
+      // The thing the use key would act on. findTarget (player.ts) sets i for a box or battery and k for a door.
       if (aim && !me.task) {
-        const obj =
-          aim.what === 'fix'
-            ? parts.boxes[aim.i]
-            : aim.what === 'bat'
-              ? parts.bats[aim.i]
-              : aim.what === 'crank'
-                ? parts.gen
-                : aim.what === 'charge'
-                  ? parts.dock
-                  : aim.what === 'door'
-                    ? parts.panels[aim.k]
-                    : aim.what === 'peel'
-                      ? actors.guards.get(aim.id as string)?.group
-                      : aim.what === 'toy'
-                        ? actors.plush.group(aim.id as number)
-                        : null;
+        const obj = partFor(aim);
         add(obj, aim.what === 'peel' ? RED : GOLD, 1);
         aimed.add(obj);
       }
       const pulse = 0.62 + 0.22 * Math.sin(t * 4);
-      S.faults?.forEach((f, i) => {
-        if (f && !aimed.has(parts.boxes[i])) add(parts.boxes[i], faultLeft(S as NightState, f) < HURRY ? RED : GOLD, pulse);
-      });
+      if (isNight(S))
+        S.faults.forEach((f, i) => {
+          if (f && !aimed.has(parts.boxes[i])) add(parts.boxes[i], faultLeft(S, f) < HURRY ? RED : GOLD, pulse);
+        });
       for (const p of S.players)
         if (p.flat && p.id !== game.myId) {
           const g = actors.guards.get(p.id)?.group;
           if (!aimed.has(g)) add(g, RED, 0.8);
         }
-      const faint = (obj: Object3D, at: Point): void => {
+      const faint = (obj: Object3D | undefined, at: Point): void => {
         if (!aimed.has(obj) && near(at)) add(obj, GOLD, 0.45);
       };
-      for (const i of S.bats || []) faint(parts.bats[i], BATTERY_SPOTS[i]);
+      for (const i of S.bats || []) faint(parts.bats[i], defined(BATTERY_SPOTS[i], `battery spot ${i}`));
       faint(parts.gen, GENERATOR);
       if (!S.players.find(p => p.id === game.myId)?.toy) for (const toy of S.toys || []) if (S.t >= toy.land) faint(actors.plush.group(toy.id), toy);
       if (S.power > 0) {
         faint(parts.dock, CHARGER);
-        for (const k in PANELS) faint(parts.panels[k], PANELS[k]);
+        for (const k of DOORS) faint(parts.panels[k], PANELS[k]);
       }
       return marks;
     },

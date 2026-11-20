@@ -22,10 +22,16 @@ interface Quality {
   shadow: number;
   fringe: boolean;
 }
-const QUALITY: Record<string, Quality> = {
+type QualityName = 'low' | 'high';
+const QUALITY: Record<QualityName, Quality> = {
   low: { width: 854, ratio: 1, shadow: 512, fringe: false },
   high: { width: 1280, ratio: 1.5, shadow: 1024, fringe: true },
 };
+// For ?q=, which is anything typed into the address bar, or null when it is not there.
+const isQuality = (name: string | null): name is QualityName => name !== null && Object.hasOwn(QUALITY, name);
+// three.js marks its kinds of object with a flag rather than a class to test.
+const isMesh = (o: THREE.Object3D): o is THREE.Mesh => 'isMesh' in o && o.isMesh === true;
+const isLight = (o: THREE.Object3D): o is THREE.Light => 'isLight' in o && o.isLight === true;
 // Start on high and drop to low if frames come slower than this, measured
 // over SAMPLE frames once the first WARMUP (shader compiles) are out of the way.
 const SLOW_MS = 26,
@@ -125,7 +131,7 @@ type ScreenMaterial = THREE.ShaderMaterial & {
 // torch: the local guard's SpotLight, whose shadow map follows the quality.
 export function createPost(renderer: THREE.WebGLRenderer, torch: THREE.SpotLight) {
   const asked = new URLSearchParams(location.search).get('q');
-  let name: string = QUALITY[asked] ? asked : 'high',
+  let name: QualityName = isQuality(asked) ? asked : 'high',
     frames = 0,
     spent = 0,
     last = 0;
@@ -138,35 +144,35 @@ export function createPost(renderer: THREE.WebGLRenderer, torch: THREE.SpotLight
   const maskMats = new WeakMap<THREE.Object3D, MaskMaterial>();
   const maskMatOf = (o: THREE.Object3D): MaskMaterial => {
     let m = maskMats.get(o);
-    if (!m)
-      maskMats.set(
-        o,
-        (m = new THREE.ShaderMaterial({
-          uniforms: { ...maskU, uCol: { value: new THREE.Vector4() } },
-          vertexShader: MASK_VERT,
-          fragmentShader: MASK_FRAG,
-          side: THREE.DoubleSide,
-          blending: THREE.NoBlending,
-          depthTest: false,
-          depthWrite: false,
-        }) as MaskMaterial)
-      );
+    if (!m) {
+      // ShaderMaterial types its uniforms as a string-keyed record; MaskMaterial names the ones given here.
+      m = new THREE.ShaderMaterial({
+        uniforms: { ...maskU, uCol: { value: new THREE.Vector4() } },
+        vertexShader: MASK_VERT,
+        fragmentShader: MASK_FRAG,
+        side: THREE.DoubleSide,
+        blending: THREE.NoBlending,
+        depthTest: false,
+        depthWrite: false,
+      }) as MaskMaterial;
+      maskMats.set(o, m);
+    }
     return m;
   };
-  // Each marked mesh followed by the material it had.
-  const swapped: (THREE.Object3D | THREE.Material | THREE.Material[])[] = [],
+  // Each marked mesh, and the material it had.
+  const swapped = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>(),
     black = new THREE.Color(0);
   function drawMask(scene: THREE.Scene, camera: THREE.PerspectiveCamera, marks: OutlineMark[]): boolean {
     for (const m of marks)
-      m.obj.traverse((o: THREE.Object3D & Partial<THREE.Mesh>) => {
-        if (!o.isMesh || o.layers.isEnabled(OUTLINE_LAYER)) return;
+      m.obj.traverse(o => {
+        if (!isMesh(o) || o.layers.isEnabled(OUTLINE_LAYER)) return;
         const mm = maskMatOf(o);
         mm.uniforms.uCol.value.set(m.col[0], m.col[1], m.col[2], m.a);
-        swapped.push(o, o.material);
+        swapped.set(o, o.material);
         o.material = mm;
         o.layers.enable(OUTLINE_LAYER);
       });
-    if (!swapped.length) return false;
+    if (!swapped.size) return false;
     const bg = scene.background,
       layers = camera.layers.mask;
     maskU.uSize.value.set(target.width, target.height);
@@ -175,8 +181,8 @@ export function createPost(renderer: THREE.WebGLRenderer, torch: THREE.SpotLight
     // The lights go on the mask's layer too. three.js keeps one light setup per scene, and a pass that saw no lights
     // would make every lit material in the next frame's scene pass work out its program again (most of a frame's
     // JavaScript on an Iris 655).
-    scene.traverse((o: THREE.Object3D & Partial<THREE.Light>) => {
-      if (o.isLight) o.layers.enable(OUTLINE_LAYER);
+    scene.traverse(o => {
+      if (isLight(o)) o.layers.enable(OUTLINE_LAYER);
     });
     // The torch's shadow and every matrix in the scene were brought up to date by the scene pass; not again.
     const shadows = renderer.shadowMap.autoUpdate,
@@ -193,11 +199,11 @@ export function createPost(renderer: THREE.WebGLRenderer, torch: THREE.SpotLight
     camera.layers.mask = layers;
     renderer.shadowMap.autoUpdate = shadows;
     scene.matrixWorldAutoUpdate = matrices;
-    for (let i = 0; i < swapped.length; i += 2) {
-      (swapped[i] as THREE.Mesh).material = swapped[i + 1] as THREE.Material | THREE.Material[];
-      (swapped[i] as THREE.Mesh).layers.disable(OUTLINE_LAYER);
+    for (const [mesh, was] of swapped) {
+      mesh.material = was;
+      mesh.layers.disable(OUTLINE_LAYER);
     }
-    swapped.length = 0;
+    swapped.clear();
     return true;
   }
   const mat = new THREE.ShaderMaterial({
