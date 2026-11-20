@@ -1,16 +1,17 @@
 // The view out of a locker: dark slats across the picture and the edges
-// closed in. It is drawn into the scene, after everything solid but before
-// the guard's own hands (HANDS_ORDER), so the phone and torch held inside the
-// locker stay in front of its doors. A page element over the canvas could
-// not do that: it covers the hands as well.
+// closed in. It is drawn into the scene, after the rest of the world (glows
+// and sprites included) but before the guard's own hands (holdInFront), so
+// the phone and torch held inside the locker stay in front of its doors. A
+// page element over the canvas could not do that: it covers the hands as well.
 
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { Me } from '../types';
 
-// Render orders. Everything else is 0. The slats are drawn without a depth test, so whatever comes after them is on top.
-const SLATS_ORDER = 1;
-export const HANDS_ORDER = 2;
+// Render orders, for the transparent pass: after everything else in the scene (guard.ts's name tags are 5, the rest
+// 0), and the hands after the slats. The slats are drawn without a depth test, so whatever comes after them is on top.
+const SLATS_ORDER = 100;
+const HANDS_ORDER = 101;
 const FADE = 8; // per second: about a third of a second to come up or go
 
 const FRAG = `
@@ -29,18 +30,15 @@ export function createSlats(scene: THREE.Scene) {
   const tri = new THREE.BufferGeometry();
   tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
   tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
-  // Not marked transparent, so three.js draws it with the solid things and their render orders apply: a transparent
-  // material would go after all of them, hands included. Custom blending, because three.js turns normal blending off
-  // for a material that is not transparent.
+  // Transparent, so it is drawn after the solid things, and its render order puts it after the glows (the wall
+  // lights' halos, the batteries' pulse, the dust) too.
   const mat = new THREE.ShaderMaterial({
     uniforms: { uShow: { value: 0 } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4( position.xy, 0., 1. ); }',
     fragmentShader: FRAG,
+    transparent: true,
     depthTest: false,
     depthWrite: false,
-    blending: THREE.CustomBlending,
-    blendSrc: THREE.SrcAlphaFactor,
-    blendDst: THREE.OneMinusSrcAlphaFactor,
   }) as THREE.ShaderMaterial & { uniforms: { uShow: THREE.IUniform<number> } };
   const slats = new THREE.Mesh(tri, mat);
   slats.name = 'locker slats';
@@ -58,4 +56,22 @@ export function createSlats(scene: THREE.Scene) {
       mat.uniforms.uShow.value = show;
     },
   };
+}
+
+// Puts something held inside the locker (the phone, the torch) in front of the slats. Its meshes go in the
+// transparent pass after them, but with blending off and the depth still written, so they look as solid as before.
+// Each mesh gets its own copy of its material: a model's copies share theirs, and the props on the shelves and the
+// other guards' torches stay solid.
+export function holdInFront(o: THREE.Object3D): void {
+  o.traverse(m => {
+    if (!(m instanceof THREE.Mesh)) return;
+    m.renderOrder = HANDS_ORDER;
+    m.material = Array.isArray(m.material) ? m.material.map(drawnLast) : drawnLast(m.material);
+  });
+}
+function drawnLast(mat: THREE.Material): THREE.Material {
+  const own = mat.clone();
+  own.transparent = true;
+  own.blending = THREE.NoBlending;
+  return own;
 }

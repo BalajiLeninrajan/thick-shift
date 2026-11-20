@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { game } from '../../state';
 import type { Me } from '../../types';
 import { createMinimap } from '../minimap';
-import { HANDS_ORDER } from '../slats';
+import { holdInFront } from '../slats';
 import { canvas } from '../world/tex';
 
 const HELD = { x: -0.15, y: -0.088, z: -0.235 },
@@ -90,9 +90,7 @@ export function createPhone(camera: THREE.Camera) {
   thumb.rotation.set(0.1, 0, 0.9);
   phone.add(hold);
   hold.rotation.set(TURN.x, TURN.y, TURN.z);
-  hold.traverse(o => {
-    o.renderOrder = HANDS_ORDER;
-  }); // in a locker it is held inside the doors, so in front of their slats
+  holdInFront(hold); // in a locker it is held inside the doors, so in front of their slats
   phone.position.set(HELD.x, HELD.y - DROP, HELD.z);
   phone.visible = false;
   camera.add(phone);
