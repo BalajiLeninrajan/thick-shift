@@ -34,6 +34,7 @@ async function discordToken(req, env) {
 
 // Discord's sandbox only lets the page load from its own origin, so the page's CDN links become /ext/ paths
 // that external() fetches. Only the pinned design system and Google's fonts go through.
+/** @type {[prefix: string, origin: string, path: RegExp][]} */
 const CDN = [
   ['jsd/', 'https://cdn.jsdelivr.net/', /^gh\/BalajiLeninrajan\/catppuccin-neu@v[\d.]+\/css\/[\w-]+\.css$/],
   ['gfonts/', 'https://fonts.googleapis.com/', /^css2\?[\w&=;:@+%.-]+$/],

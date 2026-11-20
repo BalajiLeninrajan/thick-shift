@@ -12,6 +12,11 @@
     "dev:discord": "pnpm --filter @thick-shift/discord dev",
     "build": "pnpm -r run build",
     "deploy": "pnpm --filter @thick-shift/web run deploy",
-    "deploy:discord": "pnpm --filter @thick-shift/discord run deploy"
+    "deploy:discord": "pnpm --filter @thick-shift/discord run deploy",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
   }
 }

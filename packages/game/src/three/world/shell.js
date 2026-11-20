@@ -18,6 +18,7 @@ const FRAME_W = .11, FRAME_T = .045;   // door frames: how wide, and how far pro
 const OFF = .012;                      // how far a decal sits off its surface
 
 // Things on the walls: [art, x, z, nx, nz, y of its middle, width]. (x, z) is on the wall, (nx, nz) the way it faces.
+/** @type {[art: string, x: number, z: number, nx: number, nz: number, y: number, w: number][]} */
 const ON_WALLS = [
   ['mural', 23.9, 25, 0, -1, 1.95, 5.6], ['poster0', 14.6, 11.5, 0, 1, 2.1, .84], ['poster1', 15.7, 11.5, 0, 1, 2.05, .84], ['note0', 21.3, 11.5, 0, 1, 1.6, .3],
   ['height', 12, 14.6, 1, 0, 1.15, .48], ['scrawl', 27, 22.6, -1, 0, 1.55, 1.5], ['damp', 12, 22, 1, 0, 3.4, 2.2],

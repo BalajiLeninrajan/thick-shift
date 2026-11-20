@@ -214,7 +214,7 @@ export function walls() {
   ROOMS3.forEach((room, ri) => room.rects.forEach((rect, k) => {
     const [x0, z0, x1, z1] = rect, others = room.rects.filter((_, j) => j !== k);
     // side: the fixed coordinate. horiz: the wall runs along x.
-    for (const [horiz, side, lo, hi, n] of [[true, z0, x0, x1, 1], [true, z1, x0, x1, -1], [false, x0, z0, z1, 1], [false, x1, z0, z1, -1]]) {
+    for (const [horiz, side, lo, hi, n] of /** @type {[boolean, number, number, number, number][]} */ ([[true, z0, x0, x1, 1], [true, z1, x0, x1, -1], [false, x0, z0, z1, 1], [false, x1, z0, z1, -1]])) {
       const doors = DOORWAYS.filter(d => (d.a === ri || d.b === ri) && (horiz ? d.axis === 'z' && (d.rect[1] === side || d.rect[3] === side) : d.axis === 'x' && (d.rect[0] === side || d.rect[2] === side)));
       const doorSpans = doors.map(d => horiz ? [d.rect[0], d.rect[2]] : [d.rect[1], d.rect[3]]).filter(([a, b]) => b > lo && a < hi);
       // Where another rect of the same room covers this edge there is no wall.

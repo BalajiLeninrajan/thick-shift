@@ -1,0 +1,16 @@
+// The whole repo, for `pnpm typecheck` (tsc -b). Each project checks one part of it in the runtime it runs in.
+{
+  "files": [],
+  "references": [
+    { "path": "packages/game" },
+    { "path": "packages/game/tsconfig.worker.json" },
+    { "path": "packages/game/tsconfig.node.json" },
+    { "path": "apps/web" },
+    { "path": "apps/web/tsconfig.worker.json" },
+    { "path": "apps/web/tsconfig.node.json" },
+    { "path": "apps/discord" },
+    { "path": "apps/discord/tsconfig.worker.json" },
+    { "path": "apps/discord/tsconfig.node.json" },
+    { "path": "tools" }
+  ]
+}

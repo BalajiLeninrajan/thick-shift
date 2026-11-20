@@ -1,0 +1,11 @@
+// The Node tools. They import the game's simulation by path, so the browser's types are here too.
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"]
+  },
+  "include": ["**/*.mjs", "**/*.js"]
+}

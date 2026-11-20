@@ -38,6 +38,7 @@ const BREATH = [
 const GROWL_RATE = [.7, 1.3, 1.1, .85];         // how each one's voice is pitched
 
 // One footstep cut from the step recordings, which hold five each.
+/** @type {[name: string, from: number][]} */
 const STEPS = [['steps1', .08], ['steps1', .99], ['steps1', 1.59], ['steps1', 2.14], ['steps1', 2.75], ['steps2', .33], ['steps2', .95], ['steps2', 1.6], ['steps2', 2.2], ['steps2', 2.8]];
 function footfall(rate, gain, lowpass) {
   const [name, from] = STEPS[Math.random() * STEPS.length | 0];

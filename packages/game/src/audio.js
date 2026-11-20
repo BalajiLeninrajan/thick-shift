@@ -9,7 +9,7 @@ const OPEN_HZ = 20000;
 // Browsers only allow audio after a user gesture, so call this from handlers.
 export function unlockAudio() {
   if (!ac) {
-    try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    try { ac = new (window.AudioContext || /** @type {Window & { webkitAudioContext?: typeof AudioContext }} */ (window).webkitAudioContext)(); } catch (e) { return; }
     // Everything goes through one limiter, so a growl over a bass hit does not clip.
     master = ac.createDynamicsCompressor();
     master.threshold.value = -8; master.ratio.value = 12; master.attack.value = .003; master.release.value = .2;

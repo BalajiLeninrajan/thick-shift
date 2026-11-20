@@ -137,7 +137,7 @@ function create() {
       player.update(S, dt, now);
       spectate(S, dt);
       const dread = dreadF(S), fear = threat();
-      scene.fog.density = FOG + FOG_DREAD * dread;
+      /** @type {THREE.FogExp2} */ (scene.fog).density = FOG + FOG_DREAD * dread;
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch);   // also runs the catch, which takes the camera
       // The end card (ui.js) waits until LINGER after the catch is over, however long a slow machine takes over it.

@@ -1,0 +1,8 @@
+// Build config, run by Vite in Node.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["vite.config.js"]
+}

@@ -19,7 +19,7 @@ for (const d of M.DOORWAYS) {
   const [a, b] = d.axis === 'x' ? [[x0 - out, cz], [x1 + out, cz]] : [[cx, z0 - out], [cx, z1 + out]];
   if (!M.clear(a[0], a[1], b[0], b[1], M.MASCOT_R)) bad.push(`the doorway between ${M.ROOMS3[d.a].name} and ${M.ROOMS3[d.b].name} is blocked within ${out} m`);
 }
-const onWalls = [...M.BOXES.map((c, i) => [c, `the breaker box in ${M.ROOMS3[c.room].name}`]), [M.GENERATOR, 'the generator'], [M.CHARGER, 'the charger'], [M.WALL_MAP, 'the wall map'], ...Object.entries(M.PANELS).map(([k, p]) => [p, `door button ${k}`])];
+const onWalls = /** @type {[{ x: number, z: number, face: number }, string][]} */ ([...M.BOXES.map((c, i) => [c, `the breaker box in ${M.ROOMS3[c.room].name}`]), [M.GENERATOR, 'the generator'], [M.CHARGER, 'the charger'], [M.WALL_MAP, 'the wall map'], ...Object.entries(M.PANELS).map(([k, p]) => [p, `door button ${k}`])]);
 for (const [c, name] of onWalls) {
   const p = { x: c.x + Math.sin(c.face) * .8, z: c.z + Math.cos(c.face) * .8 };
   if (!M.walkable(p.x, p.z, M.PLAYER_R)) bad.push(`nowhere to stand in front of ${name}`); else reach(p, name);
@@ -42,7 +42,7 @@ for (const [x0, z0, x1, z1] of M.OBSTACLES) {
 const LOOSE = { skee_ball: 'tickets on the floor', soda_machine: 'the lead and the puddle', spare_heads: 'the top head, 2.3 m up' };
 const sizes = {};
 let built = 0;
-for (const kit of ['props_a', 'props_b']) { const f = new URL(`../packages/game/public/models/${kit}.json`, import.meta.url); if (existsSync(f)) { built++; Object.assign(sizes, JSON.parse(readFileSync(f)).props); } else warn.push(`${kit}.json is not built yet, so its props are unchecked`); }
+for (const kit of ['props_a', 'props_b']) { const f = new URL(`../packages/game/public/models/${kit}.json`, import.meta.url); if (existsSync(f)) { built++; Object.assign(sizes, JSON.parse(readFileSync(f, 'utf8')).props); } else warn.push(`${kit}.json is not built yet, so its props are unchecked`); }
 for (const name in FOOT) if (sizes[name] && !LOOSE[name]) { const [w, , d] = sizes[name].size; if (Math.abs(w - FOOT[name][0]) > .2 || Math.abs(d - FOOT[name][1]) > .2) warn.push(`${name}: FOOT says ${FOOT[name]}, the kit says ${[w, d]}`); }
 if (built === 2) for (const name of new Set(DRESSING.flat().map(row => row[0]))) if (!sizes[name]) warn.push(`${name} is placed but is in neither kit`);
 

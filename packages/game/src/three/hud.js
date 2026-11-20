@@ -205,7 +205,7 @@ export function createHud(stage, player) {
     const e = el('div', 'ts-f-toast is-' + kind, toasts);
     e.innerHTML = icon(TOAST_ICON[kind]) + '<span></span>'; e.lastChild.textContent = text;
     live.push({ e, until: performance.now() + seconds * 1000 });
-    while (live.length > MAX_TOASTS - (root.clientHeight < SHORT)) drop(live.shift());
+    while (live.length > MAX_TOASTS - +(root.clientHeight < SHORT)) drop(live.shift());
   }
 
   /* ---------- the compass ---------- */

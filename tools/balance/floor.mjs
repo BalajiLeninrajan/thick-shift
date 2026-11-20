@@ -23,12 +23,12 @@ import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { cpus } from 'node:os';
 
 let now = 0;
-globalThis.performance = { now: () => now };
+globalThis.performance = /** @type {Performance} */ ({ now: () => now });
 const src = new URL('../../packages/game/src/', import.meta.url);
-const { game } = await import(new URL('state.js', src));
-const { MASC } = await import(new URL('config.js', src));
-const sim = await import(new URL('three/sim3d.js', src));
-const M = await import(new URL('three/map.js', src));
+const { game } = await import(new URL('state.js', src).href);
+const { MASC } = await import(new URL('config.js', src).href);
+const sim = await import(new URL('three/sim3d.js', src).href);
+const M = await import(new URL('three/map.js', src).href);
 const { F } = sim;
 
 const DT = .1;
@@ -763,7 +763,7 @@ if (!isMainThread) {
   const todo = scenarios.map((s, i) => i).filter(i => ONLY.split(',').some(part => scenarios[i].name.includes(part)));
   const results = new Map(todo.map(i => [i, []])), jobs = [];
   for (const i of todo) for (let from = 1; from <= SEEDS; from += CHUNK) jobs.push({ i, from, to: Math.min(SEEDS, from + CHUNK - 1) });
-  await new Promise(done => {
+  await new Promise(/** @param {(value?: unknown) => void} done */ done => {
     let next = 0, live = 0;
     const count = Math.max(1, Math.min(jobs.length, cpus().length, WORKERS));
     for (let k = 0; k < count; k++) {

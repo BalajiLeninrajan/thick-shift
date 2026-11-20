@@ -227,6 +227,14 @@ const GLINT = new THREE.MeshBasicMaterial({ color: EYE_PALE, fog: false });
 
 export function standIn(def) {
   const mat = new THREE.MeshStandardMaterial({ color: def.col, roughness: 1 }), dark = new THREE.MeshStandardMaterial({ color: 0x08080e, roughness: 1 });
+  /**
+   * @param {string} name
+   * @param {THREE.Object3D} [parent]
+   * @param {number} [x]
+   * @param {number} [y]
+   * @param {number} [z]
+   * @param {...[geo: THREE.BufferGeometry, material: THREE.Material, x?: number, y?: number, z?: number]} meshes
+   */
   const node = (name, parent, x, y, z, ...meshes) => {
     const o = new THREE.Object3D(); o.name = name;
     if (parent) { parent.updateWorldMatrix(true, false); o.position.set(x, y, z).sub(new THREE.Vector3().setFromMatrixPosition(parent.matrixWorld)); parent.add(o); }
@@ -236,7 +244,7 @@ export function standIn(def) {
   const root = node('root'), body = node('body', root, 0, .95, 0, [GEO.hips, mat, 0, 0, -.1], [GEO.chest, mat, 0, .55, 0]);
   const head = node('head', body, 0, 1.85, 0, [GEO.head, mat, 0, .25, .05]);
   node('jaw', head, 0, 1.95, .1, [GEO.jaw, dark]);
-  for (const [s, sx] of [['L', 1], ['R', -1]]) {
+  for (const [s, sx] of /** @type {[string, number][]} */ ([['L', 1], ['R', -1]])) {
     node('eye_' + s, head, sx * .17, 2.2, .4, [GEO.eye, dark], [GEO.glint, GLINT]);
     node('forearm_' + s, node('arm_' + s, body, sx * .62, 1.65, 0, [GEO.limb, mat]), sx * .62, 1.2, 0, [GEO.limb, mat]);
     node('shin_' + s, node('leg_' + s, body, sx * .4, .85, 0, [GEO.thigh, mat]), sx * .4, .45, 0, [GEO.limb, mat], [GEO.foot, mat]);

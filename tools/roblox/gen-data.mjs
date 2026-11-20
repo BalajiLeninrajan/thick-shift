@@ -9,9 +9,9 @@
 import { writeFileSync, readFileSync } from 'node:fs';
 
 const src = new URL('../../packages/game/src/', import.meta.url);
-const config = await import(new URL('config.js', src));
-const map = await import(new URL('three/map.js', src));
-const dressing = await import(new URL('three/world/dressing.js', src));
+const config = await import(new URL('config.js', src).href);
+const map = await import(new URL('three/map.js', src).href);
+const dressing = await import(new URL('three/world/dressing.js', src).href);
 
 // light.js and shell.js import three.js, so their plain-data tables are read out of the source instead.
 const source = file => readFileSync(new URL(file, src), 'utf8');

@@ -1,0 +1,8 @@
+// The Worker. Its globals come from the Workers runtime, not the browser.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["worker"]
+}

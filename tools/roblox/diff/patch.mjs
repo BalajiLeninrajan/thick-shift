@@ -23,5 +23,5 @@ swap('tools/balance/floor.mjs',
   "return ((t ^ t >>> 14) >>> 0) / 4294967296; };",
   "const v = ((t ^ t >>> 14) >>> 0) / 4294967296; if (globalThis.__REC?.on) globalThis.__REC.rands.push(v); return v; };");
 swap('tools/balance/floor.mjs',
-  "const sim = await import(new URL('three/sim3d.js', src));",
-  "const { wrapSim } = await import(new URL('../roblox-rec.mjs', import.meta.url));\nconst sim = wrapSim(await import(new URL('three/sim3d.js', src)), game);");
+  "const sim = await import(new URL('three/sim3d.js', src).href);",
+  "const { wrapSim } = await import(new URL('../roblox-rec.mjs', import.meta.url));\nconst sim = wrapSim(await import(new URL('three/sim3d.js', src).href), game);");

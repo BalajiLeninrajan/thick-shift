@@ -32,12 +32,12 @@ function titleScreen() {
     wire() {
       const begin = then => () => {
         unlockAudio();
-        game.myName = ($('nm').value || 'Guard').slice(0, 12);
+        game.myName = (/** @type {HTMLInputElement} */ ($('nm')).value || 'Guard').slice(0, 12);
         try { localStorage.tsName = game.myName; } catch (e) { /* storage blocked */ }
         then();
       };
       $('hb').onclick = begin(host);
-      $('jb').onclick = begin(() => join($('rc').value));
+      $('jb').onclick = begin(() => join(/** @type {HTMLInputElement} */ ($('rc')).value));
     },
   };
 }

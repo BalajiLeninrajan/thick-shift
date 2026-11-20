@@ -36,7 +36,7 @@ export function createTouch(root, player) {
     <button class="ts-t-btn ts-t-zoom" aria-label="Zoom the map" aria-pressed="false">Map</button>
     <button class="ts-t-btn ts-t-toy" aria-label="Throw a Mini Biggs">${PLUSH}</button>`;
   root.append(layer);
-  const [stickEl, runBtn, torchBtn, useBtn, phoneBtn, zoomBtn, toyBtn] = layer.children, knob = stickEl.firstChild;
+  const [stickEl, runBtn, torchBtn, useBtn, phoneBtn, zoomBtn, toyBtn] = /** @type {HTMLCollectionOf<HTMLElement>} */ (layer.children), knob = /** @type {HTMLElement} */ (stickEl.firstChild);
   let stick = null, drag = null;   // the finger on the stick and the finger looking: { id, x, y }
 
   // Whichever kind of pointer was used last decides whether these controls show.
@@ -73,7 +73,7 @@ export function createTouch(root, player) {
     }
   });
   // lostpointercapture covers a finger the browser stopped reporting, so the guard never keeps walking on its own.
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) layer.addEventListener(type, e => {
+  for (const type of /** @type {const} */ (['pointerup', 'pointercancel', 'lostpointercapture'])) layer.addEventListener(type, e => {
     if (stick?.id === e.pointerId) {
       stick = null; pad.fwd = pad.strafe = 0; pad.sprint = false;   // running ends when the thumb lifts
       stickEl.classList.remove('is-held'); stickEl.style.left = stickEl.style.top = knob.style.transform = '';

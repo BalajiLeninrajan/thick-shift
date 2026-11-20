@@ -8,7 +8,8 @@ import { game } from './state.js';
 import { F, hourF, clockF, dreadF, startFloorNight } from './three/sim3d.js';
 import { REST } from './three/map.js';
 
-const $ = id => document.getElementById(id);
+// The menu's controls are inputs and buttons. Typed as inputs, so .value and .checked check.
+const $ = id => /** @type {HTMLInputElement} */ (document.getElementById(id));
 const DEFAULTS = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: -1, dread: -1 };
 const SWITCHES = ['god', 'power', 'freeze', 'wake'];
 const cheats = () => (game.S.dev ||= { ...DEFAULTS });
@@ -70,14 +71,14 @@ const MASCOT_ACTIONS = {
 
 function bind(el) {
   const host = fn => () => { if (game.isHost && playing()) { fn(game.S); sync(el); } };
-  for (const key of SWITCHES) $('dv-' + key).onchange = e => { if (game.isHost && game.S) cheats()[key] = e.target.checked; sync(el); };
-  $('dv-rot').onclick = e => { const b = e.target.closest('button'); if (b && game.isHost && game.S) { cheats().rot = +b.dataset.v; sync(el); } };
-  $('dv-speed').oninput = e => { if (game.isHost && game.S) cheats().speed = +e.target.value; sync(el); };
-  const dread = () => { if (game.isHost && game.S) cheats().dread = $('dv-dread-on').checked ? $('dv-dread').value / 100 : -1; sync(el); };
+  for (const key of SWITCHES) $('dv-' + key).onchange = e => { if (game.isHost && game.S) cheats()[key] = /** @type {HTMLInputElement} */ (e.target).checked; sync(el); };
+  $('dv-rot').onclick = e => { const b = /** @type {Element} */ (e.target).closest('button'); if (b && game.isHost && game.S) { cheats().rot = +b.dataset.v; sync(el); } };
+  $('dv-speed').oninput = e => { if (game.isHost && game.S) cheats().speed = +/** @type {HTMLInputElement} */ (e.target).value; sync(el); };
+  const dread = () => { if (game.isHost && game.S) cheats().dread = $('dv-dread-on').checked ? +$('dv-dread').value / 100 : -1; sync(el); };
   $('dv-dread-on').onchange = dread; $('dv-dread').oninput = dread;
   for (const id in ACTIONS) $(id).onclick = host(ACTIONS[id]);
   $('dv-mascots').onclick = e => {
-    const b = e.target.closest('button');
+    const b = /** @type {Element} */ (e.target).closest('button');
     if (b && game.isHost && playing()) { MASCOT_ACTIONS[b.dataset.act](game.S, game.S.m[+b.dataset.i]); sync(el); }
   };
   $('dv-close').onclick = () => el.close();
@@ -93,11 +94,11 @@ function sync(el) {
   if (!S) return;
   const dv = cheats();
   for (const key of SWITCHES) $('dv-' + key).checked = dv[key];
-  for (const b of $('dv-rot').children) b.setAttribute('aria-pressed', String(+b.dataset.v === dv.rot));
-  $('dv-speed').value = dv.speed; $('dv-speed-out').textContent = dv.speed;
+  for (const b of /** @type {HTMLCollectionOf<HTMLElement>} */ ($('dv-rot').children)) b.setAttribute('aria-pressed', String(+b.dataset.v === dv.rot));
+  $('dv-speed').value = String(dv.speed); $('dv-speed-out').textContent = dv.speed;
   $('dv-dread-on').checked = dv.dread >= 0;
-  if (dv.dread >= 0) $('dv-dread').value = Math.round(dv.dread * 100);
-  $('dv-dread-out').textContent = Math.round(dreadF(S) * 100);
+  if (dv.dread >= 0) $('dv-dread').value = String(Math.round(dv.dread * 100));
+  $('dv-dread-out').textContent = String(Math.round(dreadF(S) * 100));
   $('dv-mascots').innerHTML = S.m.map(m => `<div class="cn-row cn-between cn-wrap cn-py-8"><span><b class="cn-name">${MASC[m.i].name}</b><br><span class="cn-meta">${m.st}, stage ${m.rot || 0}, ${Math.round((m.ire || 0) * 18)} s in a beam</span></span>
     <span class="cn-cluster">${[['near', 'In front of me'], ['home', 'Send home']].map(([a, l]) => `<button class="btn btn-ghost is-sm" data-act="${a}" data-i="${m.i}"${on ? '' : ' disabled'}>${l}</button>`).join('')}</span></div>`).join('');
   const row = (k, v) => `<dt>${k}</dt><dd class="cn-tabular">${v}</dd>`;
@@ -125,9 +126,9 @@ export function mountDev() {
     const spots = [document.querySelector('.ts-f-menu'), document.querySelector('.ts-f-pause-go')];
     if (!spots[0]) return;
     clearInterval(watch);
-    for (const spot of spots) if (spot) { const b2 = btn.cloneNode(true); b2.onclick = flip; spot.append(b2); }
+    for (const spot of spots) if (spot) { const b2 = /** @type {HTMLElement} */ (btn.cloneNode(true)); b2.onclick = flip; spot.append(b2); }
   }, 1000);
-  addEventListener('keydown', e => { if (e.key === '`' && e.target.tagName !== 'INPUT') flip(); });
+  addEventListener('keydown', e => { if (e.key === '`' && /** @type {Element} */ (e.target).tagName !== 'INPUT') flip(); });
   // Skip the mascot list while the pointer is on it, or the buttons get rebuilt mid-click.
   setInterval(() => { if (el.open && !$('dv-mascots').matches(':hover')) sync(el); }, 400);
 }

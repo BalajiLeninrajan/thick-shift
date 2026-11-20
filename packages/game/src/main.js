@@ -4,6 +4,8 @@ import { SFX, ambience } from './audio.js';
 import { dreadF } from './three/sim3d.js';
 import { syncOverlay } from './ui.js';
 
+// window.ts, the ?debug handle for poking at the game from the console.
+const debugWindow = /** @type {Window & { ts?: { game: object, client: object, floor?: object } }} */ (window);
 const FLOOR_HOLD_MS = 3000;   // the catch is 1.5 s (CUES.end in three/actors/scare.js); the rest is lying there
 
 // Every sound with a place is played there by three/sound.js. The win jingle has none, so it plays here.
@@ -28,7 +30,7 @@ function drawFloor() {
   }
   const app = floor.frame(performance.now());
   floorThreat = app.threat();
-  if (window.ts) window.ts.floor = app;   // ?debug
+  if (debugWindow.ts) debugWindow.ts.floor = app;   // ?debug
 }
 
 function frame() {
@@ -46,6 +48,6 @@ export function start() {
   // ?debug exposes state on window for poking at scenes from the console.
   // ?dev adds the dev menu.
   const params = new URLSearchParams(location.search);
-  if (params.has('debug')) window.ts = { game, client };
+  if (params.has('debug')) debugWindow.ts = { game, client };
   if (params.has('dev')) import('./dev.js').then(m => m.mountDev());
 }

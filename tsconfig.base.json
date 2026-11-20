@@ -1,0 +1,23 @@
+// Settings every project shares. Each package has a tsconfig.json for its browser code and, where it has them, a
+// tsconfig.worker.json for Worker code and a tsconfig.node.json for code that runs in Node. The tsconfig.json at the
+// root lists them all, and `pnpm typecheck` checks them with `tsc -b`.
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    // The code is JS for now. checkJs type-checks it with what TS can infer, plus JSDoc where that falls short.
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    // Off until PR 6 of the TS migration (issue #7) turns it on. TS 7 has it on by default.
+    "strict": false,
+    "skipLibCheck": true,
+    // Each project names the ambient types it wants, so Node's and the Workers' globals do not leak into browser code.
+    "types": [],
+    "tsBuildInfoFile": "${configDir}/node_modules/.tmp/${configName}.tsbuildinfo"
+  }
+}

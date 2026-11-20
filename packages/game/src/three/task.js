@@ -105,7 +105,7 @@ export function createTask(root) {
 
   const KEY_DIR = { KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0] };
   addEventListener('keydown', e => {
-    if (!job || e.target.closest?.('input, textarea, select')) return;
+    if (!job || /** @type {Element} */ (e.target).closest?.('input, textarea, select')) return;
     const c = e.code;
     if (c === 'KeyX' || c === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); quit(); return; }
     if (e.repeat && c !== 'KeyE' && c !== 'Space') return;
@@ -118,7 +118,7 @@ export function createTask(root) {
   }, true);
   addEventListener('keyup', e => { if (job && (e.code === 'KeyE' || e.code === 'Space')) job.act(false); }, true);
   panel.addEventListener('click', e => {
-    if (e.target.closest('[data-task="quit"]')) { quit(); return; }
+    if (/** @type {Element} */ (e.target).closest('[data-task="quit"]')) { quit(); return; }
     if (job) { job.tap(e); check(); }
   });
 

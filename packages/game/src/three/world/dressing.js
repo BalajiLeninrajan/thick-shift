@@ -12,6 +12,8 @@
 // Every locker outside the booth is also a place to hide (HIDES in map.js), so a locker
 // wants a metre of clear floor in front of its doors.
 // A prop is solid when FOOT has its footprint and it is not marked soft.
+/** @typedef {{ y?: number, hang?: boolean, dead?: boolean, soft?: boolean, s?: number }} PropOptions */
+/** @typedef {[prop: string, x: number, z: number, yaw: number, options?: PropOptions]} Placed */
 
 // [width, depth] of each solid prop's footprint in metres, before it is turned,
 // and where the middle of it sits from the prop's origin if not on it: [w, d, x, z],
@@ -34,13 +36,14 @@ export const GEN_BACK = 1.05;
 
 const HANG = { hang: true };
 const wall = y => ({ y });   // a wall prop, with the height of its middle
+/** @type {Placed[][]} */
 export const DRESSING = [
   // 0 Storage Stage. The mascots stand on their marks in front of a torn drape;
   // crates and flight cases crowd the wings. The platform is everything north of z 8.2.
   [
     ['curtain', 14.6, .45, 0, { y: 3.9 }], ['curtain', 17.2, .45, 0, { y: 3.9 }], ['curtain', 22.6, .45, 0, { y: 3.9 }],
     ['curtain', 11.1, 8.2, 0, { y: 4 }], ['curtain', 25.9, 8.2, 0, { y: 4 }],
-    ...[13, 16.4, 21.2, 24.2].map(x => ['stage_light', x, 6.2, 180, { y: 4.47, dead: true }]), ['stage_light', 18.6, 2.6, 0, { y: 4.47, dead: true }],
+    ...[13, 16.4, 21.2, 24.2].map(/** @returns {Placed} */ x => ['stage_light', x, 6.2, 180, { y: 4.47, dead: true }]), ['stage_light', 18.6, 2.6, 0, { y: 4.47, dead: true }],
     ['crate', 10.7, .7, 0], ['crate', 11.8, .75, 90], ['crate', 26.3, .7, 0], ['crate', 14.6, 6.4, 20],
     ['cardboard_box', 12.7, 1.2, 30], ['cardboard_box', 26.2, 1.7, -15], ['cardboard_box', 15.5, 6.9, 60], ['pallet', 23.6, 1.1, 10],
     ['speaker', 26.3, 9.7, 200], ['speaker', 10.7, 9.9, 150], ['trunk', 22.4, 10.4, 180], ['balloons', 24.6, 6.2, 0], ['chair_fallen', 16.8, 9.4, 40],
@@ -56,7 +59,7 @@ export const DRESSING = [
   // 2 Arcade. Cabinets along the west wall, two back to back as an island,
   // skee-ball at the north end, the prize counter and the claw machine by the east door.
   [
-    ...[15.7, 16.6, 19.7, 20.6, 21.5].map(z => ['arcade_cabinet', .5, z, 90]), ['arcade_cabinet', 7.3, 21.6, 270], ['arcade_cabinet', 8.15, 21.6, 90], ['arcade_cabinet', 7, 11.95, 0],
+    ...[15.7, 16.6, 19.7, 20.6, 21.5].map(/** @returns {Placed} */ z => ['arcade_cabinet', .5, z, 90]), ['arcade_cabinet', 7.3, 21.6, 270], ['arcade_cabinet', 8.15, 21.6, 90], ['arcade_cabinet', 7, 11.95, 0],
     ['skee_ball', 4, 12.9, 0], ['skee_ball', 5, 12.9, 0], ['prize_counter', 10.9, 21.4, 270], ['claw_machine', 10.6, 24, 315],
     ['locker', 11.15, 13.2, 270],
     ['stool', 1.35, 15.7, 0], ['stool', 1.35, 20.6, 0], ['stool', 6.4, 21.6, 0], ['trash_can', 11, 16.4, 0], ['balloons', 2.2, 24.2, 0], ['chair_fallen', 9, 15.4, 100],
@@ -85,7 +88,7 @@ export const DRESSING = [
     ['crate', 5.45, 29.5, 0], ['locker', 5.65, 31.5, 270], ['locker', 5.65, 32.45, 270], ['barrel', 2.4, 37.5, 0], ['crate', 9.5, 39.05, 0], ['barrel', 12, 42.1, 0],
     ['pallet', 5.3, 36, 5], ['cardboard_box', 5.2, 35.8, 20], ['cardboard_box', 5.55, 36.4, 80], ['wet_floor_sign', 3.1, 31.3, 70], ['mop_bucket', 2.5, 27.2, 0],
     ['trash_bag', 5.4, 41.9, 0], ['trash_bag', 2.5, 41.8, 200], ['fire_extinguisher', 6, 34, 270, wall(1.2)], ['vent_cover', 2, 35.2, 90, wall(.5)], ['fuse_box', 6, 37.6, 270, wall(1.5)],
-    ...[27, 29, 31].map(z => ['pipe_run', 5.55, z, 0, HANG]), ...[7.5, 9.5, 11.5, 13.5].map(x => ['duct_run', x, 39.1, 90, HANG]),
+    ...[27, 29, 31].map(/** @returns {Placed} */ z => ['pipe_run', 5.55, z, 0, HANG]), ...[7.5, 9.5, 11.5, 13.5].map(/** @returns {Placed} */ x => ['duct_run', x, 39.1, 90, HANG]),
   ],
   // 6 Snack Bar. Counter and menu on the north wall, the popcorn cart between
   // the hall door and where Squish waits, the soda machine still lit.
@@ -100,7 +103,7 @@ export const DRESSING = [
     ['crate', 36.55, 30, 0], ['crate', 36.55, 31.05, 0], ['barrel', 39.6, 28.4, 0], ['barrel', 39.6, 29.1, 0], ['crate', 31, 39.05, 0], ['barrel', 34.6, 42.1, 0],
     ['cardboard_box', 36.5, 35, 0], ['cardboard_box', 36.4, 35.6, 60], ['locker', 39.65, 36.8, 270], ['pallet', 39.3, 38, 0], ['coat_rack', 39.4, 41.9, 225], ['wet_floor_sign', 36.9, 37.2, 100],
     ['trash_bag', 36.4, 41.9, 0], ['trash_bag', 37.1, 42.1, 90], ['fire_extinguisher', 36, 33.5, 90, wall(1.2)], ['vent_cover', 40, 35.2, 270, wall(.5)],
-    ...[27, 29].map(z => ['pipe_run', 36.45, z, 0, HANG]), ...[28.5, 30.5, 32.5, 34.5].map(x => ['duct_run', x, 39.1, 90, HANG]),
+    ...[27, 29].map(/** @returns {Placed} */ z => ['pipe_run', 36.45, z, 0, HANG]), ...[28.5, 30.5, 32.5, 34.5].map(/** @returns {Placed} */ x => ['duct_run', x, 39.1, 90, HANG]),
   ],
   // 8 Ducts. Nothing but a fan turning at the far end.
   [['wall_fan', 26, 34.75, 270, wall(1.15)], ['trash_bag', 25.4, 35.6, 0], ['cardboard_box', 18.2, 35.6, 30]],

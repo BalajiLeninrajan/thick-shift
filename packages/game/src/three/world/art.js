@@ -8,6 +8,7 @@ import { ROOMS3 } from '../map.js';
 import { canvas, rand, mixc, fbm, FIELD } from './tex.js';
 
 // [x, y, w, h] in pixels of the 1024 square art canvas.
+/** @satisfies {Record<string, [x: number, y: number, w: number, h: number]>} */
 export const ART = {
   poster0: [0, 0, 224, 320], poster1: [224, 0, 224, 320], poster2: [448, 0, 224, 320], poster3: [672, 0, 224, 320], height: [896, 0, 128, 320],
   mural: [0, 320, 1024, 320],
@@ -107,7 +108,7 @@ function drawArt() {
     c.strokeStyle = INK; c.lineWidth = 3; c.beginPath(); c.moveTo(x, y + 20); c.quadraticCurveTo(x + w / 2, y + 90, x + w, y + 20); c.stroke();
     for (let k = 0; k < 20; k++) { const t = (k + .5) / 20, bx = x + t * w, by = y + 20 + 70 * 2 * t * (1 - t); c.fillStyle = ['#d4418e', '#e8c832', '#2ec4c6', '#e86a2a'][k % 4]; c.beginPath(); c.moveTo(bx - 16, by); c.lineTo(bx + 16, by); c.lineTo(bx, by + 34); c.fill(); }
     [1, 0, 3, 2].forEach((mi, k) => friend(c, mi, x + 150 + k * 240, y + 300, [.82, 1, .9, .7][k]));
-    for (const [bx, col] of [[40, '#d4418e'], [520, '#e8c832'], [985, '#2ec4c6']]) { c.strokeStyle = INK; c.lineWidth = 2; c.beginPath(); c.moveTo(x + bx, y + 150); c.lineTo(x + bx + 6, y + 290); c.stroke(); c.fillStyle = col; c.beginPath(); c.ellipse(x + bx, y + 120, 26, 32, 0, 0, 7); c.fill(); c.stroke(); }
+    for (const [bx, col] of /** @type {[number, string][]} */ ([[40, '#d4418e'], [520, '#e8c832'], [985, '#2ec4c6']])) { c.strokeStyle = INK; c.lineWidth = 2; c.beginPath(); c.moveTo(x + bx, y + 150); c.lineTo(x + bx + 6, y + 290); c.stroke(); c.fillStyle = col; c.beginPath(); c.ellipse(x + bx, y + 120, 26, 32, 0, 0, 7); c.fill(); c.stroke(); }
     c.font = `bold 44px ${FONT}`; c.lineWidth = 8; c.strokeStyle = '#fffdf5'; c.fillStyle = '#7a1f1c';
     c.strokeText('EVERY DAY IS YOUR BIRTHDAY', x + w / 2, y + 122); c.fillText('EVERY DAY IS YOUR BIRTHDAY', x + w / 2, y + 122);
     c.restore();
