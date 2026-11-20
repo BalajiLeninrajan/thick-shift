@@ -5,16 +5,20 @@
 // state.js) and starts talking to Discord. boot.js imports it only inside Discord, and the build gives it and the
 // SDK their own chunk, so elsewhere the SDK is never fetched.
 import { DiscordSDK } from '@discord/embedded-app-sdk';
-import { game, platform } from '@thick-shift/game/state';
+import { game, platform, type Platform } from '@thick-shift/game/state';
 import { host } from '@thick-shift/game/net';
 import { unlockAudio } from '@thick-shift/game/audio';
 import { $, esc, card, messageScreen } from '@thick-shift/game/ui';
 
-let sdk = null;
+// The screens the platform hooks return. packages/game exports no ./types, so they come from Platform's hooks.
+type OverlayScreen = ReturnType<NonNullable<Platform['title']>>;
+type Invite = ReturnType<NonNullable<Platform['invite']>>;
+
+let sdk: DiscordSDK | null = null;
 const discord = { room: '', name: '' }; // both '' until Discord answers
 
-async function connect() {
-  const { clientId } = await fetch('/api/discord/config').then(r => r.json());
+async function connect(): Promise<void> {
+  const { clientId } = await fetch('/api/discord/config').then(r => r.json() as Promise<{ clientId: string }>);
   if (!clientId) throw new Error('DISCORD_CLIENT_ID is not set on the Worker.');
   sdk = new DiscordSDK(clientId);
   await sdk.ready();
@@ -28,11 +32,11 @@ async function connect() {
 }
 
 // The player's Discord display name. If they turn down the sign-in, or it fails, they play as Guard.
-async function signIn(clientId) {
+async function signIn(clientId: string): Promise<string> {
   try {
     const { code } = await sdk.commands.authorize({ client_id: clientId, response_type: 'code', state: '', prompt: 'none', scope: ['identify'] });
     const r = await fetch('/api/discord/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
-    const { access_token } = await r.json();
+    const { access_token } = (await r.json()) as { access_token: string };
     const { user } = await sdk.commands.authenticate({ access_token });
     return user.global_name || user.username || '';
   } catch {
@@ -41,7 +45,7 @@ async function signIn(clientId) {
 }
 
 // The room and the name come from Discord. The button is still needed, since sound can only start from a click.
-function titleScreen() {
+function titleScreen(): OverlayScreen {
   if (!discord.room) return messageScreen('discord', 'Connecting to Discord…', '', false);
   const name = discord.name.slice(0, 12);
   return {
@@ -65,7 +69,7 @@ function titleScreen() {
 }
 
 // Everyone in the channel is already in the room, so the lobby offers Discord's invite instead of a code.
-const invite = () => ({
+const invite = (): Invite => ({
   html: '<p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel joins this night.</p><div class="cn-cluster"><button class="btn btn-secondary" id="inv">Invite someone</button></div>',
   wire() {
     $('inv').onclick = () =>
