@@ -152,7 +152,7 @@ function sync(el) {
   for (const key of SWITCHES) $('dv-' + key).checked = dv[key];
   for (const b of /** @type {HTMLCollectionOf<HTMLElement>} */ ($('dv-rot').children)) b.setAttribute('aria-pressed', String(+b.dataset.v === dv.rot));
   $('dv-speed').value = String(dv.speed);
-  $('dv-speed-out').textContent = dv.speed;
+  $('dv-speed-out').textContent = String(dv.speed);
   $('dv-dread-on').checked = dv.dread >= 0;
   if (dv.dread >= 0) $('dv-dread').value = String(Math.round(dv.dread * 100));
   $('dv-dread-out').textContent = String(Math.round(dreadF(S) * 100));

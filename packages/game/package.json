@@ -4,7 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/main.js",
-    "./state": "./src/state.js",
+    "./state": "./src/state.ts",
     "./net": "./src/net.js",
     "./audio": "./src/audio.js",
     "./ui": "./src/ui.js",

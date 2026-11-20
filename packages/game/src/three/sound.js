@@ -17,7 +17,7 @@ import { CUES } from './actors/scare';
 const HEAR = 28; // metres past which a footstep is not worth a voice
 const BUSY = 18; // with this many voices sounding, footsteps and other texture are skipped
 const POOL = 8; // emitters shared by one-off sounds (a bang, a fixed fault)
-const FIZZ = [1.6, 3.2]; // seconds between the crackles of an open fault, so it can be found by ear
+const FIZZ = /** @type {[number, number]} */ ([1.6, 3.2]); // seconds between the crackles of an open fault, so it can be found by ear
 const MAX_GUARDS = 5; // other guards whose footsteps are placed
 const MUFFLED = 420; // Hz the whole mix is cut to while this guard is flat
 const IN_LOCKER = 2600; // and while they stand in a locker, behind its doors
