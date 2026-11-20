@@ -41,6 +41,7 @@ packages/game/          the game, shared by the web and Discord apps (@thick-shi
   src/
     styles.css          stage layout and the HUD; everything else comes from catppuccin-neu
     state.ts            the shared mutable objects: game (session), client (this browser) and platform (app hooks)
+    types.ts            the client's shared types (exported as @thick-shift/game/types); types only
     net.ts              hosting and joining rooms; the host broadcasts the whole state
     audio.ts            recorded and synthesised sound, and the ambience
     ui.ts               overlay screens: title, lobby, and the cards between nights
