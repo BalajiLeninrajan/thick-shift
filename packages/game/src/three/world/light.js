@@ -16,6 +16,7 @@ import { Batch } from './geo.js';
 import { ART, uvOf } from './art.js';
 import { canvas } from './tex.js';
 
+// biome-ignore format: tools/roblox/gen-data.mjs reads this declaration as one line.
 const TUBE = [.8, .95, .74], COLD = [.62, .82, 1], WARM = [1, .66, .36], RED = [1, .06, .04], GREEN = [.2, 1, .45];
 // g: the group it belongs to. 'on' is steady; fa, fb and fc flicker in their
 // own ways; 'exit' has a battery and outlives the power.

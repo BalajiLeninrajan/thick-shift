@@ -239,6 +239,7 @@ export function startFloorNight(n) {
   const all = guards();
   all.forEach(placeGuard);
   S.players = all;
+  // biome-ignore format: tools/roblox/diff/patch.mjs swaps this line by exact text.
   const spots = BATTERY_SPOTS.map((_, i) => i).sort(() => Math.random() - .5);
   S.batN = Math.min(spots.length, 3 + all.length);   // the night's batteries, lying about or due back
   S.bats = spots.slice(0, S.batN);
@@ -694,6 +695,7 @@ let lastStep = performance.now();
 export function stepFloor() {
   const S = game.S, now = performance.now();
   const dt = Math.min(.25, (now - lastStep) / 1000) * (S.dev?.speed || 1);
+  // biome-ignore format: tools/roblox/diff/patch.mjs matches this line and the next by exact text.
   lastStep = now;
   S.players = guards();
   if (S.phase !== 'play') return;

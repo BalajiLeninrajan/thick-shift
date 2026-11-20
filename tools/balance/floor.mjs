@@ -27,6 +27,7 @@ globalThis.performance = /** @type {Performance} */ ({ now: () => now });
 const src = new URL('../../packages/game/src/', import.meta.url);
 const { game } = await import(new URL('state.js', src).href);
 const { MASC } = await import(new URL('config.js', src).href);
+// biome-ignore format: tools/roblox/diff/patch.mjs swaps this line by exact text.
 const sim = await import(new URL('three/sim3d.js', src).href);
 const M = await import(new URL('three/map.js', src).href);
 const { F } = sim;
@@ -47,6 +48,7 @@ const front = t => t.face == null ? t : { x: t.x + Math.sin(t.face) * .9, z: t.z
 
 function seedRandom(seed) {
   let a = seed * 2654435761 >>> 0;
+  // biome-ignore format: tools/roblox/diff/patch.mjs matches the end of this line by exact text.
   Math.random = () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
 

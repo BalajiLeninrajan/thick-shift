@@ -32,7 +32,8 @@ function titleScreen() {
     wire() {
       const begin = then => () => {
         unlockAudio();
-        game.myName = (/** @type {HTMLInputElement} */ ($('nm')).value || 'Guard').slice(0, 12);
+        const name = /** @type {HTMLInputElement} */ ($('nm')).value;
+        game.myName = (name || 'Guard').slice(0, 12);
         try { localStorage.tsName = game.myName; } catch (e) { /* storage blocked */ }
         then();
       };
