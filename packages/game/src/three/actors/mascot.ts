@@ -11,18 +11,23 @@ import { lightsF } from '@thick-shift/sim';
 import { Track, hostClock, wrap } from './track';
 import { buildRig, lag } from './rig';
 import { C, NCH, RATE, styleOf, standIn, hash } from './styles';
+import type { StageInfo, Style } from './styles';
+import type { Part, Rig } from './rig';
+import type { MascotKind } from '@thick-shift/sim/config';
+import type { Mascot as SimMascot, MascotState, State } from '@thick-shift/sim/types';
+import type { View } from '../actors';
 
 const TAU = Math.PI * 2,
-  clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
-const smooth = u => {
+  clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+const smooth = (u: number): number => {
   u = clamp(u, 0, 1);
   return u * u * (3 - 2 * u);
 };
 // Rises over `up` of the span, holds, and falls over the last `down`.
-const bump = (u, up, down) => smooth(u / up) * smooth((1 - u) / down);
+const bump = (u: number, up: number, down: number): number => smooth(u / up) * smooth((1 - u) / down);
 // Where a foot is through the walk cycle, from -1 (as far ahead as it lands) to 1 (as far behind as it lifts): the
 // first half on the ground going back at a steady rate, which is ground speed, the second half swinging forward.
-const footAt = q => (q < 0.5 ? q * 4 - 1 : Math.cos(Math.PI * (q * 2 - 1)));
+const footAt = (q: number): number => (q < 0.5 ? q * 4 - 1 : Math.cos(Math.PI * (q * 2 - 1)));
 
 const SEEN_RANGE = 46; // metres: past this the fog has it anyway
 const LOOK_EVERY = 0.2; // seconds between checks of whether the camera can see it
@@ -32,8 +37,8 @@ const SEAT_LOCAL = 0.8,
 
 // One soft point, drawn over every eye_glow so the eyes still read as two
 // pale points when the head is twenty metres away and three pixels wide.
-let haloTex = null;
-function haloTexture() {
+let haloTex: THREE.CanvasTexture = null;
+function haloTexture(): THREE.CanvasTexture {
   if (haloTex) return haloTex;
   const cv = document.createElement('canvas');
   cv.width = cv.height = 32;
@@ -54,8 +59,70 @@ const MAX_HALOS = 12,
 const v = new THREE.Vector3(),
   box = new THREE.Box3();
 
+// One model, made ready to animate (Mascot.fit): its rig and style, the halo sprites over its eye_glows and their
+// material, the part that carries the face and where the face is in that part's space, its rot stage, whether it is
+// a real model (not the stand-in), and how tall it is.
+export interface Fitted {
+  model: THREE.Object3D;
+  rig: Rig;
+  style: Style;
+  halos: THREE.Sprite[];
+  haloMat: THREE.SpriteMaterial;
+  carrier: Part;
+  facePoint: THREE.Vector3;
+  stage: number;
+  real: boolean;
+  height: number;
+}
+
 export class Mascot {
-  constructor(scene, i, renderer) {
+  declare i: number;
+  declare def: MascotKind;
+  declare renderer: THREE.WebGLRenderer;
+  declare group: THREE.Group;
+  declare pivot: THREE.Group;
+  declare track: Track;
+  declare ch: Float32Array;
+  declare cv: Float32Array;
+  declare fits: Fitted[];
+  declare asked: boolean[];
+  declare cur: Fitted;
+  declare rot: number;
+  declare onScreen: THREE.Sphere;
+  declare t: number;
+  declare gt: number;
+  declare phase: number;
+  declare walk: number;
+  declare live: number;
+  declare hop: number;
+  declare st: MascotState;
+  declare lit: boolean;
+  declare seen: boolean;
+  declare lookT: number;
+  declare dist: number;
+  declare lookY: number;
+  declare lookP: number;
+  declare lookVY: number;
+  declare beat: number;
+  declare offY: number;
+  declare offP: number;
+  declare side: number;
+  declare aimY: number;
+  declare aimP: number;
+  declare eyeY: number;
+  declare eyeP: number;
+  declare kLunge: number;
+  declare kSlam: number;
+  declare kLand: number;
+  declare kFlare: number;
+  declare kRecoil: number;
+  declare kSpot: number;
+  declare seat: { on: boolean; x: number; z: number; yaw: number; w: number; v: number; turn: number };
+  declare scareOn: boolean;
+  declare scareW: number;
+  declare scareBite: number;
+  declare face: THREE.Vector3;
+  constructor(scene: THREE.Scene, i: number, renderer: THREE.WebGLRenderer) {
     this.i = i;
     this.def = MASC[i];
     this.renderer = renderer;
@@ -111,25 +178,25 @@ export class Mascot {
 
   /* ---------- models ---------- */
 
-  load(stage) {
+  load(stage: number): void {
     if (stage > 2 || this.asked[stage]) return;
     this.asked[stage] = true;
     Promise.all([loadActor(`${this.def.k}_${stage}`), loadJSON(this.def.k)]).then(([src, info]) => {
       if (!src) return; // the stand-in, or the stage before, carries on
       const fit = (this.fits[stage] = this.fit(instance(src), stage, info?.stages?.[stage], true));
       // Textures go to the GPU now, not in the frame the stage first shows.
-      fit.model.traverse(o => {
+      fit.model.traverse((o: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>) => {
         if (o.isMesh) for (const k of ['map', 'normalMap', 'roughnessMap', 'emissiveMap']) if (o.material[k]) this.renderer.initTexture(o.material[k]);
       });
     });
   }
 
-  fit(model, stage, info, real) {
+  fit(model: THREE.Object3D, stage: number, info: StageInfo | undefined, real: boolean): Fitted {
     const rig = buildRig(model),
       style = styleOf(this.def.k, stage, rig, info);
     const haloMat = new THREE.SpriteMaterial({ map: haloTexture(), color: EYE_PALE, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
-    const halos = [];
-    model.traverse(o => {
+    const halos: THREE.Sprite[] = [];
+    model.traverse((o: THREE.Mesh) => {
       if (!o.userData.glow || halos.length >= MAX_HALOS) return;
       // Sit the point just proud of the glint, on the side away from the eyeball's centre.
       o.geometry.computeBoundingBox();
@@ -152,7 +219,7 @@ export class Mascot {
     return { model, rig, style, halos, haloMat, carrier, facePoint, stage, real, height: info?.height || box.max.y };
   }
 
-  show(fit) {
+  show(fit: Fitted): void {
     this.pivot.remove(this.cur.model);
     this.pivot.add(fit.model);
     for (const p of fit.rig.list) {
@@ -163,7 +230,7 @@ export class Mascot {
   }
 
   // Follow m.rot to the next model, but only while this screen cannot see it: it changes behind your back.
-  stage(rot, hidden) {
+  stage(rot: number, hidden: boolean): void {
     const want = this.fits[rot];
     if (want && want !== this.cur && (hidden || !this.cur.real)) this.show(want);
   }
@@ -171,7 +238,7 @@ export class Mascot {
   /* ---------- events ---------- */
 
   // The guard it caught is at (x, z): it turns to them and sits. mine: the guard is the one watching.
-  sitOn(x, z, mine) {
+  sitOn(x: number, z: number, mine: boolean): void {
     const s = this.seat,
       tr = this.track,
       dx = tr.x - x,
@@ -183,17 +250,17 @@ export class Mascot {
     s.z = z + (dz / d) * off;
     s.yaw = Math.atan2(-dx, -dz);
   }
-  bang() {
+  bang(): void {
     this.kSlam = 1;
   }
-  crash() {
+  crash(): void {
     this.kRecoil = 1;
   }
-  spotted() {
+  spotted(): void {
     this.kSpot = 1;
   }
   // lookT = 0: it may have jumped home, so ask again next frame whether it can be seen.
-  reset() {
+  reset(): void {
     this.track.n = 0;
     this.lookT = 0;
     this.seat.on = false;
@@ -208,7 +275,7 @@ export class Mascot {
   /* ---------- the frame ---------- */
 
   // view: { x, y, z } of the camera, id of the guard watching, flat (they are on the floor), torch (their beam is on).
-  sync(m, S, dt, view) {
+  sync(m: SimMascot, S: State, dt: number, view: View): void {
     const tr = this.track,
       st = m.st;
     if (hostClock.fresh) tr.push(S.t, m.x, m.z, m.yaw);
