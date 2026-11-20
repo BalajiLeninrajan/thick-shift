@@ -9,6 +9,8 @@ import { MASC } from '@thick-shift/sim/config';
 import { TOY } from '@thick-shift/sim';
 import { floorY } from '../world/shell';
 import { hostClock } from './track';
+import type { State } from '@thick-shift/sim/types';
+import type { View } from '../actors';
 
 const SIZE = 1.4; // a big keyring, so it shows across a room in a torch beam
 const HAND = 1.3; // metres off the floor it leaves the hand
@@ -24,7 +26,7 @@ const FUR = new THREE.Color(MASC[0].col),
   RING = 0xc8c8c8;
 
 // One part: a geometry with its colour painted into its vertices, so the whole plush is one mesh.
-function paint(geo, col) {
+function paint(geo: THREE.BufferGeometry, col: THREE.ColorRepresentation): THREE.BufferGeometry {
   const c = new THREE.Color(col),
     n = geo.attributes.position.count,
     out = new Float32Array(n * 3);
@@ -33,9 +35,10 @@ function paint(geo, col) {
   return geo;
 }
 // Every part is made from spheres, cones and a torus, all non-indexed, so mergeGeometries takes them together.
-const ball = (r, x, y, z, col, sx = 1, sy = 1, sz = 1) => paint(new THREE.SphereGeometry(r, 12, 8).toNonIndexed().scale(sx, sy, sz).translate(x, y, z), col);
+const ball = (r: number, x: number, y: number, z: number, col: THREE.ColorRepresentation, sx = 1, sy = 1, sz = 1): THREE.BufferGeometry =>
+  paint(new THREE.SphereGeometry(r, 12, 8).toNonIndexed().scale(sx, sy, sz).translate(x, y, z), col);
 
-function shape() {
+function shape(): THREE.BufferGeometry {
   // Sitting up, facing +z: a pear of a body, a big head with a broad snout, round ears, stubby arms and feet.
   const parts = [
     ball(0.04, 0, 0.04, 0, FUR, 1, 1.05, 0.95),
@@ -59,14 +62,14 @@ function shape() {
   return mergeGeometries(parts).scale(SIZE, SIZE, SIZE);
 }
 
-export function createPlush(scene) {
+export function createPlush(scene: THREE.Scene) {
   const geo = shape(),
     mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
   // The voice box's light, through the fur: unlit, so it shows in the dark while it sings.
   const lampGeo = new THREE.SphereGeometry(0.007 * SIZE, 8, 6),
     lampOn = new THREE.MeshBasicMaterial({ color: 0xff3020, fog: false }),
     lampOff = new THREE.MeshBasicMaterial({ color: 0x2a0a08 });
-  const toys = new Map(); // by the toy's id in S.toys
+  const toys = new Map<number, ReturnType<typeof make>>(); // by the toy's id in S.toys
   function make() {
     const g = new THREE.Group(),
       body = new THREE.Mesh(geo, mat),
@@ -82,16 +85,16 @@ export function createPlush(scene) {
   }
   return {
     // The group drawn for a toy in S.toys, for the outline (outline.js).
-    group: id => toys.get(id)?.g,
+    group: (id: number): THREE.Group => toys.get(id)?.g,
     // A night began: the floor is swept.
-    reset() {
+    reset(): void {
       for (const s of toys.values()) scene.remove(s.g);
       toys.clear();
     },
-    sync(S, view) {
+    sync(S: State, view: View): void {
       const now = hostClock.now,
         list = S.toys || [],
-        here = new Set();
+        here = new Set<number>();
       for (const t of list) {
         here.add(t.id);
         let s = toys.get(t.id);
