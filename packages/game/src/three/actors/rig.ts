@@ -7,7 +7,27 @@ const e = new THREE.Euler(0, 0, 0, 'YXZ'),
   q = new THREE.Quaternion();
 
 class Part {
-  constructor(o, name) {
+  declare o: THREE.Object3D;
+  declare name: string;
+  declare restP: THREE.Vector3;
+  declare restQ: THREE.Quaternion;
+  declare restS: THREE.Vector3;
+  declare at: THREE.Vector3;
+  declare rx: number;
+  declare ry: number;
+  declare rz: number;
+  declare px: number;
+  declare py: number;
+  declare pz: number;
+  declare s: number;
+  declare ax: number;
+  declare az: number;
+  declare vx: number;
+  declare vz: number;
+  declare seed: number;
+  declare depth: number;
+  declare rzSpin?: number; // set by styles.js's tooth rings, which turn on and on
+  constructor(o: THREE.Object3D, name: string) {
     this.o = o;
     this.name = name;
     this.restP = o.position.clone();
@@ -22,7 +42,7 @@ class Part {
     this.seed = 0;
     this.depth = 0;
   }
-  apply() {
+  apply(): void {
     const o = this.o;
     if (!o) {
       this.rx = this.ry = this.rz = this.px = this.py = this.pz = 0;
@@ -41,21 +61,57 @@ class Part {
 const NONE = new Part(new THREE.Object3D(), '');
 NONE.o = null;
 
-const NAMED = ['root', 'body', 'neck', 'head', 'jaw', 'eye_L', 'eye_R', 'arm_L', 'arm_R', 'forearm_L', 'forearm_R', 'leg_L', 'leg_R', 'shin_L', 'shin_R'];
-const hashStr = s => {
+const NAMED = [
+  'root',
+  'body',
+  'neck',
+  'head',
+  'jaw',
+  'eye_L',
+  'eye_R',
+  'arm_L',
+  'arm_R',
+  'forearm_L',
+  'forearm_R',
+  'leg_L',
+  'leg_R',
+  'shin_L',
+  'shin_R',
+] as const;
+type Named = (typeof NAMED)[number];
+const hashStr = (s: string): number => {
   let h = 7;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973;
   return h / 9973;
 };
 
-export function buildRig(model) {
-  const all = new Map(),
-    rig = { model, all, list: [], has: {}, chains: {}, sways: [] };
+export type { Part };
+
+// A model's parts by name, the contract's named ones as fields (NONE where the model has none), and what the gait
+// needs. chains: extra_N chains, by N. sways: the sway_ parts.
+export type Rig = Record<Named, Part> & {
+  model: THREE.Object3D;
+  all: Map<string, Part>;
+  list: Part[];
+  has: Record<string, boolean>;
+  chains: Record<string, Part[]>;
+  sways: Part[];
+  hipH: number;
+  hipX: number;
+  headH: number;
+  part: (name: string) => Part;
+  chain: (n: number | string) => Part[];
+  apply: () => void;
+};
+
+export function buildRig(model: THREE.Object3D): Rig {
+  const all = new Map<string, Part>(),
+    rig = { model, all, list: [], has: {}, chains: {}, sways: [] } as Rig;
   model.updateWorldMatrix(true, true);
   const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
   model.traverse(o => {
     // GLTFLoader keeps the file's node name in userData.name and may rename the object itself.
-    const name = o.userData.name || (o.isMesh && o.parent?.userData.name ? '' : o.name);
+    const name = o.userData.name || ((o as THREE.Mesh).isMesh && o.parent?.userData.name ? '' : o.name);
     if (!name || all.has(name)) return;
     const p = new Part(o, name);
     p.at.setFromMatrixPosition(o.matrixWorld).applyMatrix4(inv);
@@ -93,7 +149,7 @@ export function buildRig(model) {
 
 // A hanging part lags behind what it hangs from: a damped spring pulled by
 // (tx, tz), the angles it would settle at. Cheap, and enough for hair and guts.
-export function lag(p, tx, tz, dt, stiff, damp, limit) {
+export function lag(p: Part, tx: number, tz: number, dt: number, stiff: number, damp: number, limit: number): void {
   p.vx += ((tx - p.ax) * stiff - p.vx * damp) * dt;
   p.vz += ((tz - p.az) * stiff - p.vz * damp) * dt;
   p.ax = Math.max(-limit, Math.min(limit, p.ax + p.vx * dt));
