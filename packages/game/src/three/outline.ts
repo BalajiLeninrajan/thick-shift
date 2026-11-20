@@ -15,25 +15,29 @@ import { game } from '../state';
 import { GENERATOR, CHARGER, PANELS, BATTERY_SPOTS } from '@thick-shift/sim/map';
 import { faultLeft } from '@thick-shift/sim';
 import { prefs } from './player';
+import type { Object3D } from 'three';
+import type { NightState, Point, State } from '@thick-shift/sim/types';
+import type { Actors, Me, OutlineMark, WorldParts } from '../types';
 
 const NEAR = 6,
   HURRY = 15;
-const GOLD = [1, 0.78, 0.28],
-  RED = [1, 0.32, 0.28];
+const GOLD: OutlineMark['col'] = [1, 0.78, 0.28],
+  RED: OutlineMark['col'] = [1, 0.32, 0.28];
 
-export function createOutlines(parts, actors) {
-  const marks = [];
-  const add = (obj, col, a) => {
+// parts: world/usable.js's. Its panels take any string key, as usable.js builds them today; WorldParts once that is typed.
+export function createOutlines(parts: Omit<WorldParts, 'panels'> & { panels: Record<string, Object3D> }, actors: Actors) {
+  const marks: OutlineMark[] = [];
+  const add = (obj: Object3D, col: OutlineMark['col'], a: number): void => {
     if (obj) marks.push({ obj, col, a });
   };
   return {
     // The marks for this frame: [{ obj, col, a }]. Empty with the switch off or nobody standing.
-    pick(S, me, t) {
+    pick(S: State, me: Pick<Me, 'x' | 'z' | 'flat' | 'target' | 'task'>, t: number): OutlineMark[] {
       marks.length = 0;
       if (!prefs.outline || S.phase !== 'play' || me.flat) return marks;
-      const near = at => Math.hypot(at.x - me.x, at.z - me.z) < NEAR;
+      const near = (at: Point): boolean => Math.hypot(at.x - me.x, at.z - me.z) < NEAR;
       const aim = me.target,
-        aimed = new Set();
+        aimed = new Set<Object3D>();
       // The thing the use key would act on.
       if (aim && !me.task) {
         const obj =
@@ -57,14 +61,14 @@ export function createOutlines(parts, actors) {
       }
       const pulse = 0.62 + 0.22 * Math.sin(t * 4);
       S.faults?.forEach((f, i) => {
-        if (f && !aimed.has(parts.boxes[i])) add(parts.boxes[i], faultLeft(S, f) < HURRY ? RED : GOLD, pulse);
+        if (f && !aimed.has(parts.boxes[i])) add(parts.boxes[i], faultLeft(S as NightState, f) < HURRY ? RED : GOLD, pulse);
       });
       for (const p of S.players)
         if (p.flat && p.id !== game.myId) {
           const g = actors.guards.get(p.id)?.group;
           if (!aimed.has(g)) add(g, RED, 0.8);
         }
-      const faint = (obj, at) => {
+      const faint = (obj: Object3D, at: Point): void => {
         if (!aimed.has(obj) && near(at)) add(obj, GOLD, 0.45);
       };
       for (const i of S.bats || []) faint(parts.bats[i], BATTERY_SPOTS[i]);
