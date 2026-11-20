@@ -10,6 +10,18 @@ import { unlockAudio } from '../audio';
 import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, slide, walkable } from '@thick-shift/sim/map';
 import { F, TOY } from '@thick-shift/sim';
 import { FAULT_NAME } from './task';
+import type { DoorKey, GuardAct, NightState, Player, State } from '@thick-shift/sim/types';
+import type { Me, Prefs, Target, Task } from '../types';
+
+// What drives the guard besides the keys: touch.js (pad) and the gamepad (gp, which also keeps the stick's last
+// direction for a breaker box). fwd and strafe: -1 to 1.
+interface Pad {
+  fwd: number;
+  strafe: number;
+  sprint: boolean;
+  use: boolean;
+  stick?: number[];
+}
 
 const SENS = 0.0022,
   SEND_MS = 80; // radians per pixel of mouse travel at sensitivity 1
@@ -23,7 +35,7 @@ const GP = { use: 0, phone: 1, torch: 2, call: 3, sprint: 4, watch: 5, toss: 7, 
 
 // Look settings, kept between visits. sens multiplies SENS. outline: a gold edge round usable things (outline.js).
 // third: a flat guard watches teammates from behind them, not through their eyes (app.js spectate).
-export const prefs = { sens: 1, invert: false, outline: true, third: false };
+export const prefs: Prefs = { sens: 1, invert: false, outline: true, third: false };
 try {
   const saved = JSON.parse(localStorage.tsFloor || '{}');
   if (saved.sens > 0) prefs.sens = Math.min(2.5, Math.max(0.3, +saved.sens));
@@ -33,30 +45,30 @@ try {
 } catch {
   /* storage blocked */
 }
-export function savePrefs() {
+export function savePrefs(): void {
   try {
     localStorage.tsFloor = JSON.stringify(prefs);
   } catch {
     /* storage blocked */
   }
 }
-const typing = e => !!e.target.closest?.('input, textarea, select, [contenteditable]');
+const typing = (e: Event): boolean => !!(e.target as Element).closest?.('input, textarea, select, [contenteditable]');
 const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 }; // per second, and seconds before it starts coming back
 const DOOR_NAME = { L: 'left door', R: 'right door', V: 'vent' };
 // In a locker: how far the view turns either side of straight out through the doors, and up or down (radians),
 // and how far in front of the locker's middle the eye is: just past the doors, so their insides are behind it.
 const LOCKER_LOOK = { yaw: 0.85, pitch: 0.5, eye: 0.34 };
 const THROW_MS = 1000; // a second throw is not sent before the host has had time to take the first
-const angDiff = (a, b) => {
+const angDiff = (a: number, b: number): number => {
   let d = (a - b) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;
   return d;
 };
 
-export function createPlayer(camera, canvas) {
+export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement) {
   // Local view of this guard. yaw 0 faces south (+z); forward is (sin yaw, cos yaw).
-  const me = {
+  const me: Me = {
     x: 0,
     z: 0,
     yaw: Math.PI,
@@ -82,10 +94,10 @@ export function createPlayer(camera, canvas) {
     empty: 0,
     hid: -1,
   }; // the locker (HIDES index) this guard is standing in, as the host has it, or -1
-  const keys = new Set();
+  const keys = new Set<string>();
   // Touch and gamepad code can drive the guard through these instead of keys.
-  const pad = { fwd: 0, strafe: 0, sprint: false, use: false };
-  const gp = { fwd: 0, strafe: 0, sprint: false, use: false };
+  const pad: Pad = { fwd: 0, strafe: 0, sprint: false, use: false };
+  const gp: Pad = { fwd: 0, strafe: 0, sprint: false, use: false };
   let lastThrow = -1e9,
     sinceSprint = 0,
     lastSend = 0,
@@ -94,11 +106,11 @@ export function createPlayer(camera, canvas) {
     drop = 0;
   let mouseLocked = false,
     gpLive = false,
-    gpWas = [];
+    gpWas: boolean[] = [];
   let keysLive = false,
     arrowHeld = 0; // keysLive: playing on the keyboard alone, so there is no pointer to lock
-  let task = null; // the minigame panel (task.js), handed over by app.js once the HUD exists
-  function letGo() {
+  let task: Task | null = null; // the minigame panel (task.js), handed over by app.js once the HUD exists
+  function letGo(): void {
     if (me.task) {
       me.task = null;
       task?.close();
@@ -115,27 +127,27 @@ export function createPlayer(camera, canvas) {
   torch.shadow.bias = -0.002;
   camera.add(torch, torch.target);
 
-  const playing = () => game.S?.phase === 'play';
-  function toggleTorch() {
+  const playing = (): boolean => game.S?.phase === 'play';
+  function toggleTorch(): void {
     if (playing() && !me.flat && me.hid < 0) {
       me.on = !me.on;
       unlockAudio();
     }
   }
   // The phone runs on the torch's battery, so a dead battery will not raise it.
-  const charged = () => (game.S.players.find(p => p.id === game.myId)?.bat ?? 1) > 0;
-  function togglePhone() {
+  const charged = (): boolean => (game.S.players.find(p => p.id === game.myId)?.bat ?? 1) > 0;
+  function togglePhone(): void {
     if (playing() && !me.flat && !me.paused && (me.ph || charged())) me.ph = !me.ph;
   }
   // The minimap between what is round the guard and the whole building. Only with the phone up.
-  function toggleZoom() {
+  function toggleZoom(): void {
     if (me.ph) me.zoom = !me.zoom;
   }
   // The guard's Mini Biggs, thrown where they are looking: as far as the floor the view meets, or as far as one goes
   // when looking level or up. It sings on a bar of the torch's battery, so it needs that much, and it has to be picked
   // up again before the next throw. The host works out where it comes down (landing in sim.ts) and takes the
   // battery. Not from a locker, and not with both hands in a breaker box.
-  function throwToy() {
+  function throwToy(): void {
     if (!playing() || me.flat || me.paused || me.hid >= 0 || me.task) return;
     const now = performance.now(),
       mine = game.S.players.find(p => p.id === game.myId);
@@ -154,30 +166,30 @@ export function createPlayer(camera, canvas) {
   }
 
   // Turn the view by a mouse's worth of pixels.
-  function look(dx, dy) {
+  function look(dx: number, dy: number): void {
     if (me.paused) return;
     const k = SENS * prefs.sens;
     me.yaw -= dx * k;
     me.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, me.pitch - dy * k * (prefs.invert ? -1 : 1)));
   }
   // Chrome refuses to lock again for a second after Esc. Then the click-to-play state is what shows.
-  function resume() {
+  function resume(): void {
     me.paused = false;
     if (!me.touch && !mouseLocked) canvas.requestPointerLock?.()?.catch?.(() => {});
   }
-  function pause() {
+  function pause(): void {
     me.paused = true;
     keys.clear();
     if (mouseLocked) document.exitPointerLock();
   }
   // A flat guard shouts. The host rate-limits it too.
-  function call() {
+  function call(): void {
     if (!playing() || !me.flat || performance.now() - lastCall < F.CALL_GAP * 1000) return;
     lastCall = performance.now();
     send({ t: 'call' });
   }
   // A flat guard steps through the standing teammates' views, then back to their own.
-  function watchNext() {
+  function watchNext(): void {
     if (!playing() || !me.flat) return;
     const ids = game.S.players.filter(p => !p.flat && p.id !== game.myId && p.x != null).map(p => p.id);
     me.watch = ids[ids.indexOf(me.watch) + 1] ?? null;
@@ -232,7 +244,7 @@ export function createPlayer(camera, canvas) {
   });
 
   // Arrow keys: left and right turn, up and down look up and down, easing in so a tap is a small nudge.
-  function arrowLook(dt) {
+  function arrowLook(dt: number): void {
     const turn = (keys.has('ArrowLeft') ? 1 : 0) - (keys.has('ArrowRight') ? 1 : 0),
       tilt = (keys.has('ArrowUp') ? 1 : 0) - (keys.has('ArrowDown') ? 1 : 0);
     if (!turn && !tilt) {
@@ -244,13 +256,13 @@ export function createPlayer(camera, canvas) {
     look(-turn * ARROW.turn * k, -tilt * ARROW.tilt * k);
   }
 
-  function pollPad(dt) {
+  function pollPad(dt: number): void {
     const g = [...(navigator.getGamepads?.() || [])].find(g => g?.connected && g.mapping === 'standard');
     Object.assign(gp, { fwd: 0, strafe: 0, sprint: false, use: false });
     if (!g) return;
-    const axis = i => (Math.abs(g.axes[i]) > GP.dead ? g.axes[i] : 0),
-      down = i => !!g.buttons[i]?.pressed,
-      hit = i => down(i) && !gpWas[i];
+    const axis = (i: number): number => (Math.abs(g.axes[i]) > GP.dead ? g.axes[i] : 0),
+      down = (i: number): boolean => !!g.buttons[i]?.pressed,
+      hit = (i: number): boolean => down(i) && !gpWas[i];
     if (hit(GP.pause)) {
       if (me.paused || !me.locked) {
         gpLive = true;
@@ -259,12 +271,12 @@ export function createPlayer(camera, canvas) {
     } else if (!me.paused && g.buttons.some((b, i) => b.pressed && !gpWas[i])) gpLive = true; // any button takes over from the mouse
     if (gpLive && !me.paused && me.task) {
       // Hands in a box: the stick and d-pad choose, A works it, B lets go.
-      const fresh = i => hit(i),
+      const fresh = (i: number): boolean => hit(i),
         sx = axis(0),
         sy = axis(1),
         was = gp.stick || [0, 0];
       const stick = [Math.abs(sx) > 0.6 ? Math.sign(sx) : 0, Math.abs(sy) > 0.6 ? Math.sign(sy) : 0];
-      const dir = fresh(14)
+      const dir: [number, number] | null = fresh(14)
         ? [-1, 0]
         : fresh(15)
           ? [1, 0]
@@ -295,13 +307,14 @@ export function createPlayer(camera, canvas) {
 
   // The nearest thing in reach and roughly in front. { what, label, hold, ... }
   // hold: seconds to hold the use key, 0 for a tap, -1 for as long as you hold it.
-  function findTarget(S, mine) {
-    const list = [];
+  function findTarget(S: NightState, mine: Player): Target | null {
+    const list: Target[] = [];
     S.faults?.forEach((f, i) => {
       if (f) list.push({ what: 'fix', i, at: BOXES[i], label: FAULT_NAME[f.k], hold: 0 });
     });
     if (S.power > 0)
-      for (const k in PANELS) list.push({ what: 'door', k, at: PANELS[k], label: `${S.doors[k] ? 'Open' : 'Shut'} the ${DOOR_NAME[k]}`, hold: 0 });
+      for (const k in PANELS)
+        list.push({ what: 'door', k: k as DoorKey, at: PANELS[k], label: `${S.doors[k] ? 'Open' : 'Shut'} the ${DOOR_NAME[k]}`, hold: 0 });
     if (mine.bat < 1) for (const i of S.bats || []) list.push({ what: 'bat', i, at: BATTERY_SPOTS[i], label: 'Take the battery', hold: 0 });
     for (const p of S.players)
       if (p.flat && p.id !== game.myId) list.push({ what: 'peel', id: p.id, at: p, label: `Peel ${p.name} off the floor`, hold: F.PEEL_HOLD });
@@ -314,7 +327,7 @@ export function createPlayer(camera, canvas) {
     HIDES.forEach((h, i) => {
       if (!S.players.some(p => p.hid === i)) list.push({ what: 'hide', i, at: h.at, label: 'Hide in the locker', hold: F.HIDE_HOLD });
     });
-    let best = null,
+    let best: Target | null = null,
       bd = F.REACH - 0.2;
     for (const t of list) {
       const dx = t.at.x - me.x,
@@ -328,7 +341,7 @@ export function createPlayer(camera, canvas) {
     return best;
   }
 
-  function use(S, dt) {
+  function use(S: State, dt: number): void {
     const t = me.target,
       held = keys.has('KeyE') || pad.use || gp.use;
     me.act = '';
@@ -367,7 +380,7 @@ export function createPlayer(camera, canvas) {
       return;
     }
     if (t.hold < 0) {
-      me.act = t.what;
+      me.act = t.what as GuardAct;
       return;
     }
     if (usedTap) return;
@@ -379,7 +392,7 @@ export function createPlayer(camera, canvas) {
     }
   }
 
-  function walk(S, dt) {
+  function walk(S: State, dt: number): void {
     const f = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0) + pad.fwd + gp.fwd;
     const s = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + pad.strafe + gp.strafe;
     const len = Math.hypot(f, s);
@@ -408,7 +421,7 @@ export function createPlayer(camera, canvas) {
     pad,
     torch,
     letGo,
-    setTask(t) {
+    setTask(t: Task): void {
       task = t;
     },
     toggleTorch,
@@ -421,7 +434,7 @@ export function createPlayer(camera, canvas) {
     call,
     watchNext,
     // Put the guard where the host says they are: the start of a night, or after joining.
-    reset(mine) {
+    reset(mine: Player): void {
       letGo();
       Object.assign(me, {
         x: mine.x,
@@ -438,7 +451,7 @@ export function createPlayer(camera, canvas) {
         hid: -1,
       });
     },
-    update(S, dt, now) {
+    update(S: State, dt: number, now: number): void {
       const mine = S.players.find(p => p.id === game.myId);
       if (!mine || mine.x == null) return;
       // Peeled up: stand looking ahead, not at the ceiling the catch left the camera facing.
@@ -487,7 +500,7 @@ export function createPlayer(camera, canvas) {
             me.x = mine.x;
             me.z = mine.z;
           }
-          if (!me.task) me.target = findTarget(S, mine);
+          if (!me.task) me.target = findTarget(S as NightState, mine);
           use(S, dt);
           if (locker) {
             // Standing still in the dark: the torch is off and the breath comes back.
