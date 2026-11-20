@@ -392,6 +392,27 @@ function cut(lo: number, hi: number, holes: [number, number][]): [number, number
   return out;
 }
 
+// The doorways of room ri in one edge of one of its rects, each with the stretch of the edge it opens. horiz: the edge
+// runs along x. side: its fixed coordinate. lo, hi: its ends. A doorway in the edge's line but outside [lo, hi] belongs
+// to another rect and is left out.
+export function edgeDoors(
+  doorways: readonly Doorway[],
+  ri: number,
+  horiz: boolean,
+  side: number,
+  lo: number,
+  hi: number
+): { d: Doorway; span: [number, number] }[] {
+  return doorways
+    .filter(
+      d =>
+        (d.a === ri || d.b === ri) &&
+        (horiz ? d.axis === 'z' && (d.rect[1] === side || d.rect[3] === side) : d.axis === 'x' && (d.rect[0] === side || d.rect[2] === side))
+    )
+    .map(d => ({ d, span: (horiz ? [d.rect[0], d.rect[2]] : [d.rect[1], d.rect[3]]) satisfies [number, number] }))
+    .filter(({ span: [a, b] }) => b > lo && a < hi);
+}
+
 // Every stretch of wall, as seen from inside its room:
 // { x0, z0, x1, z1, nx, nz (pointing into the room), h, room, y0 }.
 // Doorways leave holes; above each hole is a lintel from the door's height to the ceiling.
@@ -409,12 +430,8 @@ export function walls(): Wall[] {
         [false, x1, z0, z1, -1],
       ];
       for (const [horiz, side, lo, hi, n] of sides) {
-        const doors = DOORWAYS.filter(
-          d =>
-            (d.a === ri || d.b === ri) &&
-            (horiz ? d.axis === 'z' && (d.rect[1] === side || d.rect[3] === side) : d.axis === 'x' && (d.rect[0] === side || d.rect[2] === side))
-        );
-        const doorSpans = doors.map((d): [number, number] => (horiz ? [d.rect[0], d.rect[2]] : [d.rect[1], d.rect[3]])).filter(([a, b]) => b > lo && a < hi);
+        const doors = edgeDoors(DOORWAYS, ri, horiz, side, lo, hi);
+        const doorSpans = doors.map(({ span }) => span);
         // Where another rect of the same room covers this edge there is no wall.
         const open = others
           .filter(([a0, b0, a1, b1]) => (horiz ? side > b0 && side < b1 : side > a0 && side < a1))
@@ -424,10 +441,9 @@ export function walls(): Wall[] {
             horiz ? { x0: a, z0: side, x1: b, z1: side, nx: 0, nz: n, y0, h, room: ri } : { x0: side, z0: a, x1: side, z1: b, nx: n, nz: 0, y0, h, room: ri }
           );
         for (const [a, b] of cut(lo, hi, [...doorSpans, ...open])) seg(a, b, 0, room.h);
-        for (const [i, d] of doors.entries()) {
-          const span = doorSpans[i],
-            dh = d.h || DOOR_H;
-          if (span && room.h > dh) seg(span[0], span[1], dh, room.h - dh);
+        for (const { d, span } of doors) {
+          const dh = d.h || DOOR_H;
+          if (room.h > dh) seg(span[0], span[1], dh, room.h - dh);
         }
       }
     });

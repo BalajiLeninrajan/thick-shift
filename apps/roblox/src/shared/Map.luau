@@ -298,7 +298,9 @@ function Map.walls(): { Wall }
 				}
 			do
 				local horiz, side, lo, hi, n = side4[1], side4[2], side4[3], side4[4], side4[5]
+				-- The doorways in this edge, and the stretch of the edge each one opens, at the same index.
 				local doors = {}
+				local doorSpans = {}
 				for _, d in DOORWAYS do
 					if d.a == ri or d.b == ri then
 						local ok
@@ -307,18 +309,11 @@ function Map.walls(): { Wall }
 						else
 							ok = d.axis == "x" and (d.rect[1] == side or d.rect[3] == side)
 						end
-						if ok then
+						local span = if horiz then { d.rect[1], d.rect[3] } else { d.rect[2], d.rect[4] }
+						if ok and span[2] > lo and span[1] < hi then
 							table.insert(doors, d)
+							table.insert(doorSpans, span)
 						end
-					end
-				end
-				-- Filtered as in map.ts, which then indexes the filtered list by door number: a door that misses this
-				-- edge shifts the lintels after it. Kept as is so the walls match the web game's.
-				local doorSpans = {}
-				for _, d in doors do
-					local span = if horiz then { d.rect[1], d.rect[3] } else { d.rect[2], d.rect[4] }
-					if span[2] > lo and span[1] < hi then
-						table.insert(doorSpans, span)
 					end
 				end
 				local open = {}
@@ -355,7 +350,7 @@ function Map.walls(): { Wall }
 				for i, d in doors do
 					local span = doorSpans[i]
 					local dh = d.h or Data.DOOR_H
-					if span and room.h > dh then
+					if room.h > dh then
 						seg(span[1], span[2], dh, room.h - dh)
 					end
 				end

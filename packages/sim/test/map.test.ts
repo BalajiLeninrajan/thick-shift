@@ -139,6 +139,27 @@ describe('slide', () => {
   });
 });
 
+describe('walls', () => {
+  it('puts one lintel over each doorway on each side, as wide as the doorway and from its height up', () => {
+    // A lintel as room, the doorway's span along the wall, and its bottom.
+    const lintels = M.walls()
+      .filter(w => w.y0 > 0)
+      .map(w => [w.room, ...(w.nz ? [w.x0, w.x1] : [w.z0, w.z1]), w.y0].join(' '));
+    const doorways = M.DOORWAYS.flatMap(d =>
+      [d.a, d.b].map(room => [room, ...(d.axis === 'z' ? [d.rect[0], d.rect[2]] : [d.rect[1], d.rect[3]]), d.h ?? M.DOOR_H].join(' '))
+    );
+    expect(lintels.sort()).toEqual(doorways.sort());
+  });
+
+  it('keeps each doorway with its own span when an earlier doorway in the same line misses the edge', () => {
+    // Room 0's edge z = 10 from x = 0 to 10. The first doorway sits in that line but past the edge's end; the second
+    // is in the edge. Pairing by index would give the first doorway the second one's span.
+    const outside: M.Doorway = { a: 0, b: 1, rect: [20, 10, 22, 10.5], axis: 'z', h: 3 };
+    const inside: M.Doorway = { a: 0, b: 2, rect: [4, 10, 6, 10.5], axis: 'z', h: 2 };
+    expect(M.edgeDoors([outside, inside], 0, true, 10, 0, 10)).toEqual([{ d: inside, span: [4, 6] }]);
+  });
+});
+
 describe('waypoints', () => {
   const { nodes, links } = M.nav();
   const node = (i: number) => defined(nodes[i], `waypoint ${i}`);
