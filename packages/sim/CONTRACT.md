@@ -1,8 +1,9 @@
 # @thick-shift/sim: the contract
 
 This is how the night simulation is called once it has moved out of `packages/game/src/three/sim3d.js` (PR 3 of
-issue #7). `src/sim.ts` already exports these signatures, with bodies that throw until the port lands, and
-`src/types.ts` has the types. `config.ts`, `map.ts`, `dressing.ts` and `data.ts` are already ported and in use.
+issue #7). It was written before the port, so it speaks of the old files as "today"; `src/sim.ts` now holds the port
+behind these signatures, `src/types.ts` has the types, and `config.ts`, `map.ts`, `dressing.ts` and `data.ts` are in
+use by the game and the tools.
 
 ## Layout
 
@@ -174,8 +175,9 @@ hook, and `patch.mjs` and the scratch copy go away:
 
 `floor.mjs` loads the recorder only when `REC_OUT` is set: before making its sim it does
 `const rec = process.env.REC_OUT ? await import('../roblox/diff/rec.mjs') : null`, makes the sim with
-`shuffle: rec ? 'fisher-yates' : 'sort'`, and calls the night through `const api = rec ? rec.wrapSim(night, sim, () => S) : night`,
-where `night` is `{ startFloorNight, stepFloor, actFloor }`. `rec.mjs` records `players` from `sim.players` at a
+`shuffle: rec ? 'fisher-yates' : 'sort'`, and calls the night through `const api = rec ? rec.wrapSim(night, sim) : night`,
+where `night` is `{ startFloorNight, stepFloor, actFloor }`. The wrapped functions keep the night's own arguments and
+record the `S` they are passed, since `floor.mjs` makes a new `S` for each night inside `play()`. `rec.mjs` records `players` from `sim.players` at a
 start, `S` after starts and steps, and `dt` for steps, in the same JSON lines as today. It still replaces
 `Math.hypot` when it loads; nothing calls `Math.hypot` before the first night, and the sim and the map look it up at
 call time, never through a saved reference. `run.sh` becomes

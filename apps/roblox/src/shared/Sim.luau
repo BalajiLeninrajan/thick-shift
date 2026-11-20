@@ -1,5 +1,5 @@
 --!nonstrict
--- The night, ported from packages/game/src/three/sim3d.js. The server owns one Sim and steps it; clients get S. Read the JS
+-- The night, ported from packages/sim/src/sim.ts. The server owns one Sim and steps it; clients get S. Read the JS
 -- file for why each number is what it is: the comments there are the tuning record, and this port keeps the same
 -- numbers and the same order of random draws so tools/roblox/diff-sim checks it tick by tick against the original.
 --
@@ -89,7 +89,7 @@ local RAMP = { 0, 1, 2, 3.15, 4.3 }
 local SNIFF = { near = 1.6, time = 3 }
 local CHECK = { near = 8, chance = 0.5, most = 2 }
 local LOCKER_NOISE = { 6, 0.5 }
--- Mini Biggs, the plush that sings on the torch's battery: see TOY in sim3d.js.
+-- Mini Biggs, the plush that sings on the torch's battery: see TOY in sim.ts.
 local TOY = {
 	cost = 0.2,
 	range = 14,
@@ -380,7 +380,7 @@ function Sim:startNight(n: number)
 	end
 	S.batN = math.min(#spots, 3 + #all)
 	S.bats = table.move(spots, 1, S.batN, 1, {})
-	-- The Mini Biggses thrown, newest last (see sim3d.js).
+	-- The Mini Biggses thrown, newest last (see sim.ts).
 	S.toys = {}
 	S.toyId = 0
 	self.batTimers = {}
