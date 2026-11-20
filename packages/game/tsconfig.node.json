@@ -9,5 +9,5 @@
     "erasableSyntaxOnly": true,
     "types": ["node"]
   },
-  "include": ["vite.js"]
+  "include": ["vite.ts"]
 }

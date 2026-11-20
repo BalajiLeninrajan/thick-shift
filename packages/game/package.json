@@ -10,7 +10,7 @@
     "./ui": "./src/ui.ts",
     "./styles.css": "./src/styles.css",
     "./worker": "./worker/room.ts",
-    "./vite": "./vite.js"
+    "./vite": "./vite.ts"
   },
   "dependencies": {
     "@thick-shift/sim": "workspace:*",
