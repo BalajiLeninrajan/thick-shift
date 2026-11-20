@@ -5,7 +5,7 @@
   "exports": {
     ".": "./src/main.js",
     "./state": "./src/state.ts",
-    "./net": "./src/net.js",
+    "./net": "./src/net.ts",
     "./audio": "./src/audio.ts",
     "./ui": "./src/ui.js",
     "./styles.css": "./src/styles.css",

@@ -6,6 +6,7 @@
 // chooses to host: everyone tries to, and whoever finds it taken joins instead (becomeGuest).
 import { game, platform } from './state';
 import { newSim, newState, stepFloor, actFloor, adoptFloor } from '@thick-shift/sim';
+import type { Action, GuestInbox, HostInbox, Player } from '@thick-shift/sim/types';
 
 const TICK_MS = 100;
 const NO_HOST = 4404,
@@ -16,34 +17,34 @@ const MAX_BACKLOG = 256 * 1024; // bytes queued before the host skips a state
 // record in S.players) and what the mascots are thinking. Made at import, so the first step measures its time from
 // when the page loaded. A guest's stays empty until a takeover makes it the host. The game's draws are not seeded.
 export const sim = newSim({ rng: Math.random, now: performance.now() });
-let ws = null,
+let ws: WebSocket | null = null,
   loop = 0;
 
-const roomUrl = (code, query) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
+const roomUrl = (code: string, query: string): string => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
 const ROOM = /^([A-Z]{4}|[a-z]-[\w-]{1,80})$/; // a typed code, or a fixed one from an app's platform (worker/room.js)
-const newCode = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[(Math.random() * 24) | 0]).join('');
-const parse = text => {
+const newCode = (): string => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[(Math.random() * 24) | 0]).join('');
+const parse = (text: string): unknown => {
   try {
     return JSON.parse(text);
   } catch {
     return null;
   }
 };
-const guard = (id, name = 'Guard') => ({ id, name });
+const guard = (id: string, name = 'Guard'): Player => ({ id, name });
 
-function broadcast() {
+function broadcast(): void {
   const guests = Object.keys(sim.players).length - 1;
   if (guests > 0 && ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < MAX_BACKLOG) ws.send(JSON.stringify({ t: 's', s: game.S }));
 }
 
 // Tell the relay when this tab goes to the background, where timers crawl, so it hands the room to a guest who
 // is looking. Plain words, not JSON, so the relay can pick them out without parsing every message.
-const showing = () => {
+const showing = (): void => {
   if (ws?.readyState === WebSocket.OPEN) ws.send(document.hidden ? 'hidden' : 'shown');
 };
 document.addEventListener('visibilitychange', showing);
 
-const run = () => {
+const run = (): void => {
   loop ||= setInterval(() => {
     stepFloor(sim, game.S, performance.now());
     broadcast();
@@ -51,14 +52,14 @@ const run = () => {
 };
 
 // The host's end of the socket: one it opened, or a guest's that the relay handed the room to.
-function hostRoom(sock, opened) {
+function hostRoom(sock: WebSocket, opened: boolean): void {
   ws = sock;
   ws.onopen = () => {
     opened = true;
     game.netNote = '';
   };
   ws.onmessage = e => {
-    const m = parse(e.data),
+    const m = parse(e.data) as HostInbox | null,
       id = m?.from,
       d = m?.d;
     if (typeof id !== 'string' || id === game.myId || !d) return;
@@ -79,12 +80,12 @@ function hostRoom(sock, opened) {
   };
 }
 
-function openRoom() {
+function openRoom(): void {
   game.netNote = 'Opening room…';
   hostRoom(new WebSocket(roomUrl(game.code, 'role=host')), false);
 }
 
-export function host(code = newCode()) {
+export function host(code = newCode()): void {
   game.isHost = true;
   game.code = code;
   game.S = newState(game.code);
@@ -95,7 +96,7 @@ export function host(code = newCode()) {
 }
 
 // Drop the night we were about to host and join the one already running under our code.
-function becomeGuest() {
+function becomeGuest(): void {
   clearInterval(loop);
   loop = 0;
   game.S = null;
@@ -105,7 +106,7 @@ function becomeGuest() {
 
 // The host left and the relay picked us. Carry on from the last state it sent, with the guards still in the
 // room: the old host is dropped, and so is anyone whose leaving it had not passed on yet.
-function takeOver(guests) {
+function takeOver(guests: string[]): void {
   game.isHost = true;
   game.joining = false;
   game.S ||= newState(game.code); // the old host left before it sent us anything
@@ -121,7 +122,7 @@ function takeOver(guests) {
 }
 
 let rehosts = 0; // fixed rooms only: times a join found nobody hosting and went back to hosting
-export function join(code) {
+export function join(code: string): void {
   if (!/^[a-z]-/.test(code)) code = code.toUpperCase().trim();
   if (!ROOM.test(code)) return;
   game.code = code;
@@ -136,7 +137,7 @@ export function join(code) {
     hello();
   };
   ws.onmessage = e => {
-    const d = parse(e.data);
+    const d = parse(e.data) as GuestInbox | null;
     if (d?.t === 's') {
       game.S = d.s;
       game.joining = false;
@@ -157,7 +158,7 @@ export function join(code) {
 }
 
 // Route an action to the simulation, locally if we are the host.
-export function send(a) {
+export function send(a: Action): void {
   if (game.isHost) actFloor(sim, game.S, game.myId, a);
   else if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(a));
 }
