@@ -23,7 +23,7 @@ import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { cpus } from 'node:os';
 
 let now = 0;
-globalThis.performance = /** @type {Performance} */ ({ now: () => now });
+globalThis.performance = /** @type {import('node:perf_hooks').Performance} */ ({ now: () => now });
 const src = new URL('../../packages/game/src/', import.meta.url);
 const { game } = await import(new URL('state.js', src).href);
 const { MASC } = await import(new URL('config.js', src).href);

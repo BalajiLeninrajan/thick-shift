@@ -1,6 +1,8 @@
 // Settings every project shares. Each package has a tsconfig.json for its browser code and, where it has them, a
 // tsconfig.worker.json for Worker code and a tsconfig.node.json for code that runs in Node. The tsconfig.json at the
-// root lists them all, and `pnpm typecheck` checks them with `tsc -b`.
+// root lists them all, and `pnpm typecheck` checks them with `tsc -b`. Each project keeps its build info under its package's node_modules/.tmp,
+// in a file named after its config. With allowJs and noEmit, tsc -b takes the JS sources for its own outputs and checks
+// every project on every run; the whole repo takes about a second with TS 7.
 {
   "compilerOptions": {
     "target": "es2024",
@@ -17,7 +19,6 @@
     "strict": false,
     "skipLibCheck": true,
     // Each project names the ambient types it wants, so Node's and the Workers' globals do not leak into browser code.
-    "types": [],
-    "tsBuildInfoFile": "${configDir}/node_modules/.tmp/${configName}.tsbuildinfo"
+    "types": []
   }
 }

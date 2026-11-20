@@ -1,8 +1,8 @@
-// The Node tools. They import the game's simulation by path, so the browser's types are here too.
+// The Node tools. They import the game's simulation by path; what they reach of it needs no browser globals.
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["es2024", "dom", "dom.iterable"],
+    "tsBuildInfoFile": "${configDir}/node_modules/.tmp/tsconfig.tsbuildinfo",
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "types": ["node"]
