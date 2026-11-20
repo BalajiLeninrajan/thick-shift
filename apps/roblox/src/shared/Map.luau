@@ -521,8 +521,8 @@ end
 Map.resetNav = resetNav
 
 -- The nearest waypoint a walker of radius r can reach in a straight line: one of the dozen nearest, or failing that
--- the nearest. ducts: false leaves out the waypoints inside the ducts.
-local function nearestNode(x: number, z: number, doors: Doors?, ducts: boolean?, r: number): number
+-- the nearest. ducts: false leaves out the waypoints inside the ducts. Nil when there is no waypoint it may use at all.
+local function nearestNode(x: number, z: number, doors: Doors?, ducts: boolean?, r: number): number?
 	local nodes = nav().nodes
 	local tried = {}
 	for _ = 1, 12 do
@@ -561,6 +561,9 @@ function Map.route(ax: number, az: number, bx: number, bz: number, opts: RouteOp
 	end
 	local from = nearestNode(ax, az, o.doors, o.ducts, r)
 	local goal = nearestNode(bx, bz, o.doors, o.ducts, r)
+	if from == nil or goal == nil then
+		return { path = {} }
+	end
 	local function search(respectDoors: boolean): { ids: { number }, via: { [number]: Link } }?
 		local n = #nodes
 		local dist, prev, via, done =

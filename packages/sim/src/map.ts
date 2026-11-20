@@ -584,8 +584,9 @@ export function resetNav(): void {
 }
 
 // The nearest waypoint that a walker of radius r can reach in a straight line: one of the dozen nearest, or failing that the nearest.
-// ducts: false leaves out the waypoints inside the ducts, for a walker that cannot go in.
-function nearestNode(x: number, z: number, doors: Doors | undefined, ducts: boolean | undefined, r: number): number {
+// ducts: false leaves out the waypoints inside the ducts, for a walker that cannot go in. Undefined when there is no
+// waypoint it may use at all.
+function nearestNode(x: number, z: number, doors: Doors | undefined, ducts: boolean | undefined, r: number): number | undefined {
   const { nodes } = nav(),
     tried: number[] = [];
   for (let k = 0; k < 12; k++) {
@@ -604,8 +605,7 @@ function nearestNode(x: number, z: number, doors: Doors | undefined, ducts: bool
     if (clear(x, z, bestNode.x, bestNode.z, r, doors)) return best;
     tried.push(best);
   }
-  // The first pass always finds a waypoint, since every room outside the ducts has one, so tried is never empty here.
-  return defined(tried[0], `a waypoint near (${x}, ${z})`);
+  return tried[0];
 }
 
 // A route from one point to another as a list of points to walk to, ending
@@ -620,6 +620,7 @@ export function route(ax: number, az: number, bx: number, bz: number, opts: Rout
   if (clear(ax, az, bx, bz, r, opts.doors)) return { path: [{ x: bx, z: bz }] };
   const from = nearestNode(ax, az, opts.doors, opts.ducts, r),
     goal = nearestNode(bx, bz, opts.doors, opts.ducts, r);
+  if (from === undefined || goal === undefined) return { path: [] };
   const point = (i: number): Point => {
     const n = defined(nodes[i], 'a waypoint on the route');
     return { x: n.x, z: n.z };
