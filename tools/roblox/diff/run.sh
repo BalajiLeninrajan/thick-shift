@@ -4,20 +4,14 @@
 #
 #   tools/roblox/diff/run.sh "solo competent n1" 3      scenario name (as floor.mjs knows it) and seed
 #
-# Needs node and lune. The JS is patched in a scratch copy (patch.mjs says how); the repo is not touched.
+# Needs node and lune. With REC_OUT set, floor.mjs records the night through rec.mjs and shuffles the battery spots
+# the way the port does; the repo is not touched.
 set -eu
 scenario=${1:-solo competent n1}
 seed=${2:-1}
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/packages/game" "$work/tools"
-cp -r "$root/packages/game/src" "$work/packages/game/src"
-# The copy imports @thick-shift/sim, which it finds through the game's own node_modules.
-ln -s "$root/packages/game/node_modules" "$work/packages/game/node_modules"
-cp -r "$root/tools/balance" "$work/tools/balance"
-cp "$root/tools/roblox/diff/rec.mjs" "$work/tools/roblox-rec.mjs"
-node "$root/tools/roblox/diff/patch.mjs" "$work"
-REC_OUT="$work/rec.jsonl" node "$work/tools/balance/floor.mjs" --trace "$scenario" --seed "$seed" > "$work/trace.txt"
+REC_OUT="$work/rec.jsonl" node "$root/tools/balance/floor.mjs" --trace "$scenario" --seed "$seed" > "$work/trace.txt"
 tail -n 2 "$work/trace.txt" | head -n 1 | cut -c1-200
 lune run "$root/apps/roblox/test/diff-sim.luau" "$work/rec.jsonl"

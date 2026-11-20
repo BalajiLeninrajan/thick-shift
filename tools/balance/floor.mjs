@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Plays the game thousands of times with scripted guards and
-// prints what happened. The numbers in packages/game/src/three/sim3d.js were tuned
+// prints what happened. The numbers in packages/sim/src/sim.ts were tuned
 // against this table.
 //
 //   node tools/balance/floor.mjs                 every scenario, 40 seeds each
@@ -21,16 +21,34 @@
 // slide() the game uses, at the game's speeds, and react late.
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { cpus } from 'node:os';
+import {
+  MASC,
+  F,
+  TOY,
+  newSim,
+  newState,
+  startFloorNight,
+  stepFloor,
+  actFloor,
+  brainOf,
+  darkRoom,
+  lightsF,
+  faultLeft,
+  landing,
+} from '../../packages/sim/src/index.ts';
+import * as M from '../../packages/sim/src/map.ts';
 
+// The sim's clock, in milliseconds: each tick moves it on by DT. It runs on from one night to the next.
 let now = 0;
-globalThis.performance = /** @type {import('node:perf_hooks').Performance} */ ({ now: () => now });
-const src = new URL('../../packages/game/src/', import.meta.url);
-const { game } = await import(new URL('state.js', src).href);
-const { MASC } = await import(new URL('config.js', src).href);
-// biome-ignore format: tools/roblox/diff/patch.mjs swaps this line by exact text.
-const sim = await import(new URL('three/sim3d.js', src).href);
-const M = await import(new URL('three/map.js', src).href);
-const { F } = sim;
+// Every random draw of a night, the guards' and the sim's, comes from this one stream, which seedRandom() seeds at
+// the start of each night. The sim reads it through a closure, so it draws from whatever stream is current.
+let random = Math.random;
+// Records the night for tools/roblox/diff when REC_OUT is set, and shuffles the battery spots the Roblox port's way.
+const rec = process.env.REC_OUT ? await import('../roblox/diff/rec.mjs') : null;
+// One sim per thread, made once: like the module state it replaces, it carries the last step's time between nights.
+const sim = newSim({ rng: () => random(), now: 0, shuffle: rec ? 'fisher-yates' : 'sort' });
+const night = { startFloorNight, stepFloor, actFloor };
+const api = rec ? rec.wrapSim(night, sim) : night;
 
 const DT = 0.1;
 const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 }; // the same as player.js, which cannot be imported without three.js
@@ -42,7 +60,7 @@ const angDiff = (a, b) => {
   if (d < -Math.PI) d += Math.PI * 2;
   return d;
 };
-const pick = list => list[(Math.random() * list.length) | 0];
+const pick = list => list[(random() * list.length) | 0];
 const MOVING = ['roam', 'search', 'hunt', 'charge'],
   COMING = ['hunt', 'windup', 'charge'];
 const BOOTH_MID = { x: 21, z: 40.5 };
@@ -57,8 +75,12 @@ const front = t => (t.face == null ? t : { x: t.x + Math.sin(t.face) * 0.9, z: t
 
 function seedRandom(seed) {
   let a = (seed * 2654435761) >>> 0;
-  // biome-ignore format: tools/roblox/diff/patch.mjs matches the end of this line by exact text.
-  Math.random = () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  random = () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 /* ---------- what a guard can know ---------- */
@@ -67,7 +89,7 @@ function seedRandom(seed) {
 function sense(S, bot, m) {
   const d = dist(bot, m),
     off = Math.abs(angDiff(ang(bot, m), bot.yaw));
-  const range = !sim.darkRoom(S, M.roomAt(m.x, m.z)) ? 18 : bot.on && off < 0.5 ? 13 : 4;
+  const range = !darkRoom(S, M.roomAt(m.x, m.z)) ? 18 : bot.on && off < 0.5 ? 13 : 4;
   if (d < range && off < bot.skill.fov && M.sees(bot.x, bot.z, m.x, m.z, S.doors)) return 'see';
   if (MOVING.includes(m.st) && d < (COMING.includes(m.st) ? 9 : 6)) return 'hear';
   return null;
@@ -79,7 +101,7 @@ const perceivable = (S, p, m) => {
 };
 
 function perceive(S, bot) {
-  const map = bot.skill.map && sim.lightsF(S) && inBooth(bot);
+  const map = bot.skill.map && lightsF(S) && inBooth(bot);
   for (const m of S.m) {
     const how = sense(S, bot, m) || (map && m.st !== 'rest' ? 'map' : null);
     if (!how) continue;
@@ -304,7 +326,7 @@ function act(S, bot, dt) {
         bot.hold += dt;
         if (u.what === 'fix') bot.act = 'fix'; // hands in the box: the torch hangs and holds nothing
         if (bot.hold >= u.hold + 0.05) {
-          sim.actFloor(bot.id, { t: 'use', what: u.what, i: u.i, k: u.k, id: u.id });
+          api.actFloor(sim, S, bot.id, { t: 'use', what: u.what, i: u.i, k: u.k, id: u.id });
           bot.hold = 0;
           bot.holding = null;
           if (u.what === 'door' && !!S.doors[u.k] !== u.shut) bot.state['stuck' + u.k] = S.t + 2;
@@ -324,13 +346,13 @@ function act(S, bot, dt) {
   } else if (goal && dist(bot, goal) > 0.15) {
     const shut = walk(S, bot, goal, dt, w.sprint, face, w.ducts);
     // A shut booth door in the way: go and press its button, from whichever side we are on.
-    if (shut && sim.lightsF(S) && !(w.keep || '').includes(shut)) {
+    if (shut && lightsF(S) && !(w.keep || '').includes(shut)) {
       const panel = M.PANELS[shut],
         at = inBooth(bot) ? front(panel) : OUTSIDE[shut];
       if (dist(bot, panel) < F.REACH - 0.3) {
         if (S.t - (bot.pressed || -9) > 0.6) {
           bot.pressed = S.t;
-          sim.actFloor(bot.id, { t: 'use', what: 'door', k: shut });
+          api.actFloor(sim, S, bot.id, { t: 'use', what: 'door', k: shut });
         }
       } else walk(S, bot, at, dt, w.sprint, face, w.ducts);
     }
@@ -344,12 +366,12 @@ function act(S, bot, dt) {
   }
   bot.on = !!w.on && bot.bat > 0;
   bot.still = dist(bot, before) < 0.01 && goal && dist(bot, goal) > 3 ? bot.still + dt : 0;
-  sim.actFloor(bot.id, { t: 'p', x: bot.x, z: bot.z, yaw: bot.yaw, pitch: 0, on: bot.on, sp: bot.sp, act: bot.act });
+  api.actFloor(sim, S, bot.id, { t: 'p', x: bot.x, z: bot.z, yaw: bot.yaw, pitch: 0, on: bot.on, sp: bot.sp, act: bot.act });
 }
 
 // Press a booth door's button if it is not already the way we want it.
 function setDoor(S, bot, k, shut) {
-  if (!!S.doors[k] === shut || !sim.lightsF(S)) return false;
+  if (!!S.doors[k] === shut || !lightsF(S)) return false;
   const panel = M.PANELS[k];
   const stand = inBooth(bot) ? front(panel) : OUTSIDE[k];
   bot.want.use = { what: 'door', k, at: stand, face: ang(stand, panel), stand, hold: 0.2, key: 'door' + k, reach: 0.6, shut };
@@ -605,7 +627,7 @@ function defend(S, bot, objective) {
   if (sight && d < 16) w.face = ang(bot, h);
   const eta = (d - F.CATCH) / (beam ? speed(h) : unlit);
   const booth = inBooth(bot),
-    canHole = sk.doors && sim.lightsF(S);
+    canHole = sk.doors && lightsF(S);
   // In the booth with it outside: the doors are the answer. With it inside: out by another door.
   if (booth && canHole && !hs.some(inBooth)) {
     st.holed = S.t + 3;
@@ -616,7 +638,7 @@ function defend(S, bot, objective) {
   // Biggs), with a free locker close by and the lights on: in, if this guard hides at all.
   if (known(S, bot, 4).some(k => k.st !== 'rest' && M.sees(k.x, k.z, bot.x, bot.z, S.doors))) st.seenAt = S.t;
   const lostThem = S.t - (st.seenAt ?? -99) > (hs.some(k => k.i === 0) ? 8.5 : 2);
-  const locker = bot.policy.hides && sim.lightsF(S) && !(st.hideCool > S.t) && lostThem && freeLocker(S, bot, 5);
+  const locker = bot.policy.hides && lightsF(S) && !(st.hideCool > S.t) && lostThem && freeLocker(S, bot, 5);
   if (locker) {
     w.use = locker;
     w.goal = null;
@@ -669,8 +691,8 @@ function objectiveOf(S, bot, team) {
     const i = mine[0],
       f = S.faults[i];
     return { use: { what: 'fix', i, at: M.BOXES[i], hold: F.FIX[f.k], key: 'fix' + i + '@' + f.at }, fault: f };
-  } else if (!sk.plans && !(st.drift > S.t) && Math.random() < 0.02) {
-    st.drift = S.t + 6 + Math.random() * 10;
+  } else if (!sk.plans && !(st.drift > S.t) && random() < 0.02) {
+    st.drift = S.t + 6 + random() * 10;
     st.driftTo = pick(M.nav().nodes.filter(n => n.room !== M.DUCTS));
   }
   // 3. Light.
@@ -692,16 +714,16 @@ function objectiveOf(S, bot, team) {
   st.cranking = false;
   // 4b. Hands empty: the nearest Mini Biggs on the floor, once it has had a few seconds to send what it drew on its way
   // and nothing known is moving near it. On the way to anything else, the plan keeps clear of the mascots as usual.
-  if (sk.toy && !game.players[bot.id].toy) {
+  if (sk.toy && !sim.players[bot.id].toy) {
     const t = S.toys
       .filter(t => S.t > t.land + 6 && !known(S, bot, 4).some(h => MOVING.includes(h.st) && dist(h, t) < 8))
       .sort((a, b) => dist(bot, a) - dist(bot, b))[0];
     if (t) return { use: { what: 'toy', id: t.id, at: t, stand: t, hold: 0.2, key: 'toy' + t.id } };
   }
   // 5. Nothing to do: the booth, and the charger if the torch wants it. A careless guard wanders.
-  if (!sk.plans && pol.stays !== true && !(bot.bat < 0.05 && sim.lightsF(S)) && !st.topUp) return st.drift > S.t ? { goal: st.driftTo } : {};
+  if (!sk.plans && pol.stays !== true && !(bot.bat < 0.05 && lightsF(S)) && !st.topUp) return st.drift > S.t ? { goal: st.driftTo } : {};
   st.topUp = !sk.plans && bot.bat < 0.6; // a careless guard charges only once the torch has died, and not for long
-  if (bot.bat < 0.95 && sim.lightsF(S)) return { use: { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' }, home: true };
+  if (bot.bat < 0.95 && lightsF(S)) return { use: { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' }, home: true };
   return { goal: BOOTH_MID, home: true };
 }
 
@@ -715,14 +737,14 @@ const honest = (skill, opts = {}) => ({
       booth = inBooth(bot);
     if (stayHidden(S, bot)) return;
     const obj = objectiveOf(S, bot, team);
-    const dark = !sim.lightsF(S);
+    const dark = !lightsF(S);
     w.on = sk.torch === 'always' ? !booth || dark : (!booth && bot.bat > sk.reserve) || (dark && bot.bat > sk.reserve / 2);
     if (defend(S, bot, obj)) return;
     // In the booth: the doors come before anything else, and nobody walks out past something waiting at one.
     if (sk.doors && booth && !dark) {
       const leaving = !obj.home;
       if (mindDoors(S, bot, team, leaving)) return;
-      if (st.holed > S.t || (leaving && w.keep.length === 3) || (leaving && w.keep && !obj.urgent && !(obj.fault && sim.faultLeft(S, obj.fault) < 15))) {
+      if (st.holed > S.t || (leaving && w.keep.length === 3) || (leaving && w.keep && !obj.urgent && !(obj.fault && faultLeft(S, obj.fault) < 15))) {
         w.goal = BOOTH_MID;
         if (bot.bat < 0.95) w.use = { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' };
         return;
@@ -732,7 +754,7 @@ const honest = (skill, opts = {}) => ({
     w.use = obj.use;
     // Something known is on every way there: wait for it to move on, unless the fault is about to burn.
     const to = obj.use ? obj.use.stand || front(obj.use.at) : obj.goal;
-    const deadline = obj.fault ? sim.faultLeft(S, obj.fault) : 1e9;
+    const deadline = obj.fault ? faultLeft(S, obj.fault) : 1e9;
     if (sk.plans && to && dist(bot, to) > 2 && wayTo(S, bot, to).risk && !obj.urgent && deadline > (dist(bot, to) / F.WALK) * 1.4 + 8) {
       lure(S, bot, to); // and wait all the same while it goes
       const nearest = known(S, bot, 4)
@@ -751,7 +773,7 @@ const honest = (skill, opts = {}) => ({
       return;
     }
     // Running late for a fault or a friend.
-    if (obj.use && (obj.urgent || obj.fault) && dist(bot, obj.use.at) / F.WALK > (obj.urgent ? 3 : sim.faultLeft(S, obj.fault) - 6)) w.sprint = true;
+    if (obj.use && (obj.urgent || obj.fault) && dist(bot, obj.use.at) / F.WALK > (obj.urgent ? 3 : faultLeft(S, obj.fault) - 6)) w.sprint = true;
   },
 });
 
@@ -759,9 +781,9 @@ const honest = (skill, opts = {}) => ({
 // hear it sing, and where walking to it takes it away from the guard and from where the guard is going (to). Sixteen
 // ways round are tried. Only with skill.spare of the battery left after it. Returns true if one was thrown.
 function lure(S, bot, to) {
-  const me = game.players[bot.id],
+  const me = sim.players[bot.id],
     st = bot.state;
-  if (!bot.skill.toy || !me.toy || me.bat - sim.TOY.cost < bot.skill.spare || S.t < (st.lureAt || 0)) return false;
+  if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < bot.skill.spare || S.t < (st.lureAt || 0)) return false;
   const h = known(S, bot, 1.5)
     .filter(k => k.how !== 'map' && (k.st === 'roam' || k.st === 'search') && dist(bot, k) < 14)
     .sort((a, b) => dist(bot, a) - dist(bot, b))[0];
@@ -769,15 +791,15 @@ function lure(S, bot, to) {
   let best = null;
   for (let k = 0; k < 16; k++) {
     const yaw = (k * Math.PI) / 8,
-      at = sim.landing(S, me.x, me.z, yaw, sim.TOY.range); // from where the host has them
-    if ([M.DUCTS, M.BOOTH].includes(M.roomAt(at.x, at.z)) || dist(at, h) > sim.TOY.hear - 2 || dist(at, bot) < 6 || dist(at, to) < 6 || segDist(h, at, bot) < 4)
+      at = landing(S, me.x, me.z, yaw, TOY.range); // from where the host has them
+    if ([M.DUCTS, M.BOOTH].includes(M.roomAt(at.x, at.z)) || dist(at, h) > TOY.hear - 2 || dist(at, bot) < 6 || dist(at, to) < 6 || segDist(h, at, bot) < 4)
       continue;
     const score = dist(at, bot) + dist(at, to) - dist(at, h);
     if (!best || score > best.score) best = { yaw, d: dist(me, at) + 0.05, score }; // a hair over, so the host's own steps reach the same spot
   }
   if (!best) return false;
   st.lureAt = S.t + 6; // and give that one time to work before throwing another
-  sim.actFloor(bot.id, { t: 'throw', yaw: best.yaw, d: best.d });
+  api.actFloor(sim, S, bot.id, { t: 'throw', yaw: best.yaw, d: best.d });
   return true;
 }
 
@@ -792,7 +814,7 @@ function freeLocker(S, bot, within) {
 // In a locker: stay while anything known is moving nearby, then out after a few seconds of quiet (or 25 s at most,
 // since the faults do not wait). Returns true while in one.
 function stayHidden(S, bot) {
-  const me = game.players[bot.id],
+  const me = sim.players[bot.id],
     st = bot.state,
     w = bot.want;
   if (!(me.hid >= 0)) {
@@ -818,7 +840,7 @@ const DEGENERATE = {
     skill: SKILL.competent,
     think(S, bot) {
       const w = bot.want;
-      w.on = !sim.lightsF(S);
+      w.on = !lightsF(S);
       if (toys) lure(S, bot, BOOTH_MID);
       for (const k of ['L', 'V', 'R']) if ((bot.i + 'LVR'.indexOf(k)) % 3 === 0 || S.t > 4) if (setDoor(S, bot, k, true)) return;
       const h = known(S, bot).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
@@ -894,7 +916,7 @@ const DEGENERATE = {
   locker: () => ({
     skill: SKILL.competent,
     think(S, bot) {
-      if (game.players[bot.id].hid >= 0) return;
+      if (sim.players[bot.id].hid >= 0) return;
       const spawn = M.spawnPoint(0),
         order = M.HIDES.map((_, i) => i).sort((a, b) => dist(spawn, M.HIDES[a].at) - dist(spawn, M.HIDES[b].at));
       const i = order[bot.i % order.length],
@@ -1003,18 +1025,17 @@ function checkBuilding(name) {
 
 function play(sc, seed, trace) {
   seedRandom(seed);
-  game.S = sim.newState('TEST');
-  game.players = {};
+  const S = newState('TEST');
+  sim.players = {};
   const team = { bots: [], fault: new Map() };
   for (let i = 0; i < sc.n; i++) {
     const id = 'g' + i;
-    game.players[id] = { id, name: 'G' + i };
+    sim.players[id] = { id, name: 'G' + i };
     team.bots.push(makeBot(id, i, sc.guard(i, sc.n)));
   }
-  sim.startFloorNight(sc.night);
-  const S = game.S;
+  api.startFloorNight(sim, S, sc.night);
   if (sc.dev) S.dev = sc.dev;
-  for (const b of team.bots) Object.assign(b, { x: game.players[b.id].x, z: game.players[b.id].z, bat: 1, flat: false });
+  for (const b of team.bots) Object.assign(b, { x: sim.players[b.id].x, z: sim.players[b.id].z, bat: 1, flat: false });
   const out = {
     win: false,
     t: 0,
@@ -1063,7 +1084,7 @@ function play(sc, seed, trace) {
       assignFaults(S, team);
     }
     for (const bot of team.bots) {
-      const me = game.players[bot.id];
+      const me = sim.players[bot.id];
       bot.bat = me.bat;
       if (me.flat) {
         if (!bot.flat) {
@@ -1073,7 +1094,7 @@ function play(sc, seed, trace) {
         }
         if (S.t - (bot.called || -9) > F.CALL_GAP) {
           bot.called = S.t;
-          sim.actFloor(bot.id, { t: 'call' });
+          api.actFloor(sim, S, bot.id, { t: 'call' });
         }
         continue;
       }
@@ -1091,7 +1112,7 @@ function play(sc, seed, trace) {
         bot.still = 0;
       }
     }
-    sim.stepFloor();
+    api.stepFloor(sim, S, now);
     if (trace === 2 && tickNo % 10 === 0)
       console.log(
         `${S.t.toFixed(0).padStart(6)}  ` +
@@ -1105,7 +1126,7 @@ function play(sc, seed, trace) {
           S.m
             .map(
               (m, i) =>
-                `${m.st}${m.lit ? '*' : ''}(${m.x.toFixed(0)},${m.z.toFixed(0)})${argv.includes('--brains') ? JSON.stringify({ ...sim.brainOf(i), path: sim.brainOf(i).path.length }) : ''}`
+                `${m.st}${m.lit ? '*' : ''}(${m.x.toFixed(0)},${m.z.toFixed(0)})${argv.includes('--brains') ? JSON.stringify({ ...brainOf(sim, i), path: brainOf(sim, i).path.length }) : ''}`
             )
             .join(' ') +
           (S.stir ? '  STIR' : '')
@@ -1125,7 +1146,7 @@ function play(sc, seed, trace) {
         bot.dryAt = S.t;
       }
       bot.wasDry = p.bat <= 0;
-      if (S.m.some((m, i) => COMING.includes(m.st) && sim.brainOf(i).tgt === p.id)) {
+      if (S.m.some((m, i) => COMING.includes(m.st) && brainOf(sim, i).tgt === p.id)) {
         out.hunted += DT;
         anyHunted = true;
       }
@@ -1170,7 +1191,7 @@ function play(sc, seed, trace) {
         else if (e.type === 'bang') out.bangs++;
         else if (e.type === 'toy') {
           out.toys++;
-          out.lured += S.m.filter((m, i) => m.st === 'search' && sim.brainOf(i).last?.x === e.x.x && sim.brainOf(i).last?.z === e.x.z).length;
+          out.lured += S.m.filter((m, i) => m.st === 'search' && brainOf(sim, i).last?.x === e.x.x && brainOf(sim, i).last?.z === e.x.z).length;
         } else if (e.type === 'out') out.outs++;
       }
 

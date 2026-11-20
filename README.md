@@ -67,7 +67,7 @@ apps/
     terms.html, privacy.html  two more pages in the build, served at /terms and /privacy
   roblox/               the Luau port, built with Rojo (apps/roblox/README.md)
 tools/
-  balance/floor.mjs     scripted guards played through three/sim3d.js
+  balance/floor.mjs     scripted guards played through packages/sim
   check-floor.mjs       checks nothing in the building is blocked or cut off
   models/               the Blender scripts that build packages/game/public/models
   roblox/               generates the port's data from the game, and checks its sim against the game's
@@ -160,7 +160,7 @@ The booth has three doors, and each button works from both sides of the wall, so
 
 ## Balance
 
-`node tools/balance/floor.mjs` plays every scenario 40 times through the real `sim3d.js` and `map.js` and prints a table (`--seeds`, `--only`, `--deaths` and `--trace` are explained at the top of the file). The guards walk with `route()` and `slide()` at the game's speeds, react a quarter to most of a second late, and only know what a person could: what is lit and in front of them, what is close enough to hear, the HUD, the wall map from the booth and a flat teammate's call. Careless, competent and expert guards play alone and in crews of 2, 3, 4 and 6. Then come the strategies that must lose: the booth sealed, one cranking while the rest hide, torches from a corner, ignoring the faults, one runner for three who stay in, camping the charger, kiting a loop, standing in the ducts or the vent doorway, and sitting in lockers all night. The `hides` scenarios are competent guards who also step into a free locker within five metres when something is after them and nothing they know of can see them, and come out after four quiet seconds. They show what the lockers are worth, and nothing asserts on them. It exits non-zero on a softlock (a mascot standing still for 30 seconds, a guard who cannot move, a night that does not end), a guard flattened in the first 30 seconds of night 1, or a bad strategy winning more than one night in ten and more than half as often as playing properly.
+`node tools/balance/floor.mjs` plays every scenario 40 times through the real sim and map in `packages/sim` and prints a table (`--seeds`, `--only`, `--deaths` and `--trace` are explained at the top of the file). The guards walk with `route()` and `slide()` at the game's speeds, react a quarter to most of a second late, and only know what a person could: what is lit and in front of them, what is close enough to hear, the HUD, the wall map from the booth and a flat teammate's call. Careless, competent and expert guards play alone and in crews of 2, 3, 4 and 6. Then come the strategies that must lose: the booth sealed, one cranking while the rest hide, torches from a corner, ignoring the faults, one runner for three who stay in, camping the charger, kiting a loop, standing in the ducts or the vent doorway, and sitting in lockers all night. The `hides` scenarios are competent guards who also step into a free locker within five metres when something is after them and nothing they know of can see them, and come out after four quiet seconds. They show what the lockers are worth, and nothing asserts on them. It exits non-zero on a softlock (a mascot standing still for 30 seconds, a guard who cannot move, a night that does not end), a guard flattened in the first 30 seconds of night 1, or a bad strategy winning more than one night in ten and more than half as often as playing properly.
 
 Where the rules stand, over 40 nights a row:
 

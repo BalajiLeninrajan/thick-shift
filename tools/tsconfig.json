@@ -1,4 +1,5 @@
-// The Node tools. They import the game's simulation by path; what they reach of it needs no browser globals.
+// The Node tools. They import packages/sim's TypeScript by relative path (Node strips the types), so tsc checks the
+// parts of the sim they reach as part of this project. None of it needs browser globals.
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {

@@ -1,17 +1,31 @@
-// Loaded by the patched floor.mjs (see patch.mjs). Writes one JSON line per sim call to $REC_OUT: the call, the
-// random draws the sim made during it, and after starts and steps the whole state S.
+// Loaded by tools/balance/floor.mjs when REC_OUT is set (run.sh sets it). Writes one JSON line per sim call to
+// $REC_OUT: the call, the random draws the sim made during it, and after starts and steps the whole state S.
 import { writeFileSync, appendFileSync } from 'node:fs';
 
-// Luau has no hypot; both sides use the plain formula so their arithmetic matches.
+// Luau has no hypot; both sides use the plain formula so their arithmetic matches. Nothing calls Math.hypot before
+// the first night, and the sim and the map look it up when they call it, so replacing it here reaches them.
 Math.hypot = (a, b) => Math.sqrt(a * a + b * b);
 
 const out = process.env.REC_OUT;
 writeFileSync(out, '');
-const REC = (globalThis.__REC = { on: false, rands: [], dt: 0 });
+const REC = { on: false, rands: [] };
 const snap = S => JSON.parse(JSON.stringify(S, (k, v) => (v === null ? false : v)));
 
-export function wrapSim(sim, game) {
-  const run = (f, entry, withState) => {
+/**
+ * The night's entry points, recording each call. Draws are recorded only inside a sim call, so the harness's own
+ * draws, which share the stream, are left out.
+ * @param {{ startFloorNight: typeof import('../../../packages/sim/src/sim.ts').startFloorNight, stepFloor: typeof import('../../../packages/sim/src/sim.ts').stepFloor, actFloor: typeof import('../../../packages/sim/src/sim.ts').actFloor }} night
+ * @param {import('../../../packages/sim/src/sim.ts').Sim} sim
+ */
+export function wrapSim(night, sim) {
+  const inner = sim.rng;
+  sim.rng = () => {
+    const v = inner();
+    if (REC.on) REC.rands.push(v);
+    return v;
+  };
+  // extra: fields that follow the draws, as the lines have always been laid out. S: the state to record after.
+  const run = (f, entry, extra, S) => {
     REC.rands = [];
     REC.on = true;
     try {
@@ -20,24 +34,24 @@ export function wrapSim(sim, game) {
       REC.on = false;
     }
     entry.rands = REC.rands;
-    if (entry.op === 'step') entry.dt = REC.dt;
-    if (withState) entry.S = snap(game.S);
+    Object.assign(entry, extra);
+    if (S) entry.S = snap(S);
     // Numbers go out as "#<shortest form>": Lune's JSON reader misreads about one double in ten by a bit, and
     // Luau's tonumber reads this form back exactly.
     appendFileSync(out, JSON.stringify(entry, (k, v) => (typeof v === 'number' ? '#' + String(v) : v)) + '\n');
   };
   return {
-    ...sim,
-    startFloorNight(n) {
-      const players = Object.values(game.players).map(p => ({ id: p.id, name: p.name }));
-      run(() => sim.startFloorNight(n), { op: 'start', n, players }, true);
+    startFloorNight(sim, S, n) {
+      const players = Object.values(sim.players).map(p => ({ id: p.id, name: p.name }));
+      run(() => night.startFloorNight(sim, S, n), { op: 'start', n, players }, {}, S);
     },
-    stepFloor() {
-      const e = { op: 'step' };
-      run(() => sim.stepFloor(), e, true);
+    stepFloor(sim, S, now) {
+      // The step's real elapsed time, before the sim caps it, so the replay steps by the same amount.
+      const dt = (now - sim.lastStep) / 1000;
+      run(() => night.stepFloor(sim, S, now), { op: 'step' }, { dt }, S);
     },
-    actFloor(id, a) {
-      run(() => sim.actFloor(id, a), { op: 'act', id, a: JSON.parse(JSON.stringify(a)) }, false);
+    actFloor(sim, S, id, a) {
+      run(() => night.actFloor(sim, S, id, a), { op: 'act', id, a: JSON.parse(JSON.stringify(a)) }, {}, null);
     },
   };
 }
