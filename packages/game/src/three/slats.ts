@@ -4,6 +4,8 @@
 // locker stay in front of its doors. A page element over the canvas could
 // not do that: it covers the hands as well.
 import * as THREE from 'three';
+import type { State } from '@thick-shift/sim/types';
+import type { Me } from '../types';
 
 // Render orders. Everything else is 0. The slats are drawn without a depth test, so whatever comes after them is on top.
 const SLATS_ORDER = 1;
@@ -21,7 +23,7 @@ void main() {
   gl_FragColor = vec4( vec3( 0. ), ( edge + slat * ( 1. - edge ) ) * uShow );
 }`;
 
-export function createSlats(scene) {
+export function createSlats(scene: THREE.Scene) {
   // One triangle that covers the screen, as in post.js.
   const tri = new THREE.BufferGeometry();
   tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
@@ -38,7 +40,7 @@ export function createSlats(scene) {
     blending: THREE.CustomBlending,
     blendSrc: THREE.SrcAlphaFactor,
     blendDst: THREE.OneMinusSrcAlphaFactor,
-  });
+  }) as THREE.ShaderMaterial & { uniforms: { uShow: THREE.IUniform<number> } };
   const slats = new THREE.Mesh(tri, mat);
   slats.name = 'locker slats';
   slats.frustumCulled = false;
@@ -48,7 +50,7 @@ export function createSlats(scene) {
   let show = 0;
   return {
     // me: player.js's guard (hid, flat). busy: the catch has the camera.
-    update(S, me, dt, busy) {
+    update(S: State, me: Pick<Me, 'hid' | 'flat'>, dt: number, busy: boolean): void {
       const on = S.phase === 'play' && me.hid >= 0 && !me.flat && !busy;
       show += ((on ? 1 : 0) - show) * Math.min(1, dt * FADE);
       slats.visible = show > 0.01;
