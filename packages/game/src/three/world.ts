@@ -7,6 +7,8 @@
 //   props.js              furniture from the prop kits, stood where the sim's dressing.ts says
 //   usable.js             breaker boxes, door buttons, generator, charger, batteries, doors, wall map
 //   sight.js              which rooms can be seen from which, so the rest are not drawn
+import type { BufferGeometry, Camera, Material, Mesh, Scene } from 'three';
+import type { State } from '@thick-shift/sim/types';
 import { surfaces } from './world/surfaces';
 import { art } from './world/art';
 import { Batch } from './world/geo';
@@ -16,7 +18,7 @@ import { createProps } from './world/props';
 import { createUsables } from './world/usable';
 import { roomsSeenFrom } from './world/sight';
 
-export function buildWorld(scene) {
+export function buildWorld(scene: Scene) {
   const mats = surfaces(),
     pics = art(),
     trim = new Batch();
@@ -29,7 +31,7 @@ export function buildWorld(scene) {
     usables = createUsables(scene);
   props.ready.then(has => light.glows(has));
   scene.traverse(o => {
-    if (o.isMesh) lit(o.material);
+    if ((o as Mesh).isMesh) lit((o as Mesh<BufferGeometry, Material>).material);
   });
 
   return {
@@ -37,7 +39,7 @@ export function buildWorld(scene) {
     parts: usables.parts, // what outline.js can put a gold edge round
     stop: 1, // how far to stop the picture down against torch glare this frame (light.js)
     // torch: how bright the local guard's torch is, 0 to 1. dread, threat: 0 to 1.
-    update(S, t, dt, camera, torch, dread, threat) {
+    update(S: State, t: number, dt: number, camera: Camera, torch: number, dread: number, threat: number): void {
       const inView = roomsSeenFrom(camera.position.x, camera.position.z);
       light.update(S, t, dt, camera, torch, dread, threat);
       this.stop = light.stop;
