@@ -233,10 +233,9 @@ Both already import the sim's `config.ts`, `map.ts`, `dressing.ts` and `data.ts`
 ### Tools
 
 - `tools/balance/floor.mjs`: as in (e). Its header comment points at `packages/sim/src/sim.ts` for the numbers.
-- `tools/roblox/diff/rec.mjs`: `wrapSim(night, sim, getS)` as in (e), wrapping `sim.rng` and computing `dt`.
+- `tools/roblox/diff/rec.mjs`: `wrapSim(night, sim)` as in (e), wrapping `sim.rng` and computing `dt`.
 - `tools/roblox/diff/patch.mjs`: deleted.
-- `tools/roblox/diff/run.sh`: no scratch copy, as in (e). (It symlinks the game's node_modules into the copy for
-  now, so the copied shims can find `@thick-shift/sim`; that goes with the copy.)
+- `tools/roblox/diff/run.sh`: no scratch copy, as in (e).
 - `tools/roblox/gen-data.mjs`, `tools/check-floor.mjs`: done.
 - `tools/tsconfig.json`: nothing, as long as the tools import the sim by relative `.ts` path
   (`allowImportingTsExtensions` is on in tsconfig.base.json).

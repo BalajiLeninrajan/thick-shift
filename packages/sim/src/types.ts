@@ -104,7 +104,8 @@ export interface Tally {
 }
 
 // The dev menu's cheats (packages/game/src/dev.js). Only the host sets them; the sim reads them.
-// rot and dread: -1 leaves them to the night.
+// rot and dread: -1 leaves them to the night. The balance harness sets only some of them (`{ freeze: true }`):
+// a missing field reads as off everywhere the sim looks at it.
 export interface Dev {
   god: boolean;
   power: boolean;
@@ -247,8 +248,9 @@ export type Action =
   // i: a box, battery spot or locker. k: a door. id: a toy (number) or a flat guard (string).
   | { t: 'use'; what: UseWhat; i?: number; k?: DoorKey; id?: string | number };
 
-// The relay's close codes (worker/room.js): nobody is hosting this code, or somebody already is.
-export type CloseCode = 4404 | 4409;
+// The relay's close codes (worker/room.js): nobody is hosting this code, somebody already is, or a guest id it
+// will not use (1008, policy violation).
+export type CloseCode = 1008 | 4404 | 4409;
 
 // Host to relay to every guest: the whole state, ten times a second.
 export interface StateMessage {

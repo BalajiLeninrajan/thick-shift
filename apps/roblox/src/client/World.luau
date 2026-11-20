@@ -100,7 +100,7 @@ local function slab(x0, y0, z0, x1, y1, z1, look, parent)
 	})
 end
 
--- A frame on one of map.js's wall things: at (at.x, y, at.z), its -Z looking out of the wall.
+-- A frame on one of map.ts's wall things: at (at.x, y, at.z), its -Z looking out of the wall.
 local function mount(at, y: number): CFrame
 	return Units.cf(at.x, y, at.z, at.face)
 end

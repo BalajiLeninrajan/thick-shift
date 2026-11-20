@@ -21,7 +21,7 @@ pnpm format              # reformat everything with Biome
 pnpm format:check        # fail if anything is not formatted
 ```
 
-The code is still JavaScript. `pnpm typecheck` checks it with `checkJs`, reading types from JSDoc. GitHub Actions runs the typecheck, the lint, the format check, both builds, `tools/check-floor.mjs`, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
+`packages/sim` is strict TypeScript. The rest of the code is still JavaScript, and `pnpm typecheck` checks it with `checkJs`, reading types from JSDoc. GitHub Actions runs the typecheck, the lint, the format check, both builds, `tools/check-floor.mjs`, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
 
 Rooms need the Worker. `vite dev` runs it, Durable Object and all, so hosting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server that serves it at the root of a domain runs the game solo. The page loads its scripts from `/assets/`, so it does not work from a sub-path.
 

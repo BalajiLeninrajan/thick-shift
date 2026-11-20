@@ -1233,7 +1233,9 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
     return;
   }
   if (a.t !== 'use' || p.flat) return;
-  // i and k are checked by what they index (a fault, a door, a spot, a locker) before they are used.
+  // i and k come off the wire unchecked. One that indexes nothing does nothing, but a numeric string such as "0"
+  // indexes like the number and is kept as a string (in p.hid and the event), as sim3d.js did. Checking them
+  // changes behaviour, so it waits for a later PR.
   const i = a.i as number,
     k = a.k as DoorKey;
   const near = (thing: Point | undefined) => thing && dist(p, thing) < F.REACH;

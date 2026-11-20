@@ -186,7 +186,7 @@ local function reaches(ax: number, az: number, bx: number, bz: number, doors: Do
 end
 Map.reaches = reaches
 
--- Can any of a body of radius r standing at b be seen from a? See map.js for the reasoning.
+-- Can any of a body of radius r standing at b be seen from a? See packages/sim/src/map.ts for the reasoning.
 local GLIMPSE = 0.25
 function Map.glimpses(ax: number, az: number, bx: number, bz: number, r: number, doors: Doors?): boolean
 	if reaches(ax, az, bx, bz, doors) then
@@ -312,7 +312,7 @@ function Map.walls(): { Wall }
 						end
 					end
 				end
-				-- Filtered as in map.js, which then indexes the filtered list by door number: a door that misses this
+				-- Filtered as in map.ts, which then indexes the filtered list by door number: a door that misses this
 				-- edge shifts the lintels after it. Kept as is so the walls match the web game's.
 				local doorSpans = {}
 				for _, d in doors do
