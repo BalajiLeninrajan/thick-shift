@@ -11,11 +11,18 @@
 // wall is in front. The full-screen pass then edges the mask and lays the
 // edge over the finished picture, so it shows in the dark.
 import * as THREE from 'three';
+import type { OutlineMark } from '../types';
 
 // width: the most pixels across the scene is drawn at. ratio: the most
 // device pixels per CSS pixel. shadow: the torch's shadow map size.
 // fringe: colour fringing, which costs two more texture reads per pixel.
-const QUALITY = {
+interface Quality {
+  width: number;
+  ratio: number;
+  shadow: number;
+  fringe: boolean;
+}
+const QUALITY: Record<string, Quality> = {
   low: { width: 854, ratio: 1, shadow: 512, fringe: false },
   high: { width: 1280, ratio: 1.5, shadow: 1024, fringe: true },
 };
@@ -92,10 +99,33 @@ void main() {
   gl_FragColor = vec4( col, 1. );
 }`;
 
+// The uniforms each material's code reads.
+type MaskMaterial = THREE.ShaderMaterial & {
+  uniforms: {
+    tDepth: THREE.IUniform<THREE.DepthTexture>;
+    uSize: THREE.IUniform<THREE.Vector2>;
+    uNear: THREE.IUniform<number>;
+    uFar: THREE.IUniform<number>;
+    uCol: THREE.IUniform<THREE.Vector4>;
+  };
+};
+type ScreenMaterial = THREE.ShaderMaterial & {
+  uniforms: {
+    tScene: THREE.IUniform<THREE.Texture>;
+    tMask: THREE.IUniform<THREE.Texture>;
+    uTime: THREE.IUniform<number>;
+    uThreat: THREE.IUniform<number>;
+    uDread: THREE.IUniform<number>;
+    uExposure: THREE.IUniform<number>;
+    uOutline: THREE.IUniform<number>;
+    uTexel: THREE.IUniform<THREE.Vector2>;
+  };
+};
+
 // torch: the local guard's SpotLight, whose shadow map follows the quality.
-export function createPost(renderer, torch) {
+export function createPost(renderer: THREE.WebGLRenderer, torch: THREE.SpotLight) {
   const asked = new URLSearchParams(location.search).get('q');
-  let name = QUALITY[asked] ? asked : 'high',
+  let name: string = QUALITY[asked] ? asked : 'high',
     frames = 0,
     spent = 0,
     last = 0;
@@ -105,8 +135,8 @@ export function createPost(renderer, torch) {
   // shared override material would flip between skinned and plain meshes, and three.js re-derives a material's
   // program every time it does.
   const maskU = { tDepth: { value: target.depthTexture }, uSize: { value: new THREE.Vector2(1, 1) }, uNear: { value: 0.1 }, uFar: { value: 100 } };
-  const maskMats = new WeakMap();
-  const maskMatOf = o => {
+  const maskMats = new WeakMap<THREE.Object3D, MaskMaterial>();
+  const maskMatOf = (o: THREE.Object3D): MaskMaterial => {
     let m = maskMats.get(o);
     if (!m)
       maskMats.set(
@@ -119,15 +149,16 @@ export function createPost(renderer, torch) {
           blending: THREE.NoBlending,
           depthTest: false,
           depthWrite: false,
-        }))
+        }) as MaskMaterial)
       );
     return m;
   };
-  const swapped = [],
+  // Each marked mesh followed by the material it had.
+  const swapped: (THREE.Object3D | THREE.Material | THREE.Material[])[] = [],
     black = new THREE.Color(0);
-  function drawMask(scene, camera, marks) {
+  function drawMask(scene: THREE.Scene, camera: THREE.PerspectiveCamera, marks: OutlineMark[]): boolean {
     for (const m of marks)
-      m.obj.traverse(o => {
+      m.obj.traverse((o: THREE.Object3D & Partial<THREE.Mesh>) => {
         if (!o.isMesh || o.layers.isEnabled(OUTLINE_LAYER)) return;
         const mm = maskMatOf(o);
         mm.uniforms.uCol.value.set(m.col[0], m.col[1], m.col[2], m.a);
@@ -144,7 +175,7 @@ export function createPost(renderer, torch) {
     // The lights go on the mask's layer too. three.js keeps one light setup per scene, and a pass that saw no lights
     // would make every lit material in the next frame's scene pass work out its program again (most of a frame's
     // JavaScript on an Iris 655).
-    scene.traverse(o => {
+    scene.traverse((o: THREE.Object3D & Partial<THREE.Light>) => {
       if (o.isLight) o.layers.enable(OUTLINE_LAYER);
     });
     // The torch's shadow and every matrix in the scene were brought up to date by the scene pass; not again.
@@ -163,8 +194,8 @@ export function createPost(renderer, torch) {
     renderer.shadowMap.autoUpdate = shadows;
     scene.matrixWorldAutoUpdate = matrices;
     for (let i = 0; i < swapped.length; i += 2) {
-      swapped[i].material = swapped[i + 1];
-      swapped[i].layers.disable(OUTLINE_LAYER);
+      (swapped[i] as THREE.Mesh).material = swapped[i + 1] as THREE.Material | THREE.Material[];
+      (swapped[i] as THREE.Mesh).layers.disable(OUTLINE_LAYER);
     }
     swapped.length = 0;
     return true;
@@ -184,7 +215,7 @@ export function createPost(renderer, torch) {
     fragmentShader: FRAG,
     depthTest: false,
     depthWrite: false,
-  });
+  }) as ScreenMaterial;
   // one triangle that covers the screen
   const tri = new THREE.BufferGeometry();
   tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
@@ -195,7 +226,7 @@ export function createPost(renderer, torch) {
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.info.autoReset = false; // so renderer.info counts the scene, not just the last pass
 
-  function apply() {
+  function apply(): void {
     const q = QUALITY[name];
     mat.defines = q.fringe ? { FRINGE: 1 } : {};
     mat.needsUpdate = true;
@@ -206,11 +237,11 @@ export function createPost(renderer, torch) {
   apply();
 
   return {
-    get quality() {
+    get quality(): string {
       return name;
     },
     // Match the drawing buffer to the canvas, within what the quality allows.
-    fit(canvas, camera) {
+    fit(canvas: HTMLCanvasElement, camera: THREE.PerspectiveCamera): void {
       const w = canvas.clientWidth,
         h = canvas.clientHeight,
         q = QUALITY[name],
@@ -230,7 +261,7 @@ export function createPost(renderer, torch) {
     },
     // threat, dread: 0 to 1. stop: exposure multiplier against torch glare. now: milliseconds, for timing frames.
     // marks: what to outline this frame (outline.js), or nothing.
-    render(scene, camera, now, threat, dread, stop, marks = []) {
+    render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, now: number, threat: number, dread: number, stop: number, marks: OutlineMark[] = []): void {
       if (!asked && name === 'high' && last) {
         if (++frames > WARMUP) spent += now - last;
         if (frames === WARMUP + SAMPLE) {
