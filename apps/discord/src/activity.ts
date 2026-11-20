@@ -35,10 +35,13 @@ async function signIn(ds: DiscordSDK, clientId: string): Promise<string> {
   try {
     const { code } = await ds.commands.authorize({ client_id: clientId, response_type: 'code', state: '', prompt: 'none', scope: ['identify'] });
     const r = await fetch('/api/discord/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
-    const { access_token } = (await r.json()) as { access_token: string };
-    const { user } = await ds.commands.authenticate({ access_token });
+    // The Worker answers { access_token } or, with an error status, { error }.
+    const d = (await r.json()) as { access_token?: unknown; error?: unknown };
+    if (!r.ok || typeof d.access_token !== 'string') throw new Error(`token exchange: ${String(d.error ?? r.status)}`);
+    const { user } = await ds.commands.authenticate({ access_token: d.access_token });
     return user.global_name || user.username || '';
-  } catch {
+  } catch (e) {
+    console.warn('Discord sign-in failed, playing as Guard:', e);
     return '';
   }
 }
