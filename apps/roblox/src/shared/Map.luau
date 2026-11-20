@@ -1,5 +1,5 @@
 --!nonstrict
--- The Depot as geometry, ported from packages/game/public/src/three/map.js: the questions the simulation and the client ask
+-- The Depot as geometry, ported from packages/sim/src/map.ts: the questions the simulation and the client ask
 -- about the building (can I stand here, can I see that, how do I walk there) and the wall and floor pieces the
 -- world is built from. Metres; x runs east and z runs south, as on the web. Loop orders match the JS so routes
 -- break ties the same way.
@@ -186,7 +186,7 @@ local function reaches(ax: number, az: number, bx: number, bz: number, doors: Do
 end
 Map.reaches = reaches
 
--- Can any of a body of radius r standing at b be seen from a? See map.js for the reasoning.
+-- Can any of a body of radius r standing at b be seen from a? See packages/sim/src/map.ts for the reasoning.
 local GLIMPSE = 0.25
 function Map.glimpses(ax: number, az: number, bx: number, bz: number, r: number, doors: Doors?): boolean
 	if reaches(ax, az, bx, bz, doors) then
@@ -298,7 +298,9 @@ function Map.walls(): { Wall }
 				}
 			do
 				local horiz, side, lo, hi, n = side4[1], side4[2], side4[3], side4[4], side4[5]
+				-- The doorways in this edge, and the stretch of the edge each one opens, at the same index.
 				local doors = {}
+				local doorSpans = {}
 				for _, d in DOORWAYS do
 					if d.a == ri or d.b == ri then
 						local ok
@@ -307,18 +309,11 @@ function Map.walls(): { Wall }
 						else
 							ok = d.axis == "x" and (d.rect[1] == side or d.rect[3] == side)
 						end
-						if ok then
+						local span = if horiz then { d.rect[1], d.rect[3] } else { d.rect[2], d.rect[4] }
+						if ok and span[2] > lo and span[1] < hi then
 							table.insert(doors, d)
+							table.insert(doorSpans, span)
 						end
-					end
-				end
-				-- Filtered as in map.js, which then indexes the filtered list by door number: a door that misses this
-				-- edge shifts the lintels after it. Kept as is so the walls match the web game's.
-				local doorSpans = {}
-				for _, d in doors do
-					local span = if horiz then { d.rect[1], d.rect[3] } else { d.rect[2], d.rect[4] }
-					if span[2] > lo and span[1] < hi then
-						table.insert(doorSpans, span)
 					end
 				end
 				local open = {}
@@ -355,7 +350,7 @@ function Map.walls(): { Wall }
 				for i, d in doors do
 					local span = doorSpans[i]
 					local dh = d.h or Data.DOOR_H
-					if span and room.h > dh then
+					if room.h > dh then
 						seg(span[1], span[2], dh, room.h - dh)
 					end
 				end
@@ -526,8 +521,8 @@ end
 Map.resetNav = resetNav
 
 -- The nearest waypoint a walker of radius r can reach in a straight line: one of the dozen nearest, or failing that
--- the nearest. ducts: false leaves out the waypoints inside the ducts.
-local function nearestNode(x: number, z: number, doors: Doors?, ducts: boolean?, r: number): number
+-- the nearest. ducts: false leaves out the waypoints inside the ducts. Nil when there is no waypoint it may use at all.
+local function nearestNode(x: number, z: number, doors: Doors?, ducts: boolean?, r: number): number?
 	local nodes = nav().nodes
 	local tried = {}
 	for _ = 1, 12 do
@@ -566,6 +561,9 @@ function Map.route(ax: number, az: number, bx: number, bz: number, opts: RouteOp
 	end
 	local from = nearestNode(ax, az, o.doors, o.ducts, r)
 	local goal = nearestNode(bx, bz, o.doors, o.ducts, r)
+	if from == nil or goal == nil then
+		return { path = {} }
+	end
 	local function search(respectDoors: boolean): { ids: { number }, via: { [number]: Link } }?
 		local n = #nodes
 		local dist, prev, via, done =

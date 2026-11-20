@@ -1,0 +1,34 @@
+// Settings every project shares. Each package has a tsconfig.json for its browser code and, where it has them, a
+// tsconfig.worker.json for Worker code and a tsconfig.node.json for code that runs in Node. The tsconfig.json at the
+// root lists them all, and `pnpm typecheck` checks them with `tsc -b`. Each project keeps its build info under its package's node_modules/.tmp,
+// in a file named after its config. With allowJs and noEmit, tsc -b takes the JS sources for its own outputs and checks
+// every project on every run; the whole repo takes about a second with TS 7.
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    // The scripts in tools/ are JS. checkJs type-checks them with what TS can infer, plus JSDoc where that falls short.
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    // packages/sim is TypeScript that Node runs by stripping the types, so its imports name the .ts files. Every
+    // project that reaches it (the game, the tools) checks those files too.
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    // A parameter that is never read is named with a leading _, which keeps a shared signature (every strategy hook
+    // takes S) without hiding a mistake. Biome's noUnusedFunctionParameters asks the same.
+    "noUnusedParameters": true,
+    // An index into an array or record may be undefined, so a read through one has to say why the value is there.
+    "noUncheckedIndexedAccess": true,
+    // An optional property that is absent differs from one set to undefined (`'k' in o`, Object.keys, spreads), so
+    // the types keep the two apart.
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    // Each project names the ambient types it wants, so Node's and the Workers' globals do not leak into browser code.
+    "types": []
+  }
+}

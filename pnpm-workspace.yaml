@@ -1,3 +1,7 @@
 packages:
   - apps/*
   - packages/*
+# esbuild and workerd fetch their native binaries in an install script.
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

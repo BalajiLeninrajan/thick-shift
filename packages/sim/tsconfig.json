@@ -1,0 +1,18 @@
+// The simulation, in TypeScript with no DOM and no three.js. Node runs the source as it is by stripping the types
+// (tools/*.mjs import it), and Vite bundles it into the game. So it uses nothing that stripping cannot erase, such as
+// enums and parameter properties, and its relative imports name the .ts file.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "${configDir}/node_modules/.tmp/tsconfig.tsbuildinfo",
+    "lib": ["es2024"],
+    "types": [],
+    "allowJs": false,
+    "checkJs": false,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["src"]
+}

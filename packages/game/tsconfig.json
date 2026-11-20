@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "${configDir}/node_modules/.tmp/tsconfig.tsbuildinfo",
+    // The sim's rules: type-only imports say `import type`, and nothing that stripping types cannot erase (enums,
+    // parameter properties, namespaces).
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "lib": ["es2024", "dom", "dom.iterable"]
+  },
+  "include": ["src"]
+}

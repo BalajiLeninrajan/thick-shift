@@ -23,7 +23,7 @@ local STAGE = Data.STAGE
 -- Fog: what FogExp2 .037 (and .03 more with dread) on the web looks like, as a linear fog's start and end.
 local FOG = { start = 4, finish = 30, dread = 12 }
 
--- Per room: floor, wall and ceiling as { material, colour }. After LOOK in three/world/surfaces.js.
+-- Per room: floor, wall and ceiling as { material, colour }. After LOOK in three/world/surfaces.ts.
 local M = Enum.Material
 local LOOK = {
 	{ { M.WoodPlanks, "#3a2a1c" }, { M.Fabric, "#4a1616" }, { M.SmoothPlastic, "#0b0b0d" } }, -- Storage Stage
@@ -100,7 +100,7 @@ local function slab(x0, y0, z0, x1, y1, z1, look, parent)
 	})
 end
 
--- A frame on one of map.js's wall things: at (at.x, y, at.z), its -Z looking out of the wall.
+-- A frame on one of map.ts's wall things: at (at.x, y, at.z), its -Z looking out of the wall.
 local function mount(at, y: number): CFrame
 	return Units.cf(at.x, y, at.z, at.face)
 end

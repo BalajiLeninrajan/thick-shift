@@ -1,0 +1,10 @@
+// The tests and their config, run by Vitest in Node. They play nights through the balance harness in tools/balance,
+// so tsc checks the parts of it they reach too, as strictly as the sim.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "${configDir}/node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["test", "vitest.config.ts"]
+}

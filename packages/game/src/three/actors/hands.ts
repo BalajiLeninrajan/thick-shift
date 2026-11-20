@@ -1,0 +1,53 @@
+// The local guard's own torch, held in view: the `flashlight` node of
+// props_a.glb, parented to the camera. It sways with the walk, comes up when
+// it is switched on, and its lens lights with the beam. If the model is
+// missing there are simply no hands.
+import type { Camera, Object3D } from 'three';
+import { MeshStandardMaterial } from 'three';
+import type { Me } from '../../types';
+import { loadPart } from '../assets';
+import { HANDS_ORDER } from '../slats';
+import { eachMesh } from './rig';
+
+const HELD = { x: 0.2, y: -0.2, z: -0.42 },
+  LOWERED = 0.1; // metres from the eye; how far it sinks when off
+
+export function createHands(camera: Camera) {
+  let torch: Object3D | null = null,
+    lens: MeshStandardMaterial | null = null,
+    up = 0,
+    away = 0,
+    drop = 0;
+  loadPart('props_a', 'flashlight').then(o => {
+    if (!o) return;
+    torch = o;
+    torch.position.set(HELD.x, HELD.y - LOWERED, HELD.z);
+    // It sits a hand's width in front of the beam's own origin; a shadow from it would black out the beam.
+    // In a locker it is held inside the doors, so it goes in front of their slats (slats.ts).
+    eachMesh(torch, m => {
+      m.castShadow = false;
+      m.renderOrder = HANDS_ORDER;
+      if (m.material instanceof MeshStandardMaterial && m.material.name === 'lamp_glow') {
+        const glass = m.material.clone();
+        m.material = glass;
+        lens = glass;
+      }
+    });
+    camera.add(torch);
+  });
+  return {
+    // me: player.ts's guard (on, ph, bob, moving, flat). busy: the catch has the camera.
+    update(me: Me, dt: number, busy: boolean): void {
+      if (!torch) return;
+      up += ((me.on ? 1 : 0) - up) * Math.min(1, dt * 10);
+      drop += ((me.ph ? 1 : 0) - drop) * Math.min(1, dt * 8); // the phone is up: the torch hangs, pointing at the floor
+      away += ((me.flat || busy ? 1 : 0) - away) * Math.min(1, dt * 8);
+      torch.visible = away < 0.98;
+      const sway = Math.sin(me.bob) * 0.012,
+        dip = Math.abs(Math.cos(me.bob)) * 0.012;
+      torch.position.set(HELD.x + sway, HELD.y - LOWERED * (1 - up) - 0.06 * drop - dip - away * 0.5, HELD.z);
+      torch.rotation.set(-0.35 * (1 - up) - 0.55 * drop + sway * 2, 0.06 - sway * 3, 0);
+      if (lens) lens.emissiveIntensity = up * 3;
+    },
+  };
+}

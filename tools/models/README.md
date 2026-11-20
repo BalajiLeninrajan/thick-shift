@@ -12,7 +12,7 @@ tools/models/bl tools/models/hippo/build.py
 
 Sizes are metres. In Blender the model stands on z = 0, centred on the origin, facing -Y. The exporter turns that into three.js axes: +Y up, facing +Z.
 
-A model is a tree of rigid mesh parts with no armature. The game animates parts by name (`packages/game/public/src/three/`), so the names, the pivots and the rest pose are the interface:
+A model is a tree of rigid mesh parts with no armature. The game animates parts by name (`packages/game/src/three/`), so the names, the pivots and the rest pose are the interface:
 
 - Every part's origin is the joint it turns about. Rotation and scale are applied (identity at rest).
 - Parts overlap at the joints by enough that a 40 degree turn opens no gap.

@@ -1,13 +1,26 @@
 {
   "name": "@thick-shift/game",
   "private": true,
+  "type": "module",
   "exports": {
-    "./worker": "./worker/room.js"
+    ".": "./src/main.ts",
+    "./state": "./src/state.ts",
+    "./dom": "./src/dom.ts",
+    "./net": "./src/net.ts",
+    "./audio": "./src/audio.ts",
+    "./ui": "./src/ui.ts",
+    "./types": "./src/types.ts",
+    "./styles.css": "./src/styles.css",
+    "./worker": "./worker/room.ts",
+    "./vite": "./vite.ts"
   },
-  "scripts": {
-    "vendor": "sh vendor-three.sh"
+  "dependencies": {
+    "@thick-shift/sim": "workspace:*",
+    "three": "0.187.0"
   },
   "devDependencies": {
-    "three": "^0.187.0"
+    "@cloudflare/workers-types": "5.20261119.1",
+    "@types/node": "22.20.5",
+    "@types/three": "0.187.0"
   }
 }

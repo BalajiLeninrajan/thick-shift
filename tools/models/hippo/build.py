@@ -27,7 +27,7 @@ STAGES = [int(a) for a in ARGS if a.isdigit()] or [0, 1, 2]
 QUICK = 'quick' in ARGS
 SHOTS = [a for a in ARGS if a in ('sf', 'sq', 'ss', 'sb', 'df', 'dl', 'face', 'sface')] or ['sf', 'sq', 'ss', 'sb', 'df', 'dl', 'face', 'sface']
 
-# Palette, from packages/game/public/src/config.js. Fur dulls with each stage as it does in 2D.
+# Palette, from packages/sim/src/config.ts. Fur dulls with each stage as it does in 2D.
 SURFACE0 = hexc('#313244')
 STAGE = KEY = FUR_COL = BELLY_COL = HEAD_R = HEAD_T = None     # set per stage by begin()
 

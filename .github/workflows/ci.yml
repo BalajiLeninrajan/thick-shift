@@ -1,0 +1,87 @@
+name: CI
+
+# Pull requests run against any base branch, not just main, because the TypeScript move lands as a stack of PRs that
+# target each other's branches, and each one needs the checks before it merges down the stack.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to the same branch or PR makes the older run pointless, so cancel it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      # Must match the lune line in apps/roblox/rokit.toml; the install step checks that it does. The hash is of
+      # lune-<version>-linux-x86_64.zip from the lune-org/lune GitHub release.
+      LUNE_VERSION: 0.11.1
+      LUNE_SHA256: 39859282ce677fce19e6eb45c37596a90a25c324c95b4e7e02d428b6cae294a1
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Reads the pnpm version from packageManager in package.json.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      # Vitest on packages/sim: the map, the floor plan, and seeded nights checked against snapshots.
+      - name: Run the tests
+        run: pnpm test
+
+      - name: Build both apps
+        run: pnpm build
+
+      - name: Check Data.luau is up to date
+        run: |
+          node tools/roblox/gen-data.mjs
+          git diff --exit-code apps/roblox/src/shared/Data.luau
+
+      - name: Install lune
+        run: |
+          pinned=$(sed -n 's/^lune = "lune-org\/lune@\(.*\)"$/\1/p' apps/roblox/rokit.toml)
+          if [ "$pinned" != "$LUNE_VERSION" ]; then
+            echo "::error::apps/roblox/rokit.toml pins lune $pinned but CI installs $LUNE_VERSION; update LUNE_VERSION and LUNE_SHA256 in ci.yml"
+            exit 1
+          fi
+          dir="$RUNNER_TEMP/lune"
+          mkdir -p "$dir"
+          curl -fsSL -o "$dir/lune.zip" "https://github.com/lune-org/lune/releases/download/v$LUNE_VERSION/lune-$LUNE_VERSION-linux-x86_64.zip"
+          echo "$LUNE_SHA256  $dir/lune.zip" | sha256sum -c -
+          unzip -q "$dir/lune.zip" -d "$dir"
+          chmod +x "$dir/lune"
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Compare the Luau port with the web sim
+        run: |
+          tools/roblox/diff/run.sh "solo competent n1" 3
+          tools/roblox/diff/run.sh "crew of 3 competent n4" 1
+          tools/roblox/diff/run.sh "solo expert n5" 2

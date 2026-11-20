@@ -1,0 +1,24 @@
+{
+  "name": "@thick-shift/sim",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./check": "./src/check.ts",
+    "./config": "./src/config.ts",
+    "./map": "./src/map.ts",
+    "./dressing": "./src/dressing.ts",
+    "./data": "./src/data.ts",
+    "./random": "./src/random.ts",
+    "./types": "./src/types.ts",
+    "./sim": "./src/sim.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
+  }
+}
