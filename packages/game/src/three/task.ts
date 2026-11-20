@@ -11,24 +11,28 @@
 // Everything works from the keyboard (W A S D or the number keys to choose,
 // E or Space to act, X or Esc to let go), a gamepad (stick or d-pad, A, B) and
 // touch (tap the parts). The host is told only when the job is done.
+import { defined } from '@thick-shift/sim/check';
 import { BOXES, ROOMS3 } from '@thick-shift/sim/map';
+import { query } from '../dom';
 
-const KIND: string[] = ['Reset the breaker', 'Reconnect the wires', 'Bleed the valve'];
-export const FAULT_NAME: string[] = KIND;
+const KIND = ['Reset the breaker', 'Reconnect the wires', 'Bleed the valve'];
+// What a fault of kind k (Fault.k) asks of the guard. The sim only makes kinds 0 to 2.
+export const faultName = (k: number): string => defined(KIND[k], `fault kind ${k}`);
+// w: the wire, its place on the left. c: its colour. name: what a screen reader says.
 const WIRES = [
-  ['#f38ba8', 'red'],
-  ['#f9e2af', 'yellow'],
-  ['#89b4fa', 'blue'],
-  ['#a6e3a1', 'green'],
+  { w: 0, c: '#f38ba8', name: 'red' },
+  { w: 1, c: '#f9e2af', name: 'yellow' },
+  { w: 2, c: '#89b4fa', name: 'blue' },
+  { w: 3, c: '#a6e3a1', name: 'green' },
 ];
-const VALVE = { rise: 0.9, fall: 1.1, wobble: 0.35, band: [0.58, 0.8], need: 1.3 }; // per second; the green band; seconds in it
+const VALVE = { rise: 0.9, fall: 1.1, wobble: 0.35, band: [0.58, 0.8] satisfies [number, number], need: 1.3 }; // per second; the green band; seconds in it
 
-const shuffle = <T>(list: T[]): T[] => {
-  for (let i = list.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
-    [list[i], list[j]] = [list[j], list[i]];
-  }
-  return list;
+// A new list in random order. Each entry goes in at a random place among those already taken, which makes every
+// order equally likely.
+const shuffle = <T>(list: readonly T[]): T[] => {
+  const out: T[] = [];
+  for (const v of list) out.splice(Math.floor(Math.random() * (out.length + 1)), 0, v);
+  return out;
 };
 
 // One minigame while it is up. Each kind fills in its own fields (sel, next, held, ...) besides these.
@@ -49,10 +53,10 @@ export function createTask(root: HTMLElement) {
   panel.hidden = true;
   panel.innerHTML = `<div class="ts-f-task-head"><b></b><span></span><button class="btn btn-ghost is-sm" data-task="quit"><kbd class="ts-key">X</kbd><span>Let go</span></button></div><div class="ts-f-task-body"></div><div class="ts-f-task-help"></div>`;
   root.append(panel);
-  const title = panel.querySelector('b'),
-    where = panel.querySelector('.ts-f-task-head > span'),
-    body = panel.querySelector('.ts-f-task-body'),
-    help = panel.querySelector('.ts-f-task-help');
+  const title = query(panel, 'b'),
+    where = query(panel, '.ts-f-task-head > span'),
+    body = query(panel, '.ts-f-task-body'),
+    help = query(panel, '.ts-f-task-help');
   let job: Job | null = null,
     onDone: (() => void) | null = null,
     onQuit: (() => void) | null = null;
@@ -69,7 +73,7 @@ export function createTask(root: HTMLElement) {
   function breaker(): Job {
     const n = 5,
       tripped = shuffle([0, 1, 2, 3, 4]).slice(0, 3),
-      order = shuffle(tripped.slice());
+      order = shuffle(tripped);
     const up = Array.from({ length: n }, (_, i) => !tripped.includes(i));
     const j = { sel: 0, next: 0, done: false };
     const flip = (i: number): void => {
@@ -107,34 +111,45 @@ export function createTask(root: HTMLElement) {
         if (down) flip(j.sel);
       },
       tap(e: MouseEvent) {
-        const b = (e.target as Element).closest<HTMLElement>('[data-i]');
-        if (b) this.pick(+b.dataset.i);
+        const b = e.target instanceof Element && e.target.closest<HTMLElement>('[data-i]');
+        if (b) this.pick(Number(b.dataset.i));
       },
     });
   }
 
   function wires(): Job {
-    const right = shuffle([0, 1, 2, 3]),
+    const right = shuffle(WIRES),
       joined = new Set<number>();
     const j = { sel: 0, done: false };
-    const live = (): number => [0, 1, 2, 3].find(w => !joined.has(w));
+    // The wire to join next: the first not yet joined, or undefined once all four are.
+    const live = (): number | undefined => WIRES.find(({ w }) => !joined.has(w))?.w;
+    // slot: a socket on the right, 0 to 3 (pick checks it, and sel wraps).
     const join = (slot: number): void => {
-      if (right[slot] === live()) {
-        joined.add(right[slot]);
+      const w = right[slot]?.w;
+      if (w !== undefined && w === live()) {
+        joined.add(w);
         j.done = joined.size === 4;
       } else buzz();
       draw();
     };
+    // Where wire w's socket is on the right.
+    const socket = (w: number): number => right.findIndex(r => r.w === w);
+    // Wires are joined in WIRES order, so the joined ones are drawn in the order they went in.
     function draw(): void {
       const now = live();
-      body.innerHTML = `<div class="ts-tk-wires"><div>${WIRES.map(([c], w) => `<span class="ts-tk-end${joined.has(w) ? ' is-joined' : w === now ? ' is-live' : ''}" style="--c:${c}"></span>`).join('')}</div>
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${[...joined].map(w => `<path d="M0 ${12.5 + w * 25} C50 ${12.5 + w * 25} 50 ${12.5 + right.indexOf(w) * 25} 100 ${12.5 + right.indexOf(w) * 25}" stroke="${WIRES[w][0]}" stroke-width="5" fill="none" vector-effect="non-scaling-stroke"/>`).join('')}</svg>
-        <div>${right.map((w, s) => `<button class="ts-tk-end is-socket${joined.has(w) ? ' is-joined' : ''}${s === j.sel ? ' is-sel' : ''}" style="--c:${WIRES[w][0]}" data-s="${s}" aria-label="${WIRES[w][1]}"><small>${s + 1}</small></button>`).join('')}</div></div>`;
+      body.innerHTML = `<div class="ts-tk-wires"><div>${WIRES.map(({ w, c }) => `<span class="ts-tk-end${joined.has(w) ? ' is-joined' : w === now ? ' is-live' : ''}" style="--c:${c}"></span>`).join('')}</div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${WIRES.filter(({ w }) => joined.has(w))
+          .map(
+            ({ w, c }) =>
+              `<path d="M0 ${12.5 + w * 25} C50 ${12.5 + w * 25} 50 ${12.5 + socket(w) * 25} 100 ${12.5 + socket(w) * 25}" stroke="${c}" stroke-width="5" fill="none" vector-effect="non-scaling-stroke"/>`
+          )
+          .join('')}</svg>
+        <div>${right.map(({ w, c, name }, s) => `<button class="ts-tk-end is-socket${joined.has(w) ? ' is-joined' : ''}${s === j.sel ? ' is-sel' : ''}" style="--c:${c}" data-s="${s}" aria-label="${name}"><small>${s + 1}</small></button>`).join('')}</div></div>`;
     }
     return Object.assign(j, {
       help: 'Join the lit wire to its colour. <kbd class="ts-key">W</kbd><kbd class="ts-key">S</kbd> or <kbd class="ts-key">1</kbd>–<kbd class="ts-key">4</kbd> to choose, <kbd class="ts-key">E</kbd> to join.',
       draw,
-      move(dx: number, dy: number) {
+      move(_dx: number, dy: number) {
         if (dy) {
           j.sel = (j.sel + dy + 4) % 4;
           draw();
@@ -150,8 +165,8 @@ export function createTask(root: HTMLElement) {
         if (down) join(j.sel);
       },
       tap(e: MouseEvent) {
-        const b = (e.target as Element).closest<HTMLElement>('[data-s]');
-        if (b) this.pick(+b.dataset.s);
+        const b = e.target instanceof Element && e.target.closest<HTMLElement>('[data-s]');
+        if (b) this.pick(Number(b.dataset.s));
       },
     });
   }
@@ -161,10 +176,10 @@ export function createTask(root: HTMLElement) {
     let needle: HTMLElement, fill: HTMLElement, dial: HTMLElement;
     function draw(): void {
       body.innerHTML = `<div class="ts-tk-valve"><div class="ts-tk-dial"><i class="ts-tk-band" style="--a:${VALVE.band[0]};--b:${VALVE.band[1]}"></i><i class="ts-tk-needle"></i></div><div class="ts-tk-fill"><i></i></div><button class="btn btn-secondary ts-tk-hold" data-hold>Hold</button></div>`;
-      dial = body.querySelector<HTMLElement>('.ts-tk-dial');
-      needle = body.querySelector<HTMLElement>('.ts-tk-needle');
-      fill = body.querySelector<HTMLElement>('.ts-tk-fill i');
-      const hold = body.querySelector('[data-hold]');
+      dial = query(body, '.ts-tk-dial');
+      needle = query(body, '.ts-tk-needle');
+      fill = query(body, '.ts-tk-fill i');
+      const hold = query(body, '[data-hold]');
       hold.addEventListener('pointerdown', e => {
         e.preventDefault();
         j.held = true;
@@ -208,7 +223,7 @@ export function createTask(root: HTMLElement) {
   addEventListener(
     'keydown',
     e => {
-      if (!job || (e.target as Element).closest?.('input, textarea, select')) return;
+      if (!job || (e.target instanceof Element && e.target.closest('input, textarea, select'))) return;
       const c = e.code;
       if (c === 'KeyX' || c === 'Escape') {
         e.preventDefault();
@@ -235,7 +250,7 @@ export function createTask(root: HTMLElement) {
     true
   );
   panel.addEventListener('click', e => {
-    if ((e.target as Element).closest('[data-task="quit"]')) {
+    if (e.target instanceof Element && e.target.closest('[data-task="quit"]')) {
       quit();
       return;
     }
@@ -270,11 +285,11 @@ export function createTask(root: HTMLElement) {
     },
     // i: the box; k: the kind. done: called once the job is finished; quit: when the guard lets go.
     open(i: number, k: number, done: () => void, quit_: () => void): void {
-      job = [breaker, wires, valve][k]();
+      job = defined([breaker, wires, valve][k], `fault kind ${k}`)();
       onDone = done;
       onQuit = quit_;
-      title.textContent = KIND[k];
-      where.textContent = ROOMS3[BOXES[i].room]?.name || '';
+      title.textContent = faultName(k);
+      where.textContent = ROOMS3[defined(BOXES[i], `box ${i}`).room]?.name || '';
       help.innerHTML = job.help;
       job.draw();
       panel.hidden = false;

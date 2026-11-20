@@ -6,6 +6,7 @@
 // the generator and the charger, spare batteries, and every mascot that is
 // off its mark, as the booth's wall map does.
 
+import { defined, isPlaced } from '@thick-shift/sim/check';
 import { BATTERY_SPOTS, BOXES, CHARGER, DOORWAYS, GENERATOR, ROOMS3, roomAt } from '@thick-shift/sim/map';
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
@@ -73,7 +74,11 @@ export function createMinimap() {
     BOXES.forEach((cl, i) => {
       if (S.faults?.[i] && blink) dot(cl.x + Math.sin(cl.face) * 0.5, cl.z + Math.cos(cl.face) * 0.5, 5 * px, INK.due);
     });
-    for (const i of S.bats || []) box(BATTERY_SPOTS[i].x, BATTERY_SPOTS[i].z, 3 * px, INK.bat);
+    // S.bats holds BATTERY_SPOTS indices.
+    for (const i of S.bats || []) {
+      const spot = defined(BATTERY_SPOTS[i], `battery spot ${i}`);
+      box(spot.x, spot.z, 3 * px, INK.bat);
+    }
     // Mascots off their marks: a blip with a ring that grows.
     const ring = (t % 900) / 900;
     for (const m of S.m || [])
@@ -89,7 +94,7 @@ export function createMinimap() {
       }
     // The other guards, and a cross for the flat ones.
     for (const p of S.players || []) {
-      if (p.x == null || p.id === myId) continue;
+      if (!isPlaced(p) || p.id === myId) continue;
       if (!p.flat) {
         box(p.x, p.z, 4 * px, INK.mate);
         continue;

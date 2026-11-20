@@ -9,20 +9,21 @@
 // states).
 
 import { clockF, F, faultLeft, TOY } from '@thick-shift/sim';
+import { defined, isNight, isNonEmpty, isPlaced } from '@thick-shift/sim/check';
 import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
 import { BOXES, CHARGER, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
-import type { NightState, Player, Point, State } from '@thick-shift/sim/types';
+import type { Guard, NightState, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
+import { query } from '../dom';
 import { game } from '../state';
 import type { Me, PlayerHandle } from '../types';
 import { prefs, savePrefs } from './player';
-import { FAULT_NAME } from './task';
+import { faultName } from './task';
 import { canFullscreen, createTouch, toggleFullscreen } from './touch';
 
 // A row of the pause screen's lists: what, the keys or buttons, and an optional note. A group: its title and rows.
 type ControlRow = [what: string, how: string[], note?: string];
 type ControlGroup = [title: string, rows: ControlRow[]];
-// A compass mark this frame. dist: metres along the route. off: where it would sit on the strip, -1 to 1 at its
-// ends. at: off, kept on the strip.
+// Something the compass points to this frame.
 interface Mark {
   key: string;
   kind: string;
@@ -31,12 +32,26 @@ interface Mark {
   hot?: boolean;
   name?: string;
   ping?: boolean;
-  dist?: number;
-  off?: number;
-  at?: number;
+}
+// A mark once its route is known. dist: metres along the route. off: where it would sit on the strip, -1 to 1 at
+// its ends.
+interface Placed extends Mark {
+  dist: number;
+  off: number;
+}
+// The way to a mark: the next corner to walk to, and how much further the mark is from there.
+interface Leg {
+  x: number;
+  z: number;
+  far: number;
 }
 // An element that remembers what html() last put in it, or how far spread() moved it.
 type Cached = HTMLElement & { _html?: string; _dx?: number };
+// A mark's element on the strip, and its label (the <b> inside it).
+interface MarkEl {
+  e: HTMLElement;
+  label: Cached;
+}
 // Compass labels laid side by side (spread): the label, where it sits unmoved and its width; mid: where the run
 // wants its centre.
 interface Run {
@@ -64,7 +79,7 @@ const TASK_TOP = 76; // pixels above the task list: the hour and the power
 const TASK_FOOT = { touch: 160, keys: 100 }; // pixels kept clear under it: the stick, or the torch
 const CELLS = 5; // bars in the torch battery
 // What each mascot did to you, by MASC index.
-const HOW = ['sat on you', 'hugged you a bit too hard', 'landed on you', 'did not slow down'];
+const HOW: PerMascot<string> = ['sat on you', 'hugged you a bit too hard', 'landed on you', 'did not slow down'];
 
 const PATHS = {
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -82,7 +97,8 @@ const PATHS = {
   rotate: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 9a10 10 0 0 0 3 9m17-3a10 10 0 0 0-3-9"/>',
   toy: '<circle cx="12" cy="13.5" r="7"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="6.5" r="2.2"/><path d="M9.5 11v.01M14.5 11v.01M10 16.5h.01M14 16.5h.01"/>',
 };
-const icon = (name: string): string =>
+type IconName = keyof typeof PATHS;
+const icon = (name: IconName): string =>
   `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
 // Each kind of toast has its own icon and colour (in styles.css), so a low
 // torch, low power, a fault burning and a guard going down do not look alike.
@@ -100,7 +116,8 @@ const TOAST_ICON = {
   call: 'call',
   hide: 'locker',
   toy: 'toy',
-};
+} satisfies Record<string, IconName>;
+type ToastKind = keyof typeof TOAST_ICON;
 const MAX_TOASTS = 3,
   SHORT = 480; // a stage under SHORT pixels tall shows one toast fewer
 
@@ -234,11 +251,11 @@ const angDiff = (a: number, b: number): number => {
 };
 const metres = (d: number): string => `${Math.max(1, Math.round(d))} m`;
 // "in the Kitchen", for a sentence.
-export function where(p: Partial<Point>): string {
+export function where(p: Point): string {
   const name = ROOMS3[roomAt(p.x, p.z)]?.name;
   return !name ? 'somewhere' : name === 'Backstage' ? 'backstage' : `in the ${name}`;
 }
-const roomName = (p: Partial<Point>): string => ROOMS3[roomAt(p.x, p.z)]?.name || '';
+const roomName = (p: Point): string => ROOMS3[roomAt(p.x, p.z)]?.name || '';
 
 export function createHud(stage: Element, player: PlayerHandle) {
   const root = el('div', 'ts-fhud', stage);
@@ -312,40 +329,47 @@ export function createHud(stage: Element, player: PlayerHandle) {
       </div>
     </div>
     <div class="ts-f-rotate"><div class="empty-state">${icon('rotate')}<strong>Turn your phone sideways</strong><span>The floor is walked in landscape.</span></div></div>`;
-  const $ = <E extends HTMLElement = HTMLElement>(sel: string): E => root.querySelector<E>(sel);
-  const [time, night] = $('.ts-f-time').children,
+  const $ = (sel: string): HTMLElement => query(root, sel);
+  const input = (sel: string): HTMLInputElement => query(root, sel, HTMLInputElement);
+  const time = $('.ts-f-time > b'),
+    night = $('.ts-f-time > span'),
     power = $('.ts-f-power'),
-    powerBar = power.querySelector('i'),
-    powerText = power.lastChild;
+    powerBar = $('.ts-f-power i'),
+    powerText = $('.ts-f-power > span');
   const compass = $('.ts-f-compass'),
     tasks = $('.ts-f-tasks'),
     toasts = $('.ts-f-toasts');
   const crew = $('.ts-f-crew'),
     dot = $('.ts-f-dot');
   const prompt = $('.ts-f-prompt'),
-    [promptKey, promptText] = $('.ts-f-prompt-row').children,
+    promptKey = $('.ts-f-prompt-row > kbd'),
+    promptText = $('.ts-f-prompt-row > span'),
     hold = $('.ts-f-hold'),
-    holdBar = hold.firstChild as HTMLElement;
+    holdBar = $('.ts-f-hold > i');
   const torch = $('.ts-f-torch'),
     stam = $('.ts-f-stam'),
+    stamBar = $('.ts-f-stam > i'),
     cells = [...$('.ts-f-cells').children],
-    torchText = $('.ts-f-torch-row').lastChild;
+    torchText = $('.ts-f-torch-row > span');
   const toy = $('.ts-f-toy'),
-    toyText = toy.querySelector('span');
+    toyText = $('.ts-f-toy > span');
   const start = $('.ts-f-start'),
     flat = $('.ts-f-flat'),
-    [, flatHow, flatSub] = flat.children,
+    flatHow = $('.ts-f-flat > b'),
+    flatSub = $('.ts-f-flat > b + span'),
     callText = $('[data-do="call"] span'),
-    watchBtn = $('[data-do="watch"]');
+    watchBtn = $('[data-do="watch"]'),
+    watchText = $('[data-do="watch"] span');
   const pause = $('.ts-f-pause'),
     pauseIn = $('.ts-f-pause-in'),
     pauseWhen = $('.ts-f-pause-when'),
     keyList = $('[data-pane="controls"]'),
-    sens = $<HTMLInputElement>('#ts-sens'),
-    sensText = sens.nextElementSibling,
-    invert = $<HTMLInputElement>('#ts-invert'),
-    outline = $<HTMLInputElement>('#ts-outline'),
-    third = $<HTMLInputElement>('#ts-third');
+    padTab = $('[data-tab="pad"]'),
+    sens = input('#ts-sens'),
+    sensText = $('#ts-sens + small'),
+    invert = input('#ts-invert'),
+    outline = input('#ts-outline'),
+    third = input('#ts-third');
   const touch = createTouch(root, player);
   // Compass ticks, by bearing. Yaw 0 faces south and grows toward east, as in player.ts.
   const ticks = (
@@ -390,9 +414,11 @@ export function createHud(stage: Element, player: PlayerHandle) {
   };
   showTab('controls');
   root.addEventListener('click', e => {
-    const name = (e.target as Element).closest<HTMLElement>('[data-do]')?.dataset.do,
-      tab = (e.target as Element).closest<HTMLElement>('[data-tab]')?.dataset.tab;
-    if (name) actions[name]();
+    if (!(e.target instanceof Element)) return;
+    const name = e.target.closest<HTMLElement>('[data-do]')?.dataset.do,
+      tab = e.target.closest<HTMLElement>('[data-tab]')?.dataset.tab;
+    // Every data-do in the markup is a key of actions.
+    if (name) defined(actions[name], `HUD action ${name}`)();
     else if (tab) showTab(tab);
     else if (e.target === pause || e.target === pauseIn) player.resume(); // a click beside the panel
   });
@@ -423,57 +449,71 @@ export function createHud(stage: Element, player: PlayerHandle) {
 
   /* ---------- toasts ---------- */
 
-  const live: Toast[] = [];
+  let live: Toast[] = [];
   function drop(t: Toast): void {
     t.e.classList.add('is-gone');
     setTimeout(() => t.e.remove(), 400);
   }
-  function say(text: string, kind = 'info', seconds = 4.5): void {
-    const e = el('div', `ts-f-toast is-${kind}`, toasts);
-    e.innerHTML = `${icon(TOAST_ICON[kind])}<span></span>`;
-    e.lastChild.textContent = text;
+  function say(text: string, kind: ToastKind = 'info', seconds = 4.5): void {
+    const e = el('div', `ts-f-toast is-${kind}`, toasts),
+      words = document.createElement('span');
+    words.textContent = text;
+    e.innerHTML = icon(TOAST_ICON[kind]);
+    e.append(words);
     live.push({ e, until: performance.now() + seconds * 1000 });
-    while (live.length > MAX_TOASTS - +(root.clientHeight < SHORT)) drop(live.shift());
+    // Past the most the stage has room for, the oldest go.
+    const room = MAX_TOASTS - +(root.clientHeight < SHORT);
+    for (const t of live.splice(0, Math.max(0, live.length - room))) drop(t);
   }
 
   /* ---------- the compass ---------- */
 
   // Marks point along the walking route, not through the walls: nobody knows
-  // the building on their first night. routes: key -> the next corner to walk
-  // to and how much further the thing is from there.
-  const routes = new Map<string, { x: number; z: number; far: number }>(),
-    marks = new Map<string, HTMLElement>(),
+  // the building on their first night. routes: key -> the leg to walk next.
+  const routes = new Map<string, Leg>(),
+    marks = new Map<string, MarkEl>(),
     pings = new Map<string, number>();
   let navAt = 0,
     navTurn = 0;
-  function findRoute(S: State, me: Me, t: Mark): void {
+  function findRoute(S: State, me: Me, t: Mark): Leg {
     const r = route(me.x, me.z, t.x, t.z, { doors: S.doors }),
-      path = r.path.length && !r.blocked ? r.path : [t];
-    let far = 0;
-    for (let i = 1; i < path.length; i++) far += Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z);
-    routes.set(t.key, { x: path[0].x, z: path[0].z, far });
+      path: NonEmpty<Point> = isNonEmpty(r.path) && !r.blocked ? r.path : [t];
+    let far = 0,
+      prev = path[0];
+    for (const p of path.slice(1)) {
+      far += Math.hypot(p.x - prev.x, p.z - prev.z);
+      prev = p;
+    }
+    const leg = { x: path[0].x, z: path[0].z, far };
+    routes.set(t.key, leg);
+    return leg;
   }
-  function drawCompass(S: NightState, me: Me, mine: Player, now: number): void {
+  // bat: this guard's torch battery, 0 to 1.
+  function drawCompass(S: NightState, me: Me, bat: number, now: number): void {
     const list: Mark[] = [];
-    // A breaker box hangs on a wall. Aim at the floor in front of it.
-    S.faults?.forEach((f, i) => {
+    // A breaker box hangs on a wall. Aim at the floor in front of it. S.faults has one entry per box.
+    for (const [i, box] of BOXES.entries()) {
+      const f = S.faults[i];
       if (f)
         list.push({
           key: `f${i}@${f.at}`,
           kind: 'fault',
-          x: BOXES[i].x + Math.sin(BOXES[i].face) * 0.9,
-          z: BOXES[i].z + Math.cos(BOXES[i].face) * 0.9,
+          x: box.x + Math.sin(box.face) * 0.9,
+          z: box.z + Math.cos(box.face) * 0.9,
           hot: faultLeft(S, f) < HURRY,
         });
-    });
+    }
+    // A guard who has not called has no ping.
     for (const p of S.players)
-      if (p.flat && p.id !== game.myId && p.x != null) list.push({ key: `p${p.id}`, kind: 'flat', x: p.x, z: p.z, name: p.name, ping: pings.get(p.id) > now });
-    if ((mine.bat ?? 1) < LOW_BAT && S.power > 0) list.push({ key: 'dock', kind: 'dock', x: CHARGER.x, z: CHARGER.z - 0.9, name: 'charger' });
+      if (p.flat && p.id !== game.myId && isPlaced(p))
+        list.push({ key: `p${p.id}`, kind: 'flat', x: p.x, z: p.z, name: p.name, ping: (pings.get(p.id) ?? 0) > now });
+    if (bat < LOW_BAT && S.power > 0) list.push({ key: 'dock', kind: 'dock', x: CHARGER.x, z: CHARGER.z - 0.9, name: 'charger' });
     if (S.power < GEN_MARK)
       list.push({ key: 'gen', kind: 'gen', x: GENERATOR.x + Math.sin(GENERATOR.face) * 0.9, z: GENERATOR.z + Math.cos(GENERATOR.face) * 0.9, name: 'crank' });
+    // One mark's route is refreshed at a time, in turn.
     if (now - navAt > NAV_MS && list.length) {
       navAt = now;
-      findRoute(S, me, list[navTurn++ % list.length]);
+      findRoute(S, me, defined(list[navTurn++ % list.length], 'compass mark'));
     }
 
     for (const t of ticks) {
@@ -481,48 +521,51 @@ export function createHud(stage: Element, player: PlayerHandle) {
       t.e.hidden = Math.abs(off) > 1;
       t.e.style.left = `${50 + off * 50}%`;
     }
-    let nearest: Mark | null = null;
+    let nearest: Placed | null = null;
+    const shown: Placed[] = [];
     for (const t of list) {
-      if (!routes.has(t.key)) findRoute(S, me, t);
-      let r = routes.get(t.key);
-      if (r.far && Math.hypot(r.x - me.x, r.z - me.z) < 1.2) {
-        findRoute(S, me, t);
-        r = routes.get(t.key);
-      } // reached the corner it pointed at
-      t.dist = Math.hypot(r.x - me.x, r.z - me.z) + r.far;
-      t.off = -angDiff(Math.atan2(r.x - me.x, r.z - me.z), me.yaw) / HALF_SPAN;
-      if (t.kind === 'fault' && (!nearest || t.dist < nearest.dist)) nearest = t;
+      let r = routes.get(t.key) ?? findRoute(S, me, t);
+      if (r.far && Math.hypot(r.x - me.x, r.z - me.z) < 1.2) r = findRoute(S, me, t); // reached the corner it pointed at
+      const p: Placed = {
+        ...t,
+        dist: Math.hypot(r.x - me.x, r.z - me.z) + r.far,
+        off: -angDiff(Math.atan2(r.x - me.x, r.z - me.z), me.yaw) / HALF_SPAN,
+      };
+      if (p.kind === 'fault' && (!nearest || p.dist < nearest.dist)) nearest = p;
+      shown.push(p);
     }
-    for (const t of list) {
-      t.at = Math.max(-1, Math.min(1, t.off));
+    for (const t of shown) {
+      const at = Math.max(-1, Math.min(1, t.off));
       let m = marks.get(t.key);
       if (!m) {
-        m = el('div', `ts-f-mark is-${t.kind}`, compass);
-        m.innerHTML = '<i></i><b></b>';
+        const e = el('div', `ts-f-mark is-${t.kind}`, compass);
+        e.innerHTML = '<i></i><b></b>';
+        m = { e, label: query(e, 'b') };
         marks.set(t.key, m);
       }
-      m.style.left = `${50 + t.at * 50}%`;
+      m.e.style.left = `${50 + at * 50}%`;
       // Off the end of the strip: it is that way, further round.
-      data(m, 'side', t.off < -1 ? 'left' : t.off > 1 ? 'right' : '');
-      m.classList.toggle('is-near', t === nearest);
-      m.classList.toggle('is-ping', !!t.ping);
-      m.classList.toggle('is-hot', !!t.hot);
-      set(m.lastChild, (t.name ? `${t.name} ` : '') + metres(t.dist));
+      data(m.e, 'side', t.off < -1 ? 'left' : t.off > 1 ? 'right' : '');
+      m.e.classList.toggle('is-near', t === nearest);
+      m.e.classList.toggle('is-ping', !!t.ping);
+      m.e.classList.toggle('is-hot', !!t.hot);
+      set(m.label, (t.name ? `${t.name} ` : '') + metres(t.dist));
     }
     for (const [key, m] of marks)
-      if (!list.some(t => t.key === key)) {
-        m.remove();
+      if (!shown.some(t => t.key === key)) {
+        m.e.remove();
         marks.delete(key);
         routes.delete(key);
       }
-    spread(list);
+    spread(shown);
   }
   // Where labels would overlap, lay them side by side instead, centred on
   // where they wanted to be and kept inside the strip, so all stay readable.
   // The marks stay on their bearings. b._dx: how far a label is moved now,
   // so where it would sit unmoved can be measured.
   // Labels that would not fit in the strip side by side are hidden, furthest first, keeping their dots.
-  function spread(list: Mark[]): void {
+  // Every mark in list has its element in marks (drawCompass).
+  function spread(list: Placed[]): void {
     const strip = compass.getBoundingClientRect(),
       W = strip.width,
       runs: Run[] = [];
@@ -533,11 +576,10 @@ export function createHud(stage: Element, player: PlayerHandle) {
       .slice()
       .sort((a, c) => rank(a) - rank(c) || a.dist - c.dist)
       .flatMap(t => {
-        const m = marks.get(t.key),
-          b = m.lastChild as Cached,
+        const { e, label: b } = defined(marks.get(t.key), `compass mark ${t.key}`),
           r = b.getBoundingClientRect();
         room -= r.width + LABEL_GAP;
-        m.classList.toggle('is-quiet', room < 0);
+        e.classList.toggle('is-quiet', room < 0);
         return room < 0 ? [] : [{ b, x: r.left - (b._dx || 0) - strip.left, w: r.width }];
       })
       .sort((a, c) => a.x - c.x);
@@ -568,16 +610,17 @@ export function createHud(stage: Element, player: PlayerHandle) {
   // Every open fault, nearest first: the room, the job, and the seconds before it starts to burn the building's ceiling.
   // A short stage shows fewer rows, so the list stops above the stick and the torch.
   function drawTasks(S: NightState, me: Me): void {
-    const ours = (S.faults || [])
-      .map((f, i) => f && { f, i, d: Math.hypot(BOXES[i].x - me.x, BOXES[i].z - me.z) })
-      .filter(Boolean)
-      .sort((a, b) => a.d - b.d);
+    // S.faults has one slot per box.
+    const ours = BOXES.flatMap((box, i) => {
+      const f = S.faults[i];
+      return f ? [{ f, i, box, d: Math.hypot(box.x - me.x, box.z - me.z) }] : [];
+    }).sort((a, b) => a.d - b.d);
     const fit = Math.max(2, Math.floor((root.clientHeight - TASK_TOP - TASK_FOOT[me.touch ? 'touch' : 'keys']) / TASK_ROW));
     const max = ours.length <= Math.min(fit, MAX_TASKS) ? ours.length : Math.max(1, Math.min(MAX_TASKS, fit - 1)); // the rest counted on one more row
-    const rows = ours.slice(0, max).map(({ f, i }) => {
+    const rows = ours.slice(0, max).map(({ f, i, box }) => {
       const left = faultLeft(S, f),
         state = left <= 0 ? 'burn' : left < HURRY ? 'hot' : '';
-      return `<li data-state="${state}"${me.task?.i === i ? ' class="is-here"' : ''}>${icon('fault')}<b>${esc(ROOMS3[BOXES[i].room]?.name || '')}</b><span>${FAULT_NAME[f.k]}</span><em class="cn-tabular">${left <= 0 ? 'burning' : `${Math.ceil(left)}s`}</em></li>`;
+      return `<li data-state="${state}"${me.task?.i === i ? ' class="is-here"' : ''}>${icon('fault')}<b>${esc(ROOMS3[box.room]?.name || '')}</b><span>${faultName(f.k)}</span><em class="cn-tabular">${left <= 0 ? 'burning' : `${Math.ceil(left)}s`}</em></li>`;
     });
     if (ours.length > max) rows.push(`<li class="is-more">${ours.length - max} more</li>`);
     if (!ours.length) rows.push(`<li class="is-clear">${icon('fault')}<span>No faults. Listen for the next one.</span></li>`);
@@ -599,14 +642,16 @@ export function createHud(stage: Element, player: PlayerHandle) {
     },
     // scared: the catch has the camera (actors/scare.ts), and the face fills the screen with nothing over it.
     update(S: State, me: Me, scared: boolean): void {
+      // mine is undefined until this guard has joined the state.
       const now = performance.now(),
-        mine = S.players.find(p => p.id === game.myId) || ({} as Player),
-        bat = mine.bat ?? 1;
-      const mates = S.players.filter(p => p.id !== game.myId && p.x != null);
+        mine = S.players.find(p => p.id === game.myId),
+        bat = mine?.bat ?? 1;
+      const mates: Guard[] = S.players.filter(isPlaced).filter(p => p.id !== game.myId);
       root.hidden = S.phase !== 'play' || !!scared;
       if (S.t < lastT) was = { bat: 1, power: 100, dry: me.dry, empty: me.empty }; // a night began
       lastT = S.t;
-      for (let i = live.length - 1; i >= 0; i--) if (now > live[i].until) drop(live.splice(i, 1)[0]);
+      for (const t of live) if (now > t.until) drop(t);
+      live = live.filter(t => !(now > t.until));
       if (root.hidden) return;
       data(root, 'flat', me.flat);
       data(root, 'hid', me.hid >= 0 && !me.flat);
@@ -619,9 +664,12 @@ export function createHud(stage: Element, player: PlayerHandle) {
       if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say('Power below 25%.', 'power', 7);
       was.power = S.power;
 
-      drawTasks(S as NightState, me);
-      compass.hidden = me.flat;
-      if (!me.flat) drawCompass(S as NightState, me, mine, now);
+      // A night in play has its faults (startFloorNight sets them with the rest of the night).
+      if (isNight(S)) {
+        drawTasks(S, me);
+        compass.hidden = me.flat;
+        if (!me.flat) drawCompass(S, me, bat, now);
+      }
 
       html(
         crew,
@@ -667,22 +715,22 @@ export function createHud(stage: Element, player: PlayerHandle) {
       was.bat = bat;
       // The Mini Biggs: in hand or on the floor somewhere, greyed out without it or the bar a throw costs, and a word
       // when they try anyway.
-      set(toyText, mine.toy ? 'Mini Biggs, 1 bar' : 'Mini Biggs on the floor');
-      data(toy, 'ok', !!mine.toy && bat >= TOY.cost);
+      set(toyText, mine?.toy ? 'Mini Biggs, 1 bar' : 'Mini Biggs on the floor');
+      data(toy, 'ok', !!mine?.toy && bat >= TOY.cost);
       toy.classList.toggle('is-fresh', now - me.threw < 600);
       if (me.dry > was.dry) say('Not enough battery to throw.', 'toy', 4);
       if (me.empty > was.empty) say('No Mini Biggs in hand.', 'toy', 4);
       was.empty = me.empty;
       was.dry = me.dry;
       stam.hidden = me.stam >= 1;
-      (stam.firstChild as HTMLElement).style.width = `${me.stam * 100}%`;
+      stamBar.style.width = `${me.stam * 100}%`;
 
       const t = me.target;
       dot.hidden = me.flat || me.paused;
       prompt.hidden = !t || !!me.task;
       if (t) {
         set(promptKey, me.touch ? 'Use' : 'E');
-        set(promptText, (t.hold === 0 ? '' : 'Hold to ') + (t.hold === 0 ? t.label : t.label[0].toLowerCase() + t.label.slice(1)));
+        set(promptText, (t.hold === 0 ? '' : 'Hold to ') + (t.hold === 0 ? t.label : t.label.charAt(0).toLowerCase() + t.label.slice(1)));
         hold.hidden = !(t.hold > 0);
         holdBar.style.width = `${Math.min(1, me.hold / t.hold) * 100}%`;
         prompt.classList.toggle('is-busy', me.hold > 0 || !!me.act);
@@ -691,10 +739,12 @@ export function createHud(stage: Element, player: PlayerHandle) {
       flat.hidden = !me.flat || me.paused;
       if (me.flat) {
         const up = mates.filter(p => !p.flat),
-          near = up.reduce((a, p) => (!a || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(a.x - me.x, a.z - me.z) ? p : a), null);
+          near = up.reduce<Guard | null>((a, p) => (!a || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(a.x - me.x, a.z - me.z) ? p : a), null);
+        // Watching nobody offers the first.
         const watched = up.find(p => p.id === me.watch),
-          next = up[up.indexOf(watched) + 1];
-        const by = mine.flatBy ?? -1;
+          next = up[(watched ? up.indexOf(watched) : -1) + 1];
+        // A flat guard has flatBy. One without it, or with -1, reads as flattened by something unnamed.
+        const by = mine?.flatBy ?? -1;
         set(flatHow, by === -1 ? 'Something got you.' : `${MASC[by].name} ${HOW[by]}.`);
         set(
           flatSub,
@@ -706,14 +756,14 @@ export function createHud(stage: Element, player: PlayerHandle) {
         );
         set(callText, now - calledAt < F.CALL_GAP * 1000 ? 'Called' : 'Call out');
         watchBtn.hidden = !up.length;
-        set(watchBtn.lastChild, next ? `Watch ${next.name}` : 'Back to the floor');
+        set(watchText, next ? `Watch ${next.name}` : 'Back to the floor');
       }
 
       start.hidden = me.locked || me.paused || me.flat;
       if (pause.hidden === me.paused) {
         pause.hidden = !me.paused;
         html(keyList, controlGroups(CONTROLS[me.touch ? 'touch' : 'keys']));
-        tabs.find(t => t.dataset.tab === 'pad').hidden = me.touch;
+        padTab.hidden = me.touch;
         if (me.paused) set(pauseWhen, `Night ${S.night} of ${FINAL_NIGHT}, ${clockF(S)}`);
         showPrefs();
       }

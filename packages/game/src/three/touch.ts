@@ -5,7 +5,9 @@
 // player.toggleZoom and player.throwToy, and show only while a finger is the pointer.
 
 import { TOY } from '@thick-shift/sim';
+import { isPlaced } from '@thick-shift/sim/check';
 import { unlockAudio } from '../audio';
+import { query } from '../dom';
 import { game } from '../state';
 import type { PlayerHandle } from '../types';
 
@@ -54,8 +56,14 @@ export function createTouch(root: HTMLElement, player: PlayerHandle) {
     <button class="ts-t-btn ts-t-zoom" aria-label="Zoom the map" aria-pressed="false">Map</button>
     <button class="ts-t-btn ts-t-toy" aria-label="Throw a Mini Biggs">${PLUSH}</button>`;
   root.append(layer);
-  const [stickEl, runBtn, torchBtn, useBtn, phoneBtn, zoomBtn, toyBtn] = layer.children as HTMLCollectionOf<HTMLElement>,
-    knob = stickEl.firstChild as HTMLElement;
+  const stickEl = query(layer, '.ts-t-stick'),
+    knob = query(stickEl, 'i'),
+    runBtn = query(layer, '.ts-t-run'),
+    torchBtn = query(layer, '.ts-t-torch'),
+    useBtn = query(layer, '.ts-t-use'),
+    phoneBtn = query(layer, '.ts-t-phone'),
+    zoomBtn = query(layer, '.ts-t-zoom'),
+    toyBtn = query(layer, '.ts-t-toy');
   let stick: Finger | null = null,
     drag: Finger | null = null; // the finger on the stick and the finger looking: { id, x, y }
 
@@ -173,7 +181,8 @@ export function createTouch(root: HTMLElement, player: PlayerHandle) {
       layer.classList.toggle('is-busy', !!me.task);
       // Greyed out with empty hands, or while the battery has less than a throw costs.
       const mine = game.S?.players.find(p => p.id === game.myId);
-      flag(toyBtn, 'aria-disabled', !mine?.toy || mine.bat < TOY.cost);
+      // Holding a toy means stepFloor has placed them, so isPlaced holds whenever toy is set.
+      flag(toyBtn, 'aria-disabled', !mine?.toy || !isPlaced(mine) || mine.bat < TOY.cost);
     },
   };
 }
