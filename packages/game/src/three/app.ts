@@ -15,14 +15,16 @@ import { createPhone } from './actors/phone';
 import { createSlats } from './slats';
 import { createOutlines } from './outline';
 import { dreadF } from '@thick-shift/sim';
+import type { Player, State } from '@thick-shift/sim/types';
+import type { EventOf } from '../types';
 
-let app = null;
+let app: ReturnType<typeof create> | null = null;
 const FOG = 0.037,
   FOG_DREAD = 0.03; // fog density on a quiet night, and what a bad one adds
 const TORCH_FULL = 60; // the torch's intensity on a full battery (player.js)
 
 function create() {
-  const stage = document.querySelector('.ts-stage');
+  const stage = document.querySelector<HTMLDivElement>('.ts-stage');
   const canvas = document.createElement('canvas');
   canvas.id = 'c3';
   stage.append(canvas);
@@ -51,9 +53,9 @@ function create() {
     lastT = 1e9,
     lastEv = 0,
     shown = false,
-    seat = null;
+    seat: { x: number; z: number; yaw: number; pitch: number; back: number } | null = null;
 
-  function show(on) {
+  function show(on: boolean): void {
     if (on === shown) return;
     shown = on;
     canvas.hidden = !on;
@@ -69,7 +71,7 @@ function create() {
   const BACK = 3,
     ABOVE = 2.2,
     AIM = 1.4; // third person: metres behind, camera height, and the height looked at
-  function spectate(S, dt) {
+  function spectate(S: State, dt: number): void {
     const p = S.players.find(q => q.id === player.me.watch);
     if (!p) {
       seat = null;
@@ -100,55 +102,55 @@ function create() {
 
   // What each new event means on this screen, beyond its sound (sound.js plays
   // those). hud.say takes the line, its kind (which sets icon and colour) and seconds.
-  const guard = id => game.S.players.find(p => p.id === id),
-    isMe = id => id === game.myId;
+  const guard = (id: string): Player => game.S.players.find(p => p.id === id),
+    isMe = (id: string): boolean => id === game.myId;
   const SAY = {
     // A fault broke out, and where.
-    fault(e) {
+    fault(e: EventOf<'fault'>): void {
       const f = game.S.faults[e.x.i];
       if (!f) return;
       hud.say(`Fault in the ${ROOMS3[BOXES[e.x.i].room]?.name}.`, 'fault', 4);
     },
-    fix(e) {
+    fix(e: EventOf<'fix'>): void {
       const left = game.S.faults.filter(Boolean).length,
         rest = left ? `${left} still open.` : 'All clear.';
       hud.say(isMe(e.x.by) ? `Fixed. ${rest}` : `${guard(e.x.by)?.name || 'Someone'} fixed the ${ROOMS3[BOXES[e.x.i].room]?.name}. ${rest}`, 'fixed', 3);
     },
-    burn: () => hud.say('A fault is burning. Max power is dropping.', 'burnt', 6),
-    out: () => hud.say('Power out. Every door is open.', 'out', 7),
-    on: () => hud.say('Power back.', 'back', 3),
-    flat(e) {
+    burn: (): void => hud.say('A fault is burning. Max power is dropping.', 'burnt', 6),
+    out: (): void => hud.say('Power out. Every door is open.', 'out', 7),
+    on: (): void => hud.say('Power back.', 'back', 3),
+    flat(e: EventOf<'flat'>): void {
       const who = guard(e.x.id);
       if (!isMe(e.x.id) && who) {
         hud.say(`${MASC[e.x.by].name} flattened ${who.name} ${where(e.x)}.`, 'down', 6);
       }
     },
-    peel(e) {
+    peel(e: EventOf<'peel'>): void {
       if (isMe(e.x.id)) hud.say("Back up. They won't notice you for a few seconds.", 'up', 4);
       else hud.say(`${isMe(e.x.by) ? 'You' : guard(e.x.by)?.name || 'Someone'} peeled ${guard(e.x.id)?.name || 'someone'} up.`, 'up', 3);
     },
     // A flat guard calling out. sound.js plays its two notes from where the guard lies.
-    call(e) {
+    call(e: EventOf<'call'>): void {
       hud.ping(e.x.id);
       if (!isMe(e.x.id)) hud.say(`${guard(e.x.id)?.name || 'Someone'} is calling from the floor ${where(e.x)}.`, 'call', 4);
     },
-    bat(e) {
+    bat(e: EventOf<'bat'>): void {
       if (isMe(e.x.by)) hud.say('Fresh battery.', 'torch', 2.5);
     },
-    found(e) {
+    found(e: EventOf<'found'>): void {
       if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker.`, 'down', 4);
       else hud.say(`${MASC[e.x.i].name} pulled ${guard(e.x.id)?.name || 'someone'} out of a locker ${where(e.x)}.`, 'hide', 6);
     },
-    fumble(e) {
+    fumble(e: EventOf<'fumble'>): void {
       if (isMe(e.x.by)) hud.say('Something is blocking the door.', 'info', 3);
     },
-    grab(e) {
+    grab(e: EventOf<'grab'>): void {
       if (isMe(e.x.by)) hud.say('Mini Biggs in hand.', 'toy', 2.5);
     },
   };
 
   // How scared this guard should be right now, 0 to 1: something hunting, close.
-  function threat() {
+  function threat(): number {
     const S = game.S,
       me = player.me;
     let worst = 0;
@@ -160,7 +162,7 @@ function create() {
 
   return {
     show,
-    tick(now) {
+    tick(now: number): void {
       const S = game.S,
         dt = Math.min(0.1, (now - last) / 1000),
         t = now / 1000;
@@ -183,7 +185,7 @@ function create() {
       spectate(S, dt);
       const dread = dreadF(S),
         fear = threat();
-      /** @type {THREE.FogExp2} */ (scene.fog).density = FOG + FOG_DREAD * dread;
+      (scene.fog as THREE.FogExp2).density = FOG + FOG_DREAD * dread;
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch); // also runs the catch, which takes the camera
       // The end card (ui.js) waits until LINGER after the catch is over, however long a slow machine takes over it.
@@ -208,10 +210,10 @@ function create() {
   };
 }
 
-export function frame(now) {
+export function frame(now: number): ReturnType<typeof create> {
   (app ||= create()).tick(now);
   return app;
 }
-export function hide() {
+export function hide(): void {
   app?.show(false);
 }
