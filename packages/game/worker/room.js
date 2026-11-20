@@ -35,7 +35,7 @@ export class Room extends DurableObject {
   host(except) { return this.open(except).find(s => att(s).host); }
 
   toHost(id, json) {
-    try { this.host(id)?.send(`{"from":${JSON.stringify(id)},"d":${json}}`); } catch (e) { /* host is closing */ }
+    try { this.host(id)?.send(`{"from":${JSON.stringify(id)},"d":${json}}`); } catch { /* host is closing */ }
   }
 
   fetch(req) {
@@ -61,7 +61,7 @@ export class Room extends DurableObject {
     if (msg === 'hidden' || msg === 'shown') { ws.serializeAttachment({ ...att(ws), hidden: msg === 'hidden' }); return; }
     const { id, host } = att(ws);
     if (!host) { if (msg.length <= MAX_GUEST_MESSAGE) this.toHost(id, msg); return; }
-    for (const g of this.open(id)) try { g.send(msg); } catch (e) { /* guest is closing */ }
+    for (const g of this.open(id)) try { g.send(msg); } catch { /* guest is closing */ }
   }
 
   webSocketClose(ws) { this.left(ws); }
@@ -71,7 +71,7 @@ export class Room extends DurableObject {
     const a = att(ws);
     if (a.left) return;   // an error and a close can both arrive for one socket
     ws.serializeAttachment({ ...a, host: false, left: true });
-    try { ws.close(); } catch (e) { /* already closed */ }
+    try { ws.close(); } catch { /* already closed */ }
     if (!a.host) return this.toHost(a.id, '{"t":"leave"}');
     // Hand the room to whoever has been in it longest, a tab someone is looking at before one in the background.
     const hid = s => att(s).hidden ? 1 : 0;
@@ -79,7 +79,7 @@ export class Room extends DurableObject {
     const next = rest.shift();
     if (!next) return;
     next.serializeAttachment({ ...att(next), host: true });
-    try { next.send(JSON.stringify({ t: 'host', guests: rest.map(g => att(g).id) })); } catch (e) { /* closing too: its own close hands the room on */ }
-    for (const g of rest) try { g.send('{"t":"rehost"}'); } catch (e) { /* guest is closing */ }
+    try { next.send(JSON.stringify({ t: 'host', guests: rest.map(g => att(g).id) })); } catch { /* closing too: its own close hands the room on */ }
+    for (const g of rest) try { g.send('{"t":"rehost"}'); } catch { /* guest is closing */ }
   }
 }

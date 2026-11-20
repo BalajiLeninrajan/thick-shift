@@ -3,7 +3,7 @@
 // animation add to during a frame and apply() writes once at the end.
 import * as THREE from 'three';
 
-const e = new THREE.Euler(0, 0, 0, 'YXZ'), q = new THREE.Quaternion(), v = new THREE.Vector3();
+const e = new THREE.Euler(0, 0, 0, 'YXZ'), q = new THREE.Quaternion();
 
 class Part {
   constructor(o, name) {

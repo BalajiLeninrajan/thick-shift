@@ -70,7 +70,7 @@ const FIT = {
   walrus: [
     () => ({ gait: { max: .5, knee: .65, hipRoll: .07, hipYaw: .24 }, head: { yaw: .65, pitch: .24 }, limit: { arm: .75, out: .7, fore: .7 }, gestures: ['tilt', 'hug'], sit: .5 }),
     () => ({ gait: { max: .5, knee: .65 }, head: { yaw: .65, pitch: .2, step: 7, twitch: .1 }, limit: { arm: .75, out: .7, fore: .7 }, jaw: .75, sit: .5 }),
-    rig => ({
+    _rig => ({
       // The drape hangs dead still and the head stays level and on you; all the movement is the four legs behind.
       gait: { mode: 'glide' }, head: { yaw: 1, pitch: .9, rate: 11, twitch: .12, neck: .45 }, jaw: 1.3, swayMax: .16, sit: .35,
       states: { roam: { jaw: 0, sway: 0, breath: 0 }, search: { lean: 0, jaw: 0, sweep: 1 }, hunt: { lean: 0, jaw: .15, track: 1, reach: .4 }, lit: { lean: 0, drop: 0, shake: .35, jaw: .5, track: 1, reach: 1 }, scare: { lean: 0, headX: .2, reach: 1 } },
@@ -104,7 +104,7 @@ const FIT = {
         rig.leg_L.rx += .65 * k; rig.leg_R.rx += .65 * k; rig.shin_L.rx -= .8 * k; rig.shin_R.rx -= .8 * k; rig.root.py += .35 * k;
       },
     }),
-    rig => ({
+    _rig => ({
       // A puppet hung from the worm in its belly. The worm does the looking.
       gait: { min: .1, max: .26, knee: .17, hipRoll: .03, hipYaw: .08, arm: 0, shift: .02 }, head: { yaw: .3, pitch: .2, rate: 3, neck: 0 }, sit: .4, looker: 1, slackArms: true, swayMax: .5,
       states: { roam: { slack: 1 }, search: { slack: 1, sweep: 1, lean: -.04 }, hunt: { slack: 1, lean: -.1, track: 1, armL: 0, armR: 0, fore: 0, reach: 1 }, lit: { slack: 1, lean: -.16, shake: 1, armL: 0, armR: 0, fore: 0, track: 1, drop: 0 }, siege: { slack: 1, lean: -.15, armL: 0, armR: 0, fore: 0, rear: 1 }, windup: { slack: 1, lean: -.22, drop: 0, armL: 0, armR: 0, rear: 1, headX: 0 }, charge: { slack: 1, lean: -.3, armL: 0, armR: 0, rear: -1, headX: 0 }, feast: { slack: 1, armL: 0, armR: 0 }, scare: { slack: 1, lean: -.15, armL: 0, armR: 0, fore: 0, rear: -1, jaw: 1 } },

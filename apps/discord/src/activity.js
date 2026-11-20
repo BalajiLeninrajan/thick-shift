@@ -31,7 +31,7 @@ async function signIn(clientId) {
     const { access_token } = await r.json();
     const { user } = await sdk.commands.authenticate({ access_token });
     return user.global_name || user.username || '';
-  } catch (e) {
+  } catch {
     return '';
   }
 }

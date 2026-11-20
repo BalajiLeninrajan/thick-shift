@@ -19,7 +19,7 @@ const hostAction = label => game.isHost ? `<button class="btn btn-primary" id="g
 
 function titleScreen() {
   let savedName = '';
-  try { savedName = localStorage.tsName || ''; } catch (e) { /* storage blocked */ }
+  try { savedName = localStorage.tsName || ''; } catch { /* storage blocked */ }
   return {
     key: 'title',
     html: card(`
@@ -34,7 +34,7 @@ function titleScreen() {
         unlockAudio();
         const name = /** @type {HTMLInputElement} */ ($('nm')).value;
         game.myName = (name || 'Guard').slice(0, 12);
-        try { localStorage.tsName = game.myName; } catch (e) { /* storage blocked */ }
+        try { localStorage.tsName = game.myName; } catch { /* storage blocked */ }
         then();
       };
       $('hb').onclick = begin(host);

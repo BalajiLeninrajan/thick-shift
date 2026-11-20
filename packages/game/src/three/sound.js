@@ -97,7 +97,7 @@ export function createSound() {
   const gain = (v = 0) => { const g = ac.createGain(); g.gain.value = v; return g; };
   const filter = (type, hz, q = 1) => { const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = hz; f.Q.value = q; return f; };
   const osc = (type, hz) => { const o = ac.createOscillator(); o.type = type; o.frequency.value = hz; o.start(); sources++; return o; };
-  const chain = (...nodes) => nodes.reduce((a, b) => (a.connect(b), b));
+  const chain = (...nodes) => nodes.reduce((a, b) => { a.connect(b); return b; });
   // Glide a parameter to a value. Asking for the value it already has queues nothing.
   const aimed = new WeakMap();
   function aim(param, v, over = .08) {

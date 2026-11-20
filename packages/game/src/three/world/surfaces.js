@@ -43,7 +43,7 @@ const FLOOR = {
       c.globalAlpha = 1;
       p.fill(0, y, s, 2, '#0a0603', .1, .95);
       const jx = rnd() * s; p.fill(jx, y, 2, pw, '#0a0603', .15, .95);
-      for (const nx of [jx - 6, jx + 7]) p.fill(nx, y + pw * .3, 2, 2, '#15100c', .3, .4), p.fill(nx, y + pw * .7, 2, 2, '#15100c', .3, .4);
+      for (const nx of [jx - 6, jx + 7]) { p.fill(nx, y + pw * .3, 2, 2, '#15100c', .3, .4); p.fill(nx, y + pw * .7, 2, 2, '#15100c', .3, .4); }
     }
     p.wash(MID, .52, .78, '#a58a62', .38, .56, .92);
     p.wash(PATCH, .55, .8, '#080503', .55, null, .28);

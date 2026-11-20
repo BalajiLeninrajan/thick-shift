@@ -232,7 +232,7 @@ export function walls() {
 export function slabs() {
   const out = [];
   ROOMS3.forEach((room, ri) => {
-    let done = [];
+    const done = [];
     for (const rect of room.rects) {
       let pieces = [rect];
       for (const [a0, b0, a1, b1] of done) pieces = pieces.flatMap(([x0, z0, x1, z1]) => {

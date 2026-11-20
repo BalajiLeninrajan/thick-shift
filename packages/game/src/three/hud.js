@@ -164,7 +164,7 @@ export function createHud(stage, player) {
     <div class="ts-f-rotate"><div class="empty-state">${icon('rotate')}<strong>Turn your phone sideways</strong><span>The floor is walked in landscape.</span></div></div>`;
   const $ = sel => root.querySelector(sel);
   const [time, night] = $('.ts-f-time').children, power = $('.ts-f-power'), powerBar = power.querySelector('i'), powerText = power.lastChild;
-  const nav = $('.ts-f-nav'), compass = $('.ts-f-compass'), tasks = $('.ts-f-tasks'), toasts = $('.ts-f-toasts');
+  const compass = $('.ts-f-compass'), tasks = $('.ts-f-tasks'), toasts = $('.ts-f-toasts');
   const crew = $('.ts-f-crew'), dot = $('.ts-f-dot');
   const prompt = $('.ts-f-prompt'), [promptKey, promptText] = $('.ts-f-prompt-row').children, hold = $('.ts-f-hold'), holdBar = hold.firstChild;
   const torch = $('.ts-f-torch'), stam = $('.ts-f-stam'), cells = [...$('.ts-f-cells').children], torchText = $('.ts-f-torch-row').lastChild;

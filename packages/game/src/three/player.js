@@ -22,8 +22,8 @@ const GP = { use: 0, phone: 1, torch: 2, call: 3, sprint: 4, watch: 5, toss: 7, 
 // Look settings, kept between visits. sens multiplies SENS. outline: a gold edge round usable things (outline.js).
 // third: a flat guard watches teammates from behind them, not through their eyes (app.js spectate).
 export const prefs = { sens: 1, invert: false, outline: true, third: false };
-try { const saved = JSON.parse(localStorage.tsFloor || '{}'); if (saved.sens > 0) prefs.sens = Math.min(2.5, Math.max(.3, +saved.sens)); prefs.invert = !!saved.invert; if (saved.outline === false) prefs.outline = false; prefs.third = !!saved.third; } catch (e) { /* storage blocked */ }
-export function savePrefs() { try { localStorage.tsFloor = JSON.stringify(prefs); } catch (e) { /* storage blocked */ } }
+try { const saved = JSON.parse(localStorage.tsFloor || '{}'); if (saved.sens > 0) prefs.sens = Math.min(2.5, Math.max(.3, +saved.sens)); prefs.invert = !!saved.invert; if (saved.outline === false) prefs.outline = false; prefs.third = !!saved.third; } catch { /* storage blocked */ }
+export function savePrefs() { try { localStorage.tsFloor = JSON.stringify(prefs); } catch { /* storage blocked */ } }
 const typing = e => !!e.target.closest?.('input, textarea, select, [contenteditable]');
 const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 };   // per second, and seconds before it starts coming back
 const DOOR_NAME = { L: 'left door', R: 'right door', V: 'vent' };

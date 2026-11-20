@@ -9,7 +9,7 @@ const OPEN_HZ = 20000;
 // Browsers only allow audio after a user gesture, so call this from handlers.
 export function unlockAudio() {
   if (!ac) {
-    try { ac = new (window.AudioContext || /** @type {Window & { webkitAudioContext?: typeof AudioContext }} */ (window).webkitAudioContext)(); } catch (e) { return; }
+    try { ac = new (window.AudioContext || /** @type {Window & { webkitAudioContext?: typeof AudioContext }} */ (window).webkitAudioContext)(); } catch { return; }
     // Everything goes through one limiter, so a growl over a bass hit does not clip.
     master = ac.createDynamicsCompressor();
     master.threshold.value = -8; master.ratio.value = 12; master.attack.value = .003; master.release.value = .2;
@@ -81,7 +81,7 @@ export function room() {
   for (let ch = 0; ch < 2; ch++) {
     const d = ir.getChannelData(ch);
     let lp = 0;
-    for (let i = 0; i < len; i++) { lp += (Math.random() * 2 - 1 - lp) * .35; d[i] = lp * Math.pow(1 - i / len, 2.6); }
+    for (let i = 0; i < len; i++) { lp += (Math.random() * 2 - 1 - lp) * .35; d[i] = lp * (1 - i / len) ** 2.6; }
   }
   roomNode = ac.createConvolver();
   roomNode.buffer = ir;

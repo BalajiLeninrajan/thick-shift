@@ -15,7 +15,7 @@ let ws = null, loop = 0;
 const roomUrl = (code, query) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
 const ROOM = /^([A-Z]{4}|[a-z]-[\w-]{1,80})$/;   // a typed code, or a fixed one from an app's platform (worker/room.js)
 const newCode = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('');
-const parse = text => { try { return JSON.parse(text); } catch (e) { return null; } };
+const parse = text => { try { return JSON.parse(text); } catch { return null; } };
 const guard = (id, name = 'Guard') => ({ id, name });
 
 function broadcast() {

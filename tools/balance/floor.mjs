@@ -405,7 +405,7 @@ function objectiveOf(S, bot, team) {
     if (helpers[0] === bot) return { use: { what: 'peel', id: f.id, at: { x: f.x, z: f.z }, stand: { x: f.x, z: f.z }, hold: F.PEEL_HOLD, key: 'peel' + f.id }, urgent: true };
   }
   // 2. The faults that are ours.
-  let mine = pol.faults === false ? [] : sk.plans ? (team.fault.get(bot.id) || []).filter(i => S.faults[i]) : fixable(S);
+  const mine = pol.faults === false ? [] : sk.plans ? (team.fault.get(bot.id) || []).filter(i => S.faults[i]) : fixable(S);
   if (mine.length) {
     mine.sort((a, b) => dist(bot, M.BOXES[a]) - dist(bot, M.BOXES[b]));
     // A careless guard drifts off between jobs.
