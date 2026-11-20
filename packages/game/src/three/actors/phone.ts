@@ -8,6 +8,8 @@ import { game } from '../../state';
 import { canvas } from '../world/tex';
 import { createMinimap } from '../minimap';
 import { HANDS_ORDER } from '../slats';
+import type { State } from '@thick-shift/sim/types';
+import type { Me } from '../../types';
 
 const HELD = { x: -0.15, y: -0.088, z: -0.235 },
   DROP = 0.2; // metres from the eye, and how far below that it sits when put away
@@ -17,13 +19,13 @@ const SCREEN = { w: 0.062, h: 0.048, y: 0.03 }; // the glass, the minimap's shap
 const GLOW = 0.62; // how bright the glass is, before post.js's exposure
 
 // The keypad: two soft keys and a rocker, then twelve keys with the old letters.
-function keypad() {
+function keypad(): THREE.CanvasTexture {
   const W = 140,
     H = 150,
     c = canvas(W, H);
   c.fillStyle = '#16181b';
   c.fillRect(0, 0, W, H);
-  const key = (x, y, w, h, label, small) => {
+  const key = (x: number, y: number, w: number, h: number, label: string, small?: boolean): void => {
     c.fillStyle = '#3a3e44';
     c.beginPath();
     c.roundRect(x, y, w, h, 7);
@@ -48,7 +50,7 @@ function keypad() {
   return t;
 }
 
-export function createPhone(camera) {
+export function createPhone(camera: THREE.Camera) {
   const map = createMinimap();
   const phone = new THREE.Group(),
     hold = new THREE.Group();
@@ -56,7 +58,7 @@ export function createPhone(camera) {
   const plastic = new THREE.MeshStandardMaterial({ color: 0x34373c, roughness: 0.55, emissive: 0x0a120c });
   const face = new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.4, emissive: 0x081009 });
   const skin = new THREE.MeshStandardMaterial({ color: 0xc99a7c, roughness: 0.8, emissive: 0x1a2a1c });
-  const mesh = (geo, mat, x, y, z) => {
+  const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     m.castShadow = false;
@@ -98,7 +100,7 @@ export function createPhone(camera) {
     away = 0;
   return {
     // me: player.js's guard (ph, zoom, x, z, yaw, bob, flat). busy: the catch has the camera. now: milliseconds.
-    update(S, me, dt, now, busy) {
+    update(S: State, me: Me, dt: number, now: number, busy: boolean): void {
       up += ((me.ph ? 1 : 0) - up) * Math.min(1, dt * 9);
       away += ((me.flat || busy ? 1 : 0) - away) * Math.min(1, dt * 8);
       const shown = up * (1 - away);
