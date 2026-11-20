@@ -11,15 +11,15 @@
 //   plush.js   the Mini Biggs guards throw, in the air and singing on the floor
 import * as THREE from 'three';
 import { MASC } from '@thick-shift/sim/config';
-import { game } from '../state.js';
+import { game } from '../state';
 import { DOORWAYS } from '@thick-shift/sim/map';
-import { hostClock } from './actors/track.js';
-import { prefs } from './player.js';
-import { Mascot } from './actors/mascot.js';
-import { Guard } from './actors/guard.js';
-import { createScare } from './actors/scare.js';
-import { createHands } from './actors/hands.js';
-import { createPlush } from './actors/plush.js';
+import { hostClock } from './actors/track';
+import { prefs } from './player';
+import { Mascot } from './actors/mascot';
+import { Guard } from './actors/guard';
+import { createScare } from './actors/scare';
+import { createHands } from './actors/hands';
+import { createPlush } from './actors/plush';
 
 // Other guards' torches are real lights, but every light costs every pixel, so
 // there are only this many: the nearest lit torches get them and the rest make do with a glowing lens.

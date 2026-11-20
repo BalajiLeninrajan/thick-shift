@@ -6,11 +6,11 @@
 // A kit that is missing leaves its props out and nothing else changes.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { loadGLB } from '../assets.js';
+import { loadGLB } from '../assets';
 import { ROOMS3 } from '@thick-shift/sim/map';
 import { DRESSING } from '@thick-shift/sim/dressing';
-import { floorY } from './shell.js';
-import { lit } from './light.js';
+import { floorY } from './shell';
+import { lit } from './light';
 
 const KITS = ['props_a', 'props_b'];
 // Materials the kits mean to be lit from inside, and which of the building's light levels drives each.

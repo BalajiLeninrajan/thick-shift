@@ -8,11 +8,11 @@
 // into(). Nothing here runs until the audio context is running, and events
 // that happen before then are dropped, not queued.
 import { MASC, DOORS } from '@thick-shift/sim/config';
-import { game, rnd } from '../state.js';
-import { SFX, ctx, bus, room, into, muffle, voices, sample, tone, noise, boom, pick, whiteNoise, shriek, song } from '../audio.js';
+import { game, rnd } from '../state';
+import { SFX, ctx, bus, room, into, muffle, voices, sample, tone, noise, boom, pick, whiteNoise, shriek, song } from '../audio';
 import { ROOMS3, DOORWAYS, PANELS, BOXES, GENERATOR, CHARGER, DUCTS, EYE, sees, roomAt } from '@thick-shift/sim/map';
 import { lightsF, TOY } from '@thick-shift/sim';
-import { CUES } from './actors/scare.js';
+import { CUES } from './actors/scare';
 
 const HEAR = 28; // metres past which a footstep is not worth a voice
 const BUSY = 18; // with this many voices sounding, footsteps and other texture are skipped

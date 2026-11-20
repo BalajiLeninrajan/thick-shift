@@ -6,7 +6,7 @@ import { game } from '@thick-shift/game/state';
 
 if (new URLSearchParams(location.search).has('frame_id')) {
   try {
-    await import('./activity.js');
+    await import('./activity');
   } catch (err) {
     game.error = { title: 'Could not reach Discord', detail: String(err.message || err) };
   }

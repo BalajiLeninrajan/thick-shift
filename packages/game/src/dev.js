@@ -4,10 +4,10 @@
 // Cheats that change the simulation live in S.dev, so packages/sim/src/sim.ts can read
 // them and guests see their effects. Only the host can set them.
 import { MASC, FINAL_NIGHT } from '@thick-shift/sim/config';
-import { game } from './state.js';
+import { game } from './state';
 import { F, hourF, clockF, dreadF, startFloorNight } from '@thick-shift/sim';
 import { REST } from '@thick-shift/sim/map';
-import { sim } from './net.js';
+import { sim } from './net';
 
 // The menu's controls are inputs and buttons. Typed as inputs, so .value and .checked check.
 const $ = id => /** @type {HTMLInputElement} */ (document.getElementById(id));

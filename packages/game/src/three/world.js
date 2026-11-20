@@ -7,14 +7,14 @@
 //   props.js              furniture from the prop kits, stood where the sim's dressing.ts says
 //   usable.js             breaker boxes, door buttons, generator, charger, batteries, doors, wall map
 //   sight.js              which rooms can be seen from which, so the rest are not drawn
-import { surfaces } from './world/surfaces.js';
-import { art } from './world/art.js';
-import { Batch } from './world/geo.js';
-import { buildShell } from './world/shell.js';
-import { createLight, lit, torchCookie } from './world/light.js';
-import { createProps } from './world/props.js';
-import { createUsables } from './world/usable.js';
-import { roomsSeenFrom } from './world/sight.js';
+import { surfaces } from './world/surfaces';
+import { art } from './world/art';
+import { Batch } from './world/geo';
+import { buildShell } from './world/shell';
+import { createLight, lit, torchCookie } from './world/light';
+import { createProps } from './world/props';
+import { createUsables } from './world/usable';
+import { roomsSeenFrom } from './world/sight';
 
 export function buildWorld(scene) {
   const mats = surfaces(),

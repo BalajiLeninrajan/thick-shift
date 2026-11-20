@@ -5,12 +5,12 @@
 // eyes, the things particular to it, whatever hangs off it, then feet planted.
 import * as THREE from 'three';
 import { MASC } from '@thick-shift/sim/config';
-import { loadActor, loadJSON, instance, EYE_PALE } from '../assets.js';
+import { loadActor, loadJSON, instance, EYE_PALE } from '../assets';
 import { glimpses, MASCOT_R, EYE } from '@thick-shift/sim/map';
 import { lightsF } from '@thick-shift/sim';
-import { Track, hostClock, wrap } from './track.js';
-import { buildRig, lag } from './rig.js';
-import { C, NCH, RATE, styleOf, standIn, hash } from './styles.js';
+import { Track, hostClock, wrap } from './track';
+import { buildRig, lag } from './rig';
+import { C, NCH, RATE, styleOf, standIn, hash } from './styles';
 
 const TAU = Math.PI * 2,
   clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);

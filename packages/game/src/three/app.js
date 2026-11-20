@@ -2,18 +2,18 @@
 // night is drawn, so the title screen and lobby never wait on three.js.
 import * as THREE from 'three';
 import { MASC } from '@thick-shift/sim/config';
-import { game, client } from '../state.js';
-import { buildWorld } from './world.js';
-import { createPlayer, prefs } from './player.js';
-import { createActors } from './actors.js';
-import { createHud, where } from './hud.js';
-import { createTask } from './task.js';
+import { game, client } from '../state';
+import { buildWorld } from './world';
+import { createPlayer, prefs } from './player';
+import { createActors } from './actors';
+import { createHud, where } from './hud';
+import { createTask } from './task';
 import { EYE, BOXES, ROOMS3, roomAt, reaches } from '@thick-shift/sim/map';
-import { createSound } from './sound.js';
-import { createPost } from './post.js';
-import { createPhone } from './actors/phone.js';
-import { createSlats } from './slats.js';
-import { createOutlines } from './outline.js';
+import { createSound } from './sound';
+import { createPost } from './post';
+import { createPhone } from './actors/phone';
+import { createSlats } from './slats';
+import { createOutlines } from './outline';
 import { dreadF } from '@thick-shift/sim';
 
 let app = null;

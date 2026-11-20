@@ -3,8 +3,8 @@
 // machinery; this file is the tuning, written from the notes each model
 // carries in packages/game/public/models/<key>.json.
 import * as THREE from 'three';
-import { EYE_PALE } from '../assets.js';
-import { lag } from './rig.js';
+import { EYE_PALE } from '../assets';
+import { lag } from './rig';
 
 /* ---------- pose channels ---------- */
 // A pose is one number per channel. Every state has a pose, and a mascot's

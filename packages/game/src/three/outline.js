@@ -11,10 +11,10 @@
 //   batteries, the crank, the charger, door buttons, a Mini Biggs on the floor (with empty hands)  a faint gold, within NEAR metres
 //   flat teammates       red, wherever they can be seen
 // The switch is in the pause panel (prefs.outline in player.js), on by default.
-import { game } from '../state.js';
+import { game } from '../state';
 import { GENERATOR, CHARGER, PANELS, BATTERY_SPOTS } from '@thick-shift/sim/map';
 import { faultLeft } from '@thick-shift/sim';
-import { prefs } from './player.js';
+import { prefs } from './player';
 
 const NEAR = 6,
   HURRY = 15;

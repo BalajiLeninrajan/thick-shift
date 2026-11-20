@@ -4,10 +4,10 @@
 // drops out of view when it is not. Built here from boxes; there is no
 // model for it.
 import * as THREE from 'three';
-import { game } from '../../state.js';
-import { canvas } from '../world/tex.js';
-import { createMinimap } from '../minimap.js';
-import { HANDS_ORDER } from '../slats.js';
+import { game } from '../../state';
+import { canvas } from '../world/tex';
+import { createMinimap } from '../minimap';
+import { HANDS_ORDER } from '../slats';
 
 const HELD = { x: -0.15, y: -0.088, z: -0.235 },
   DROP = 0.2; // metres from the eye, and how far below that it sits when put away

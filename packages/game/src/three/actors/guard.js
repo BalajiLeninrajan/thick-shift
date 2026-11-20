@@ -3,11 +3,11 @@
 // phone when they have it up, a name tag, and the two things that happen to
 // guards: being flattened and being peeled back up.
 import * as THREE from 'three';
-import { loadActor, instance } from '../assets.js';
+import { loadActor, instance } from '../assets';
 import { glimpses, PLAYER_R } from '@thick-shift/sim/map';
 import { F } from '@thick-shift/sim';
-import { Track, hostClock } from './track.js';
-import { buildRig } from './rig.js';
+import { Track, hostClock } from './track';
+import { buildRig } from './rig';
 
 const TAU = Math.PI * 2,
   clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);

@@ -4,12 +4,12 @@
 // Keyboard (WASD to walk, and arrow keys to look for anyone without a mouse), mouse and gamepad are read here. Touch is in touch.js, which
 // drives the same guard through pad, look(), toggleTorch(), togglePhone(), toggleZoom() and throwToy().
 import * as THREE from 'three';
-import { game } from '../state.js';
-import { send } from '../net.js';
-import { unlockAudio } from '../audio.js';
+import { game } from '../state';
+import { send } from '../net';
+import { unlockAudio } from '../audio';
 import { PLAYER_R, EYE, BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, slide, walkable } from '@thick-shift/sim/map';
 import { F, TOY } from '@thick-shift/sim';
-import { FAULT_NAME } from './task.js';
+import { FAULT_NAME } from './task';
 
 const SENS = 0.0022,
   SEND_MS = 80; // radians per pixel of mouse travel at sensitivity 1

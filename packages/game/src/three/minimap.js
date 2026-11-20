@@ -7,7 +7,7 @@
 // off its mark, as the booth's wall map does.
 import * as THREE from 'three';
 import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, BATTERY_SPOTS, roomAt } from '@thick-shift/sim/map';
-import { canvas } from './world/tex.js';
+import { canvas } from './world/tex';
 
 export const MAP_W = 288,
   MAP_H = 224; // canvas pixels: the 4:3-ish shape of the phone's glass

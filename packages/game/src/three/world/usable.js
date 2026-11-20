@@ -6,9 +6,9 @@ import * as THREE from 'three';
 import { MASC, DOORS } from '@thick-shift/sim/config';
 import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, WALL_MAP, PANELS, BATTERY_SPOTS, DOOR_H, BOOTH, roomAt } from '@thick-shift/sim/map';
 import { lightsF } from '@thick-shift/sim';
-import { floorY } from './shell.js';
-import { canvas } from './tex.js';
-import { prop } from './props.js';
+import { floorY } from './shell';
+import { canvas } from './tex';
+import { prop } from './props';
 import { GEN_BACK } from '@thick-shift/sim/dressing';
 
 const AMBER = 0xffb040,

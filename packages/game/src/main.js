@@ -1,8 +1,8 @@
 // Entry point: the per-frame loop that ties state, sound, UI and drawing together.
-import { game, client } from './state.js';
-import { SFX, ambience } from './audio.js';
+import { game, client } from './state';
+import { SFX, ambience } from './audio';
 import { dreadF } from '@thick-shift/sim';
-import { syncOverlay } from './ui.js';
+import { syncOverlay } from './ui';
 
 // window.ts, the ?debug handle for poking at the game from the console.
 const debugWindow = /** @type {Window & { ts?: { game: object, client: object, floor?: object } }} */ (window);
@@ -29,7 +29,7 @@ function drawFloor() {
   if (!floor) {
     if (!floorLoading) {
       floorLoading = true;
-      import('./three/app.js').then(
+      import('./three/app').then(
         m => {
           floor = m;
         },
@@ -63,5 +63,5 @@ export function start() {
   // ?dev adds the dev menu.
   const params = new URLSearchParams(location.search);
   if (params.has('debug')) debugWindow.ts = { game, client };
-  if (params.has('dev')) import('./dev.js').then(m => m.mountDev());
+  if (params.has('dev')) import('./dev').then(m => m.mountDev());
 }

@@ -8,12 +8,12 @@
 // it matters (a prompt in reach, stamina while winded, the flat and pause
 // states).
 import { MASC, FINAL_NIGHT } from '@thick-shift/sim/config';
-import { game } from '../state.js';
+import { game } from '../state';
 import { ROOMS3, BOXES, CHARGER, GENERATOR, roomAt, route } from '@thick-shift/sim/map';
 import { F, TOY, clockF, faultLeft } from '@thick-shift/sim';
-import { FAULT_NAME } from './task.js';
-import { prefs, savePrefs } from './player.js';
-import { createTouch, toggleFullscreen, canFullscreen } from './touch.js';
+import { FAULT_NAME } from './task';
+import { prefs, savePrefs } from './player';
+import { createTouch, toggleFullscreen, canFullscreen } from './touch';
 
 const HALF_SPAN = 1.3; // radians either side of straight ahead that fit on the compass
 const LABEL_GAP = 6; // pixels kept between two compass labels

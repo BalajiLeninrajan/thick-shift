@@ -11,10 +11,10 @@
 import * as THREE from 'three';
 import { ROOMS3, BOXES } from '@thick-shift/sim/map';
 import { darkRoom } from '@thick-shift/sim';
-import { roomOf, open, sees, reach } from './sight.js';
-import { Batch } from './geo.js';
-import { ART, uvOf } from './art.js';
-import { canvas } from './tex.js';
+import { roomOf, open, sees, reach } from './sight';
+import { Batch } from './geo';
+import { ART, uvOf } from './art';
+import { canvas } from './tex';
 // The lamps and the dead fittings are plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read them too.
 import { TUBE, GREEN, LAMPS, DEAD_TUBES } from '@thick-shift/sim/data';
 

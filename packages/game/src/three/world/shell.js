@@ -5,9 +5,9 @@
 // and the stencilled room names go into two decal meshes.
 import * as THREE from 'three';
 import { ROOMS3, DOORWAYS, DOOR_H, REST, walls, slabs, roomAt } from '@thick-shift/sim/map';
-import { Batch, rgbOf } from './geo.js';
-import { SPAN, LOOK } from './surfaces.js';
-import { ART, NAME_CELL, uvOf } from './art.js';
+import { Batch, rgbOf } from './geo';
+import { SPAN, LOOK } from './surfaces';
+import { ART, NAME_CELL, uvOf } from './art';
 // The stage's platform (STAGE) is plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read it too.
 import { STAGE } from '@thick-shift/sim/data';
 

@@ -7,8 +7,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MASC } from '@thick-shift/sim/config';
 import { TOY } from '@thick-shift/sim';
-import { floorY } from '../world/shell.js';
-import { hostClock } from './track.js';
+import { floorY } from '../world/shell';
+import { hostClock } from './track';
 
 const SIZE = 1.4; // a big keyring, so it shows across a room in a torch beam
 const HAND = 1.3; // metres off the floor it leaves the hand

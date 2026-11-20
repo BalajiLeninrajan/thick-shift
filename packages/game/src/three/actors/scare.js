@@ -4,7 +4,7 @@
 // lunges, then the camera is dropped to the floor and left looking up at it
 // as it sits down. After that player.js has the camera back, where we left it.
 import * as THREE from 'three';
-import { wrap } from './track.js';
+import { wrap } from './track';
 
 // Seconds from the catch. The sound should hang its stinger on these.
 export const CUES = { grab: 0, face: 0.12, bite: 0.62, drop: 1.05, floor: 1.3, end: 1.5 };

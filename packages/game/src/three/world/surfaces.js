@@ -3,7 +3,7 @@
 // Every texture covers SPAN metres across; a wall texture covers the whole
 // height of its room, so the dado and the damp sit at real heights.
 import * as THREE from 'three';
-import { paint, fbm, mixc } from './tex.js';
+import { paint, fbm, mixc } from './tex';
 import { ROOMS3 } from '@thick-shift/sim/map';
 
 export const SPAN = 4;

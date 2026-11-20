@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { MASC } from '@thick-shift/sim/config';
 import { ROOMS3 } from '@thick-shift/sim/map';
-import { canvas, rand, mixc, fbm, FIELD } from './tex.js';
+import { canvas, rand, mixc, fbm, FIELD } from './tex';
 
 // [x, y, w, h] in pixels of the 1024 square art canvas.
 /** @satisfies {Record<string, [x: number, y: number, w: number, h: number]>} */
