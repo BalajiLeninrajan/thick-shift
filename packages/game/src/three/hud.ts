@@ -14,6 +14,40 @@ import { F, TOY, clockF, faultLeft } from '@thick-shift/sim';
 import { FAULT_NAME } from './task';
 import { prefs, savePrefs } from './player';
 import { createTouch, toggleFullscreen, canFullscreen } from './touch';
+import type { NightState, Player, Point, State } from '@thick-shift/sim/types';
+import type { Me, PlayerHandle } from '../types';
+
+// A row of the pause screen's lists: what, the keys or buttons, and an optional note. A group: its title and rows.
+type ControlRow = [what: string, how: string[], note?: string];
+type ControlGroup = [title: string, rows: ControlRow[]];
+// A compass mark this frame. dist: metres along the route. off: where it would sit on the strip, -1 to 1 at its
+// ends. at: off, kept on the strip.
+interface Mark {
+  key: string;
+  kind: string;
+  x: number;
+  z: number;
+  hot?: boolean;
+  name?: string;
+  ping?: boolean;
+  dist?: number;
+  off?: number;
+  at?: number;
+}
+// An element that remembers what html() last put in it, or how far spread() moved it.
+type Cached = HTMLElement & { _html?: string; _dx?: number };
+// Compass labels laid side by side (spread): the label, where it sits unmoved and its width; mid: where the run
+// wants its centre.
+interface Run {
+  ls: { b: Cached; x: number; w: number }[];
+  mid: number;
+  w: number;
+}
+// A toast on screen, and when it goes.
+interface Toast {
+  e: HTMLElement;
+  until: number;
+}
 
 const HALF_SPAN = 1.3; // radians either side of straight ahead that fit on the compass
 const LABEL_GAP = 6; // pixels kept between two compass labels
@@ -47,7 +81,7 @@ const PATHS = {
   rotate: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 9a10 10 0 0 0 3 9m17-3a10 10 0 0 0-3-9"/>',
   toy: '<circle cx="12" cy="13.5" r="7"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="6.5" r="2.2"/><path d="M9.5 11v.01M14.5 11v.01M10 16.5h.01M14 16.5h.01"/>',
 };
-const icon = name =>
+const icon = (name: string): string =>
   `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
 // Each kind of toast has its own icon and colour (in styles.css), so a low
 // torch, low power, a fault burning and a guard going down do not look alike.
@@ -73,7 +107,7 @@ const MAX_TOASTS = 3,
 // optional note under the action.
 const DRAINS = 'Drains the battery fast';
 const TOSS = 'Costs a battery bar';
-const CONTROLS = {
+const CONTROLS: Record<'keys' | 'touch' | 'pad', ControlGroup[]> = {
   keys: [
     [
       'Moving',
@@ -161,7 +195,7 @@ const CONTROLS = {
     ],
   ],
 };
-const controlGroups = groups =>
+const controlGroups = (groups: ControlGroup[]): string =>
   groups
     .map(
       ([title, rows]) =>
@@ -174,38 +208,38 @@ const controlGroups = groups =>
     )
     .join('');
 
-const el = (tag, cls, parent) => {
+const el = (tag: string, cls: string, parent: Element): HTMLElement => {
   const e = document.createElement(tag);
   e.className = cls;
   parent.append(e);
   return e;
 };
-const set = (e, text) => {
+const set = (e: Node, text: string): void => {
   if (e.textContent !== text) e.textContent = text;
 };
-const html = (e, markup) => {
+const html = (e: Cached, markup: string): void => {
   if (e._html !== markup) e.innerHTML = e._html = markup;
 };
-const data = (e, key, v) => {
+const data = (e: HTMLElement, key: string, v: string | boolean): void => {
   v = String(v);
   if (e.dataset[key] !== v) e.dataset[key] = v;
 };
-const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
-const angDiff = (a, b) => {
+const esc = (s: string): string => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
+const angDiff = (a: number, b: number): number => {
   let d = (a - b) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;
   return d;
 };
-const metres = d => Math.max(1, Math.round(d)) + ' m';
+const metres = (d: number): string => Math.max(1, Math.round(d)) + ' m';
 // "in the Kitchen", for a sentence.
-export function where(p) {
+export function where(p: Partial<Point>): string {
   const name = ROOMS3[roomAt(p.x, p.z)]?.name;
   return !name ? 'somewhere' : name === 'Backstage' ? 'backstage' : 'in the ' + name;
 }
-const roomName = p => ROOMS3[roomAt(p.x, p.z)]?.name || '';
+const roomName = (p: Partial<Point>): string => ROOMS3[roomAt(p.x, p.z)]?.name || '';
 
-export function createHud(stage, player) {
+export function createHud(stage: Element, player: PlayerHandle) {
   const root = el('div', 'ts-fhud', stage);
   root.innerHTML = `
     <div class="ts-f-vignette"></div>
@@ -277,7 +311,7 @@ export function createHud(stage, player) {
       </div>
     </div>
     <div class="ts-f-rotate"><div class="empty-state">${icon('rotate')}<strong>Turn your phone sideways</strong><span>The floor is walked in landscape.</span></div></div>`;
-  const $ = sel => root.querySelector(sel);
+  const $ = <E extends HTMLElement = HTMLElement>(sel: string): E => root.querySelector<E>(sel);
   const [time, night] = $('.ts-f-time').children,
     power = $('.ts-f-power'),
     powerBar = power.querySelector('i'),
@@ -290,7 +324,7 @@ export function createHud(stage, player) {
   const prompt = $('.ts-f-prompt'),
     [promptKey, promptText] = $('.ts-f-prompt-row').children,
     hold = $('.ts-f-hold'),
-    holdBar = hold.firstChild;
+    holdBar = hold.firstChild as HTMLElement;
   const torch = $('.ts-f-torch'),
     stam = $('.ts-f-stam'),
     cells = [...$('.ts-f-cells').children],
@@ -306,38 +340,46 @@ export function createHud(stage, player) {
     pauseIn = $('.ts-f-pause-in'),
     pauseWhen = $('.ts-f-pause-when'),
     keyList = $('[data-pane="controls"]'),
-    sens = $('#ts-sens'),
+    sens = $<HTMLInputElement>('#ts-sens'),
     sensText = sens.nextElementSibling,
-    invert = $('#ts-invert'),
-    outline = $('#ts-outline'),
-    third = $('#ts-third');
+    invert = $<HTMLInputElement>('#ts-invert'),
+    outline = $<HTMLInputElement>('#ts-outline'),
+    third = $<HTMLInputElement>('#ts-third');
   const touch = createTouch(root, player);
   // Compass ticks, by bearing. Yaw 0 faces south and grows toward east, as in player.js.
-  const ticks = [
-    ['S', 0],
-    ['', Math.PI / 4],
-    ['E', Math.PI / 2],
-    ['', Math.PI * 0.75],
-    ['N', Math.PI],
-    ['', -Math.PI * 0.75],
-    ['W', -Math.PI / 2],
-    ['', -Math.PI / 4],
-  ].map(([letter, b]) => {
+  const ticks = (
+    [
+      ['S', 0],
+      ['', Math.PI / 4],
+      ['E', Math.PI / 2],
+      ['', Math.PI * 0.75],
+      ['N', Math.PI],
+      ['', -Math.PI * 0.75],
+      ['W', -Math.PI / 2],
+      ['', -Math.PI / 4],
+    ] satisfies [string, number][]
+  ).map(([letter, b]) => {
     const e = el('span', 'ts-f-tick', compass);
     e.textContent = letter;
     return { e, b };
   });
 
-  const actions = { resume: player.resume, pause: player.pause, call: player.call, watch: player.watchNext, full: toggleFullscreen };
+  const actions: Record<string, () => void> = {
+    resume: player.resume,
+    pause: player.pause,
+    call: player.call,
+    watch: player.watchNext,
+    full: toggleFullscreen,
+  };
   // The pause screen opens on Controls. Touch has no gamepad tab. The panes share one cell and the others are
   // only made invisible, so the panel keeps the tallest one's size and the tabs stay put.
-  const tabs = [...pause.querySelectorAll('[data-tab]')],
-    panes = [...pause.querySelectorAll('[data-pane]')];
-  const showTab = name => {
+  const tabs = [...pause.querySelectorAll<HTMLElement>('[data-tab]')],
+    panes = [...pause.querySelectorAll<HTMLElement>('[data-pane]')];
+  const showTab = (name: string): void => {
     for (const t of tabs) {
       const on = t.dataset.tab === name;
       t.classList.toggle('active', on);
-      t.setAttribute('aria-selected', on);
+      t.setAttribute('aria-selected', String(on));
     }
     for (const p of panes) {
       const off = p.dataset.pane !== name;
@@ -347,14 +389,14 @@ export function createHud(stage, player) {
   };
   showTab('controls');
   root.addEventListener('click', e => {
-    const name = e.target.closest('[data-do]')?.dataset.do,
-      tab = e.target.closest('[data-tab]')?.dataset.tab;
+    const name = (e.target as Element).closest<HTMLElement>('[data-do]')?.dataset.do,
+      tab = (e.target as Element).closest<HTMLElement>('[data-tab]')?.dataset.tab;
     if (name) actions[name]();
     else if (tab) showTab(tab);
     else if (e.target === pause || e.target === pauseIn) player.resume(); // a click beside the panel
   });
-  const showPrefs = () => {
-    sens.value = prefs.sens;
+  const showPrefs = (): void => {
+    sens.value = String(prefs.sens);
     invert.checked = prefs.invert;
     outline.checked = prefs.outline;
     third.checked = prefs.third;
@@ -380,12 +422,12 @@ export function createHud(stage, player) {
 
   /* ---------- toasts ---------- */
 
-  const live = [];
-  function drop(t) {
+  const live: Toast[] = [];
+  function drop(t: Toast): void {
     t.e.classList.add('is-gone');
     setTimeout(() => t.e.remove(), 400);
   }
-  function say(text, kind = 'info', seconds = 4.5) {
+  function say(text: string, kind = 'info', seconds = 4.5): void {
     const e = el('div', 'ts-f-toast is-' + kind, toasts);
     e.innerHTML = icon(TOAST_ICON[kind]) + '<span></span>';
     e.lastChild.textContent = text;
@@ -398,20 +440,20 @@ export function createHud(stage, player) {
   // Marks point along the walking route, not through the walls: nobody knows
   // the building on their first night. routes: key -> the next corner to walk
   // to and how much further the thing is from there.
-  const routes = new Map(),
-    marks = new Map(),
-    pings = new Map();
+  const routes = new Map<string, { x: number; z: number; far: number }>(),
+    marks = new Map<string, HTMLElement>(),
+    pings = new Map<string, number>();
   let navAt = 0,
     navTurn = 0;
-  function findRoute(S, me, t) {
+  function findRoute(S: State, me: Me, t: Mark): void {
     const r = route(me.x, me.z, t.x, t.z, { doors: S.doors }),
       path = r.path.length && !r.blocked ? r.path : [t];
     let far = 0;
     for (let i = 1; i < path.length; i++) far += Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z);
     routes.set(t.key, { x: path[0].x, z: path[0].z, far });
   }
-  function drawCompass(S, me, mine, now) {
-    const list = [];
+  function drawCompass(S: NightState, me: Me, mine: Player, now: number): void {
+    const list: Mark[] = [];
     // A breaker box hangs on a wall. Aim at the floor in front of it.
     S.faults?.forEach((f, i) => {
       if (f)
@@ -438,7 +480,7 @@ export function createHud(stage, player) {
       t.e.hidden = Math.abs(off) > 1;
       t.e.style.left = 50 + off * 50 + '%';
     }
-    let nearest = null;
+    let nearest: Mark | null = null;
     for (const t of list) {
       if (!routes.has(t.key)) findRoute(S, me, t);
       let r = routes.get(t.key);
@@ -479,19 +521,19 @@ export function createHud(stage, player) {
   // The marks stay on their bearings. b._dx: how far a label is moved now,
   // so where it would sit unmoved can be measured.
   // Labels that would not fit in the strip side by side are hidden, furthest first, keeping their dots.
-  function spread(list) {
+  function spread(list: Mark[]): void {
     const strip = compass.getBoundingClientRect(),
       W = strip.width,
-      runs = [];
-    const place = run => Math.max(0, Math.min(W - run.w, run.mid - run.w / 2));
-    const rank = t => (t.kind === 'flat' || t.ping ? 0 : t.hot || t.kind === 'gen' || t.kind === 'dock' ? 1 : 2);
+      runs: Run[] = [];
+    const place = (run: Run): number => Math.max(0, Math.min(W - run.w, run.mid - run.w / 2));
+    const rank = (t: Mark): number => (t.kind === 'flat' || t.ping ? 0 : t.hot || t.kind === 'gen' || t.kind === 'dock' ? 1 : 2);
     let room = W + LABEL_GAP;
     const row = list
       .slice()
       .sort((a, c) => rank(a) - rank(c) || a.dist - c.dist)
       .flatMap(t => {
         const m = marks.get(t.key),
-          b = m.lastChild,
+          b = m.lastChild as Cached,
           r = b.getBoundingClientRect();
         room -= r.width + LABEL_GAP;
         m.classList.toggle('is-quiet', room < 0);
@@ -499,7 +541,7 @@ export function createHud(stage, player) {
       })
       .sort((a, c) => a.x - c.x);
     for (const l of row) {
-      let run = { ls: [l], mid: l.x + l.w / 2, w: l.w };
+      let run: Run = { ls: [l], mid: l.x + l.w / 2, w: l.w };
       for (let last = runs.at(-1); last && place(last) + last.w + LABEL_GAP > place(run); last = runs.at(-1)) {
         runs.pop();
         const n = last.ls.length + run.ls.length;
@@ -524,7 +566,7 @@ export function createHud(stage, player) {
 
   // Every open fault, nearest first: the room, the job, and the seconds before it starts to burn the building's ceiling.
   // A short stage shows fewer rows, so the list stops above the stick and the torch.
-  function drawTasks(S, me) {
+  function drawTasks(S: NightState, me: Me): void {
     const ours = (S.faults || [])
       .map((f, i) => f && { f, i, d: Math.hypot(BOXES[i].x - me.x, BOXES[i].z - me.z) })
       .filter(Boolean)
@@ -550,14 +592,14 @@ export function createHud(stage, player) {
     root,
     say,
     // Someone flat called out: their compass mark pulses for a few seconds.
-    ping(id) {
+    ping(id: string): void {
       if (id === game.myId) calledAt = performance.now();
       else pings.set(id, performance.now() + 4000);
     },
     // scared: the catch has the camera (actors/scare.js), and the face fills the screen with nothing over it.
-    update(S, me, scared) {
+    update(S: State, me: Me, scared: boolean): void {
       const now = performance.now(),
-        mine = S.players.find(p => p.id === game.myId) || {},
+        mine = S.players.find(p => p.id === game.myId) || ({} as Player),
         bat = mine.bat ?? 1;
       const mates = S.players.filter(p => p.id !== game.myId && p.x != null);
       root.hidden = S.phase !== 'play' || !!scared;
@@ -576,9 +618,9 @@ export function createHud(stage, player) {
       if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say('Power below 25%.', 'power', 7);
       was.power = S.power;
 
-      drawTasks(S, me);
+      drawTasks(S as NightState, me);
       compass.hidden = me.flat;
-      if (!me.flat) drawCompass(S, me, mine, now);
+      if (!me.flat) drawCompass(S as NightState, me, mine, now);
 
       html(
         crew,
@@ -630,7 +672,7 @@ export function createHud(stage, player) {
       was.empty = me.empty;
       was.dry = me.dry;
       stam.hidden = me.stam >= 1;
-      stam.firstChild.style.width = me.stam * 100 + '%';
+      (stam.firstChild as HTMLElement).style.width = me.stam * 100 + '%';
 
       const t = me.target;
       dot.hidden = me.flat || me.paused;
