@@ -3,6 +3,7 @@
 // what is behind a wall, so without this a guard in the booth facing north
 // would draw the furniture of every room north of it.
 import { ROOMS3, DOORWAYS } from '@thick-shift/sim/map';
+import type { Doorway } from '@thick-shift/sim/map';
 
 const G = 4,
   W = 42 * G,
@@ -10,13 +11,14 @@ const G = 4,
 const FAR = 30; // fog and the torch's reach leave nothing to see past this many metres
 const RAYS = 180; // directions looked in from each point: two degrees apart
 
-export const roomOf = (x, z) => {
+export const roomOf = (x: number, z: number): number => {
   for (let i = 0; i < ROOMS3.length; i++) for (const [x0, z0, x1, z1] of ROOMS3[i].rects) if (x >= x0 && x <= x1 && z >= z0 && z <= z1) return i;
   return -1;
 };
-const doorAt = (x, z, pad = 0) => DOORWAYS.find(({ rect: [x0, z0, x1, z1] }) => x >= x0 - pad && x <= x1 + pad && z >= z0 - pad && z <= z1 + pad);
+const doorAt = (x: number, z: number, pad = 0): Doorway | undefined =>
+  DOORWAYS.find(({ rect: [x0, z0, x1, z1] }) => x >= x0 - pad && x <= x1 + pad && z >= z0 - pad && z <= z1 + pad);
 // Open floor: a room or a doorway, ignoring furniture and shut doors.
-export const open = (x, z) => roomOf(x, z) >= 0 || !!doorAt(x, z);
+export const open = (x: number, z: number): boolean => roomOf(x, z) >= 0 || !!doorAt(x, z);
 
 // Each cell: 0 for wall, 1 for a doorway, 2 + r for room r.
 const grid = new Uint8Array(W * H);
@@ -28,7 +30,7 @@ for (let j = 0; j < H; j++)
     grid[j * W + i] = r >= 0 ? 2 + r : doorAt(x, z) ? 1 : 0;
   }
 // Is the straight line between two points clear of walls?
-export function sees(ax, az, bx, bz) {
+export function sees(ax: number, az: number, bx: number, bz: number): boolean {
   const n = Math.ceil(Math.hypot(bx - ax, bz - az) * G);
   for (let k = 1; k < n; k++) {
     const t = k / n;
@@ -38,7 +40,7 @@ export function sees(ax, az, bx, bz) {
 }
 
 // How far it is from a point to the first wall in a direction (dx, dz, of unit length), up to max metres.
-export function reach(x, z, dx, dz, max) {
+export function reach(x: number, z: number, dx: number, dz: number, max: number): number {
   for (let d = 0; d < max; d += 1 / G) {
     const px = (x + dx * d) * G,
       pz = (z + dz * d) * G;
@@ -53,8 +55,8 @@ export function reach(x, z, dx, dz, max) {
 // narrower than the rays are apart can be missed, so something glimpsed
 // through two doorways may appear a step late.
 const CELL = 2,
-  cells = new Map();
-export function roomsSeenFrom(x, z) {
+  cells = new Map<number, Set<number>>();
+export function roomsSeenFrom(x: number, z: number): Set<number> {
   const cx = Math.floor(x / CELL),
     cz = Math.floor(z / CELL),
     key = cx * 64 + cz;

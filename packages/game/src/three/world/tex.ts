@@ -4,19 +4,47 @@
 // hold for twenty-odd surfaces.
 import * as THREE from 'three';
 
+// What paint() is given. look: { col, rough, bump (normal strength), seed, tall }.
+export interface Look {
+  col: string;
+  rough: number;
+  bump: number;
+  seed: number;
+  tall?: boolean;
+}
+// What a painter draws with (paint's p). Each helper takes a colour, a height and a roughness; null leaves that canvas alone.
+export interface Painter {
+  s: number;
+  c: CanvasRenderingContext2D;
+  h: CanvasRenderingContext2D;
+  r: CanvasRenderingContext2D;
+  rnd: () => number;
+  fill(x: number, y: number, w: number, hh: number, col: string | null, hv: number | null, rv: number | null): void;
+  line(pts: [number, number][], w: number, col: string | null, hv: number | null, rv: number | null, alpha?: number): void;
+  blob(x: number, y: number, rad: number, col: string | null, alpha: number, hv: number | null, rv: number | null): void;
+  wash(field: Float32Array, lo: number, hi: number, col: string | null, alpha: number, hv: number | null, rv: number | null): void;
+  speck(n: number, cols: string[], size: number, alpha: number): void;
+}
+// paint's result: the maps as MeshStandardMaterial parameters.
+export interface Maps {
+  map: THREE.CanvasTexture;
+  normalMap: THREE.CanvasTexture;
+  roughnessMap: THREE.CanvasTexture;
+}
+
 // A seeded random number generator, so the building looks the same every night.
-export const rand = seed => () => {
+export const rand = (seed: number) => (): number => {
   seed = (seed + 0x6d2b79f5) | 0;
   let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
-const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
-export const grey = v => {
+const rgb = (hex: string): number[] => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+export const grey = (v: number): string => {
   const g = Math.round(Math.max(0, Math.min(1, v)) * 255);
   return `rgb(${g},${g},${g})`;
 };
-export const mixc = (a, b, t) => {
+export const mixc = (a: string, b: string, t: number): string => {
   const p = rgb(a),
     q = rgb(b);
   return (
@@ -32,7 +60,7 @@ export const mixc = (a, b, t) => {
 };
 
 // Fractal noise that tiles, n by n, values 0 to 1. cells: lumps across the tile at the coarsest octave.
-export function fbm(n, cells, octaves, seed) {
+export function fbm(n: number, cells: number, octaves: number, seed: number): Float32Array {
   const out = new Float32Array(n * n),
     r = rand(seed);
   let amp = 1,
@@ -65,7 +93,7 @@ export function fbm(n, cells, octaves, seed) {
 }
 export const FIELD = 256; // the size every noise field is made at
 
-export function canvas(w, h = w) {
+export function canvas(w: number, h = w): CanvasRenderingContext2D {
   const cv = document.createElement('canvas');
   cv.width = w;
   cv.height = h;
@@ -76,7 +104,7 @@ export function canvas(w, h = w) {
 // fading in across that range. The stains, wear and peeling all come from this.
 const scratch = canvas(FIELD);
 // roll: how far to slide the field first, so two surfaces do not wear in the same places.
-function wash(ctx, field, lo, hi, col, alpha, roll) {
+function wash(ctx: CanvasRenderingContext2D, field: Float32Array, lo: number, hi: number, col: string, alpha: number, roll: number): void {
   const img = scratch.createImageData(FIELD, FIELD),
     d = img.data,
     [r, g, b] = rgb(col);
@@ -94,14 +122,14 @@ function wash(ctx, field, lo, hi, col, alpha, roll) {
   ctx.drawImage(scratch.canvas, 0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
 }
-const hexGrey = v => {
+const hexGrey = (v: number): string => {
   const g = Math.round(Math.max(0, Math.min(1, v)) * 255)
     .toString(16)
     .padStart(2, '0');
   return '#' + g + g + g;
 };
 
-function texOf(ctx, srgb, wrapT) {
+function texOf(ctx: CanvasRenderingContext2D, srgb: boolean, wrapT: THREE.Wrapping): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(ctx.canvas);
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = wrapT;
@@ -111,13 +139,13 @@ function texOf(ctx, srgb, wrapT) {
 }
 
 // The slope of a height canvas as a normal map. The canvas tiles, so the edges wrap.
-function normalFrom(h, strength, wrapT) {
+function normalFrom(h: CanvasRenderingContext2D, strength: number, wrapT: THREE.Wrapping): THREE.CanvasTexture {
   const n = h.canvas.width,
     src = h.getImageData(0, 0, n, n).data,
     out = canvas(n),
     img = out.createImageData(n, n),
     d = img.data;
-  const at = (x, y) => src[(((y + n) % n) * n + ((x + n) % n)) * 4];
+  const at = (x: number, y: number): number => src[(((y + n) % n) * n + ((x + n) % n)) * 4];
   for (let y = 0; y < n; y++)
     for (let x = 0; x < n; x++) {
       // canvas y runs down and texture v runs up, hence the sign of the second term
@@ -139,7 +167,7 @@ function normalFrom(h, strength, wrapT) {
 // draw gets p: { s, c, h, r, rnd } and the helpers below. Heights and
 // roughness are 0 to 1; a height of .5 is the untouched surface.
 // Returns the maps as MeshStandardMaterial parameters.
-export function paint(look, draw) {
+export function paint(look: Look, draw: (p: Painter) => void): Maps {
   const s = 512,
     c = canvas(s),
     h = canvas(s / 2),
@@ -152,18 +180,18 @@ export function paint(look, draw) {
   r.fillStyle = grey(look.rough);
   for (const ctx of [c, h, r]) ctx.fillRect(0, 0, s, s);
   const roll = (look.seed * 7919) % (FIELD * FIELD);
-  const on = (col, hv, rv, fn) => {
+  const on = (col: string | null, hv: number | null, rv: number | null, fn: (ctx: CanvasRenderingContext2D) => void): void => {
     for (const [ctx, v] of [
       [c, col],
       [h, hv == null ? null : grey(hv)],
       [r, rv == null ? null : grey(rv)],
-    ])
+    ] satisfies [CanvasRenderingContext2D, string | null][])
       if (v != null) {
         ctx.fillStyle = ctx.strokeStyle = v;
         fn(ctx);
       }
   };
-  const p = {
+  const p: Painter = {
     s,
     c,
     h,
@@ -191,7 +219,7 @@ export function paint(look, draw) {
         [c, col],
         [h, hv == null ? null : hexGrey(hv)],
         [r, rv == null ? null : hexGrey(rv)],
-      ])
+      ] satisfies [CanvasRenderingContext2D, string | null][])
         if (v != null)
           for (const ox of [-s, 0, s])
             for (const oy of look.tall ? [0] : [-s, 0, s]) {
