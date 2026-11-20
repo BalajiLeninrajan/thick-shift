@@ -8,22 +8,23 @@ import { game } from './state';
 import { F, hourF, clockF, dreadF, startFloorNight } from '@thick-shift/sim';
 import { REST } from '@thick-shift/sim/map';
 import { sim } from './net';
+import type { Dev, Mascot, State } from '@thick-shift/sim/types';
 
 // The menu's controls are inputs and buttons. Typed as inputs, so .value and .checked check.
-const $ = id => /** @type {HTMLInputElement} */ (document.getElementById(id));
-const DEFAULTS = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: -1, dread: -1 };
-const SWITCHES = ['god', 'power', 'freeze', 'wake'];
-const cheats = () => (game.S.dev ||= { ...DEFAULTS });
-const playing = () => !!game.S && game.S.phase === 'play';
-const STAGES = [
+const $ = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
+const DEFAULTS: Dev = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: -1, dread: -1 };
+const SWITCHES: ('god' | 'power' | 'freeze' | 'wake')[] = ['god', 'power', 'freeze', 'wake'];
+const cheats = (): Dev => (game.S.dev ||= { ...DEFAULTS });
+const playing = (): boolean => !!game.S && game.S.phase === 'play';
+const STAGES: [number, string][] = [
   [-1, 'Auto'],
   [0, 'Cute'],
   [1, 'Off'],
   [2, 'Rotten'],
 ];
 
-const toggle = (id, label) => `<label class="choice"><input class="switch" type="checkbox" id="${id}">${label}</label>`;
-const button = (id, label) => `<button class="btn btn-secondary is-sm" id="${id}">${label}</button>`;
+const toggle = (id: string, label: string): string => `<label class="choice"><input class="switch" type="checkbox" id="${id}">${label}</label>`;
+const button = (id: string, label: string): string => `<button class="btn btn-secondary is-sm" id="${id}">${label}</button>`;
 
 const HTML = `
 <header><h2>Dev menu</h2><div class="band-actions"><button class="btn btn-ghost is-sm" id="dv-close">Close</button></div></header>
@@ -54,7 +55,7 @@ const HTML = `
 
 /* ---------- actions ---------- */
 
-const ACTIONS = {
+const ACTIONS: Record<string, (S: State) => void> = {
   'dv-hour'(S) {
     S.t = Math.min(6 * F.HOUR - 1, (hourF(S) + 1) * F.HOUR);
   },
@@ -85,7 +86,7 @@ const ACTIONS = {
 };
 
 // Bring a mascot to stand in front of the host, or send it back to its mark.
-const MASCOT_ACTIONS = {
+const MASCOT_ACTIONS: Record<string, (S: State, m: Mascot) => void> = {
   near(S, m) {
     const me = S.players.find(p => p.id === game.myId);
     if (!me || me.x == null) return;
@@ -99,8 +100,8 @@ const MASCOT_ACTIONS = {
   },
 };
 
-function bind(el) {
-  const host = fn => () => {
+function bind(el: HTMLDialogElement): void {
+  const host = (fn: (S: State) => void) => (): void => {
     if (game.isHost && playing()) {
       fn(game.S);
       sync(el);
@@ -108,21 +109,21 @@ function bind(el) {
   };
   for (const key of SWITCHES)
     $('dv-' + key).onchange = e => {
-      if (game.isHost && game.S) cheats()[key] = /** @type {HTMLInputElement} */ (e.target).checked;
+      if (game.isHost && game.S) cheats()[key] = (e.target as HTMLInputElement).checked;
       sync(el);
     };
   $('dv-rot').onclick = e => {
-    const b = /** @type {Element} */ (e.target).closest('button');
+    const b = (e.target as Element).closest('button');
     if (b && game.isHost && game.S) {
       cheats().rot = +b.dataset.v;
       sync(el);
     }
   };
   $('dv-speed').oninput = e => {
-    if (game.isHost && game.S) cheats().speed = +(/** @type {HTMLInputElement} */ (e.target).value);
+    if (game.isHost && game.S) cheats().speed = +(e.target as HTMLInputElement).value;
     sync(el);
   };
-  const dread = () => {
+  const dread = (): void => {
     if (game.isHost && game.S) cheats().dread = $('dv-dread-on').checked ? +$('dv-dread').value / 100 : -1;
     sync(el);
   };
@@ -130,7 +131,7 @@ function bind(el) {
   $('dv-dread').oninput = dread;
   for (const id in ACTIONS) $(id).onclick = host(ACTIONS[id]);
   $('dv-mascots').onclick = e => {
-    const b = /** @type {Element} */ (e.target).closest('button');
+    const b = (e.target as Element).closest('button');
     if (b && game.isHost && playing()) {
       MASCOT_ACTIONS[b.dataset.act](game.S, game.S.m[+b.dataset.i]);
       sync(el);
@@ -142,15 +143,15 @@ function bind(el) {
 /* ---------- display ---------- */
 
 // Bring every control in line with the state. Runs on a timer while the menu is open.
-function sync(el) {
+function sync(el: HTMLDialogElement): void {
   const S = game.S,
     on = !!S && game.isHost;
   $('dv-note').textContent = !S ? 'Host a night to use these.' : game.isHost ? 'Changes apply to everyone in the room.' : 'Only the host can change the night.';
-  for (const input of el.querySelectorAll('input, button')) if (input.id !== 'dv-close') input.disabled = !on;
+  for (const input of el.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')) if (input.id !== 'dv-close') input.disabled = !on;
   if (!S) return;
   const dv = cheats();
   for (const key of SWITCHES) $('dv-' + key).checked = dv[key];
-  for (const b of /** @type {HTMLCollectionOf<HTMLElement>} */ ($('dv-rot').children)) b.setAttribute('aria-pressed', String(+b.dataset.v === dv.rot));
+  for (const b of $('dv-rot').children as HTMLCollectionOf<HTMLElement>) b.setAttribute('aria-pressed', String(+b.dataset.v === dv.rot));
   $('dv-speed').value = String(dv.speed);
   $('dv-speed-out').textContent = String(dv.speed);
   $('dv-dread-on').checked = dv.dread >= 0;
@@ -167,7 +168,7 @@ function sync(el) {
       .join('')}</span></div>`
     )
     .join('');
-  const row = (k, v) => `<dt>${k}</dt><dd class="cn-tabular">${v}</dd>`;
+  const row = (k: string, v: string | number): string => `<dt>${k}</dt><dd class="cn-tabular">${v}</dd>`;
   $('dv-read').innerHTML =
     row('Phase', S.phase) +
     row('Night', `${S.night}, ${clockF(S)} (${(S.t / F.HOUR).toFixed(2)} h)`) +
@@ -177,7 +178,7 @@ function sync(el) {
     row('Guards', S.players.map(p => `${p.name} ${Math.round((p.bat ?? 1) * 100)}%${p.flat ? ' flat' : ''}`).join(', '));
 }
 
-export function mountDev() {
+export function mountDev(): void {
   const el = document.createElement('dialog');
   el.className = 'drawer ts-dev';
   el.id = 'dev';
@@ -185,7 +186,7 @@ export function mountDev() {
   document.body.append(el);
   bind(el);
   // show(), not showModal(): the game stays playable. Opening it lets go of the mouse, so the game pauses behind it.
-  const flip = () => {
+  const flip = (): void => {
     if (el.open) el.close();
     else {
       if (document.pointerLockElement) document.exitPointerLock();
@@ -204,13 +205,13 @@ export function mountDev() {
     clearInterval(watch);
     for (const spot of spots)
       if (spot) {
-        const b2 = /** @type {HTMLElement} */ (btn.cloneNode(true));
+        const b2 = btn.cloneNode(true) as HTMLElement;
         b2.onclick = flip;
         spot.append(b2);
       }
   }, 1000);
   addEventListener('keydown', e => {
-    if (e.key === '`' && /** @type {Element} */ (e.target).tagName !== 'INPUT') flip();
+    if (e.key === '`' && (e.target as Element).tagName !== 'INPUT') flip();
   });
   // Skip the mascot list while the pointer is on it, or the buttons get rebuilt mid-click.
   setInterval(() => {
