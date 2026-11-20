@@ -33,29 +33,22 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
-      // Each rule below is off because obeying it would mean rewriting working code by hand. The counts are the
-      // violations when the rule was turned off.
       "complexity": {
-        // 3. `a && a.b` and `a?.b` differ when a is falsy but not null (0, '', false). Revisit in PR 6 of #7 (strict),
-        // when the types say which values can be null.
-        "useOptionalChain": "off",
-        // 2, both clamp(). Math.min() orders 0 and -0 differently from the ternary. Revisit in PR 6 of #7.
-        "useMathMinMax": "off"
-      },
-      "correctness": {
-        // 18. Most keep a shared signature readable: strategy hooks that all take S, forEach indices. Revisit in
-        // PR 6 of #7 (strict), alongside TypeScript's noUnusedParameters.
-        "noUnusedFunctionParameters": "off"
+        // Clamps read as Math.min/Math.max.
+        "useMathMinMax": "error"
       },
       "style": {
         // 26 in styles.css. Reordering rules to satisfy it changes which rule wins, so it would change how the page
         // looks. Revisit if the stylesheet is split up.
-        "noDescendingSpecificity": "off"
+        "noDescendingSpecificity": "off",
+        // Where the code knows a value is there, the types should say so: a PerMascot table read by a MascotIndex, a
+        // Record keyed by DoorKey, a NonEmpty list, or a check from @thick-shift/sim/check or the game's dom.ts that
+        // throws a named Error. A `!` that stays carries a biome-ignore comment giving the reason.
+        "noNonNullAssertion": "error"
       },
       "suspicious": {
-        // 26. Assignments inside expressions (`return lensTex = new ...`, `if (!(b.woke ||= ...))`,
-        // `(v.strain -= dt) <= 0`) are deliberate here. Revisit in PR 6 of #7 (strict).
-        "noAssignInExpressions": "off"
+        // An assignment is a statement of its own, so a countdown or a cached value is not hidden inside a test.
+        "noAssignInExpressions": "error"
       }
     }
   }
