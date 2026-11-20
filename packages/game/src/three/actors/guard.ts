@@ -8,14 +8,17 @@ import { glimpses, PLAYER_R } from '@thick-shift/sim/map';
 import { F } from '@thick-shift/sim';
 import { Track, hostClock } from './track';
 import { buildRig } from './rig';
+import type { Rig } from './rig';
+import type { Player, State } from '@thick-shift/sim/types';
+import type { View } from '../actors';
 
 const TAU = Math.PI * 2,
-  clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 const TAG_NEAR = 7,
   TAG_FLAT = 25; // metres a name shows from: standing (and in sight), and flat (so someone can find them)
 const THIN = 0.035; // how much of a guard is left, front to back, once flat
 // A leg's angle through the walk cycle: the first half on the ground, the foot going back at ground speed; the second half swinging forward.
-const legAt = (q, A, S) => (q < 0.5 ? Math.asin(S * (q * 4 - 1)) : A * Math.cos(Math.PI * (q * 2 - 1)));
+const legAt = (q: number, A: number, S: number): number => (q < 0.5 ? Math.asin(S * (q * 4 - 1)) : A * Math.cos(Math.PI * (q * 2 - 1)));
 const LOWERED = 0.9; // radians the torch arm drops when the torch is off
 const PHONE_UP = 1.15; // radians the left arm comes forward to hold the phone up
 
@@ -36,8 +39,15 @@ const MAT = {
 };
 
 // The contract's guard parts, built from capsules. Shown until guard.glb loads, and if it never does.
-function standIn() {
-  const node = (name, parent, x, y, z, ...meshes) => {
+function standIn(): THREE.Object3D {
+  const node = (
+    name: string,
+    parent: THREE.Object3D | null,
+    x: number,
+    y: number,
+    z: number,
+    ...meshes: [geo: THREE.BufferGeometry, material: THREE.Material][]
+  ): THREE.Object3D => {
     const o = new THREE.Object3D();
     o.name = name;
     o.position.set(x, y, z);
@@ -60,14 +70,14 @@ function standIn() {
 }
 
 // Where the left hand is: just above the lowest point of arm_L, where the phone goes.
-function handOn(model) {
+function handOn(model: THREE.Object3D): THREE.Object3D | null {
   const arm = model.getObjectByName('arm_L'),
     box = new THREE.Box3(),
     part = new THREE.Box3();
   if (!arm) return null;
   model.updateWorldMatrix(true, true);
   const back = arm.matrixWorld.clone().invert();
-  arm.traverse(m => {
+  arm.traverse((m: THREE.Mesh) => {
     if (!m.isMesh) return;
     m.geometry.computeBoundingBox();
     box.union(part.copy(m.geometry.boundingBox).applyMatrix4(back.clone().multiply(m.matrixWorld)));
@@ -85,14 +95,14 @@ function handOn(model) {
 
 // A point on arm_R at the front of the torch (the middle of guard.glb's
 // lamp_glow face), so the lens glow and the lent light go where the torch is.
-function lensOn(model) {
+function lensOn(model: THREE.Object3D): THREE.Object3D | null {
   const arm = model.getObjectByName('arm_R'),
     box = new THREE.Box3(),
     part = new THREE.Box3();
   if (!arm) return null;
   model.updateWorldMatrix(true, true);
   const back = arm.matrixWorld.clone().invert();
-  arm.traverse(m => {
+  arm.traverse((m: THREE.Mesh<THREE.BufferGeometry, THREE.Material>) => {
     if (!m.isMesh || m.material.name !== 'lamp_glow') return;
     m.geometry.computeBoundingBox();
     box.union(part.copy(m.geometry.boundingBox).applyMatrix4(back.clone().multiply(m.matrixWorld)));
@@ -105,8 +115,8 @@ function lensOn(model) {
   return at;
 }
 
-let lensTex = null;
-function lens() {
+let lensTex: THREE.CanvasTexture = null;
+function lens(): THREE.CanvasTexture {
   if (lensTex) return lensTex;
   const cv = document.createElement('canvas');
   cv.width = cv.height = 32;
@@ -120,7 +130,7 @@ function lens() {
   return (lensTex = new THREE.CanvasTexture(cv));
 }
 
-function nameTag(name) {
+function nameTag(name: string): THREE.Sprite {
   const cv = document.createElement('canvas');
   cv.width = 256;
   cv.height = 64;
@@ -142,7 +152,36 @@ function nameTag(name) {
 }
 
 export class Guard {
-  constructor(scene, p) {
+  declare id: string;
+  declare name: string;
+  declare group: THREE.Group;
+  declare pivot: THREE.Group;
+  declare track: Track;
+  declare glow: THREE.Sprite;
+  declare phone: THREE.Group;
+  declare screen: THREE.Sprite;
+  declare model: THREE.Object3D;
+  declare rig: Rig;
+  declare lens: THREE.Object3D;
+  declare tag: THREE.Sprite;
+  declare phase: number;
+  declare walk: number;
+  declare t: number;
+  declare raise: number;
+  declare busy: number;
+  declare flat: number;
+  declare flatV: number;
+  declare isFlat: boolean;
+  declare seen: boolean;
+  declare lookT: number;
+  declare on: boolean;
+  declare ph: boolean;
+  declare phRaise: number;
+  declare dist: number;
+  declare aim: THREE.Vector3;
+  declare hand: THREE.Vector3;
+  declare here: boolean; // still in S.players this frame (actors.js)
+  constructor(scene: THREE.Scene, p: Player) {
     this.id = p.id;
     this.name = p.name;
     this.group = new THREE.Group();
@@ -186,7 +225,7 @@ export class Guard {
     this.aim = new THREE.Vector3();
     this.hand = new THREE.Vector3();
   }
-  wear(model) {
+  wear(model: THREE.Object3D): void {
     this.model = model;
     this.rig = buildRig(model);
     this.pivot.add(model);
@@ -194,7 +233,7 @@ export class Guard {
     this.lens.add(this.glow);
     (handOn(model) || this.pivot).add(this.phone);
   }
-  dispose(scene) {
+  dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
     this.tag.material.map.dispose();
     this.tag.material.dispose();
@@ -202,7 +241,7 @@ export class Guard {
     this.screen.material.dispose();
   }
 
-  sync(p, S, dt, view) {
+  sync(p: Player, S: State, dt: number, view: View): void {
     const tr = this.track,
       rig = this.rig,
       flat = !!p.flat;
