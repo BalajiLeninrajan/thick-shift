@@ -11,16 +11,21 @@ import { ROOMS3 } from '@thick-shift/sim/map';
 import { DRESSING } from '@thick-shift/sim/dressing';
 import { floorY } from './shell';
 import { lit } from './light';
+import type { Levels } from './light';
+
+// A node of a kit model as traverse() hands it over: a mesh when isMesh is set, wearing the kit's own material or, once
+// dressed, the one dressMaterial gave it.
+type KitMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial | THREE.MeshBasicMaterial>;
 
 const KITS = ['props_a', 'props_b'];
 // Materials the kits mean to be lit from inside, and which of the building's light levels drives each.
-const GLOW = { lamp_glow: 'on', screen_glow: 'screen', sign_glow: 'on', exit_glow: 'exit', status_glow: 'on' };
+const GLOW: Record<string, keyof Levels> = { lamp_glow: 'on', screen_glow: 'screen', sign_glow: 'on', exit_glow: 'exit', status_glow: 'on' };
 // Props with a part that keeps moving: [child node, radians per second about its z].
-const SPIN = { wall_fan: ['blades', 1.1] };
+const SPIN: Record<string, [part: string, speed: number]> = { wall_fan: ['blades', 1.1] };
 
 // Vertex colours as RGB. three.js builds a different program for RGBA ones, so a material drawn on both would have
 // its program worked out again at every switch, many times a frame. The kits' alphas are all 1.
-function rgb(g) {
+function rgb(g: THREE.BufferGeometry): void {
   const c = g.attributes.color;
   if (!c || c.itemSize === 3) return;
   const out = new Float32Array(c.count * 3);
@@ -29,22 +34,22 @@ function rgb(g) {
 }
 
 // Every prop of both kits by name. A node's own position is its place on the kit's contact sheet, not in the game.
-const nodes = Promise.all(KITS.map(loadGLB)).then(scenes => {
-  const byName = new Map();
+const nodes: Promise<Map<string, THREE.Object3D>> = Promise.all(KITS.map(loadGLB)).then((scenes: (THREE.Group | null)[]) => {
+  const byName = new Map<string, THREE.Object3D>();
   for (const scene of scenes)
     for (const node of scene?.children || []) {
       node.traverse(o => {
-        if (o.isMesh) rgb(o.geometry);
+        if ((o as KitMesh).isMesh) rgb((o as KitMesh).geometry);
       });
       byName.set(node.name, node);
     }
   return byName;
 });
 
-const glowing = new Map(); // kit glow material -> { mat, level }
+const glowing = new Map<THREE.Material, { mat: THREE.MeshBasicMaterial; base: THREE.Color; level: keyof Levels }>(); // kit glow material -> { mat, level }
 const DEAD = lit(new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.25 })); // a lamp with nothing behind the glass
 // dead: its lamps are out, so its glow materials are just dark glass.
-function dressMaterial(m, dead) {
+function dressMaterial(m: THREE.MeshStandardMaterial, dead?: boolean): THREE.MeshStandardMaterial | THREE.MeshBasicMaterial {
   const level = GLOW[m.name];
   if (!level) return lit(m);
   if (dead) return DEAD;
@@ -58,15 +63,15 @@ function dressMaterial(m, dead) {
 }
 
 // A copy of one prop, standing at the origin, ready to add to the scene. Null if its kit has not been built.
-export async function prop(name) {
+export async function prop(name: string): Promise<THREE.Object3D | null> {
   const node = (await nodes).get(name);
   if (!node) return null;
   const copy = node.clone(true);
   copy.position.set(0, 0, 0);
   copy.traverse(o => {
-    if (o.isMesh) {
-      o.material = dressMaterial(o.material);
-      o.castShadow = !o.material.transparent && !o.material.isMeshBasicMaterial;
+    if ((o as KitMesh).isMesh) {
+      (o as KitMesh).material = dressMaterial((o as KitMesh).material as THREE.MeshStandardMaterial);
+      o.castShadow = !(o as KitMesh).material.transparent && !((o as KitMesh).material as THREE.MeshBasicMaterial).isMeshBasicMaterial;
       o.receiveShadow = true;
     }
   });
@@ -74,7 +79,7 @@ export async function prop(name) {
 }
 
 // Geometries from different props only merge if they carry the same attributes in the same form.
-function plain(geo, names) {
+function plain(geo: THREE.BufferGeometry, names: string[]): THREE.BufferGeometry {
   const g = geo.index ? geo.toNonIndexed() : geo.clone();
   for (const name of Object.keys(g.attributes)) {
     const a = g.attributes[name];
@@ -82,7 +87,7 @@ function plain(geo, names) {
       g.deleteAttribute(name);
       continue;
     }
-    if (a.array instanceof Float32Array && !a.normalized && !a.isInterleavedBufferAttribute) continue;
+    if (a.array instanceof Float32Array && !a.normalized && !(a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute) continue;
     const out = new Float32Array(a.count * a.itemSize);
     for (let i = 0; i < a.count; i++) for (let k = 0; k < a.itemSize; k++) out[i * a.itemSize + k] = a.getComponent(i, k);
     g.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize));
@@ -95,14 +100,14 @@ function plain(geo, names) {
   return g;
 }
 
-export function createProps(scene) {
+export function createProps(scene: THREE.Scene) {
   const rooms = ROOMS3.map(room => {
       const g = new THREE.Group();
       g.name = 'props: ' + room.name;
       scene.add(g);
       return g;
     }),
-    spinning = [];
+    spinning: [part: THREE.Object3D, speed: number][] = [];
 
   nodes.then(byName => {
     const m = new THREE.Matrix4(),
@@ -110,7 +115,7 @@ export function createProps(scene) {
       up = new THREE.Vector3(0, 1, 0),
       one = new THREE.Vector3();
     DRESSING.forEach((rows, room) => {
-      const buckets = new Map(); // the material it will be drawn with -> geometries
+      const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>(); // the material it will be drawn with -> geometries
       for (const [name, x, z, yaw = 0, opt = {}] of rows) {
         const node = byName.get(name);
         if (!node) continue;
@@ -130,16 +135,16 @@ export function createProps(scene) {
         copy.position.set(0, 0, 0);
         copy.updateMatrixWorld(true);
         copy.traverse(o => {
-          if (!o.isMesh) return;
-          const mat = dressMaterial(o.material, opt.dead);
+          if (!(o as KitMesh).isMesh) return;
+          const mat = dressMaterial((o as KitMesh).material as THREE.MeshStandardMaterial, opt.dead);
           if (!buckets.has(mat)) buckets.set(mat, []);
-          buckets.get(mat).push(o.geometry.clone().applyMatrix4(m.clone().multiply(o.matrixWorld)));
+          buckets.get(mat).push((o as KitMesh).geometry.clone().applyMatrix4(m.clone().multiply(o.matrixWorld)));
         });
       }
       for (const [mat, geos] of buckets) {
         const names = ['position', 'normal', 'uv', ...(geos.some(g => g.attributes.color) ? ['color'] : [])];
         const mesh = new THREE.Mesh(mergeGeometries(geos.map(g => plain(g, names))), mat);
-        mesh.castShadow = !mat.transparent && !mat.isMeshBasicMaterial;
+        mesh.castShadow = !mat.transparent && !(mat as THREE.MeshBasicMaterial).isMeshBasicMaterial;
         mesh.receiveShadow = true;
         rooms[room].add(mesh);
       }
@@ -150,7 +155,7 @@ export function createProps(scene) {
     // Resolves, once the kits have loaded or failed to, with a test for whether a prop exists.
     ready: nodes.then(byName => name => byName.has(name)),
     // inView: the rooms that might be seen from the camera (sight.js). level: the building's light levels from light.js, by group.
-    update(inView, level, dt) {
+    update(inView: Set<number>, level: Levels, dt: number): void {
       rooms.forEach((g, i) => {
         g.visible = inView.has(i);
       });

@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { MASC, DOORS } from '@thick-shift/sim/config';
 import { ROOMS3, DOORWAYS, BOXES, GENERATOR, CHARGER, WALL_MAP, PANELS, BATTERY_SPOTS, DOOR_H, BOOTH, roomAt } from '@thick-shift/sim/map';
 import { lightsF } from '@thick-shift/sim';
+import type { DoorKey, Point, State } from '@thick-shift/sim/types';
+import type { WorldParts } from '../../types';
 import { floorY } from './shell';
 import { canvas } from './tex';
 import { prop } from './props';
@@ -20,16 +22,19 @@ const AMBER = 0xffb040,
   DEAD = 0x222222;
 const FAULT_LIGHTS = 3; // real lights for open faults: the nearest three to the guard get one each, flickering like a short
 
-function box(w, h, d, color) {
+// A mesh in a kit model as traverse() hands it over, once isMesh has said it is one.
+type KitMesh<M extends THREE.Material = THREE.Material> = THREE.Mesh<THREE.BufferGeometry, M>;
+
+function box(w: number, h: number, d: number, color: THREE.ColorRepresentation): THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial> {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color, roughness: 0.7 }));
   m.castShadow = m.receiveShadow = true;
   return m;
 }
-const lampMat = () => new THREE.MeshBasicMaterial({ color: OFF });
-const placed = []; // every usable's group
+const lampMat = (): THREE.MeshBasicMaterial => new THREE.MeshBasicMaterial({ color: OFF });
+const placed: THREE.Group[] = []; // every usable's group
 // A group standing at one of map.ts's wall things, turned to face out of the wall.
 // room: which room it is in, so it can be skipped when that room is out of sight.
-function mount(scene, name, at, y) {
+function mount(scene: THREE.Scene, name: string, at: Point & { face: number; room?: number }, y: number): THREE.Group {
   const g = new THREE.Group();
   g.name = name;
   g.userData.room = at.room ?? roomAt(at.x + Math.sin(at.face) * 0.3, at.z + Math.cos(at.face) * 0.3);
@@ -41,7 +46,7 @@ function mount(scene, name, at, y) {
 }
 // Swap a stand-in for a kit model. Meshes in `status_glow` get the given unlit material.
 // big: it is large enough to cast a shadow. Returns the model, or null.
-async function upgrade(group, name, lamp, big) {
+async function upgrade(group: THREE.Object3D, name: string, lamp?: THREE.Material | null, big?: boolean): Promise<THREE.Object3D | null> {
   const model = await prop(name);
   if (!model) return null;
   group.clear();
@@ -52,8 +57,8 @@ async function upgrade(group, name, lamp, big) {
     }); // a small thing's shadow is not worth a second draw
   if (lamp)
     model.traverse(o => {
-      if (o.isMesh && o.material.name === 'status_glow') {
-        o.material = lamp;
+      if ((o as KitMesh).isMesh && (o as KitMesh).material.name === 'status_glow') {
+        (o as KitMesh).material = lamp;
         o.castShadow = false;
       }
     });
@@ -62,7 +67,7 @@ async function upgrade(group, name, lamp, big) {
 
 // The floor plan on the booth wall: a dot for every guard and every mascot
 // on the move, a red lamp for every open fault. It needs the power.
-function wallMap(scene) {
+function wallMap(scene: THREE.Scene): (S: State, t: number) => void {
   const W = 820,
     H = 380,
     k = 8.2,
@@ -82,7 +87,7 @@ function wallMap(scene) {
   g.add(plain);
   upgrade(g, 'wall_map').then(model =>
     model?.traverse(o => {
-      if (o.isMesh && o.material.name === 'map') o.material = glbFace;
+      if ((o as KitMesh).isMesh && (o as KitMesh).material.name === 'map') (o as KitMesh).material = glbFace;
     })
   );
   let next = 0;
@@ -145,7 +150,10 @@ function wallMap(scene) {
   };
 }
 
-export function createUsables(scene) {
+export function createUsables(scene: THREE.Scene): {
+  parts: WorldParts;
+  update(S: State, t: number, dt: number, camera: THREE.Camera, inView: Set<number>): void;
+} {
   // Breaker boxes: a grey cabinet with a status lamp on top and its door hanging open while it has a fault, sparks
   // spitting out of it. Seen from down a corridor by the light it throws.
   const sparkMat = new THREE.SpriteMaterial({ color: SPARK, blending: THREE.AdditiveBlending, depthWrite: false, map: haloTexture() });
@@ -188,7 +196,7 @@ export function createUsables(scene) {
       btn.rotation.x = Math.PI / 2;
       btn.position.z = 0.12;
       g.add(body, btn);
-      const p = { g, lamp, button: null, rest: 0 };
+      const p: { g: THREE.Group; lamp: THREE.MeshBasicMaterial; button: THREE.Object3D | null; rest: number } = { g, lamp, button: null, rest: 0 };
       upgrade(g, 'door_panel', lamp).then(model => {
         p.button = model?.getObjectByName('button') || null;
         p.rest = p.button?.position.z || 0;
@@ -199,7 +207,7 @@ export function createUsables(scene) {
 
   const gen = mount(scene, 'generator', GENERATOR, floorY(GENERATOR.x, GENERATOR.z)),
     genBody = box(1.4, 1, 0.8, 0x7a5c2e);
-  let crank = box(0.08, 0.5, 0.08, 0xc8c8c8);
+  let crank: THREE.Object3D = box(0.08, 0.5, 0.08, 0xc8c8c8);
   // GENERATOR is where a guard stands to crank it; the machine is behind that point.
   genBody.position.set(0, 0.5, -GEN_BACK);
   crank.position.set(0, 0.7, 0.45 - GEN_BACK);
@@ -237,10 +245,10 @@ export function createUsables(scene) {
     scene.add(g);
     upgrade(spin, 'battery').then(model =>
       model?.traverse(o => {
-        if (o.isMesh) {
-          o.material = o.material.clone();
-          o.material.emissive.setHex(0x3a3010);
-          o.material.emissiveMap = o.material.map;
+        if ((o as KitMesh<THREE.MeshStandardMaterial>).isMesh) {
+          (o as KitMesh<THREE.MeshStandardMaterial>).material = (o as KitMesh<THREE.MeshStandardMaterial>).material.clone();
+          (o as KitMesh<THREE.MeshStandardMaterial>).material.emissive.setHex(0x3a3010);
+          (o as KitMesh<THREE.MeshStandardMaterial>).material.emissiveMap = (o as KitMesh<THREE.MeshStandardMaterial>).material.map;
         }
       })
     );
@@ -272,14 +280,20 @@ export function createUsables(scene) {
     order = boxes.map((_, i) => i);
   return {
     // The groups that can be outlined (outline.js), by what a guard would use them for.
-    parts: { boxes: boxes.map(b => b.g), bats: bats.map(b => b.g), gen, dock, panels: Object.fromEntries(DOORS.map(k => [k, panels[k].g])) },
+    parts: {
+      boxes: boxes.map(b => b.g),
+      bats: bats.map(b => b.g),
+      gen,
+      dock,
+      panels: Object.fromEntries(DOORS.map(k => [k, panels[k].g])) as Record<DoorKey, THREE.Group>,
+    },
     // inView: the rooms that might be seen from the camera (sight.js).
-    update(S, t, dt, camera, inView) {
+    update(S: State, t: number, dt: number, camera: THREE.Camera, inView: Set<number>): void {
       updateMap(S, t);
       for (const g of placed) g.visible = inView.has(g.userData.room);
       const pulse = 0.6 + 0.4 * Math.sin(t * 6);
       // A short: bursts of light at random, never steady.
-      const crackle = i => (Math.sin(t * 37 + i * 9.1) * Math.sin(t * 23.7 + i * 3.3) > 0.2 ? 1 : 0.15) * (0.7 + 0.3 * Math.sin(t * 90 + i));
+      const crackle = (i: number): number => (Math.sin(t * 37 + i * 9.1) * Math.sin(t * 23.7 + i * 3.3) > 0.2 ? 1 : 0.15) * (0.7 + 0.3 * Math.sin(t * 90 + i));
       boxes.forEach((c, i) => {
         const f = S.faults?.[i];
         c.lamp.color.setHex(f ? (pulse > 0.6 ? 0xff2020 : AMBER) : S.power > 0 ? DONE : OFF);
@@ -317,7 +331,7 @@ export function createUsables(scene) {
   };
 }
 
-function haloTexture() {
+function haloTexture(): THREE.CanvasTexture {
   const c = canvas(64),
     g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, '#fff');
