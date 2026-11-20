@@ -1,4 +1,4 @@
-// Plain-data tables the renderer owns but other code needs too: the game's light.js and shell.js draw them, and
+// Plain-data tables the renderer owns but other code needs too: the game's light.ts and shell.ts draw them, and
 // tools/roblox/gen-data.mjs writes them into the Roblox port's Data.luau. They live here, away from three.js, so
 // Node can import them.
 

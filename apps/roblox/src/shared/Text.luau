@@ -1,5 +1,5 @@
 --!strict
--- Words the client shows, from task.js, player.js, hud.js and ui.js.
+-- Words the client shows, from task.ts, player.ts, hud.ts and ui.ts.
 
 local Text = {}
 

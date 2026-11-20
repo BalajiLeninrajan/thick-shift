@@ -23,7 +23,7 @@ local STAGE = Data.STAGE
 -- Fog: what FogExp2 .037 (and .03 more with dread) on the web looks like, as a linear fog's start and end.
 local FOG = { start = 4, finish = 30, dread = 12 }
 
--- Per room: floor, wall and ceiling as { material, colour }. After LOOK in three/world/surfaces.js.
+-- Per room: floor, wall and ceiling as { material, colour }. After LOOK in three/world/surfaces.ts.
 local M = Enum.Material
 local LOOK = {
 	{ { M.WoodPlanks, "#3a2a1c" }, { M.Fabric, "#4a1616" }, { M.SmoothPlastic, "#0b0b0d" } }, -- Storage Stage

@@ -1,6 +1,6 @@
 // Room hosting and joining. The host runs the simulation and sends the whole
 // state to every guest ten times a second, through a WebSocket relay on the
-// same origin (worker/room.js). If the host leaves, the relay makes the guest
+// same origin (worker/room.ts). If the host leaves, the relay makes the guest
 // who has been there longest the host, and the night carries on (takeOver).
 // When an app fixes the room (platform.fixedRoom, as the Discord Activity does), nobody
 // chooses to host: everyone tries to, and whoever finds it taken joins instead (becomeGuest).
@@ -21,7 +21,7 @@ let ws: WebSocket | null = null,
   loop = 0;
 
 const roomUrl = (code: string, query: string): string => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
-const ROOM = /^([A-Z]{4}|[a-z]-[\w-]{1,80})$/; // a typed code, or a fixed one from an app's platform (worker/room.js)
+const ROOM = /^([A-Z]{4}|[a-z]-[\w-]{1,80})$/; // a typed code, or a fixed one from an app's platform (worker/room.ts)
 const newCode = (): string => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[(Math.random() * 24) | 0]).join('');
 const parse = (text: string): unknown => {
   try {

@@ -1,5 +1,5 @@
 // What makes each mascot itself: how it walks, how far its head turns, the
-// pose it takes in each state, and the parts only it has. mascot.js runs the
+// pose it takes in each state, and the parts only it has. mascot.ts runs the
 // machinery; this file is the tuning, written from the notes each model
 // carries in packages/game/public/models/<key>.json.
 import * as THREE from 'three';
@@ -463,7 +463,7 @@ function poseOf(...layers: PoseLayer[]): Float32Array {
 
 // Everything the animator needs for one mascot at one stage. info is that
 // stage's entry in the manifest, or nothing if the manifest has not loaded.
-// Everything mascot.js needs to animate one mascot at one stage: see styleOf().
+// Everything mascot.ts needs to animate one mascot at one stage: see styleOf().
 export interface Style {
   gait: Gait;
   head: Head;

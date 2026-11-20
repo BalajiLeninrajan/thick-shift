@@ -1,4 +1,4 @@
-// Dev menu. Loaded only when the URL has ?dev (see main.js). Toggle with ` or
+// Dev menu. Loaded only when the URL has ?dev (see main.ts). Toggle with ` or
 // the Dev button beside pause and in the touch menu.
 //
 // Cheats that change the simulation live in S.dev, so packages/sim/src/sim.ts can read

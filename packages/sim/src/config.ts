@@ -5,12 +5,12 @@ export const FINAL_NIGHT = 5; // survive this one and the game is won
 export const DOORS: DoorKey[] = ['L', 'V', 'R']; // the booth's three ways in: left door, vent, right door
 
 // One of the cast. k names the model files (packages/game/public/models/<k>_*.glb) and the tuning in
-// packages/game/src/three/actors/styles.js; col colours its blip on the booth's wall map and its stand-in until the model loads.
+// packages/game/src/three/actors/styles.ts; col colours its blip on the booth's wall map and its stand-in until the model loads.
 export interface MascotKind {
   k: string;
   name: string;
   col: string;
-  // The game's art.js paints a belly in this colour on the posters. No mascot has one yet, so it paints with none.
+  // The game's art.ts paints a belly in this colour on the posters. No mascot has one yet, so it paints with none.
   belly?: string;
 }
 

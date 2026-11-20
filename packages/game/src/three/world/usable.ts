@@ -279,7 +279,7 @@ export function createUsables(scene: THREE.Scene): {
   const updateMap = wallMap(scene),
     order = boxes.map((_, i) => i);
   return {
-    // The groups that can be outlined (outline.js), by what a guard would use them for.
+    // The groups that can be outlined (outline.ts), by what a guard would use them for.
     parts: {
       boxes: boxes.map(b => b.g),
       bats: bats.map(b => b.g),
@@ -287,7 +287,7 @@ export function createUsables(scene: THREE.Scene): {
       dock,
       panels: Object.fromEntries(DOORS.map(k => [k, panels[k].g])) as Record<DoorKey, THREE.Group>,
     },
-    // inView: the rooms that might be seen from the camera (sight.js).
+    // inView: the rooms that might be seen from the camera (sight.ts).
     update(S: State, t: number, dt: number, camera: THREE.Camera, inView: Set<number>): void {
       updateMap(S, t);
       for (const g of placed) g.visible = inView.has(g.userData.room);

@@ -1,4 +1,4 @@
-// The renderer and the frame. main.js imports this file the first time a
+// The renderer and the frame. main.ts imports this file the first time a
 // night is drawn, so the title screen and lobby never wait on three.js.
 import * as THREE from 'three';
 import { MASC } from '@thick-shift/sim/config';
@@ -21,7 +21,7 @@ import type { EventOf } from '../types';
 let app: ReturnType<typeof create> | null = null;
 const FOG = 0.037,
   FOG_DREAD = 0.03; // fog density on a quiet night, and what a bad one adds
-const TORCH_FULL = 60; // the torch's intensity on a full battery (player.js)
+const TORCH_FULL = 60; // the torch's intensity on a full battery (player.ts)
 
 function create() {
   const stage = document.querySelector<HTMLDivElement>('.ts-stage');
@@ -44,7 +44,7 @@ function create() {
     sound = createSound();
   player.setTask(createTask(hud.root));
   const outlines = createOutlines(world.parts, actors);
-  // post.js draws the frame and owns its resolution and the torch's shadow map; the torch gets a cheap torch's beam pattern.
+  // post.ts draws the frame and owns its resolution and the torch's shadow map; the torch gets a cheap torch's beam pattern.
   const post = createPost(renderer, player.torch);
   player.torch.map = world.torchCookie();
   const phone = createPhone(camera); // in the left hand, with the minimap on its screen
@@ -60,7 +60,7 @@ function create() {
     shown = on;
     canvas.hidden = !on;
     hud.root.hidden = !on;
-    stage.classList.toggle('is-live', on); // the picture has its own grain (post.js)
+    stage.classList.toggle('is-live', on); // the picture has its own grain (post.ts)
     if (!on && document.pointerLockElement === canvas) document.exitPointerLock();
     if (!on) sound.quiet();
   }
@@ -100,7 +100,7 @@ function create() {
     camera.lookAt(seat.x, Math.min(AIM, h - 0.6), seat.z);
   }
 
-  // What each new event means on this screen, beyond its sound (sound.js plays
+  // What each new event means on this screen, beyond its sound (sound.ts plays
   // those). hud.say takes the line, its kind (which sets icon and colour) and seconds.
   const guard = (id: string): Player => game.S.players.find(p => p.id === id),
     isMe = (id: string): boolean => id === game.myId;
@@ -129,7 +129,7 @@ function create() {
       if (isMe(e.x.id)) hud.say("Back up. They won't notice you for a few seconds.", 'up', 4);
       else hud.say(`${isMe(e.x.by) ? 'You' : guard(e.x.by)?.name || 'Someone'} peeled ${guard(e.x.id)?.name || 'someone'} up.`, 'up', 3);
     },
-    // A flat guard calling out. sound.js plays its two notes from where the guard lies.
+    // A flat guard calling out. sound.ts plays its two notes from where the guard lies.
     call(e: EventOf<'call'>): void {
       hud.ping(e.x.id);
       if (!isMe(e.x.id)) hud.say(`${guard(e.x.id)?.name || 'Someone'} is calling from the floor ${where(e.x)}.`, 'call', 4);
@@ -188,7 +188,7 @@ function create() {
       (scene.fog as THREE.FogExp2).density = FOG + FOG_DREAD * dread;
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch); // also runs the catch, which takes the camera
-      // The end card (ui.js) waits until LINGER after the catch is over, however long a slow machine takes over it.
+      // The end card (ui.ts) waits until LINGER after the catch is over, however long a slow machine takes over it.
       if (actors.scare.active) client.holdUntil = Math.max(client.holdUntil, now + LINGER * 1000);
       phone.update(S, player.me, dt, now, actors.scare.active);
       slats.update(S, player.me, dt, actors.scare.active);

@@ -1,14 +1,14 @@
 // Everyone who moves and is not you: the four mascots and the other guards.
 // This file owns them and passes events along; the work is in actors/:
-//   track.js   the host sends positions ten times a second; drawing between snapshots
-//   rig.js     a model's named parts, and the offsets animation adds to them
-//   mascot.js  one mascot: stages of rot, states, gait, head and eyes
-//   styles.js  what makes each of the four itself at each stage
-//   guard.js   another guard: walking, torch, name, being flattened and peeled
-//   scare.js   the catch, seen by the guard who was caught
-//   hands.js   your own torch, held in view
-//   phone.js   your own phone, held in view, with the minimap (app.js makes it)
-//   plush.js   the Mini Biggs guards throw, in the air and singing on the floor
+//   track.ts   the host sends positions ten times a second; drawing between snapshots
+//   rig.ts     a model's named parts, and the offsets animation adds to them
+//   mascot.ts  one mascot: stages of rot, states, gait, head and eyes
+//   styles.ts  what makes each of the four itself at each stage
+//   guard.ts   another guard: walking, torch, name, being flattened and peeled
+//   scare.ts   the catch, seen by the guard who was caught
+//   hands.ts   your own torch, held in view
+//   phone.ts   your own phone, held in view, with the minimap (app.ts makes it)
+//   plush.ts   the Mini Biggs guards throw, in the air and singing on the floor
 import * as THREE from 'three';
 import { MASC } from '@thick-shift/sim/config';
 import { game } from '../state';
@@ -105,7 +105,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
       } else if (e.type === 'spot') mascots[(x as EventData['spot']).i].spotted();
       else if (e.type === 'check' || e.type === 'found') mascots[(x as EventData['check' | 'found']).i].bang(); // the yank on the locker door
     },
-    // me, torch: player.js's guard and its light. Call after player.update, which has put the camera where the guard is.
+    // me, torch: player.ts's guard and its light. Call after player.update, which has put the camera where the guard is.
     sync(S: State, dt: number, me: Me, torch: THREE.SpotLight): void {
       hostClock.see(S.t, performance.now() / 1000);
       camera.updateMatrixWorld();

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const publicDir = fileURLToPath(new URL('public', import.meta.url));
 
 // DRACOLoader names two sets of decoder files with import.meta.url, so the build emits both. The game asks only for
-// the glTF set in libs/draco/gltf/ (src/three/assets.js). These are the general-purpose ones, which nothing fetches.
+// the glTF set in libs/draco/gltf/ (src/three/assets.ts). These are the general-purpose ones, which nothing fetches.
 const unusedDraco = /\/three\/examples\/jsm\/libs\/draco\/draco_[^/]+$/;
 
 // The parts of Vite's Plugin type this plugin uses. packages/game does not depend on vite, so it says them itself.
@@ -24,7 +24,7 @@ export function game(): GamePlugin {
     name: 'thick-shift:game',
     config: () => ({
       publicDir,
-      // app.js, the lazy three.js chunk, is about 800 kB on its own.
+      // app.ts, the lazy three.js chunk, is about 800 kB on its own.
       build: { chunkSizeWarningLimit: 900 },
     }),
     generateBundle(_: unknown, bundle: Record<string, BundleFile>): void {

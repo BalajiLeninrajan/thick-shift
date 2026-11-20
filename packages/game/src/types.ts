@@ -1,5 +1,5 @@
-// Shapes that cross from one part of the client to another: the overlay screens, this guard as player.js keeps it,
-// what it can reach, the look settings, the parts of the building outline.js edges, and the handles app.js builds
+// Shapes that cross from one part of the client to another: the overlay screens, this guard as player.ts keeps it,
+// what it can reach, the look settings, the parts of the building outline.ts edges, and the handles app.ts builds
 // the frame from. Types only: nothing here exists at runtime. The state that goes over the wire (S, its guards and
 // mascots, events, actions) is in @thick-shift/sim/types.
 //
@@ -20,7 +20,7 @@ import type { createTask } from './three/task';
 import type { createTouch } from './three/touch';
 import type { buildWorld } from './three/world';
 
-/* ---------- the overlay (ui.js, and an app's platform hooks in state.ts) ---------- */
+/* ---------- the overlay (ui.ts, and an app's platform hooks in state.ts) ---------- */
 
 // One overlay screen. The overlay is redrawn only when key changes; wire() then hooks up its buttons.
 export interface OverlayScreen {
@@ -39,10 +39,10 @@ export interface GameError {
   detail: string;
 }
 
-/* ---------- this guard (three/player.js) ---------- */
+/* ---------- this guard (three/player.ts) ---------- */
 
 // Look settings, kept in localStorage between visits. sens multiplies the mouse's radians per pixel. outline: a gold
-// edge round usable things (outline.js). third: a flat guard watches teammates from behind them (app.js spectate).
+// edge round usable things (outline.ts). third: a flat guard watches teammates from behind them (app.ts spectate).
 export interface Prefs {
   sens: number;
   invert: boolean;
@@ -50,7 +50,7 @@ export interface Prefs {
   third: boolean;
 }
 
-// What a guard's use key would act on (player.js findTarget): the field names follow the 'use' action it sends.
+// What a guard's use key would act on (player.ts findTarget): the field names follow the 'use' action it sends.
 // what: also 'crank' and 'charge', which are held (hold -1) and so set Me.act instead of sending a 'use'.
 // at: where it is, for distance and facing. hold: seconds to hold the use key, 0 for a tap, -1 for as long as it is
 // held. i: a box, battery spot or locker. k: a door. id: a toy (number) or a flat guard (string).
@@ -65,7 +65,7 @@ export interface Target {
 }
 
 // This guard as their own browser has them (player.me), ahead of what the host sends back. yaw 0 faces south (+z).
-// Read by the HUD, touch, sound, outline, the actors, the phone and the slats; only player.js writes it, apart from
+// Read by the HUD, touch, sound, outline, the actors, the phone and the slats; only player.ts writes it, apart from
 // touch, which sets touch.
 export interface Me {
   x: number;
@@ -83,7 +83,7 @@ export interface Me {
   locked: boolean; // there is a way to play: a locked pointer, touch, a gamepad or the keyboard, and no pause
   flat: boolean;
   paused: boolean; // the pause panel is up: nothing here moves the guard
-  touch: boolean; // a finger is driving (set by touch.js), so there is no pointer to lock
+  touch: boolean; // a finger is driving (set by touch.ts), so there is no pointer to lock
   watch: string | null; // id of the teammate a flat guard is watching through
   ph: boolean; // the phone is up, showing the minimap
   task: { i: number; at: number } | null; // hands in a breaker box: the box, and when its fault broke out (Fault.at)
@@ -94,9 +94,9 @@ export interface Me {
   hid: number; // the locker (HIDES index) this guard is in, as the host has it, or -1
 }
 
-/* ---------- the frame (three/app.js and what it puts together) ---------- */
+/* ---------- the frame (three/app.ts and what it puts together) ---------- */
 
-// The building's usable parts that outline.js can put an edge round (world/usable.js).
+// The building's usable parts that outline.ts can put an edge round (world/usable.ts).
 export interface WorldParts {
   boxes: Object3D[]; // by BOXES index
   bats: Object3D[]; // by BATTERY_SPOTS index
@@ -105,7 +105,7 @@ export interface WorldParts {
   panels: Record<DoorKey, Object3D>;
 }
 
-// One thing to outline this frame (outline.js to post.js). col: linear RGB, 0 to 1. a: how strongly, 0 to 1.
+// One thing to outline this frame (outline.ts to post.ts). col: linear RGB, 0 to 1. a: how strongly, 0 to 1.
 export interface OutlineMark {
   obj: Object3D;
   col: [number, number, number];
@@ -115,7 +115,7 @@ export interface OutlineMark {
 // One event from S.evs, narrowed to its type: EventOf<'flat'>['x'] is { id, by, x, z }.
 export type EventOf<K extends EventType> = Extract<SimEvent, { type: K }>;
 
-// three/app.js, which main.js imports the first time a night is drawn, and what its frame() returns.
+// three/app.ts, which main.ts imports the first time a night is drawn, and what its frame() returns.
 export type FloorModule = typeof import('./three/app');
 export type App = ReturnType<FloorModule['frame']>;
 

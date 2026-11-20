@@ -1,4 +1,4 @@
-// The map on the phone's screen (actors/phone.js): the building drawn like an
+// The map on the phone's screen (actors/phone.ts): the building drawn like an
 // old green LCD, a few times a second. Near, it is centred on the guard and
 // turns with them, so what is ahead is up. Zoomed out it is the whole
 // building with north up. It shows rooms and doorways, the booth doors that
@@ -125,7 +125,7 @@ export function createMinimap() {
 
   return {
     texture,
-    // me: player.js's guard (x, z, yaw). myId: theirs, to leave out of the other guards. zoom: the whole building. now: milliseconds.
+    // me: player.ts's guard (x, z, yaw). myId: theirs, to leave out of the other guards. zoom: the whole building. now: milliseconds.
     draw(S: State, me: Me, myId: string, zoom: boolean, now: number): void {
       if (now < next) return;
       next = now + EVERY;

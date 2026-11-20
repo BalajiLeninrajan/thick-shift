@@ -1,5 +1,5 @@
 --!nonstrict
--- The fault minigames, ported from packages/game/src/three/task.js: a panel over the bottom of the screen while a guard
+-- The fault minigames, ported from packages/game/src/three/task.ts: a panel over the bottom of the screen while a guard
 -- has their hands in a breaker box. The server is told only when the job is done.
 --   0 breaker: flip the tripped switches back in the order on their tags
 --   1 wires:   join the lit wire on the left to its colour on the right

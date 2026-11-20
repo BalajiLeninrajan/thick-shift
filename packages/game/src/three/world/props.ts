@@ -154,7 +154,7 @@ export function createProps(scene: THREE.Scene) {
   return {
     // Resolves, once the kits have loaded or failed to, with a test for whether a prop exists.
     ready: nodes.then(byName => name => byName.has(name)),
-    // inView: the rooms that might be seen from the camera (sight.js). level: the building's light levels from light.js, by group.
+    // inView: the rooms that might be seen from the camera (sight.ts). level: the building's light levels from light.ts, by group.
     update(inView: Set<number>, level: Levels, dt: number): void {
       rooms.forEach((g, i) => {
         g.visible = inView.has(i);

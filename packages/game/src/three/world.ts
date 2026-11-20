@@ -1,12 +1,12 @@
 // The building: what it is made of, how it is lit, what stands in it and what
 // a guard can use. The parts are in world/; this file puts them together.
-//   surfaces.js, tex.js   painted textures for every floor, wall and ceiling
-//   art.js                posters, notices, stains, stencilled room names
-//   shell.js, geo.js      geometry from the sim's map.ts: rooms, frames, pipes, the stage
-//   light.js              baked lamp light, flicker, torch spill, dust
-//   props.js              furniture from the prop kits, stood where the sim's dressing.ts says
-//   usable.js             breaker boxes, door buttons, generator, charger, batteries, doors, wall map
-//   sight.js              which rooms can be seen from which, so the rest are not drawn
+//   surfaces.ts, tex.ts   painted textures for every floor, wall and ceiling
+//   art.ts                posters, notices, stains, stencilled room names
+//   shell.ts, geo.ts      geometry from the sim's map.ts: rooms, frames, pipes, the stage
+//   light.ts              baked lamp light, flicker, torch spill, dust
+//   props.ts              furniture from the prop kits, stood where the sim's dressing.ts says
+//   usable.ts             breaker boxes, door buttons, generator, charger, batteries, doors, wall map
+//   sight.ts              which rooms can be seen from which, so the rest are not drawn
 import type { BufferGeometry, Camera, Material, Mesh, Scene } from 'three';
 import type { State } from '@thick-shift/sim/types';
 import { surfaces } from './world/surfaces';
@@ -36,8 +36,8 @@ export function buildWorld(scene: Scene) {
 
   return {
     torchCookie,
-    parts: usables.parts, // what outline.js can put a gold edge round
-    stop: 1, // how far to stop the picture down against torch glare this frame (light.js)
+    parts: usables.parts, // what outline.ts can put a gold edge round
+    stop: 1, // how far to stop the picture down against torch glare this frame (light.ts)
     // torch: how bright the local guard's torch is, 0 to 1. dread, threat: 0 to 1.
     update(S: State, t: number, dt: number, camera: Camera, torch: number, dread: number, threat: number): void {
       const inView = roomsSeenFrom(camera.position.x, camera.position.z);

@@ -1,6 +1,6 @@
 // This guard's phone, held in the left hand at the bottom left of the view:
 // a late-90s candybar with a stub aerial, a green-lit keypad and a small
-// screen showing the map (minimap.js). It comes up while me.ph is on and
+// screen showing the map (minimap.ts). It comes up while me.ph is on and
 // drops out of view when it is not. Built here from boxes; there is no
 // model for it.
 import * as THREE from 'three';
@@ -16,7 +16,7 @@ const HELD = { x: -0.15, y: -0.088, z: -0.235 },
 const TURN = { x: 0.14, y: 0.24, z: 0.07 }; // radians: tipped back and turned in, toward the eye
 const BODY = { w: 0.074, h: 0.16, d: 0.026 };
 const SCREEN = { w: 0.062, h: 0.048, y: 0.03 }; // the glass, the minimap's shape, centred this far above the middle
-const GLOW = 0.62; // how bright the glass is, before post.js's exposure
+const GLOW = 0.62; // how bright the glass is, before post.ts's exposure
 
 // The keypad: two soft keys and a rocker, then twelve keys with the old letters.
 function keypad(): THREE.CanvasTexture {
@@ -99,7 +99,7 @@ export function createPhone(camera: THREE.Camera) {
   let up = 0,
     away = 0;
   return {
-    // me: player.js's guard (ph, zoom, x, z, yaw, bob, flat). busy: the catch has the camera. now: milliseconds.
+    // me: player.ts's guard (ph, zoom, x, z, yaw, bob, flat). busy: the catch has the camera. now: milliseconds.
     update(S: State, me: Me, dt: number, now: number, busy: boolean): void {
       up += ((me.ph ? 1 : 0) - up) * Math.min(1, dt * 9);
       away += ((me.flat || busy ? 1 : 0) - away) * Math.min(1, dt * 8);

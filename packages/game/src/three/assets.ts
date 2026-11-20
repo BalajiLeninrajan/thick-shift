@@ -12,7 +12,7 @@ const draco = new DRACOLoader().setDecoderPath(DRACO_GLTF_CONFIG);
 const loader = new GLTFLoader().setDRACOLoader(draco);
 const cache = new Map<string, Promise<unknown>>();
 
-// models/<mascot>.json, one entry per stage of the mascot's model (actors/mascot.js reads it).
+// models/<mascot>.json, one entry per stage of the mascot's model (actors/mascot.ts reads it).
 export interface ModelStage {
   file: string;
   height: number;

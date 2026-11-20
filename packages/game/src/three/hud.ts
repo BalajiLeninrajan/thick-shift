@@ -346,7 +346,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
     outline = $<HTMLInputElement>('#ts-outline'),
     third = $<HTMLInputElement>('#ts-third');
   const touch = createTouch(root, player);
-  // Compass ticks, by bearing. Yaw 0 faces south and grows toward east, as in player.js.
+  // Compass ticks, by bearing. Yaw 0 faces south and grows toward east, as in player.ts.
   const ticks = (
     [
       ['S', 0],
@@ -596,7 +596,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
       if (id === game.myId) calledAt = performance.now();
       else pings.set(id, performance.now() + 4000);
     },
-    // scared: the catch has the camera (actors/scare.js), and the face fills the screen with nothing over it.
+    // scared: the catch has the camera (actors/scare.ts), and the face fills the screen with nothing over it.
     update(S: State, me: Me, scared: boolean): void {
       const now = performance.now(),
         mine = S.players.find(p => p.id === game.myId) || ({} as Player),

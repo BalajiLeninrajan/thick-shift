@@ -5,7 +5,7 @@
 // something is close. One pass, because every extra one is a whole screen of
 // pixels on a GPU that has none to spare.
 //
-// The one exception is the outline of usable things (outline.js). Only while
+// The one exception is the outline of usable things (outline.ts). Only while
 // something is marked, those objects are drawn again, flat, into a mask the
 // size of the scene, each fragment dropped where the scene's depth says a
 // wall is in front. The full-screen pass then edges the mask and lays the
@@ -260,7 +260,7 @@ export function createPost(renderer: THREE.WebGLRenderer, torch: THREE.SpotLight
       camera.updateProjectionMatrix();
     },
     // threat, dread: 0 to 1. stop: exposure multiplier against torch glare. now: milliseconds, for timing frames.
-    // marks: what to outline this frame (outline.js), or nothing.
+    // marks: what to outline this frame (outline.ts), or nothing.
     render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, now: number, threat: number, dread: number, stop: number, marks: OutlineMark[] = []): void {
       if (!asked && name === 'high' && last) {
         if (++frames > WARMUP) spent += now - last;

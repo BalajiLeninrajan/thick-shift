@@ -1,7 +1,7 @@
 // One mascot: its models for the three rot stages, where it is, and the layers
 // of procedural animation that pose its parts each frame. Nothing here is
 // keyframed. In order: the gait (driven by the distance actually covered, so
-// feet stay where they land), the pose of its state (styles.js), its head and
+// feet stay where they land), the pose of its state (styles.ts), its head and
 // eyes, the things particular to it, whatever hangs off it, then feet planted.
 import * as THREE from 'three';
 import { MASC } from '@thick-shift/sim/config';

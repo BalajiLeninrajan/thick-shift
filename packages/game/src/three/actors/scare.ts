@@ -2,7 +2,7 @@
 // the camera is taken from them and dragged to the mascot's face (or, for
 // Tank at the end, the worm's mouth), the mascot plays its scare pose and
 // lunges, then the camera is dropped to the floor and left looking up at it
-// as it sits down. After that player.js has the camera back, where we left it.
+// as it sits down. After that player.ts has the camera back, where we left it.
 import * as THREE from 'three';
 import { wrap } from './track';
 import type { Mascot } from './mascot';
@@ -17,7 +17,7 @@ const ORDER = Object.keys(CUES) as Cue[];
 const FILL: Record<string, number[]> = { hippo: [0.95, 0.95, 0.8], walrus: [0.8, 0.8, 0.6], toad: [1.05, 1, 1.1], rhino: [0.9, 0.8, 0.62] };
 const BITE = 0.72; // at the bite it comes this much closer again
 const GLARE = 45; // the torch is forced on through the catch, stuttering, or in a dark building there would be nothing to see
-const FLOOR_Y = 0.22; // where player.js holds the camera of a flat guard
+const FLOOR_Y = 0.22; // where player.ts holds the camera of a flat guard
 const FOV_IN = 86; // the lens goes wide as the face arrives
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
 const smooth = (u: number): number => {
@@ -92,7 +92,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
     get active(): boolean {
       return !!on;
     },
-    // me: player.js's guard. Its x and z are where the guard is lying.
+    // me: player.ts's guard. Its x and z are where the guard is lying.
     start(mascot: Mascot, me: Me): void {
       stop();
       on = { by: mascot.i, t: 0, cue: -1, mascot, yaw0: me.yaw, pitch0: me.pitch, fov0: camera.fov };
@@ -102,7 +102,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
       mascot.sitOn(me.x, me.z, true);
     },
     stop,
-    // Call after player.js and the actors have run. Takes the camera (and the torch), and at the end hands me.yaw and me.pitch back where the camera is.
+    // Call after player.ts and the actors have run. Takes the camera (and the torch), and at the end hands me.yaw and me.pitch back where the camera is.
     update(me: Me, dt: number, torch: THREE.SpotLight) {
       if (!on) return;
       const a = on,

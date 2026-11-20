@@ -1,6 +1,6 @@
 // The shapes of everything the simulation shares: the state S the host keeps and sends to every guest ten times a
 // second, the host's own thinking that never leaves it, and every message that goes over the room's socket
-// (packages/game/src/net.js and packages/game/worker/room.js). Types only: nothing here exists at runtime.
+// (packages/game/src/net.ts and packages/game/worker/room.ts). Types only: nothing here exists at runtime.
 
 /* ---------- small things ---------- */
 
@@ -27,7 +27,7 @@ export type Phase = 'lobby' | 'play' | 'win' | 'dead' | 'won';
 // What a guard's hands are on while they hold the use key: the generator's crank, the charging dock, or a breaker box.
 export type GuardAct = '' | 'crank' | 'charge' | 'fix';
 
-// A guard as they join the room: what net.js knows before their first night places them.
+// A guard as they join the room: what net.ts knows before their first night places them.
 export interface Joined {
   id: string; // 'host' for the first host, or the guest's peer id
   name: string;
@@ -103,7 +103,7 @@ export interface Tally {
   peels: string[];
 }
 
-// The dev menu's cheats (packages/game/src/dev.js). Only the host sets them; the sim reads them.
+// The dev menu's cheats (packages/game/src/dev.ts). Only the host sets them; the sim reads them.
 // rot and dread: -1 leaves them to the night. The balance harness sets only some of them (`{ freeze: true }`):
 // a missing field reads as off everywhere the sim looks at it.
 export interface Dev {
@@ -234,7 +234,7 @@ export interface Brain {
 
 /* ---------- the wire ---------- */
 
-// A guard's action, sent by their own browser (packages/game/src/three/player.js) or, for the host, handed straight
+// A guard's action, sent by their own browser (packages/game/src/three/player.ts) or, for the host, handed straight
 // to actFloor. It comes off the wire as JSON from someone else's browser, so actFloor checks every field.
 export type UseWhat = 'fix' | 'door' | 'bat' | 'toy' | 'hide' | 'peel';
 export type Action =
@@ -248,7 +248,7 @@ export type Action =
   // i: a box, battery spot or locker. k: a door. id: a toy (number) or a flat guard (string).
   | { t: 'use'; what: UseWhat; i?: number; k?: DoorKey; id?: string | number };
 
-// The relay's close codes (worker/room.js): nobody is hosting this code, somebody already is, or a guest id it
+// The relay's close codes (worker/room.ts): nobody is hosting this code, somebody already is, or a guest id it
 // will not use (1008, policy violation).
 export type CloseCode = 1008 | 4404 | 4409;
 

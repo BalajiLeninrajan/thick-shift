@@ -13,7 +13,7 @@ use by the game and the tools.
 | `@thick-shift/sim/config` | `src/config.ts` | `FINAL_NIGHT`, `DOORS`, `MASC` |
 | `@thick-shift/sim/map` | `src/map.ts` | rooms, doorways, fixtures, `walkable`, `slide`, `clear`, `sees`, `reaches`, `glimpses`, `roomAt`, `route`, `nav`, `walls`, `slabs`, ... |
 | `@thick-shift/sim/dressing` | `src/dressing.ts` | `FOOT`, `GEN_BACK`, `DRESSING`, `footprint`, `obstacles` |
-| `@thick-shift/sim/data` | `src/data.ts` | `LAMPS`, `DEAD_TUBES`, the tube colours, `STAGE` (moved out of `light.js` and `shell.js`) |
+| `@thick-shift/sim/data` | `src/data.ts` | `LAMPS`, `DEAD_TUBES`, the tube colours, `STAGE` (moved out of `light.ts` and `shell.ts`) |
 | `@thick-shift/sim/random` | `src/random.ts` | `seeded(seed)`, the seeded `Rng` the balance harness and the tests play with |
 | `@thick-shift/sim/types` | `src/types.ts` | `State`, `NightState`, `Guard`, `Mascot`, `SimEvent`, `Brain`, `Action`, the relay messages, `Rng` |
 | `@thick-shift/sim/sim` | `src/sim.ts` | the night: `newSim`, `newState`, `startFloorNight`, `stepFloor`, `actFloor`, `adoptFloor`, ... |
@@ -62,7 +62,7 @@ darkRoom(S, room), faultLeft(S, f), landing(S, x, z, yaw, d)
 
 ### (a) No singleton
 
-The sim no longer imports `state.js`. Everything sim3d.js kept at module level, and `game.players`, lives on the
+The sim no longer imports `state.ts`. Everything sim3d.js kept at module level, and `game.players`, lives on the
 `Sim` record the caller makes with `newSim()` and passes in. `S` is passed beside it, never stored on it, because
 guests hold an `S` and no `Sim`.
 
@@ -71,7 +71,7 @@ guests hold an `S` and no `Sim`.
   `crankNoise` as it does today. It does not touch `lastStep` or `players`.
 - `sim.players[id]` and that guard's entry in `S.players` are the same object. `stepFloor` sets
   `S.players = Object.values(sim.players)` on every call, as `guards()` does today, and `startFloorNight` does the
-  same after placing them. Callers add and remove guards in `sim.players` (net.js on `join` and `leave`, the harness
+  same after placing them. Callers add and remove guards in `sim.players` (net.ts on `join` and `leave`, the harness
   when it sets up a night) and never in `S.players`.
 - `brainOf(sim, i)` returns `sim.brains[i]`. A brain's keys keep today's order: `since`, `was` and `noShort` are
   added when first set, after the rest, as today. This shows only in `floor.ts --brains`.
@@ -96,13 +96,13 @@ Every draw goes through `sim.rng()`, at the same point and in the same order as 
 - `Array.from({ length }, () => rnd(5, 50)).sort((a, b) => a - b)` in `adoptFloor` stays as it is (the sort draws
   nothing).
 
-The game passes `rng: Math.random`. `state.js` keeps `rnd()` for the client's own use (sound.js), and the sim stops
+The game passes `rng: Math.random`. `state.ts` keeps `rnd()` for the client's own use (sound.ts), and the sim stops
 importing it.
 
 Draws outside the sim share one stream with it today, because the harness replaces `Math.random` for the whole
 process: `floor.mjs`'s own `pick()` and its drift (`Math.random() < 0.02`, `Math.random() * 10`) fall between the sim's
-draws. They must stay on the same stream (see "The balance harness" below). In the game, net.js's `newCode()` and
-`join()`'s id, `sound.js` and `state.js`'s `rnd()` also use `Math.random`; they are not part of any seeded run, and
+draws. They must stay on the same stream (see "The balance harness" below). In the game, net.ts's `newCode()` and
+`join()`'s id, `sound.ts` and `state.ts`'s `rnd()` also use `Math.random`; they are not part of any seeded run, and
 stay on `Math.random`.
 
 ### (c) Time
@@ -127,7 +127,7 @@ treats `a` as untrusted JSON: every field it reads is checked as today (`num()`,
 `State` is what goes over the wire: a `LobbyState` (what `newState` returns) with the night's fields optional, because
 the lobby has none of them and a host from before some fields existed may not send them. `NightState` is the state
 once `startFloorNight` has run, with every field present and `players: Guard[]`. Inside a night the sim narrows
-`State` to `NightState`. `Player` is a guard as net.js adds them (`{ id, name }`) with the body's fields optional;
+`State` to `NightState`. `Player` is a guard as net.ts adds them (`{ id, name }`) with the body's fields optional;
 `stepFloor` places one whose `x` is missing. `SimEvent` is a union keyed on `type`, with each event's `x` typed. The
 wire messages are `Action` (guest to host, and the host's own actions), `StateMessage` (`{ t: 's', s }`, host to
 guests), `RelayToGuest` (`{ t: 'host', guests }`, `{ t: 'rehost' }`), `HostInbox` (`{ from, d }`, where `d` is an
@@ -149,7 +149,7 @@ seeded mulberry32 at the start of each night (`seedRandom`). The sim and the har
 stream. After the port:
 
 1. It imports the sim from `../../packages/sim/src/index.ts` (and the map from there), not from packages/game, and
-   no longer imports `state.js` or fakes `performance`.
+   no longer imports `state.ts` or fakes `performance`.
 2. It keeps `let now = 0` and a module-level `let random = Math.random`. `seedRandom(seed)` sets `random` to the same
    mulberry32 function instead of assigning `Math.random`. Its own `pick()` and drift call `random()`.
 3. It makes one sim at module level, after the imports and before any night:
@@ -196,7 +196,7 @@ no change.
 ### gen-data
 
 It already imports the sim's `config.ts`, `map.ts`, `dressing.ts` and `data.ts` directly. It no longer reads
-`light.js` or `shell.js` as text, and `Data.luau` comes out byte-identical. The floor-plan checks, which import them
+`light.ts` or `shell.ts` as text, and `Data.luau` comes out byte-identical. The floor-plan checks, which import them
 the same way, are now `test/floor-plan.test.ts`.
 
 ## (f) What has to change
@@ -204,7 +204,7 @@ the same way, are now `test/floor-plan.test.ts`.
 ### Game (packages/game, stays JS)
 
 - `src/three/sim3d.js`: moves into `packages/sim/src/sim.ts` behind the signatures above, then is deleted.
-- `src/net.js`:
+- `src/net.ts`:
   - module level: `export const sim = newSim({ rng: Math.random, now: performance.now() })`, created at import as
     sim3d.js's `lastStep` was; imports from `@thick-shift/sim` instead of `./three/sim3d.js`.
   - `run`: `stepFloor(sim, game.S, performance.now())`.
@@ -216,26 +216,26 @@ the same way, are now `test/floor-plan.test.ts`.
   - `takeOver`: build `sim.players`, then `game.S.players = Object.values(sim.players)` and
     `adoptFloor(sim, game.S, performance.now())`.
   - `send`: `actFloor(sim, game.S, game.myId, a)`.
-- `src/state.js`: `game.players` goes (it is `sim.players`). `rnd` stays for sound.js.
-- `src/ui.js` (`next`, in the end-of-night screen): `restartFloor(sim, S)` and `startFloorNight(sim, S, n)` with
-  `sim` from net.js; `clockF` from `@thick-shift/sim`.
-- `src/dev.js` (`ACTIONS['dv-next']`, `ACTIONS['dv-final']`): `startFloorNight(sim, S, n)` with `sim` from net.js;
+- `src/state.ts`: `game.players` goes (it is `sim.players`). `rnd` stays for sound.ts.
+- `src/ui.ts` (`next`, in the end-of-night screen): `restartFloor(sim, S)` and `startFloorNight(sim, S, n)` with
+  `sim` from net.ts; `clockF` from `@thick-shift/sim`.
+- `src/dev.ts` (`ACTIONS['dv-next']`, `ACTIONS['dv-final']`): `startFloorNight(sim, S, n)` with `sim` from net.ts;
   `F`, `hourF`, `clockF`, `dreadF` from `@thick-shift/sim`; `REST` from `@thick-shift/sim/map`.
-- Imports from `sim3d.js` that become imports from `@thick-shift/sim`, with no other change: `src/main.js` (dreadF),
-  `three/app.js` (dreadF), `three/hud.js` (F, TOY, clockF, faultLeft), `three/outline.js` (faultLeft),
-  `three/player.js` (F, TOY), `three/sound.js` (lightsF, TOY), `three/touch.js` (TOY), `three/actors/guard.js` (F),
-  `three/actors/mascot.js` (lightsF), `three/actors/plush.js` (TOY), `three/world/light.js` (darkRoom),
-  `three/world/usable.js` (lightsF).
+- Imports from `sim3d.js` that become imports from `@thick-shift/sim`, with no other change: `src/main.ts` (dreadF),
+  `three/app.ts` (dreadF), `three/hud.ts` (F, TOY, clockF, faultLeft), `three/outline.ts` (faultLeft),
+  `three/player.ts` (F, TOY), `three/sound.ts` (lightsF, TOY), `three/touch.ts` (TOY), `three/actors/guard.ts` (F),
+  `three/actors/mascot.ts` (lightsF), `three/actors/plush.ts` (TOY), `three/world/light.ts` (darkRoom),
+  `three/world/usable.ts` (lightsF).
 - The shims `src/config.js`, `three/map.js` and `three/world/dressing.js` only re-export the sim now. Point their
   importers at `@thick-shift/sim/config`, `/map` and `/dressing` and delete them:
-  - config.js: `dev.js`, `ui.js`, `three/actors.js`, `three/app.js`, `three/hud.js`, `three/sound.js`,
-    `three/actors/mascot.js`, `three/actors/plush.js`, `three/world/art.js`, `three/world/usable.js`.
-  - map.js: `dev.js`, `three/actors.js`, `three/app.js`, `three/hud.js`, `three/minimap.js`, `three/outline.js`,
-    `three/player.js`, `three/sound.js`, `three/task.js`, `three/actors/guard.js`, `three/actors/mascot.js`,
-    `three/world/art.js`, `three/world/light.js`, `three/world/props.js`, `three/world/shell.js`,
-    `three/world/sight.js`, `three/world/surfaces.js`, `three/world/usable.js`.
-  - dressing.js: `three/world/props.js`, `three/world/usable.js`.
-- `light.js` and `shell.js` already import `LAMPS`, `DEAD_TUBES`, `TUBE`, `GREEN` and `STAGE` from
+  - config.js: `dev.ts`, `ui.ts`, `three/actors.ts`, `three/app.ts`, `three/hud.ts`, `three/sound.ts`,
+    `three/actors/mascot.ts`, `three/actors/plush.ts`, `three/world/art.ts`, `three/world/usable.ts`.
+  - map.js: `dev.ts`, `three/actors.ts`, `three/app.ts`, `three/hud.ts`, `three/minimap.ts`, `three/outline.ts`,
+    `three/player.ts`, `three/sound.ts`, `three/task.ts`, `three/actors/guard.ts`, `three/actors/mascot.ts`,
+    `three/world/art.ts`, `three/world/light.ts`, `three/world/props.ts`, `three/world/shell.ts`,
+    `three/world/sight.ts`, `three/world/surfaces.ts`, `three/world/usable.ts`.
+  - dressing.js: `three/world/props.ts`, `three/world/usable.ts`.
+- `light.ts` and `shell.ts` already import `LAMPS`, `DEAD_TUBES`, `TUBE`, `GREEN` and `STAGE` from
   `@thick-shift/sim/data`.
 
 ### Tools

@@ -1,6 +1,6 @@
 // Where the furniture stands. Plain data with no three.js in it: map.ts
 // reads it at load to learn what is solid (the host walks mascots round it),
-// and the game's props.js reads it to put the models there.
+// and the game's props.ts reads it to put the models there.
 //
 // DRESSING[room] is a list of [prop, x, z, yaw in degrees, options].
 // yaw 0 leaves the prop's front facing south (+z), 90 east. Options:

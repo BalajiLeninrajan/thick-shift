@@ -84,7 +84,7 @@ export function createPlush(scene: THREE.Scene) {
     return { g, lamp, wobble: Math.random() * 6 };
   }
   return {
-    // The group drawn for a toy in S.toys, for the outline (outline.js).
+    // The group drawn for a toy in S.toys, for the outline (outline.ts).
     group: (id: number): THREE.Group => toys.get(id)?.g,
     // A night began: the floor is swept.
     reset(): void {

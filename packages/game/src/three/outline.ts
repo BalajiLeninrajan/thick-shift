@@ -1,16 +1,16 @@
 // The gold edge round things a guard can use, like the highlight in some
 // games' accessibility modes: so a breaker box, a battery or a friend on the
-// floor reads as something to walk to, even in the dark. post.js draws it:
+// floor reads as something to walk to, even in the dark. post.ts draws it:
 // the marked objects go into a mask, which is edged and laid over the
 // finished picture, hidden where a wall is in front.
 //
-// What gets an edge, and how strongly (alpha: post.js draws a wider edge the
+// What gets an edge, and how strongly (alpha: post.ts draws a wider edge the
 // higher it is, and the widest, at 1, is kept for what the use key would act on):
 //   open faults          gold, pulsing, red in their last seconds; in any room that can be seen
 //   what you are aiming at  brighter and thicker, whatever it is
 //   batteries, the crank, the charger, door buttons, a Mini Biggs on the floor (with empty hands)  a faint gold, within NEAR metres
 //   flat teammates       red, wherever they can be seen
-// The switch is in the pause panel (prefs.outline in player.js), on by default.
+// The switch is in the pause panel (prefs.outline in player.ts), on by default.
 import { game } from '../state';
 import { GENERATOR, CHARGER, PANELS, BATTERY_SPOTS } from '@thick-shift/sim/map';
 import { faultLeft } from '@thick-shift/sim';

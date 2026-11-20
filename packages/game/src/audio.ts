@@ -1,7 +1,7 @@
 // Sound. Physical events (doors, bangs, footsteps, growls) are recordings from
 // packages/game/public/sfx; things that change as you play (the hum, the heartbeat) are
 // synthesised. If a recording has not loaded yet, a synthesised stand-in plays.
-// three/sound.js places each sound in the building, built from these
+// three/sound.ts places each sound in the building, built from these
 // pieces: it plays them into its own nodes with into().
 let ac: AudioContext | null = null,
   master: DynamicsCompressorNode | null = null,
@@ -438,8 +438,8 @@ const BANGS = [
 
 /* ---------- event sounds ---------- */
 
-// Keyed by simulation event type, for the sounds three/sound.js reuses (bang, out, scare) and the win jingle,
-// which main.js plays itself because it has no place in the building.
+// Keyed by simulation event type, for the sounds three/sound.ts reuses (bang, out, scare) and the win jingle,
+// which main.ts plays itself because it has no place in the building.
 export const SFX = {
   bang(): void {
     if (!buffers.slam1) {

@@ -24,7 +24,7 @@ void main() {
 }`;
 
 export function createSlats(scene: THREE.Scene) {
-  // One triangle that covers the screen, as in post.js.
+  // One triangle that covers the screen, as in post.ts.
   const tri = new THREE.BufferGeometry();
   tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
   tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
@@ -49,7 +49,7 @@ export function createSlats(scene: THREE.Scene) {
   scene.add(slats);
   let show = 0;
   return {
-    // me: player.js's guard (hid, flat). busy: the catch has the camera.
+    // me: player.ts's guard (hid, flat). busy: the catch has the camera.
     update(S: State, me: Me, dt: number, busy: boolean): void {
       const on = S.phase === 'play' && me.hid >= 0 && !me.flat && !busy;
       show += ((on ? 1 : 0) - show) * Math.min(1, dt * FADE);

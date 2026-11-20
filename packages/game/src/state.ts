@@ -44,11 +44,11 @@ export interface Platform {
 }
 
 // platform: what changes when an app runs the game inside something else, such as a Discord Activity
-// (apps/discord). Set by that app's src/boot.js before start(). The web game leaves it as it is.
+// (apps/discord). Set by that app's src/boot.ts before start(). The web game leaves it as it is.
 export const platform: Platform = {
-  fixedRoom: false, // the room comes from outside: everyone tries to host it, and whoever finds it taken joins (net.js)
-  title: null, // () => screen ({ key, html, wire }), shown in place of the title screen (ui.js)
-  invite: null, // () => { html, wire }, shown in the lobby in place of the room code and link (ui.js)
+  fixedRoom: false, // the room comes from outside: everyone tries to host it, and whoever finds it taken joins (net.ts)
+  title: null, // () => screen ({ key, html, wire }), shown in place of the title screen (ui.ts)
+  invite: null, // () => { html, wire }, shown in the lobby in place of the room code and link (ui.ts)
 };
 
 export const rnd = (a: number, b: number): number => a + Math.random() * (b - a);

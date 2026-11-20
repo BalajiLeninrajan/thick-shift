@@ -2,7 +2,7 @@
 // proxy forwards every same-origin request, the room WebSocket included, to this app's Worker (the "/" URL
 // mapping in the Developer Portal). Everyone who opens the Activity in one channel shares its instanceId, which
 // becomes the room, so nobody types a code. Importing this module sets the game's platform hooks (the game's
-// state.js) and starts talking to Discord. boot.js imports it only inside Discord, and the build gives it and the
+// state.ts) and starts talking to Discord. boot.ts imports it only inside Discord, and the build gives it and the
 // SDK their own chunk, so elsewhere the SDK is never fetched.
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { game, platform } from '@thick-shift/game/state';

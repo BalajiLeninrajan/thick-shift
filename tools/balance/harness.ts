@@ -198,7 +198,7 @@ interface Objective {
 }
 
 const DT = 0.1;
-const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 }; // the same as player.js, which cannot be imported without three.js
+const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 }; // the same as player.ts, which cannot be imported without three.js
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 const ang = (a: Point, b: Point) => Math.atan2(b.x - a.x, b.z - a.z);
 const angDiff = (a: number, b: number) => {
@@ -451,7 +451,7 @@ function walk(S: NightState, bot: Bot, goal: Point, dt: number, sprint?: boolean
   return null;
 }
 
-// Do what bot.want says for one tick, then tell the host, as player.js does.
+// Do what bot.want says for one tick, then tell the host, as player.ts does.
 function act(S: NightState, bot: Bot, dt: number): void {
   const w = bot.want,
     before = { x: bot.x, z: bot.z };

@@ -26,7 +26,7 @@ class Part {
   declare vz: number;
   declare seed: number;
   declare depth: number;
-  declare rzSpin?: number; // set by styles.js's tooth rings, which turn on and on
+  declare rzSpin?: number; // set by styles.ts's tooth rings, which turn on and on
   constructor(o: THREE.Object3D, name: string) {
     this.o = o;
     this.name = name;

@@ -8,7 +8,7 @@ const NO_HOST = 4404,
 const MAX_GUEST_MESSAGE = 2000; // characters. Guest actions are tiny.
 
 // A room is a four-letter code someone typed, or a lowercase letter, a dash and an id that an app gets from its
-// platform, such as d- and a Discord Activity's instance id (apps/discord). Matches ROOM in src/net.js.
+// platform, such as d- and a Discord Activity's instance id (apps/discord). Matches ROOM in src/net.ts.
 const ROOM = /^\/room\/([A-Z]{4}|[a-z]-[\w-]{1,80})$/;
 
 // The bindings relay() needs from an app's Worker (its wrangler.jsonc).
@@ -84,7 +84,7 @@ export class Room extends DurableObject<RelayEnv> {
 
   webSocketMessage(ws: WebSocket, msg: string | ArrayBuffer): void {
     if (typeof msg !== 'string') return;
-    // A tab saying it went to the background or came back (net.js).
+    // A tab saying it went to the background or came back (net.ts).
     if (msg === 'hidden' || msg === 'shown') {
       ws.serializeAttachment({ ...att(ws), hidden: msg === 'hidden' });
       return;

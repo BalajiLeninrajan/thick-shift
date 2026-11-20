@@ -1,5 +1,5 @@
 --!nonstrict
--- This guard: walking, looking, the torch and using things. Ported from packages/game/src/three/player.js. The client
+-- This guard: walking, looking, the torch and using things. Ported from packages/game/src/three/player.ts. The client
 -- owns its own position and tells the server about twelve times a second (a 'p' action); everything else about
 -- the guard comes back in S. Keyboard and mouse only so far: the web game's gamepad and touch controls are not
 -- ported yet.

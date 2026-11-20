@@ -16,9 +16,9 @@ src/server/Main.server.luau   steps the sim ten times a second and sends every c
 src/client/            StarterPlayerScripts.Client
   Main.client.luau     the frame: events to HUD lines, the catch, watching a teammate
   World.luau           builds the Depot on the client: shell, furniture, lamps, usables, wall map
-  Controller.luau      three/player.js: walking, looking, the torch, using things
-  Task.luau            three/task.js: the three fault minigames
-  Hud.luau             three/hud.js and ui.js: the HUD and the cards between nights
+  Controller.luau      three/player.ts: walking, looking, the torch, using things
+  Task.luau            three/task.ts: the three fault minigames
+  Hud.luau             three/hud.ts and ui.ts: the HUD and the cards between nights
   Actors.luau          the mascots and the other guards
 test/
   diff-sim.luau        replays a web-sim night through Sim.luau (run through tools/roblox/diff/run.sh)

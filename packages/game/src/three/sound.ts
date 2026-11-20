@@ -3,7 +3,7 @@
 // a breaker box. Each place is an emitter (a panner with a filter in front of it),
 // the listener is this guard's head, and walls dull what is behind them.
 //
-// The sounds themselves are the pieces in ../audio.js (recordings, tones,
+// The sounds themselves are the pieces in ../audio.ts (recordings, tones,
 // noise, the room reverb, the one limiter), played into an emitter with
 // into(). Nothing here runs until the audio context is running, and events
 // that happen before then are dropped, not queued.
@@ -478,8 +478,8 @@ export function createSound() {
         });
         return;
       }
-      // The jumpscare (SFX.scare in audio.js) and more, hung on the catch's own
-      // timings (actors/scare.js): a hit as the camera is taken, its voice and the
+      // The jumpscare (SFX.scare in audio.ts) and more, hung on the catch's own
+      // timings (actors/scare.ts): a hit as the camera is taken, its voice and the
       // shriek as the face arrives, lower at the bite, then the floor. It has to
       // be louder than everything else on the floor, so the limiter ducks the rest.
       const rate = GROWL_RATE[x.by],
@@ -672,7 +672,7 @@ export function createSound() {
       torchOn = me.on;
       tone(me.on ? 1400 : 900, 0.04, 'square', 0.07);
     }
-    // A dying torch buzzes each time its flicker dips (player.js dims the beam on the same wave).
+    // A dying torch buzzes each time its flicker dips (player.ts dims the beam on the same wave).
     const dip = me.on && bat < 0.15 && bat > 0 && Math.sin(performance.now() * 0.05) < -0.2;
     if (dip && !dim) {
       tone(110, 0.05, 'square', 0.035);

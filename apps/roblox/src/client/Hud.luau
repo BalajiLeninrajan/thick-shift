@@ -1,5 +1,5 @@
 --!nonstrict
--- The heads-up display and the cards between nights, after packages/game/src/three/hud.js and packages/game/src/ui.js. Kept to
+-- The heads-up display and the cards between nights, after packages/game/src/three/hud.ts and packages/game/src/ui.ts. Kept to
 -- the edges and small: the thing to look at is the dark room. Top left: the hour, the power and the faults to fix.
 -- Top centre: what just happened. Bottom left: the torch. Centre: what is in reach.
 

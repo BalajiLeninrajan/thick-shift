@@ -29,7 +29,7 @@ body {
   60% { background-position: 31px 140px; } 80% { background-position: 97px 62px; }
 }
 @media (prefers-reduced-motion: reduce) { .ts-stage::after { animation: none; } }
-/* While a night is drawn, the grain comes from the last shader pass instead (three/post.js). */
+/* While a night is drawn, the grain comes from the last shader pass instead (three/post.ts). */
 .ts-stage.is-live::after { display: none; }
 
 .ts-overlay {
@@ -69,7 +69,7 @@ body {
 .ts-dev-body { overflow-y: auto; touch-action: pan-y; }
 
 /* ---------- in the night ---------- */
-/* The HUD (three/hud.js) and touch controls (three/touch.js). The HUD sits on
+/* The HUD (three/hud.ts) and touch controls (three/touch.ts). The HUD sits on
    a moving picture, so its pieces are bare text and thin marks with an ink
    shadow, or a translucent ink plate where a line has to be read. Recipes are
    used where a real surface appears: the pause panel, tags, buttons. */
@@ -183,7 +183,7 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-tick:empty { top: 13px; width: 1px; height: 4px; background: var(--overlay-1); }
 .ts-f-mark { position: absolute; top: 12px; transform: translateX(-50%); display: grid; justify-items: center; gap: 3px; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ts-f-mark b { font-weight: 600; }
-/* More labels than the strip holds: the furthest keep their dot and lose their words (hud.js spread). */
+/* More labels than the strip holds: the furthest keep their dot and lose their words (hud.ts spread). */
 .ts-f-mark.is-quiet b { visibility: hidden; }
 .ts-f-mark i { box-sizing: border-box; width: 11px; height: 11px; border-radius: 50%; border: 2px solid currentColor; background: var(--neu-ink); }
 .ts-f-mark.is-fault { color: color-mix(in srgb, var(--yellow) 65%, var(--overlay-0)); }
@@ -267,7 +267,7 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-start .ts-key { margin: 0 2px 0 8px; }
 .ts-fhud[data-touch="true"] .ts-f-start { display: none; }
 
-/* In a locker the slats are drawn in the scene (src/three/slats.js), behind the phone. */
+/* In a locker the slats are drawn in the scene (src/three/slats.ts), behind the phone. */
 .ts-fhud[data-hid="true"] .ts-f-dot { display: none; }
 .ts-f-toast.is-hide { --tc: var(--teal); }
 .ts-f-toast.is-toy { --tc: var(--mauve); }

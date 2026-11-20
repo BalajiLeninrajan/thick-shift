@@ -1,7 +1,7 @@
 // This guard: walking, looking, the torch, and using things. The browser
 // owns its own position and tells the host about twelve times a second
 // (a 'p' action); everything else about the guard comes back in S.
-// Keyboard (WASD to walk, and arrow keys to look for anyone without a mouse), mouse and gamepad are read here. Touch is in touch.js, which
+// Keyboard (WASD to walk, and arrow keys to look for anyone without a mouse), mouse and gamepad are read here. Touch is in touch.ts, which
 // drives the same guard through pad, look(), toggleTorch(), togglePhone(), toggleZoom() and throwToy().
 import * as THREE from 'three';
 import { game } from '../state';
@@ -13,7 +13,7 @@ import { FAULT_NAME } from './task';
 import type { DoorKey, GuardAct, NightState, Player, State, UseWhat } from '@thick-shift/sim/types';
 import type { Me, Prefs, Target, Task } from '../types';
 
-// What drives the guard besides the keys: touch.js (pad) and the gamepad (gp, which also keeps the stick's last
+// What drives the guard besides the keys: touch.ts (pad) and the gamepad (gp, which also keeps the stick's last
 // direction for a breaker box). fwd and strafe: -1 to 1.
 interface Pad {
   fwd: number;
@@ -33,8 +33,8 @@ const GAME_KEYS = /^(Key[WASDEFQCRG]|Arrow|Shift|Space)/;
 // A standard-mapping gamepad: left stick walks, right stick looks.
 const GP = { use: 0, phone: 1, torch: 2, call: 3, sprint: 4, watch: 5, toss: 7, pause: 9, zoom: 12, dead: 0.18, look: 2.8 }; // look: radians per second at full tilt
 
-// Look settings, kept between visits. sens multiplies SENS. outline: a gold edge round usable things (outline.js).
-// third: a flat guard watches teammates from behind them, not through their eyes (app.js spectate).
+// Look settings, kept between visits. sens multiplies SENS. outline: a gold edge round usable things (outline.ts).
+// third: a flat guard watches teammates from behind them, not through their eyes (app.ts spectate).
 export const prefs: Prefs = { sens: 1, invert: false, outline: true, third: false };
 try {
   const saved = JSON.parse(localStorage.tsFloor || '{}');
@@ -84,10 +84,10 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     locked: false,
     flat: false,
     paused: false, // the pause panel is up: nothing here moves the guard
-    touch: false, // a finger is driving (set by touch.js), so there is no pointer to lock
+    touch: false, // a finger is driving (set by touch.ts), so there is no pointer to lock
     watch: null, // id of the teammate a flat guard is watching through, or null
     ph: false, // the phone is up, showing the minimap
-    task: null, // hands in a breaker box: { i } of the box, while the minigame panel (task.js) is up
+    task: null, // hands in a breaker box: { i } of the box, while the minigame panel (task.ts) is up
     zoom: true, // the minimap shows the whole building, not what is round the guard. The phone starts on this.
     threw: 0, // performance.now() of the last Mini Biggs thrown, of the last try without the battery for it (dry),
     dry: 0, // and of the last try with empty hands (empty)
@@ -109,7 +109,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     gpWas: boolean[] = [];
   let keysLive = false,
     arrowHeld = 0; // keysLive: playing on the keyboard alone, so there is no pointer to lock
-  let task: Task | null = null; // the minigame panel (task.js), handed over by app.js once the HUD exists
+  let task: Task | null = null; // the minigame panel (task.ts), handed over by app.ts once the HUD exists
   function letGo(): void {
     if (me.task) {
       me.task = null;

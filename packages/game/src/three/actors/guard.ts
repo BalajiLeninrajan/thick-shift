@@ -180,7 +180,7 @@ export class Guard {
   declare dist: number;
   declare aim: THREE.Vector3;
   declare hand: THREE.Vector3;
-  declare here: boolean; // still in S.players this frame (actors.js)
+  declare here: boolean; // still in S.players this frame (actors.ts)
   constructor(scene: THREE.Scene, p: Player) {
     this.id = p.id;
     this.name = p.name;
@@ -251,7 +251,7 @@ export class Guard {
     this.group.position.set(tr.x, 0, tr.z);
     this.group.rotation.y = tr.yaw;
     this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
-    // Any of them in view past walls and shut doors (see mascot.js): a shoulder past a door jamb keeps them, and their torch.
+    // Any of them in view past walls and shut doors (see mascot.ts): a shoulder past a door jamb keeps them, and their torch.
     if ((this.lookT -= dt) <= 0) {
       this.lookT = 0.25;
       this.seen = this.dist < 2 || glimpses(view.x, view.z, tr.x, tr.z, PLAYER_R, S.doors);
@@ -354,7 +354,7 @@ export class Guard {
     rig.leg_R.rz -= lie * 0.35;
     rig.apply();
 
-    // Where the torch is and where it points, for the light (actors.js lends it one) and the lens glow.
+    // Where the torch is and where it points, for the light (actors.ts lends it one) and the lens glow.
     // With the phone up the torch hangs at the floor.
     const aimP = pitch + (-0.9 - pitch) * this.phRaise,
       cp = Math.cos(aimP);

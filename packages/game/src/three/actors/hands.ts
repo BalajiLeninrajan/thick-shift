@@ -21,7 +21,7 @@ export function createHands(camera: Camera) {
     torch = o;
     torch.position.set(HELD.x, HELD.y - LOWERED, HELD.z);
     // It sits a hand's width in front of the beam's own origin; a shadow from it would black out the beam.
-    // In a locker it is held inside the doors, so it goes in front of their slats (slats.js).
+    // In a locker it is held inside the doors, so it goes in front of their slats (slats.ts).
     torch.traverse((m: Mesh<BufferGeometry, MeshStandardMaterial>) => {
       if (!m.isMesh) return;
       m.castShadow = false;
@@ -34,7 +34,7 @@ export function createHands(camera: Camera) {
     camera.add(torch);
   });
   return {
-    // me: player.js's guard (on, ph, bob, moving, flat). busy: the catch has the camera.
+    // me: player.ts's guard (on, ph, bob, moving, flat). busy: the catch has the camera.
     update(me: Me, dt: number, busy: boolean): void {
       if (!torch) return;
       up += ((me.on ? 1 : 0) - up) * Math.min(1, dt * 10);

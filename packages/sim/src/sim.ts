@@ -1,4 +1,4 @@
-// The night simulation, host side. Only the host calls stepFloor() and actFloor(); net.js
+// The night simulation, host side. Only the host calls stepFloor() and actFloor(); net.ts
 // sends the state S it keeps to every guest. S.phase is 'lobby' until the host
 // starts night 1, then 'play', and a night ends in 'win', 'dead' or, after the
 // last one, 'won'.
@@ -92,7 +92,7 @@ export const F = {
   // The phone's minimap is meant for a glance. It draws on the torch's battery at PHONE times the torch's rate:
   // a full battery lasts 16 seconds with only the phone up and 13 with the torch on too, so a two-second look
   // costs an eighth of a battery. While it is up the guard walks at PHONE_WALK of their pace and cannot run
-  // (player.js), and the torch hangs at the floor and holds nothing (beamOn). Not tuned in the balance harness,
+  // (player.ts), and the torch hangs at the floor and holds nothing (beamOn). Not tuned in the balance harness,
   // whose guards never use it.
   PHONE: 4,
   PHONE_WALK: 0.6,
@@ -212,7 +212,7 @@ export const clockF = (S: State): string => (hourF(S) || 12) + ' AM';
 // back to F.RESTART. S.power is 0 for exactly as long as S.out is set.
 export const lightsF = (S: State): boolean => !S.out;
 // How eerie the building is, 0 to 1: fog, colour drained from the picture, sagging lamps and the background
-// sound (app.js, post.js, audio.js) all follow it. It fills over seven 45-second spans counted from midnight
+// sound (app.ts, post.ts, audio.ts) all follow it. It fills over seven 45-second spans counted from midnight
 // on night 1, with two more already counted for each later night: full at 4:30 on night 1, from midnight on night 5.
 const DREAD_SPAN = 45,
   DREAD_FULL = 7;
@@ -1178,7 +1178,7 @@ export function stepFloor(sim: Sim, state: State, now: number): void {
 // A field off the wire: a finite number, clamped, or the fallback.
 const num = (v: unknown, lo: number, hi: number, fallback: number) => (Number.isFinite(v) ? Math.max(lo, Math.min(hi, v as number)) : fallback);
 
-// One guard's action, from their own browser or sent over the wire (net.js). a is someone else's JSON, so every field
+// One guard's action, from their own browser or sent over the wire (net.ts). a is someone else's JSON, so every field
 // it reads is checked here; the casts below only tell TypeScript what those checks found.
 export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
   const S = state as NightState,

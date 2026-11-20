@@ -19,7 +19,7 @@ const hostAction = (label: string): string =>
 
 /* ---------- screens ---------- */
 // Each returns { key, html, wire }. The overlay only re-renders when key changes. An app can swap in its own title
-// screen and lobby invite through platform (state.js), built from the exported helpers here.
+// screen and lobby invite through platform (state.ts), built from the exported helpers here.
 
 function titleScreen(): OverlayScreen {
   let savedName = '';
@@ -106,7 +106,7 @@ function floorStats(t: Tally, run?: boolean): string {
 function nightScreen(S: State): OverlayScreen {
   const names = S.players.map(p => p.name),
     who = names.map(esc).join(', ') || esc(game.myName);
-  // The catch has the screen until client.holdUntil (see main.js).
+  // The catch has the screen until client.holdUntil (see main.ts).
   const scaring = performance.now() < client.holdUntil;
   const key = [S.phase, S.night, names.join(','), game.netNote, scaring].join('|');
   const next = (): void => (S.phase === 'won' ? restartFloor(sim, S) : startFloorNight(sim, S, S.phase === 'win' ? S.night + 1 : S.night));
