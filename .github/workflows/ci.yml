@@ -53,6 +53,10 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
+      # Vitest on packages/sim: the map, the floor plan, and seeded nights checked against snapshots.
+      - name: Run the tests
+        run: pnpm test
+
       - name: Build both apps
         run: pnpm build
 
