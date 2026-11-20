@@ -637,7 +637,9 @@ export function createHud(stage: Element, player: PlayerHandle) {
       const lit = Math.ceil(bat * CELLS - 0.001),
         state = bat <= 0 ? 'dead' : me.act === 'charge' ? 'charging' : bat < LOW_BAT ? 'low' : 'ok';
       torch.hidden = me.flat;
-      cells.forEach((c, i) => c.classList.toggle('is-full', i < lit));
+      cells.forEach((c, i) => {
+        c.classList.toggle('is-full', i < lit);
+      });
       // The phone draws on the same battery, four times as fast, so the bars count as on while it is up.
       data(torch, 'state', state);
       data(torch, 'on', me.on || me.ph);

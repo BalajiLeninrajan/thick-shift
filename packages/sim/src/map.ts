@@ -383,7 +383,7 @@ function cut(lo: number, hi: number, holes: [number, number][]): [number, number
 // Doorways leave holes; above each hole is a lintel from the door's height to the ceiling.
 export function walls(): Wall[] {
   const out: Wall[] = [];
-  ROOMS3.forEach((room, ri) =>
+  ROOMS3.forEach((room, ri) => {
     room.rects.forEach((rect, k) => {
       const [x0, z0, x1, z1] = rect,
         others = room.rects.filter((_, j) => j !== k);
@@ -416,8 +416,8 @@ export function walls(): Wall[] {
           if (a != null && room.h > dh) seg(a, b, dh, room.h - dh);
         });
       }
-    })
-  );
+    });
+  });
   return out;
 }
 
@@ -489,7 +489,11 @@ function buildNav(): Nav {
   const add = (x: number, z: number, room: number) => {
     if (room >= 0 && walkable(x, z, MASCOT_R)) nodes.push({ x, z, room });
   };
-  ROOMS3.forEach((room, ri) => room.rects.forEach(([x0, z0, x1, z1]) => add((x0 + x1) / 2, (z0 + z1) / 2, ri)));
+  ROOMS3.forEach((room, ri) => {
+    room.rects.forEach(([x0, z0, x1, z1]) => {
+      add((x0 + x1) / 2, (z0 + z1) / 2, ri);
+    });
+  });
   for (const [room, x, z] of EXTRA_NODES) add(x, z, room);
   for (const [x0, z0, x1, z1] of OBSTACLES)
     for (const [x, z] of [

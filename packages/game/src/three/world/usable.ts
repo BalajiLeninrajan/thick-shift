@@ -144,7 +144,9 @@ function wallMap(scene: THREE.Scene): (S: State, t: number) => void {
       c.fillText(`OFF MARK ${out} of ${S.m.length}`, 400, 114);
       c.fillStyle = due.length ? '#f38ba8' : '#7fbf8a';
       c.fillText(due.length ? 'FAULTS' : 'NO FAULTS', 400, 160);
-      due.forEach((cl, i) => c.fillText(`  ${ROOMS3[cl.room].name}`, 400 + (i > 6 ? 200 : 0), 188 + (i % 7) * 26));
+      due.forEach((cl, i) => {
+        c.fillText(`  ${ROOMS3[cl.room].name}`, 400 + (i > 6 ? 200 : 0), 188 + (i % 7) * 26);
+      });
     }
     tex.needsUpdate = glbTex.needsUpdate = true;
   };

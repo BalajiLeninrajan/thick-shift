@@ -55,10 +55,7 @@
       "suspicious": {
         // 26. Assignments inside expressions (`return lensTex = new ...`, `if (!(b.woke ||= ...))`,
         // `(v.strain -= dt) <= 0`) are deliberate here. Revisit in PR 6 of #7 (strict).
-        "noAssignInExpressions": "off",
-        // 14. `list.forEach(x => f(x))` returns f's value to forEach, which ignores it; this one-line form is the
-        // house style. Revisit in PR 5 of #7, when the client is ported to TS.
-        "useIterableCallbackReturn": "off"
+        "noAssignInExpressions": "off"
       }
     }
   }

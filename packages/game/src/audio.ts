@@ -458,7 +458,9 @@ export const SFX = {
     shriek(0.42);
   },
   win(): void {
-    [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.5, 'triangle', 0.2), i * 160));
+    [523, 659, 784, 1047].forEach((f, i) => {
+      setTimeout(() => tone(f, 0.5, 'triangle', 0.2), i * 160);
+    });
   },
   out(): void {
     sample('hit_low', { gain: 0.9, rate: 0.7 });
@@ -531,7 +533,10 @@ const ODD = [
   }, // two knocks
   () => sample(pick('creak1', 'creak2'), { gain: 0.3, rate: 0.7, lowpass: 900, wet: 0.6 }), // a door, far off
   () => tone(70, 2.2, 'sawtooth', 0.035, 52), // something dragged
-  () => [660, 587, 660].forEach((f, i) => setTimeout(() => tone(f, 0.5, 'sine', 0.018, f * 0.985), i * 520)), // someone humming
+  () =>
+    [660, 587, 660].forEach((f, i) => {
+      setTimeout(() => tone(f, 0.5, 'sine', 0.018, f * 0.985), i * 520);
+    }), // someone humming
   // It, somewhere below you. Muffled this far, it is closer to a whisper than a growl.
   // Listed three times so it is the sound you hear most.
   farGrowl,

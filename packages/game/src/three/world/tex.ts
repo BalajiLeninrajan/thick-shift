@@ -208,7 +208,10 @@ export function paint(look: Look, draw: (p: Painter) => void): Maps {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.beginPath();
-        pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        pts.forEach(([x, y], i) => {
+          if (i) ctx.lineTo(x, y);
+          else ctx.moveTo(x, y);
+        });
         ctx.stroke();
         ctx.globalAlpha = 1;
       });

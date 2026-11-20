@@ -234,7 +234,9 @@ function drawArt(): CanvasRenderingContext2D {
     c.font = `bold 34px ${FONT}`;
     c.fillText(m.name.toUpperCase(), x + w / 2, y + 27, w - 24);
     c.font = `bold 17px ${FONT}`;
-    POSTER_LINE[i].split('\n').forEach((l, k, all) => c.fillText(l, x + w / 2, y + 291 + (k - (all.length - 1) / 2) * 20));
+    POSTER_LINE[i].split('\n').forEach((l, k, all) => {
+      c.fillText(l, x + w / 2, y + 291 + (k - (all.length - 1) / 2) * 20);
+    });
     c.restore();
     age(c, r, rnd);
   });
@@ -290,7 +292,9 @@ function drawArt(): CanvasRenderingContext2D {
       c.lineTo(bx, by + 34);
       c.fill();
     }
-    [1, 0, 3, 2].forEach((mi, k) => friend(c, mi, x + 150 + k * 240, y + 300, [0.82, 1, 0.9, 0.7][k]));
+    [1, 0, 3, 2].forEach((mi, k) => {
+      friend(c, mi, x + 150 + k * 240, y + 300, [0.82, 1, 0.9, 0.7][k]);
+    });
     for (const [bx, col] of [
       [40, '#d4418e'],
       [520, '#e8c832'],
