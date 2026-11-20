@@ -4,7 +4,29 @@
 // height of its room, so the dado and the damp sit at real heights.
 import * as THREE from 'three';
 import { paint, fbm, mixc } from './tex';
+import type { Look, Maps, Painter } from './tex';
 import { ROOMS3 } from '@thick-shift/sim/map';
+
+// Which surfaces a room wears (LOOK). skirt and frame are trim colours; dado: a corridor wall's lower colour.
+export interface RoomLook {
+  floor: string;
+  wall: string;
+  dado?: string;
+  ceil: string;
+  skirt: string | null;
+  frame: string;
+}
+// One room's materials, from surfaces().
+export interface RoomMaterials {
+  floor: THREE.MeshStandardMaterial;
+  wall: THREE.MeshStandardMaterial;
+  ceil: THREE.MeshStandardMaterial;
+}
+// What surfaces() returns: each room's materials by room index, and the trim's.
+export interface Materials {
+  rooms: RoomMaterials[];
+  trim: THREE.MeshStandardMaterial;
+}
 
 export const SPAN = 4;
 const M = 512 / SPAN; // pixels per metre across
@@ -18,14 +40,14 @@ const BROAD = fbm(256, 3, 5, 11),
 const FLAKE = fbm(256, 16, 3, 71).map((v, i) => v * 0.55 + BROAD[i] * 0.45);
 
 // The dirt every surface has: ground-in grime in patches and a fine speckle.
-function dirt(p, k = 1) {
+function dirt(p: Painter, k = 1): void {
   p.wash(BROAD, 0.5, 0.85, '#0d0a07', 0.4 * k, null, 0.95);
   p.wash(FLAKE, 0.5, 0.7, '#0a0806', 0.3 * k, null, null);
   p.wash(FINE, 0.5, 0.9, '#000000', 0.13 * k, 0.44, null);
   p.wash(FINE, 0.1, 0.5, '#ffffff', 0.04 * k, null, null);
 }
 // Short curved scrapes, the kind chair legs and trolleys leave.
-const scuffs = (p, n, col, len = 40) => {
+const scuffs = (p: Painter, n: number, col: string, len = 40): void => {
   for (let i = 0; i < n; i++) {
     const x = p.rnd() * p.s,
       y = p.rnd() * p.s,
@@ -46,12 +68,12 @@ const scuffs = (p, n, col, len = 40) => {
     );
   }
 };
-function cracks(p, n, col = '#07070a') {
+function cracks(p: Painter, n: number, col = '#07070a'): void {
   for (let i = 0; i < n; i++) {
     let x = p.rnd() * p.s,
       y = p.rnd() * p.s,
       a = p.rnd() * 7;
-    const pts = [[x, y]];
+    const pts: [number, number][] = [[x, y]];
     for (let k = 0; k < 9; k++) {
       a += (p.rnd() - 0.5) * 1.3;
       x += Math.cos(a) * 16;
@@ -62,7 +84,7 @@ function cracks(p, n, col = '#07070a') {
   }
 }
 
-const FLOOR = {
+const FLOOR: Record<string, () => Maps> = {
   // Stage: dark varnished boards, worn pale where people stood.
   boards: () =>
     paint({ col: '#5a3d22', rough: 0.6, bump: 2.4, seed: 1 }, p => {
@@ -280,7 +302,7 @@ const FLOOR = {
 };
 
 // Sheet metal: the ducts are made of it on every side.
-const metal = () =>
+const metal = (): Maps =>
   paint({ col: '#7c8288', rough: 0.5, bump: 2.2, seed: 9 }, p => {
     const { s, rnd } = p;
     p.wash(BROAD, 0.2, 0.8, '#9aa0a4', 0.5, null, 0.35);
@@ -314,10 +336,11 @@ const metal = () =>
 /* ---------- walls ---------- */
 
 // A wall painter gets Y(metres up the wall) -> pixels down the canvas.
-const wall = (look, H, draw) => paint({ ...look, tall: true }, p => draw(p, m => p.s * (1 - m / H)));
+const wall = (look: Look, H: number, draw: (p: Painter, Y: (m: number) => number) => void): Maps =>
+  paint({ ...look, tall: true }, p => draw(p, m => p.s * (1 - m / H)));
 // Dirt that every wall has: a dark band kicked up from the floor, damp coming
 // down from the ceiling, and runs below it.
-function wallDirt(p, Y, H, k = 1) {
+function wallDirt(p: Painter, Y: (m: number) => number, H: number, k = 1): void {
   const { s, c, rnd } = p;
   let g = c.createLinearGradient(0, Y(0.5), 0, Y(0));
   g.addColorStop(0, '#0a080600');
@@ -343,16 +366,16 @@ function wallDirt(p, Y, H, k = 1) {
   p.wash(FINE, 0.5, 0.9, '#000000', 0.1, 0.46, null);
 }
 // Paint coming away from the plaster underneath.
-function peel(p, lo = 0.62, under = '#8f887a') {
+function peel(p: Painter, lo = 0.62, under = '#8f887a'): void {
   p.wash(FLAKE, lo, lo + 0.015, under, 1, 0.3, 0.95);
   p.wash(FLAKE, lo - 0.02, lo, '#ffffff', 0.22, 0.62, null); // the lifted edge catches the light
 }
 // A band of colour from height a to b (metres), with a darker line where it meets the next.
-const band = (p, Y, a, b, col, rough) => {
+const band = (p: Painter, Y: (m: number) => number, a: number, b: number, col: string, rough: number | null): void => {
   p.fill(0, Y(b), p.s, Y(a) - Y(b), col, null, rough);
 };
 
-const WALL = {
+const WALL: Record<string, (H: number, dado?: string) => Maps> = {
   // Stage: a painted night sky over timber panelling.
   stage: H =>
     wall({ col: '#2a4470', rough: 0.9, bump: 1.8, seed: 21 }, H, (p, Y) => {
@@ -518,7 +541,7 @@ const WALL = {
 
 /* ---------- ceilings ---------- */
 
-const CEIL = {
+const CEIL: Record<string, () => Maps> = {
   // Suspended tiles in a metal grid: sagging, water-stained.
   tiles: () =>
     paint({ col: '#8f8c80', rough: 0.95, bump: 2, seed: 41 }, p => {
@@ -567,7 +590,7 @@ const CEIL = {
 
 // Small parts (skirting, door frames, pipes, fittings) share one worn-paint
 // texture and take their colour from the mesh.
-const trim = () =>
+const trim = (): Maps =>
   paint({ col: '#c8c8c8', rough: 0.6, bump: 1.4, seed: 61 }, p => {
     p.wash(BROAD, 0.3, 0.8, '#8e8e8e', 0.6, null, 0.8);
     p.wash(MID, 0.62, 0.7, '#4a4038', 0.8, 0.35, 0.95);
@@ -578,7 +601,7 @@ const trim = () =>
 // Which surfaces each room wears, by room index. skirt and frame are trim colours.
 const WEST_DADO = '#3f6a54',
   EAST_DADO = '#8a6a2a';
-export const LOOK = [
+export const LOOK: RoomLook[] = [
   { floor: 'boards', wall: 'stage', ceil: 'black', skirt: '#2a1a0e', frame: '#5a1a1a' },
   { floor: 'ply', wall: 'block', ceil: 'slab', skirt: '#1a1a1c', frame: '#2c3a34' },
   { floor: 'carpet', wall: 'arcade', ceil: 'tiles', skirt: '#0c0a10', frame: '#d9b82e' },
@@ -592,11 +615,11 @@ export const LOOK = [
 ];
 
 // Materials for the whole building: { floor, wall, ceil } by room index, and trim.
-export function surfaces() {
-  const std = (maps, metalness = 0) => new THREE.MeshStandardMaterial({ ...maps, roughness: 1, metalness });
+export function surfaces(): Materials {
+  const std = (maps: Maps, metalness = 0): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial({ ...maps, roughness: 1, metalness });
   const sheet = std(metal(), 0.55),
-    made = new Map();
-  const once = (key, make) => {
+    made = new Map<string, THREE.MeshStandardMaterial>();
+  const once = (key: string, make: () => THREE.MeshStandardMaterial): THREE.MeshStandardMaterial => {
     if (!made.has(key)) made.set(key, make());
     return made.get(key);
   };
