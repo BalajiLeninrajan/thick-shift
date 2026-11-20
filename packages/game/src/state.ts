@@ -26,6 +26,13 @@ export const game: Game = {
   error: null, // { title, detail } when the session cannot continue
 };
 
+// game.S, for code that runs only once a room exists: the floor's frame, the host's step, the dev menu. Code that
+// can run before then (the title screen, the overlay) checks game.S itself.
+export function currentState(): State {
+  if (!game.S) throw new Error('no room state yet');
+  return game.S;
+}
+
 export interface Client {
   lastEv: number;
   holdUntil: number;

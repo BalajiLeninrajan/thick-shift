@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./check": "./src/check.ts",
     "./config": "./src/config.ts",
     "./map": "./src/map.ts",
     "./dressing": "./src/dressing.ts",

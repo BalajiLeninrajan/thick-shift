@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/main.ts",
     "./state": "./src/state.ts",
+    "./dom": "./src/dom.ts",
     "./net": "./src/net.ts",
     "./audio": "./src/audio.ts",
     "./ui": "./src/ui.ts",

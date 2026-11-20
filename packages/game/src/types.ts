@@ -6,7 +6,7 @@
 // A handle (what a create...() function returns) is typed from the function itself, so it follows the code as it
 // changes. The data shapes are written out, because two modules have to agree on them.
 
-import type { DoorKey, EventType, GuardAct, Point, SimEvent, UseWhat } from '@thick-shift/sim/types';
+import type { DoorKey, EventType, GuardAct, Point, SimEvent } from '@thick-shift/sim/types';
 import type { Object3D } from 'three';
 import type { createActors } from './three/actors';
 import type { createPhone } from './three/actors/phone';
@@ -54,16 +54,15 @@ export interface Prefs {
 // What a guard's use key would act on (player.ts findTarget): the field names follow the 'use' action it sends.
 // what: also 'crank' and 'charge', which are held (hold -1) and so set Me.act instead of sending a 'use'.
 // at: where it is, for distance and facing. hold: seconds to hold the use key, 0 for a tap, -1 for as long as it is
-// held. i: a box, battery spot or locker. k: a door. id: a toy (number) or a flat guard (string).
-export interface Target {
-  what: UseWhat | 'crank' | 'charge';
-  at: Point;
-  label: string;
-  hold: number;
-  i?: number;
-  k?: DoorKey;
-  id?: string | number;
-}
+// held. Each kind carries the one handle it needs: i, a box, battery spot or locker; k, a door; id, a toy (number)
+// or a flat guard (string). The others read as undefined, so the 'use' action can copy all three.
+export type Target = { at: Point; label: string; hold: number } & (
+  | { what: 'fix' | 'bat' | 'hide'; i: number; k?: never; id?: never }
+  | { what: 'door'; k: DoorKey; i?: never; id?: never }
+  | { what: 'toy'; id: number; i?: never; k?: never }
+  | { what: 'peel'; id: string; i?: never; k?: never }
+  | { what: 'crank' | 'charge'; i?: never; k?: never; id?: never }
+);
 
 // This guard as their own browser has them (player.me), ahead of what the host sends back. yaw 0 faces south (+z).
 // Read by the HUD, touch, sound, outline, the actors, the phone and the slats; only player.ts writes it, apart from

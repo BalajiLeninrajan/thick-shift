@@ -178,7 +178,7 @@ function nightScreen(S: State): OverlayScreen {
       key,
       wire,
       html: card(
-        `<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(MASC[S.killer]?.name || 'Something')} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(S.tally)}`,
+        `<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(S.killer === -1 ? 'Something' : MASC[S.killer].name)} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(S.tally)}`,
         hostAction(`Retry night ${S.night}`),
         'ts-card-slow'
       ),

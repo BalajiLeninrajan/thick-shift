@@ -34,7 +34,7 @@
 // every strategy in the harness's second half loses. Since the clocks became
 // faults a guard alone is near that and crews fall faster from night 3 (see the
 // README's "Balance on the floor").
-import { DOORS, FINAL_NIGHT, MASC } from './config.ts';
+import { DOORS, FINAL_NIGHT, MASC, MASCOTS } from './config.ts';
 import {
   BATTERY_SPOTS,
   BOOTH,
@@ -70,6 +70,7 @@ import type {
   Guard,
   LobbyState,
   Mascot,
+  MascotIndex,
   MascotState,
   NightState,
   Player,
@@ -216,14 +217,19 @@ export const lightsF = (S: State): boolean => !S.out;
 // on night 1, with two more already counted for each later night: full at 4:30 on night 1, from midnight on night 5.
 const DREAD_SPAN = 45,
   DREAD_FULL = 7;
-// (`S.dev && S.dev.dread >= 0` is how `S.dev?.dread >= 0` reads with the types: the same answer for every S.)
-export const dreadF = (S: State): number => (S.dev && S.dev.dread >= 0 ? S.dev.dread : Math.min(1, (S.t / DREAD_SPAN + (S.night - 1) * 2) / DREAD_FULL));
+// S.dev is a Partial<Dev>: the harness leaves dread unset, which leaves it to the night, as -1 does.
+export const dreadF = (S: State): number => {
+  const dread = S.dev?.dread;
+  return dread !== undefined && dread >= 0 ? dread : Math.min(1, (S.t / DREAD_SPAN + (S.night - 1) * 2) / DREAD_FULL);
+};
 const late = (S: State) => (S.night <= RAMP.length ? RAMP[S.night - 1] : (RAMP.at(-1) as number) + S.night - RAMP.length);
 // Mascots start the night as the costumes they were and come apart: 0 is cute, 1 is off, 2 is what is underneath. Left alone they are whole until 5 AM on
 // night 1, so the torch stops them dead while a guard is learning what it is for, and fully rotten from
 // 3 AM on night 5, when it only slows them. Torchlight and doors slammed on one (m.ire) bring it on sooner.
 function rot(S: NightState, m: Mascot): number {
-  if (S.dev && S.dev.rot >= 0) return S.dev.rot;
+  // As in dreadF: an unset rot leaves it to the night.
+  const set = S.dev?.rot;
+  if (set !== undefined && set >= 0) return set;
   const r = late(S) * ROT.night + (S.t / F.HOUR) * ROT.hour + (m.ire || 0) * ROT.ire;
   return r < 0.34 ? 0 : r < 0.67 ? 1 : 2;
 }
@@ -351,7 +357,7 @@ export function startFloorNight(sim: Sim, state: State, n: number): void {
     crank: false,
     round: -1,
   });
-  S.m = MASC.map((d, i) => ({ i, x: REST[i].x, z: REST[i].z, yaw: REST[i].yaw, st: 'rest', rot: 0, lit: false, ire: 0 }));
+  S.m = MASCOTS.map(i => ({ i, x: REST[i].x, z: REST[i].z, yaw: REST[i].yaw, st: 'rest', rot: 0, lit: false, ire: 0 }));
   // Nothing moves for the first half minute of night 1, and a quarter minute after that.
   // S.waveAt is when the mascots next stir or settle, on S.t, kept in S so a guest who takes over as host has it.
   const quiet = n === 1 ? 34 : Math.max(12, 26 - n * 3);
@@ -751,7 +757,7 @@ function flatten(S: NightState, p: Guard, m: Mascot, b: Brain) {
   b.last = { x: p.x, z: p.z };
   if (!standing(S).length) endNight(S, m.i);
 }
-function endNight(S: NightState, by: number) {
+function endNight(S: NightState, by: MascotIndex | -1) {
   S.phase = 'dead';
   S.killer = by;
   S.deaths++;

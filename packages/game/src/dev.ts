@@ -15,7 +15,16 @@ import { game } from './state';
 const $ = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
 const DEFAULTS: Dev = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: -1, dread: -1 };
 const SWITCHES: ('god' | 'power' | 'freeze' | 'wake')[] = ['god', 'power', 'freeze', 'wake'];
-const cheats = (): Dev => (game.S.dev ||= { ...DEFAULTS });
+const isFull = (dev: Partial<Dev> | undefined): dev is Dev => !!dev && Object.keys(DEFAULTS).every(k => k in dev);
+// S.dev, made whole. This menu is the one thing in the game that writes S.dev, and always a full Dev; only the
+// balance harness sets part of one, and a missing field is filled from DEFAULTS.
+function cheats(): Dev {
+  const S = game.S;
+  if (isFull(S.dev)) return S.dev;
+  const dev: Dev = { ...DEFAULTS, ...S.dev };
+  S.dev = dev;
+  return dev;
+}
 const playing = (): boolean => !!game.S && game.S.phase === 'play';
 const STAGES: [number, string][] = [
   [-1, 'Auto'],

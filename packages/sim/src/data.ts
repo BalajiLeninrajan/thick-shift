@@ -11,26 +11,31 @@ export const TUBE: RGB = [0.8, 0.95, 0.74],
   RED: RGB = [1, 0.06, 0.04],
   GREEN: RGB = [0.2, 1, 0.45];
 
-// g: the group it belongs to. 'on' is steady; fa, fb and fc flicker in their
-// own ways; 'exit' has a battery and outlives the power.
-// kind: tube (ceiling fitting, running along dir), bulb (bare, hanging at y),
-// red (emergency bulkhead on a wall facing n), exit (sign on a wall facing n),
-// glow (no fitting: the light of a prop with a lit screen or bulbs, named by
-// `by`, and only there once that prop has loaded). pow: how bright the floor
-// right under it gets. reach: metres before it has faded to nothing.
-export interface Lamp {
-  kind: 'tube' | 'bulb' | 'red' | 'exit' | 'glow';
-  g?: 'on' | 'fa' | 'fb' | 'fc' | 'exit';
-  by?: string;
+// Every lamp has a place, a colour, pow (how bright the floor right under it gets) and reach (metres before it has
+// faded to nothing). The rest depends on its kind, so each kind says what it has.
+interface LampBase {
   x: number;
   z: number;
-  y?: number;
-  dir?: 'x' | 'z';
-  n?: [number, number];
   col: RGB;
   pow: number;
   reach: number;
 }
+// g: the group a fitted lamp belongs to. 'on' is steady; fa, fb and fc flicker in their own ways; 'exit' has a
+// battery and outlives the power.
+export type LampGroup = 'on' | 'fa' | 'fb' | 'fc' | 'exit';
+// The fields a kind of lamp does not have read as undefined, so code that treats every lamp alike can still ask
+// (`l.y ?? ceiling`), and code that has checked l.kind gets the fields that kind always has.
+type Without<K extends 'g' | 'dir' | 'y' | 'n' | 'by'> = { [F in K]?: never };
+export type Lamp = LampBase &
+  (
+    | ({ kind: 'tube'; g: LampGroup; dir: 'x' | 'z' } & Without<'y' | 'n' | 'by'>) // a ceiling fitting, running along dir
+    | ({ kind: 'bulb'; g: LampGroup; y: number } & Without<'dir' | 'n' | 'by'>) // bare, hanging at y
+    | ({ kind: 'red'; g: LampGroup; n: [number, number] } & Without<'dir' | 'y' | 'by'>) // an emergency bulkhead on a wall facing n
+    | ({ kind: 'exit'; g: LampGroup; y: number; n: [number, number] } & Without<'dir' | 'by'>) // a sign on a wall facing n
+    // No fitting: the light of a prop with a lit screen or bulbs, named by `by`, and only there once that prop has
+    // loaded.
+    | ({ kind: 'glow'; by: string; y: number } & Without<'g' | 'dir' | 'n'>)
+  );
 
 export const LAMPS: Lamp[] = [
   { kind: 'bulb', g: 'on', x: 18.5, z: 7.6, y: 2.7, col: WARM, pow: 0.9, reach: 10 }, // the stage's ghost light

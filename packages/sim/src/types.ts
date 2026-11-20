@@ -14,6 +14,10 @@ export interface Point {
 // [x0, z0, x1, z1] in metres.
 export type Rect = [number, number, number, number];
 
+// A list known to hold at least one entry, so [0] reads the entry rather than possibly undefined. isNonEmpty
+// (check.ts) narrows a plain array to one.
+export type NonEmpty<T> = readonly [T, ...T[]];
+
 // The booth's three ways in: left door, vent, right door.
 export type DoorKey = 'L' | 'V' | 'R';
 // Which booth doors are shut.
@@ -43,7 +47,7 @@ export interface Guard extends Joined {
   ph: boolean; // phone up, reading the minimap
   bat: number; // torch battery, 0 to 1
   flat: boolean;
-  flatBy: number; // the mascot (MASC index) that flattened them, or -1
+  flatBy: MascotIndex | -1; // the mascot that flattened them, or -1
   sp: boolean; // sprinting
   act: GuardAct;
   safe: number; // S.t before which no mascot can flatten them (after a peel)
@@ -60,10 +64,15 @@ export type Player = Joined & Partial<Omit<Guard, keyof Joined>>;
 // feast: sitting on a guard it flattened. siege: banging on a shut booth door.
 export type MascotState = 'rest' | 'roam' | 'search' | 'hunt' | 'windup' | 'charge' | 'stun' | 'feast' | 'siege';
 
+// The cast, by their place in MASC (config.ts): Big Biggs, Madame Flan, Squish, Tank. Every table kept per mascot
+// is a PerMascot, so reading one by a MascotIndex always finds an entry.
+export type MascotIndex = 0 | 1 | 2 | 3;
+export type PerMascot<T> = readonly [T, T, T, T];
+
 // A mascot as every guest sees it. i: its MASC index. rot: how far it has come apart, 0 to 2. lit: a torch is on it.
 // ire: what torchlight and slammed doors have added to its rot.
 export interface Mascot {
-  i: number;
+  i: MascotIndex;
   x: number;
   z: number;
   yaw: number;
@@ -99,13 +108,13 @@ export interface Toy {
 export interface Tally {
   fixed: number;
   burnt: number;
-  flats: [name: string, by: number][];
+  flats: [name: string, by: MascotIndex][];
   peels: string[];
 }
 
 // The dev menu's cheats (packages/game/src/dev.ts). Only the host sets them; the sim reads them.
-// rot and dread: -1 leaves them to the night. The balance harness sets only some of them (`{ freeze: true }`):
-// a missing field reads as off everywhere the sim looks at it.
+// rot and dread: -1 leaves them to the night. The dev menu sets all of them; the balance harness sets only some
+// (`{ freeze: true }`), so S.dev is a Partial<Dev>, and a missing field reads as off everywhere the sim looks at it.
 export interface Dev {
   god: boolean;
   power: boolean;
@@ -128,15 +137,15 @@ export interface EventData {
   win: undefined;
   scare: undefined; // the last guard standing was flattened
   toy: { by: string; x: number; z: number };
-  flat: { id: string; by: number; x: number; z: number };
-  spot: { i: number; id: string; x: number; z: number };
-  found: { i: number; id: string; h: number; x: number; z: number }; // h: the locker
-  check: { i: number; h: number; x: number; z: number };
+  flat: { id: string; by: MascotIndex; x: number; z: number };
+  spot: { i: MascotIndex; id: string; x: number; z: number };
+  found: { i: MascotIndex; id: string; h: number; x: number; z: number }; // h: the locker
+  check: { i: MascotIndex; h: number; x: number; z: number };
   crash: { x: number; z: number };
   bang: DoorKey;
   arrive: DoorKey;
-  quit: { i: number; x: number; z: number };
-  roar: { i: number; x: number; z: number };
+  quit: { i: MascotIndex; x: number; z: number };
+  roar: { i: MascotIndex; x: number; z: number };
   call: { id: string; x: number; z: number };
   fix: { i: number; by: string; x: number; z: number };
   fumble: { k: DoorKey; by: string };
@@ -161,13 +170,13 @@ export interface LobbyState {
   doors: Doors;
   m: Mascot[];
   players: Player[];
-  killer: number; // the mascot that ended the night, or -1
+  killer: MascotIndex | -1; // the mascot that ended the night, or -1
   evs: SimEvent[]; // the last ten events
   evId: number;
   deaths: number;
   slams: number;
   code: string;
-  dev?: Dev;
+  dev?: Partial<Dev>;
 }
 // The state once a night has started (startFloorNight).
 export interface NightState extends LobbyState {
@@ -245,8 +254,10 @@ export type Action =
   | { t: 'call' }
   // A Mini Biggs thrown along yaw, d metres.
   | { t: 'throw'; yaw: number; d: number }
-  // i: a box, battery spot or locker. k: a door. id: a toy (number) or a flat guard (string).
-  | { t: 'use'; what: UseWhat; i?: number; k?: DoorKey; id?: string | number };
+  // i: a box, battery spot or locker. k: a door. id: a toy (number) or a flat guard (string). The host's own browser
+  // hands actFloor the object it built, which can carry a field set to undefined (player.ts copies them from its
+  // Target); JSON drops those for a guest's.
+  | { t: 'use'; what: UseWhat; i?: number | undefined; k?: DoorKey | undefined; id?: string | number | undefined };
 
 // The relay's close codes (worker/room.ts): nobody is hosting this code, somebody already is, or a guest id it
 // will not use (1008, policy violation).

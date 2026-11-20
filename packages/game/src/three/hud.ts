@@ -694,7 +694,8 @@ export function createHud(stage: Element, player: PlayerHandle) {
           near = up.reduce((a, p) => (!a || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(a.x - me.x, a.z - me.z) ? p : a), null);
         const watched = up.find(p => p.id === me.watch),
           next = up[up.indexOf(watched) + 1];
-        set(flatHow, `${MASC[mine.flatBy]?.name || 'Something'} ${HOW[mine.flatBy] || 'got you'}.`);
+        const by = mine.flatBy ?? -1;
+        set(flatHow, by === -1 ? 'Something got you.' : `${MASC[by].name} ${HOW[by]}.`);
         set(
           flatSub,
           watched
