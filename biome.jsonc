@@ -26,6 +26,9 @@
   "css": { "formatter": { "enabled": false } },
   "html": { "formatter": { "enabled": false } },
   "markdown": { "formatter": { "enabled": false } },
+  // Sorting imports would move side-effect imports (styles, audio) ahead of the modules that must load first. Off until
+  // PR 5 of #7, when the client is ported to TS and its import order can be checked file by file.
+  "assist": { "enabled": false },
   "linter": {
     "enabled": true,
     "rules": {
