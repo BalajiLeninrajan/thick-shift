@@ -1,7 +1,7 @@
 // Loaded by tools/balance/harness.ts when REC_OUT is set (run.sh sets it). Writes one JSON line per sim call to
 // $REC_OUT: the call, the random draws the sim made during it, and after starts and steps the whole state S.
-import { writeFileSync, appendFileSync } from 'node:fs';
-import type { Sim, actFloor, startFloorNight, stepFloor } from '../../../packages/sim/src/sim.ts';
+import { appendFileSync, writeFileSync } from 'node:fs';
+import type { actFloor, Sim, startFloorNight, stepFloor } from '../../../packages/sim/src/sim.ts';
 import type { State } from '../../../packages/sim/src/types.ts';
 
 // The night's entry points, as the harness calls them.

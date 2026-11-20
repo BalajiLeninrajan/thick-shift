@@ -6,24 +6,24 @@
 // booth, and what a flat teammate shouts. They walk with the same route() and
 // slide() the game uses, at the game's speeds, and react late.
 import {
-  MASC,
-  F,
-  TOY,
-  newSim,
-  newState,
-  startFloorNight,
-  stepFloor,
   actFloor,
   brainOf,
   darkRoom,
-  lightsF,
+  F,
   faultLeft,
   landing,
+  lightsF,
+  MASC,
+  newSim,
+  newState,
   seeded,
+  startFloorNight,
+  stepFloor,
+  TOY,
 } from '../../packages/sim/src/index.ts';
+import type { NavLink } from '../../packages/sim/src/map.ts';
 import * as M from '../../packages/sim/src/map.ts';
 import type { Dev, DoorKey, Fault, Guard, GuardAct, MascotState, NightState, Point, UseWhat } from '../../packages/sim/src/types.ts';
-import type { NavLink } from '../../packages/sim/src/map.ts';
 import type { Night } from '../roblox/diff/rec.ts';
 
 // The sim's clock, in milliseconds: each tick moves it on by DT. It runs on from one night to the next.
@@ -406,7 +406,7 @@ function plan(S: NightState, bot: Bot, goal: Point, ducts?: boolean): { path: Po
 // The plan for getting to a point. Thought about again every second, or sooner with a mascot about.
 function wayTo(S: NightState, bot: Bot, goal: Point, ducts?: boolean): Way {
   const st = bot.state,
-    key = Math.round(goal.x * 2) + ',' + Math.round(goal.z * 2) + (ducts ? 'd' : '');
+    key = `${Math.round(goal.x * 2)},${Math.round(goal.z * 2)}${ducts ? 'd' : ''}`;
   st.ways ??= new Map();
   const had = st.ways.get(key);
   if (had && S.t - had.at < (had.calm ? 1.2 : 0.4)) return had;
@@ -526,7 +526,7 @@ function setDoor(S: NightState, bot: Bot, k: DoorKey, shut: boolean): boolean {
   if (!!S.doors[k] === shut || !lightsF(S)) return false;
   const panel = M.PANELS[k];
   const stand = inBooth(bot) ? front(panel) : OUTSIDE[k];
-  bot.want.use = { what: 'door', k, at: stand, face: ang(stand, panel), stand, hold: 0.2, key: 'door' + k, reach: 0.6, shut };
+  bot.want.use = { what: 'door', k, at: stand, face: ang(stand, panel), stand, hold: 0.2, key: `door${k}`, reach: 0.6, shut };
   return true;
 }
 
@@ -834,7 +834,7 @@ function objectiveOf(S: NightState, bot: Bot, team: Team): Objective {
   for (const f of flat) {
     const helpers = team.bots.filter(b => !b.flat && b.policy.peels !== false && dist(b, f) < b.skill.peelRange).sort((a, b) => dist(a, f) - dist(b, f));
     if (helpers[0] === bot)
-      return { use: { what: 'peel', id: f.id, at: { x: f.x, z: f.z }, stand: { x: f.x, z: f.z }, hold: F.PEEL_HOLD, key: 'peel' + f.id }, urgent: true };
+      return { use: { what: 'peel', id: f.id, at: { x: f.x, z: f.z }, stand: { x: f.x, z: f.z }, hold: F.PEEL_HOLD, key: `peel${f.id}` }, urgent: true };
   }
   // 2. The faults that are ours.
   const mine = pol.faults === false ? [] : sk.plans ? (team.fault.get(bot.id) || []).filter(i => S.faults[i]) : fixable(S);
@@ -844,7 +844,7 @@ function objectiveOf(S: NightState, bot: Bot, team: Team): Objective {
     if (!sk.plans && (st.drift ?? Number.NaN) > S.t) return { goal: st.driftTo };
     const i = mine[0],
       f = S.faults[i] as Fault; // mine holds only open faults
-    return { use: { what: 'fix', i, at: M.BOXES[i], hold: F.FIX[f.k], key: 'fix' + i + '@' + f.at }, fault: f };
+    return { use: { what: 'fix', i, at: M.BOXES[i], hold: F.FIX[f.k], key: `fix${i}@${f.at}` }, fault: f };
   } else if (!sk.plans && !((st.drift ?? Number.NaN) > S.t) && random() < 0.02) {
     st.drift = S.t + 6 + random() * 10;
     st.driftTo = pick(M.nav().nodes.filter(n => n.room !== M.DUCTS));
@@ -872,7 +872,7 @@ function objectiveOf(S: NightState, bot: Bot, team: Team): Objective {
     const t = S.toys
       .filter(t => S.t > t.land + 6 && !known(S, bot, 4).some(h => MOVING.includes(h.st) && dist(h, t) < 8))
       .sort((a, b) => dist(bot, a) - dist(bot, b))[0];
-    if (t) return { use: { what: 'toy', id: t.id, at: t, stand: t, hold: 0.2, key: 'toy' + t.id } };
+    if (t) return { use: { what: 'toy', id: t.id, at: t, stand: t, hold: 0.2, key: `toy${t.id}` } };
   }
   // 5. Nothing to do: the booth, and the charger if the torch wants it. A careless guard wanders.
   if (!sk.plans && pol.stays !== true && !(bot.bat < 0.05 && lightsF(S)) && !st.topUp) return (st.drift ?? Number.NaN) > S.t ? { goal: st.driftTo } : {};
@@ -969,7 +969,7 @@ function freeLocker(S: NightState, bot: Bot, within: number): Use | undefined {
     ({ h, i }) => !S.players.some(p => p.hid === i) && dist(bot, h.at) < within && M.clear(bot.x, bot.z, h.at.x, h.at.z, M.PLAYER_R, S.doors)
   );
   const best = free.sort((a, b) => dist(bot, a.h.at) - dist(bot, b.h.at))[0];
-  return best && { what: 'hide', i: best.i, at: best.h.at, stand: best.h.at, hold: F.HIDE_HOLD, key: 'hide' + best.i };
+  return best && { what: 'hide', i: best.i, at: best.h.at, stand: best.h.at, hold: F.HIDE_HOLD, key: `hide${best.i}` };
 }
 // In a locker: stay while anything known is moving nearby, then out after a few seconds of quiet (or 25 s at most,
 // since the faults do not wait). Returns true while in one.
@@ -1081,7 +1081,7 @@ const DEGENERATE = {
         order = M.HIDES.map((_, i) => i).sort((a, b) => dist(spawn, M.HIDES[a].at) - dist(spawn, M.HIDES[b].at));
       const i = order[bot.i % order.length],
         h = M.HIDES[i];
-      bot.want.use = { what: 'hide', i, at: h.at, stand: h.at, hold: F.HIDE_HOLD, key: 'hide' + i };
+      bot.want.use = { what: 'hide', i, at: h.at, stand: h.at, hold: F.HIDE_HOLD, key: `hide${i}` };
     },
   }),
   // Crank the generator and nothing else, torch on whatever turns up.
@@ -1148,10 +1148,14 @@ export function checkBuilding(name: string): void {
     const r = M.route(start.x, start.z, stand.x, stand.z, { r: M.PLAYER_R });
     if (!r.path.length) fail(name, `${label}: no route from the booth`);
   };
-  M.BOXES.forEach((c, i) => reachable('box ' + i, c, front(c)));
+  M.BOXES.forEach((c, i) => {
+    reachable(`box ${i}`, c, front(c));
+  });
   reachable('generator', M.GENERATOR, front(M.GENERATOR));
   reachable('charger', M.CHARGER, front(M.CHARGER));
-  M.BATTERY_SPOTS.forEach((b, i) => reachable('battery ' + i, b, b));
+  M.BATTERY_SPOTS.forEach((b, i) => {
+    reachable(`battery ${i}`, b, b);
+  });
   // Every door has a button a guard can press from inside and from outside, so nobody is shut out for good.
   for (const key in M.PANELS) {
     const k = key as DoorKey;
@@ -1230,8 +1234,8 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
   sim.players = {};
   const team: Team = { bots: [], fault: new Map() };
   for (let i = 0; i < sc.n; i++) {
-    const id = 'g' + i;
-    sim.players[id] = { id, name: 'G' + i };
+    const id = `g${i}`;
+    sim.players[id] = { id, name: `G${i}` };
     team.bots.push(makeBot(id, i, sc.guard(i, sc.n)));
   }
   api.startFloorNight(sim, S, sc.night);

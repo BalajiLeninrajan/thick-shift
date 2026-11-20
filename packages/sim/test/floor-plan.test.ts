@@ -20,11 +20,11 @@ const reach = (bad: string[], p: Point, why: string) => {
 describe('the floor plan', () => {
   it('leaves every waypoint clear', () => {
     const bad: string[] = [];
-    M.ROOMS3.forEach(room =>
+    M.ROOMS3.forEach(room => {
       room.rects.forEach(([x0, z0, x1, z1]) => {
         if (!M.walkable((x0 + x1) / 2, (z0 + z1) / 2, M.MASCOT_R)) bad.push(`the middle of ${room.name} is blocked (a waypoint)`);
-      })
-    );
+      });
+    });
     for (const [room, x, z] of M.EXTRA_NODES) if (!M.walkable(x, z, M.MASCOT_R)) bad.push(`waypoint (${x}, ${z}) in ${M.ROOMS3[room].name} is blocked`);
     expect(bad).toEqual([]);
   });

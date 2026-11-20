@@ -16,13 +16,14 @@
 // strategy that should lose doing as well as playing properly.
 //
 // Node runs it as it is by stripping the types, so it uses only TypeScript that stripping can erase.
-import { Worker, isMainThread, parentPort, type MessagePort } from 'node:worker_threads';
+
 import { cpus } from 'node:os';
-import { checkBuilding, fail, failures, play, scenarios, type Outcome } from './harness.ts';
+import { isMainThread, type MessagePort, parentPort, Worker } from 'node:worker_threads';
+import { checkBuilding, fail, failures, type Outcome, play, scenarios } from './harness.ts';
 
 const argv = process.argv.slice(2),
   arg = <T>(k: string, d: T): string | T => {
-    const i = argv.indexOf('--' + k);
+    const i = argv.indexOf(`--${k}`);
     return i < 0 ? d : argv[i + 1];
   };
 const SEEDS = +arg('seeds', 40),
@@ -159,37 +160,37 @@ if (!isMainThread) {
         )
         .join(' '),
       median(warn).toFixed(1),
-      pct(warn.filter(x => x < 1.5).length, warn.length) + '%',
-      pct(
+      `${pct(warn.filter(x => x < 1.5).length, warn.length)}%`,
+      `${pct(
         sum(runs, r => r.hunted),
         stood
-      ) + '%',
+      )}%`,
       (sum(runs, r => r.calms) / n).toFixed(1),
-      pct(
+      `${pct(
         sum(runs, r => r.lit),
         stood
-      ) + '%',
-      pct(
+      )}%`,
+      `${pct(
         sum(runs, r => r.low),
         stood
-      ) + '%',
-      pct(
+      )}%`,
+      `${pct(
         sum(runs, r => r.dead),
         stood
-      ) + '%',
+      )}%`,
       (sum(runs, r => r.dry) / n / sc.n).toFixed(1),
-      pct(
+      `${pct(
         sum(runs, r => r.dryFlat),
         sum(runs, r => r.dry)
-      ) + '%',
-      pct(
+      )}%`,
+      `${pct(
         sum(runs, r => r.darkFlat),
         flats
-      ) + '%',
-      pct(
+      )}%`,
+      `${pct(
         sum(runs, r => r.burnt),
         sum(runs, r => r.fixed + r.burnt)
-      ) + '%',
+      )}%`,
       Math.round(sum(runs, r => r.power) / n),
       pct(
         sum(runs, r => +(r.outs > 0)),
@@ -254,7 +255,7 @@ lured   mascots that went to look, per one thrown`);
             .join('\n')
       );
   if (failures.length) {
-    console.log(`\n${failures.length} FAILED\n` + failures.join('\n'));
+    console.log(`\n${failures.length} FAILED\n${failures.join('\n')}`);
     process.exit(1);
   }
   console.log('\nNo softlocks, and nothing degenerate beats playing properly.');

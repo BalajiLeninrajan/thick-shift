@@ -11,7 +11,7 @@ import { countEvents, digest, eventsSince } from './nights.ts';
 function start(seed: number, n: number, night: number, now = 0): { sim: Sim; S: NightState } {
   const sim = newSim({ rng: seeded(seed), now });
   const S = newState('TEST');
-  for (let i = 0; i < n; i++) sim.players['g' + i] = { id: 'g' + i, name: 'G' + i };
+  for (let i = 0; i < n; i++) sim.players[`g${i}`] = { id: `g${i}`, name: `G${i}` };
   startFloorNight(sim, S, night);
   return { sim, S: S as NightState };
 }
@@ -186,7 +186,9 @@ describe('restartFloor', () => {
     expect(S.total).toEqual({ fixed: 0, burnt: 0, flats: [], peels: [] });
     expect(S.total).not.toBe(S.tally);
     expect([S.phase, S.night, S.t, S.power]).toEqual(['play', 1, 0, 100]);
-    S.players.forEach((p: Guard, i) => expect(p).toMatchObject({ ...spawnPoint(i), bat: 1, flat: false }));
+    S.players.forEach((p: Guard, i) => {
+      expect(p).toMatchObject({ ...spawnPoint(i), bat: 1, flat: false });
+    });
 
     const fresh = start(11, 2, 1);
     const { evs, evId, flats, ...restarted } = S;
