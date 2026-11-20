@@ -21,9 +21,11 @@ const QUALITY = {
 };
 // Start on high and drop to low if frames come slower than this, measured
 // over SAMPLE frames once the first WARMUP (shader compiles) are out of the way.
-const SLOW_MS = 26, WARMUP = 40, SAMPLE = 60;
+const SLOW_MS = 26,
+  WARMUP = 40,
+  SAMPLE = 60;
 const EXPOSURE = 1.5;
-const OUTLINE_LAYER = 7;   // marked meshes are put on this layer for the mask pass
+const OUTLINE_LAYER = 7; // marked meshes are put on this layer for the mask pass
 const MASK_VERT = `
 #include <common>
 #include <skinning_pars_vertex>
@@ -93,90 +95,164 @@ void main() {
 // torch: the local guard's SpotLight, whose shadow map follows the quality.
 export function createPost(renderer, torch) {
   const asked = new URLSearchParams(location.search).get('q');
-  let name = QUALITY[asked] ? asked : 'high', frames = 0, spent = 0, last = 0;
+  let name = QUALITY[asked] ? asked : 'high',
+    frames = 0,
+    spent = 0,
+    last = 0;
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(1, 1) });
   const mask = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
   // Each marked mesh gets a mask material of its own, sharing these uniforms and keeping its colour in uCol. One
   // shared override material would flip between skinned and plain meshes, and three.js re-derives a material's
   // program every time it does.
-  const maskU = { tDepth: { value: target.depthTexture }, uSize: { value: new THREE.Vector2(1, 1) }, uNear: { value: .1 }, uFar: { value: 100 } };
+  const maskU = { tDepth: { value: target.depthTexture }, uSize: { value: new THREE.Vector2(1, 1) }, uNear: { value: 0.1 }, uFar: { value: 100 } };
   const maskMats = new WeakMap();
   const maskMatOf = o => {
     let m = maskMats.get(o);
-    if (!m) maskMats.set(o, m = new THREE.ShaderMaterial({ uniforms: { ...maskU, uCol: { value: new THREE.Vector4() } }, vertexShader: MASK_VERT, fragmentShader: MASK_FRAG, side: THREE.DoubleSide, blending: THREE.NoBlending, depthTest: false, depthWrite: false }));
+    if (!m)
+      maskMats.set(
+        o,
+        (m = new THREE.ShaderMaterial({
+          uniforms: { ...maskU, uCol: { value: new THREE.Vector4() } },
+          vertexShader: MASK_VERT,
+          fragmentShader: MASK_FRAG,
+          side: THREE.DoubleSide,
+          blending: THREE.NoBlending,
+          depthTest: false,
+          depthWrite: false,
+        }))
+      );
     return m;
   };
-  const swapped = [], black = new THREE.Color(0);
+  const swapped = [],
+    black = new THREE.Color(0);
   function drawMask(scene, camera, marks) {
-    for (const m of marks) m.obj.traverse(o => {
-      if (!o.isMesh || o.layers.isEnabled(OUTLINE_LAYER)) return;
-      const mm = maskMatOf(o); mm.uniforms.uCol.value.set(m.col[0], m.col[1], m.col[2], m.a);
-      swapped.push(o, o.material); o.material = mm; o.layers.enable(OUTLINE_LAYER);
-    });
+    for (const m of marks)
+      m.obj.traverse(o => {
+        if (!o.isMesh || o.layers.isEnabled(OUTLINE_LAYER)) return;
+        const mm = maskMatOf(o);
+        mm.uniforms.uCol.value.set(m.col[0], m.col[1], m.col[2], m.a);
+        swapped.push(o, o.material);
+        o.material = mm;
+        o.layers.enable(OUTLINE_LAYER);
+      });
     if (!swapped.length) return false;
-    const bg = scene.background, layers = camera.layers.mask;
-    maskU.uSize.value.set(target.width, target.height); maskU.uNear.value = camera.near; maskU.uFar.value = camera.far;
+    const bg = scene.background,
+      layers = camera.layers.mask;
+    maskU.uSize.value.set(target.width, target.height);
+    maskU.uNear.value = camera.near;
+    maskU.uFar.value = camera.far;
     // The lights go on the mask's layer too. three.js keeps one light setup per scene, and a pass that saw no lights
     // would make every lit material in the next frame's scene pass work out its program again (most of a frame's
     // JavaScript on an Iris 655).
-    scene.traverse(o => { if (o.isLight) o.layers.enable(OUTLINE_LAYER); });
+    scene.traverse(o => {
+      if (o.isLight) o.layers.enable(OUTLINE_LAYER);
+    });
     // The torch's shadow and every matrix in the scene were brought up to date by the scene pass; not again.
-    const shadows = renderer.shadowMap.autoUpdate, matrices = scene.matrixWorldAutoUpdate;
-    scene.background = null; camera.layers.set(OUTLINE_LAYER); renderer.shadowMap.autoUpdate = false; scene.matrixWorldAutoUpdate = false;
-    renderer.setRenderTarget(mask); renderer.setClearColor(black, 0); renderer.clear(true, false, false);
+    const shadows = renderer.shadowMap.autoUpdate,
+      matrices = scene.matrixWorldAutoUpdate;
+    scene.background = null;
+    camera.layers.set(OUTLINE_LAYER);
+    renderer.shadowMap.autoUpdate = false;
+    scene.matrixWorldAutoUpdate = false;
+    renderer.setRenderTarget(mask);
+    renderer.setClearColor(black, 0);
+    renderer.clear(true, false, false);
     renderer.render(scene, camera);
-    scene.background = bg; camera.layers.mask = layers; renderer.shadowMap.autoUpdate = shadows; scene.matrixWorldAutoUpdate = matrices;
-    for (let i = 0; i < swapped.length; i += 2) { swapped[i].material = swapped[i + 1]; swapped[i].layers.disable(OUTLINE_LAYER); }
+    scene.background = bg;
+    camera.layers.mask = layers;
+    renderer.shadowMap.autoUpdate = shadows;
+    scene.matrixWorldAutoUpdate = matrices;
+    for (let i = 0; i < swapped.length; i += 2) {
+      swapped[i].material = swapped[i + 1];
+      swapped[i].layers.disable(OUTLINE_LAYER);
+    }
     swapped.length = 0;
     return true;
   }
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tScene: { value: target.texture }, tMask: { value: mask.texture }, uTime: { value: 0 }, uThreat: { value: 0 }, uDread: { value: 0 }, uExposure: { value: EXPOSURE }, uOutline: { value: 0 }, uTexel: { value: new THREE.Vector2() } },
+    uniforms: {
+      tScene: { value: target.texture },
+      tMask: { value: mask.texture },
+      uTime: { value: 0 },
+      uThreat: { value: 0 },
+      uDread: { value: 0 },
+      uExposure: { value: EXPOSURE },
+      uOutline: { value: 0 },
+      uTexel: { value: new THREE.Vector2() },
+    },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4( position.xy, 0., 1. ); }',
-    fragmentShader: FRAG, depthTest: false, depthWrite: false,
+    fragmentShader: FRAG,
+    depthTest: false,
+    depthWrite: false,
   });
   // one triangle that covers the screen
   const tri = new THREE.BufferGeometry();
   tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
   tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
-  const screen = new THREE.Mesh(tri, mat), flat = new THREE.Camera();
+  const screen = new THREE.Mesh(tri, mat),
+    flat = new THREE.Camera();
   screen.frustumCulled = false;
   renderer.toneMapping = THREE.NoToneMapping;
-  renderer.info.autoReset = false;   // so renderer.info counts the scene, not just the last pass
+  renderer.info.autoReset = false; // so renderer.info counts the scene, not just the last pass
 
   function apply() {
     const q = QUALITY[name];
-    mat.defines = q.fringe ? { FRINGE: 1 } : {}; mat.needsUpdate = true;
-    torch.shadow.mapSize.setScalar(q.shadow); torch.shadow.map?.dispose(); torch.shadow.map = null;
+    mat.defines = q.fringe ? { FRINGE: 1 } : {};
+    mat.needsUpdate = true;
+    torch.shadow.mapSize.setScalar(q.shadow);
+    torch.shadow.map?.dispose();
+    torch.shadow.map = null;
   }
   apply();
 
   return {
-    get quality() { return name; },
+    get quality() {
+      return name;
+    },
     // Match the drawing buffer to the canvas, within what the quality allows.
     fit(canvas, camera) {
-      const w = canvas.clientWidth, h = canvas.clientHeight, q = QUALITY[name], ratio = Math.min(devicePixelRatio || 1, q.width / Math.max(1, w), q.ratio);
-      const pw = Math.round(w * ratio), ph = Math.round(h * ratio);
+      const w = canvas.clientWidth,
+        h = canvas.clientHeight,
+        q = QUALITY[name],
+        ratio = Math.min(devicePixelRatio || 1, q.width / Math.max(1, w), q.ratio);
+      const pw = Math.round(w * ratio),
+        ph = Math.round(h * ratio);
       if (!w || (target.width === pw && target.height === ph)) return;
-      renderer.setPixelRatio(ratio); renderer.setSize(w, h, false); target.setSize(pw, ph); mask.setSize(pw, ph);
+      renderer.setPixelRatio(ratio);
+      renderer.setSize(w, h, false);
+      target.setSize(pw, ph);
+      mask.setSize(pw, ph);
       // Edge width in texels, so the outline is about as thick on any screen.
-      const k = Math.max(1, ph / 720); mat.uniforms.uTexel.value.set(k / pw, k / ph);
-      camera.aspect = w / h; camera.updateProjectionMatrix();
+      const k = Math.max(1, ph / 720);
+      mat.uniforms.uTexel.value.set(k / pw, k / ph);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
     },
     // threat, dread: 0 to 1. stop: exposure multiplier against torch glare. now: milliseconds, for timing frames.
     // marks: what to outline this frame (outline.js), or nothing.
     render(scene, camera, now, threat, dread, stop, marks = []) {
       if (!asked && name === 'high' && last) {
         if (++frames > WARMUP) spent += now - last;
-        if (frames === WARMUP + SAMPLE) { if (spent / SAMPLE > SLOW_MS) { name = 'low'; apply(); } }
+        if (frames === WARMUP + SAMPLE) {
+          if (spent / SAMPLE > SLOW_MS) {
+            name = 'low';
+            apply();
+          }
+        }
       }
       last = now;
-      const u = mat.uniforms; u.uTime.value = now / 1000 % 600; u.uThreat.value = threat; u.uDread.value = dread; u.uExposure.value = EXPOSURE * stop;
+      const u = mat.uniforms;
+      u.uTime.value = (now / 1000) % 600;
+      u.uThreat.value = threat;
+      u.uDread.value = dread;
+      u.uExposure.value = EXPOSURE * stop;
       renderer.info.reset();
-      torch.shadow.autoUpdate = torch.intensity > 0;   // no shadow pass for a torch that is off
-      renderer.setRenderTarget(target); renderer.render(scene, camera);
+      torch.shadow.autoUpdate = torch.intensity > 0; // no shadow pass for a torch that is off
+      renderer.setRenderTarget(target);
+      renderer.render(scene, camera);
       u.uOutline.value = drawMask(scene, camera, marks) ? 1 : 0;
-      renderer.setRenderTarget(null); renderer.render(screen, flat);
+      renderer.setRenderTarget(null);
+      renderer.render(screen, flat);
     },
   };
 }

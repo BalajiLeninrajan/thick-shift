@@ -11,14 +11,18 @@ import { unlockAudio } from '@thick-shift/game/audio';
 import { $, esc, card, messageScreen } from '@thick-shift/game/ui';
 
 let sdk = null;
-const discord = { room: '', name: '' };   // both '' until Discord answers
+const discord = { room: '', name: '' }; // both '' until Discord answers
 
 async function connect() {
   const { clientId } = await fetch('/api/discord/config').then(r => r.json());
   if (!clientId) throw new Error('DISCORD_CLIENT_ID is not set on the Worker.');
   sdk = new DiscordSDK(clientId);
   await sdk.ready();
-  const room = 'd-' + String(sdk.instanceId).replace(/[^\w-]/g, '').slice(0, 80);
+  const room =
+    'd-' +
+    String(sdk.instanceId)
+      .replace(/[^\w-]/g, '')
+      .slice(0, 80);
   discord.name = await signIn(clientId);
   discord.room = room;
 }
@@ -42,12 +46,14 @@ function titleScreen() {
   const name = discord.name.slice(0, 12);
   return {
     key: 'discord-title',
-    html: card(`
+    html: card(
+      `
       <h1 class="ts-logo">Thick Shift 3D</h1>
       <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
       <p class="cn-meta cn-m-0">Keep the power on until 6 AM. The retired mascots are enormous, and at night they wander.</p>
       <p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel works the same night.</p>`,
-      `<button class="btn btn-primary" id="hb">Clock in${name ? ' as ' + esc(name) : ''}</button>`),
+      `<button class="btn btn-primary" id="hb">Clock in${name ? ' as ' + esc(name) : ''}</button>`
+    ),
     wire() {
       $('hb').onclick = () => {
         unlockAudio();
@@ -62,11 +68,16 @@ function titleScreen() {
 const invite = () => ({
   html: '<p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel joins this night.</p><div class="cn-cluster"><button class="btn btn-secondary" id="inv">Invite someone</button></div>',
   wire() {
-    $('inv').onclick = () => sdk?.commands.openInviteDialog().catch(() => { /* closed, or not allowed in this channel */ });
+    $('inv').onclick = () =>
+      sdk?.commands.openInviteDialog().catch(() => {
+        /* closed, or not allowed in this channel */
+      });
   },
 });
 
 platform.fixedRoom = true;
 platform.title = titleScreen;
 platform.invite = invite;
-connect().catch(err => { game.error = { title: 'Could not reach Discord', detail: String(err.message || err) }; });
+connect().catch(err => {
+  game.error = { title: 'Could not reach Discord', detail: String(err.message || err) };
+});

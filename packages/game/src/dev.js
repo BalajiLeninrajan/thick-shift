@@ -14,7 +14,12 @@ const DEFAULTS = { god: false, power: false, freeze: false, wake: false, speed: 
 const SWITCHES = ['god', 'power', 'freeze', 'wake'];
 const cheats = () => (game.S.dev ||= { ...DEFAULTS });
 const playing = () => !!game.S && game.S.phase === 'play';
-const STAGES = [[-1, 'Auto'], [0, 'Cute'], [1, 'Off'], [2, 'Rotten']];
+const STAGES = [
+  [-1, 'Auto'],
+  [0, 'Cute'],
+  [1, 'Off'],
+  [2, 'Rotten'],
+];
 
 const toggle = (id, label) => `<label class="choice"><input class="switch" type="checkbox" id="${id}">${label}</label>`;
 const button = (id, label) => `<button class="btn btn-secondary is-sm" id="${id}">${label}</button>`;
@@ -49,37 +54,86 @@ const HTML = `
 /* ---------- actions ---------- */
 
 const ACTIONS = {
-  'dv-hour'(S) { S.t = Math.min(6 * F.HOUR - 1, (hourF(S) + 1) * F.HOUR); },
-  'dv-late'(S) { S.t = 6 * F.HOUR - F.HOUR / 6; },
-  'dv-win'(S) { S.t = 6 * F.HOUR; },
-  'dv-next'(S) { startFloorNight(S.night + 1); },
-  'dv-final'() { startFloorNight(FINAL_NIGHT); },
-  'dv-out'(S) { S.power = .01; },
-  'dv-bat'(S) { for (const p of S.players) p.bat = 1; },
-  'dv-peel'(S) { for (const p of S.players) p.flat = false; },
-  'dv-low'(S) { S.power = 5; },
+  'dv-hour'(S) {
+    S.t = Math.min(6 * F.HOUR - 1, (hourF(S) + 1) * F.HOUR);
+  },
+  'dv-late'(S) {
+    S.t = 6 * F.HOUR - F.HOUR / 6;
+  },
+  'dv-win'(S) {
+    S.t = 6 * F.HOUR;
+  },
+  'dv-next'(S) {
+    startFloorNight(S.night + 1);
+  },
+  'dv-final'() {
+    startFloorNight(FINAL_NIGHT);
+  },
+  'dv-out'(S) {
+    S.power = 0.01;
+  },
+  'dv-bat'(S) {
+    for (const p of S.players) p.bat = 1;
+  },
+  'dv-peel'(S) {
+    for (const p of S.players) p.flat = false;
+  },
+  'dv-low'(S) {
+    S.power = 5;
+  },
 };
 
 // Bring a mascot to stand in front of the host, or send it back to its mark.
 const MASCOT_ACTIONS = {
   near(S, m) {
-    const me = S.players.find(p => p.id === game.myId); if (!me || me.x == null) return;
-    m.x = me.x + Math.sin(me.yaw) * 4; m.z = me.z + Math.cos(me.yaw) * 4; m.st = 'roam'; cheats().wake = true;
+    const me = S.players.find(p => p.id === game.myId);
+    if (!me || me.x == null) return;
+    m.x = me.x + Math.sin(me.yaw) * 4;
+    m.z = me.z + Math.cos(me.yaw) * 4;
+    m.st = 'roam';
+    cheats().wake = true;
   },
-  home(S, m) { Object.assign(m, { x: REST[m.i].x, z: REST[m.i].z, yaw: REST[m.i].yaw, st: 'rest' }); },
+  home(S, m) {
+    Object.assign(m, { x: REST[m.i].x, z: REST[m.i].z, yaw: REST[m.i].yaw, st: 'rest' });
+  },
 };
 
 function bind(el) {
-  const host = fn => () => { if (game.isHost && playing()) { fn(game.S); sync(el); } };
-  for (const key of SWITCHES) $('dv-' + key).onchange = e => { if (game.isHost && game.S) cheats()[key] = /** @type {HTMLInputElement} */ (e.target).checked; sync(el); };
-  $('dv-rot').onclick = e => { const b = /** @type {Element} */ (e.target).closest('button'); if (b && game.isHost && game.S) { cheats().rot = +b.dataset.v; sync(el); } };
-  $('dv-speed').oninput = e => { if (game.isHost && game.S) cheats().speed = +/** @type {HTMLInputElement} */ (e.target).value; sync(el); };
-  const dread = () => { if (game.isHost && game.S) cheats().dread = $('dv-dread-on').checked ? +$('dv-dread').value / 100 : -1; sync(el); };
-  $('dv-dread-on').onchange = dread; $('dv-dread').oninput = dread;
+  const host = fn => () => {
+    if (game.isHost && playing()) {
+      fn(game.S);
+      sync(el);
+    }
+  };
+  for (const key of SWITCHES)
+    $('dv-' + key).onchange = e => {
+      if (game.isHost && game.S) cheats()[key] = /** @type {HTMLInputElement} */ (e.target).checked;
+      sync(el);
+    };
+  $('dv-rot').onclick = e => {
+    const b = /** @type {Element} */ (e.target).closest('button');
+    if (b && game.isHost && game.S) {
+      cheats().rot = +b.dataset.v;
+      sync(el);
+    }
+  };
+  $('dv-speed').oninput = e => {
+    if (game.isHost && game.S) cheats().speed = +(/** @type {HTMLInputElement} */ (e.target).value);
+    sync(el);
+  };
+  const dread = () => {
+    if (game.isHost && game.S) cheats().dread = $('dv-dread-on').checked ? +$('dv-dread').value / 100 : -1;
+    sync(el);
+  };
+  $('dv-dread-on').onchange = dread;
+  $('dv-dread').oninput = dread;
   for (const id in ACTIONS) $(id).onclick = host(ACTIONS[id]);
   $('dv-mascots').onclick = e => {
     const b = /** @type {Element} */ (e.target).closest('button');
-    if (b && game.isHost && playing()) { MASCOT_ACTIONS[b.dataset.act](game.S, game.S.m[+b.dataset.i]); sync(el); }
+    if (b && game.isHost && playing()) {
+      MASCOT_ACTIONS[b.dataset.act](game.S, game.S.m[+b.dataset.i]);
+      sync(el);
+    }
   };
   $('dv-close').onclick = () => el.close();
 }
@@ -88,24 +142,38 @@ function bind(el) {
 
 // Bring every control in line with the state. Runs on a timer while the menu is open.
 function sync(el) {
-  const S = game.S, on = !!S && game.isHost;
+  const S = game.S,
+    on = !!S && game.isHost;
   $('dv-note').textContent = !S ? 'Host a night to use these.' : game.isHost ? 'Changes apply to everyone in the room.' : 'Only the host can change the night.';
   for (const input of el.querySelectorAll('input, button')) if (input.id !== 'dv-close') input.disabled = !on;
   if (!S) return;
   const dv = cheats();
   for (const key of SWITCHES) $('dv-' + key).checked = dv[key];
   for (const b of /** @type {HTMLCollectionOf<HTMLElement>} */ ($('dv-rot').children)) b.setAttribute('aria-pressed', String(+b.dataset.v === dv.rot));
-  $('dv-speed').value = String(dv.speed); $('dv-speed-out').textContent = dv.speed;
+  $('dv-speed').value = String(dv.speed);
+  $('dv-speed-out').textContent = dv.speed;
   $('dv-dread-on').checked = dv.dread >= 0;
   if (dv.dread >= 0) $('dv-dread').value = String(Math.round(dv.dread * 100));
   $('dv-dread-out').textContent = String(Math.round(dreadF(S) * 100));
-  $('dv-mascots').innerHTML = S.m.map(m => `<div class="cn-row cn-between cn-wrap cn-py-8"><span><b class="cn-name">${MASC[m.i].name}</b><br><span class="cn-meta">${m.st}, stage ${m.rot || 0}, ${Math.round((m.ire || 0) * 18)} s in a beam</span></span>
-    <span class="cn-cluster">${[['near', 'In front of me'], ['home', 'Send home']].map(([a, l]) => `<button class="btn btn-ghost is-sm" data-act="${a}" data-i="${m.i}"${on ? '' : ' disabled'}>${l}</button>`).join('')}</span></div>`).join('');
+  $('dv-mascots').innerHTML = S.m
+    .map(
+      m => `<div class="cn-row cn-between cn-wrap cn-py-8"><span><b class="cn-name">${MASC[m.i].name}</b><br><span class="cn-meta">${m.st}, stage ${m.rot || 0}, ${Math.round((m.ire || 0) * 18)} s in a beam</span></span>
+    <span class="cn-cluster">${[
+      ['near', 'In front of me'],
+      ['home', 'Send home'],
+    ]
+      .map(([a, l]) => `<button class="btn btn-ghost is-sm" data-act="${a}" data-i="${m.i}"${on ? '' : ' disabled'}>${l}</button>`)
+      .join('')}</span></div>`
+    )
+    .join('');
   const row = (k, v) => `<dt>${k}</dt><dd class="cn-tabular">${v}</dd>`;
-  $('dv-read').innerHTML = row('Phase', S.phase) + row('Night', `${S.night}, ${clockF(S)} (${(S.t / F.HOUR).toFixed(2)} h)`)
-    + row('Power', `${Math.round(S.power)}% of ${Math.round(S.cap ?? 100)}%${S.out ? ', out' : ''}${S.crank ? ', cranking' : ''}`)
-    + row('Faults open', (S.faults || []).filter(Boolean).length) + row('Mascots stirring', S.stir ? 'yes' : 'no')
-    + row('Guards', S.players.map(p => `${p.name} ${Math.round((p.bat ?? 1) * 100)}%${p.flat ? ' flat' : ''}`).join(', '));
+  $('dv-read').innerHTML =
+    row('Phase', S.phase) +
+    row('Night', `${S.night}, ${clockF(S)} (${(S.t / F.HOUR).toFixed(2)} h)`) +
+    row('Power', `${Math.round(S.power)}% of ${Math.round(S.cap ?? 100)}%${S.out ? ', out' : ''}${S.crank ? ', cranking' : ''}`) +
+    row('Faults open', (S.faults || []).filter(Boolean).length) +
+    row('Mascots stirring', S.stir ? 'yes' : 'no') +
+    row('Guards', S.players.map(p => `${p.name} ${Math.round((p.bat ?? 1) * 100)}%${p.flat ? ' flat' : ''}`).join(', '));
 }
 
 export function mountDev() {
@@ -116,7 +184,14 @@ export function mountDev() {
   document.body.append(el);
   bind(el);
   // show(), not showModal(): the game stays playable. Opening it lets go of the mouse, so the game pauses behind it.
-  const flip = () => { if (el.open) el.close(); else { if (document.pointerLockElement) document.exitPointerLock(); el.show(); sync(el); } };
+  const flip = () => {
+    if (el.open) el.close();
+    else {
+      if (document.pointerLockElement) document.exitPointerLock();
+      el.show();
+      sync(el);
+    }
+  };
   const btn = document.createElement('button');
   btn.className = 'btn btn-ghost';
   btn.textContent = 'Dev';
@@ -126,9 +201,18 @@ export function mountDev() {
     const spots = [document.querySelector('.ts-f-menu'), document.querySelector('.ts-f-pause-go')];
     if (!spots[0]) return;
     clearInterval(watch);
-    for (const spot of spots) if (spot) { const b2 = /** @type {HTMLElement} */ (btn.cloneNode(true)); b2.onclick = flip; spot.append(b2); }
+    for (const spot of spots)
+      if (spot) {
+        const b2 = /** @type {HTMLElement} */ (btn.cloneNode(true));
+        b2.onclick = flip;
+        spot.append(b2);
+      }
   }, 1000);
-  addEventListener('keydown', e => { if (e.key === '`' && /** @type {Element} */ (e.target).tagName !== 'INPUT') flip(); });
+  addEventListener('keydown', e => {
+    if (e.key === '`' && /** @type {Element} */ (e.target).tagName !== 'INPUT') flip();
+  });
   // Skip the mascot list while the pointer is on it, or the buttons get rebuilt mid-click.
-  setInterval(() => { if (el.open && !$('dv-mascots').matches(':hover')) sync(el); }, 400);
+  setInterval(() => {
+    if (el.open && !$('dv-mascots').matches(':hover')) sync(el);
+  }, 400);
 }

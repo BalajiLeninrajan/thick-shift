@@ -42,12 +42,26 @@ const CDN = [
 ];
 
 async function discordPage(req, env) {
-  const ext = { element(e) { const h = e.getAttribute('href') || '', c = CDN.find(([, origin]) => h.startsWith(origin)); if (c) e.setAttribute('href', '/ext/' + c[0] + h.slice(c[1].length)); } };
-  return new HTMLRewriter().on('link[rel=stylesheet]', ext).on('link[rel=preconnect]', { element(e) { e.remove(); } }).transform(await env.ASSETS.fetch(req));
+  const ext = {
+    element(e) {
+      const h = e.getAttribute('href') || '',
+        c = CDN.find(([, origin]) => h.startsWith(origin));
+      if (c) e.setAttribute('href', '/ext/' + c[0] + h.slice(c[1].length));
+    },
+  };
+  return new HTMLRewriter()
+    .on('link[rel=stylesheet]', ext)
+    .on('link[rel=preconnect]', {
+      element(e) {
+        e.remove();
+      },
+    })
+    .transform(await env.ASSETS.fetch(req));
 }
 
 async function external(req, rest) {
-  const c = CDN.find(([prefix]) => rest.startsWith(prefix)), tail = c && rest.slice(c[0].length) + new URL(req.url).search;
+  const c = CDN.find(([prefix]) => rest.startsWith(prefix)),
+    tail = c && rest.slice(c[0].length) + new URL(req.url).search;
   if (!c || !c[2].test(tail)) return new Response('Not found', { status: 404 });
   // Google picks the font format from the browser, so it gets the player's user agent.
   const r = await fetch(c[1] + tail, { headers: { 'User-Agent': req.headers.get('User-Agent') || '' }, cf: { cacheTtl: 86400, cacheEverything: true } });

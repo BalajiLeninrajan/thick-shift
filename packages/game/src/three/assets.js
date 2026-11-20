@@ -14,11 +14,24 @@ const cache = new Map();
 
 // The scene of models/<name>.glb. Loaded once; clone it before adding it twice.
 export function loadGLB(name) {
-  if (!cache.has(name)) cache.set(name, loader.loadAsync(`models/${name}.glb`).then(g => g.scene, () => null));
+  if (!cache.has(name))
+    cache.set(
+      name,
+      loader.loadAsync(`models/${name}.glb`).then(
+        g => g.scene,
+        () => null
+      )
+    );
   return cache.get(name);
 }
 export function loadJSON(name) {
-  if (!cache.has(name + '.json')) cache.set(name + '.json', fetch(`models/${name}.json`).then(r => r.ok ? r.json() : null).catch(() => null));
+  if (!cache.has(name + '.json'))
+    cache.set(
+      name + '.json',
+      fetch(`models/${name}.json`)
+        .then(r => (r.ok ? r.json() : null))
+        .catch(() => null)
+    );
   return cache.get(name + '.json');
 }
 
@@ -31,19 +44,29 @@ export const EYE_PALE = 0xf5e0dc;
 // take copies with instance().
 export function loadActor(name) {
   const key = name + '|actor';
-  if (!cache.has(key)) cache.set(key, loadGLB(name).then(src => {
-    if (!src) return null;
-    const glows = new Map();
-    src.traverse(o => {
-      if (!o.isMesh) return;
-      o.castShadow = o.receiveShadow = true;
-      const m = o.material;
-      if (!m.name?.startsWith('eye_glow')) return;
-      if (!glows.has(m)) glows.set(m, new THREE.MeshBasicMaterial({ name: 'eye_glow', color: m.emissive?.getHex() ? m.emissive : EYE_PALE, map: m.emissiveMap || null, fog: false }));
-      o.material = glows.get(m); o.castShadow = false; o.userData.glow = true;
-    });
-    return src;
-  }));
+  if (!cache.has(key))
+    cache.set(
+      key,
+      loadGLB(name).then(src => {
+        if (!src) return null;
+        const glows = new Map();
+        src.traverse(o => {
+          if (!o.isMesh) return;
+          o.castShadow = o.receiveShadow = true;
+          const m = o.material;
+          if (!m.name?.startsWith('eye_glow')) return;
+          if (!glows.has(m))
+            glows.set(
+              m,
+              new THREE.MeshBasicMaterial({ name: 'eye_glow', color: m.emissive?.getHex() ? m.emissive : EYE_PALE, map: m.emissiveMap || null, fog: false })
+            );
+          o.material = glows.get(m);
+          o.castShadow = false;
+          o.userData.glow = true;
+        });
+        return src;
+      })
+    );
   return cache.get(key);
 }
 
@@ -56,7 +79,9 @@ export const instance = src => src.clone(true);
 export function loadPart(file, node) {
   return loadGLB(file).then(src => {
     let found = null;
-    src?.traverse(o => { if (!found && (o.userData.name || o.name) === node) found = o; });
+    src?.traverse(o => {
+      if (!found && (o.userData.name || o.name) === node) found = o;
+    });
     return found ? found.clone(true) : null;
   });
 }

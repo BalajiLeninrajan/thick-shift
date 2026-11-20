@@ -15,17 +15,19 @@ import { FAULT_NAME } from './task.js';
 import { prefs, savePrefs } from './player.js';
 import { createTouch, toggleFullscreen, canFullscreen } from './touch.js';
 
-const HALF_SPAN = 1.3;    // radians either side of straight ahead that fit on the compass
-const LABEL_GAP = 6;      // pixels kept between two compass labels
-const NAV_MS = 150;       // one compass mark has its walking route refreshed this often, in turn
-const LOW_BAT = .25, LOW_POWER = 25, CRIT_POWER = 10;
-const GEN_MARK = 40;   // power, in percent, under which the compass points to the generator
-const HURRY = 15;         // seconds left before a fault burns when its row turns red
-const MAX_TASKS = 6;      // rows in the task list before the rest are counted, on a stage tall enough for them
-const TASK_ROW = 28;      // pixels a task row and its gap take
-const TASK_TOP = 76;      // pixels above the task list: the hour and the power
-const TASK_FOOT = { touch: 160, keys: 100 };   // pixels kept clear under it: the stick, or the torch
-const CELLS = 5;          // bars in the torch battery
+const HALF_SPAN = 1.3; // radians either side of straight ahead that fit on the compass
+const LABEL_GAP = 6; // pixels kept between two compass labels
+const NAV_MS = 150; // one compass mark has its walking route refreshed this often, in turn
+const LOW_BAT = 0.25,
+  LOW_POWER = 25,
+  CRIT_POWER = 10;
+const GEN_MARK = 40; // power, in percent, under which the compass points to the generator
+const HURRY = 15; // seconds left before a fault burns when its row turns red
+const MAX_TASKS = 6; // rows in the task list before the rest are counted, on a stage tall enough for them
+const TASK_ROW = 28; // pixels a task row and its gap take
+const TASK_TOP = 76; // pixels above the task list: the hour and the power
+const TASK_FOOT = { touch: 160, keys: 100 }; // pixels kept clear under it: the stick, or the torch
+const CELLS = 5; // bars in the torch battery
 // What each mascot did to you, by MASC index.
 const HOW = ['sat on you', 'hugged you a bit too hard', 'landed on you', 'did not slow down'];
 
@@ -45,11 +47,27 @@ const PATHS = {
   rotate: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 9a10 10 0 0 0 3 9m17-3a10 10 0 0 0-3-9"/>',
   toy: '<circle cx="12" cy="13.5" r="7"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="6.5" r="2.2"/><path d="M9.5 11v.01M14.5 11v.01M10 16.5h.01M14 16.5h.01"/>',
 };
-const icon = name => `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
+const icon = name =>
+  `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
 // Each kind of toast has its own icon and colour (in styles.css), so a low
 // torch, low power, a fault burning and a guard going down do not look alike.
-const TOAST_ICON = { info: 'info', fault: 'fault', fixed: 'fault', burnt: 'fault', power: 'bolt', out: 'bolt', back: 'bolt', torch: 'battery', down: 'down', up: 'up', call: 'call', hide: 'locker', toy: 'toy' };
-const MAX_TOASTS = 3, SHORT = 480;   // a stage under SHORT pixels tall shows one toast fewer
+const TOAST_ICON = {
+  info: 'info',
+  fault: 'fault',
+  fixed: 'fault',
+  burnt: 'fault',
+  power: 'bolt',
+  out: 'bolt',
+  back: 'bolt',
+  torch: 'battery',
+  down: 'down',
+  up: 'up',
+  call: 'call',
+  hide: 'locker',
+  toy: 'toy',
+};
+const MAX_TOASTS = 3,
+  SHORT = 480; // a stage under SHORT pixels tall shows one toast fewer
 
 // The pause screen's lists, in groups. Each row is what, then the keys or buttons as keycaps, then an
 // optional note under the action.
@@ -57,31 +75,128 @@ const DRAINS = 'Drains the battery fast';
 const TOSS = 'Costs a battery bar';
 const CONTROLS = {
   keys: [
-    ['Moving', [['Walk', ['W A S D']], ['Run', ['Shift']], ['Look', ['Mouse', '← → ↑ ↓']]]],
-    ['Working', [['Use, fix', ['E']], ['Peel a friend up, hide', ['Hold E']], ['Torch', ['F', 'Click']], ['Phone map', ['C'], DRAINS], ['Zoom the map', ['R']], ['Throw a Mini Biggs', ['G', 'Right click'], TOSS]]],
-    ['At a breaker box', [['Choose', ['W A S D', '1–5']], ['Act', ['E']], ['Let go', ['X']]]],
-    ['When you are flat', [['Call out', ['Q']], ['Watch a teammate', ['Space']]]],
+    [
+      'Moving',
+      [
+        ['Walk', ['W A S D']],
+        ['Run', ['Shift']],
+        ['Look', ['Mouse', '← → ↑ ↓']],
+      ],
+    ],
+    [
+      'Working',
+      [
+        ['Use, fix', ['E']],
+        ['Peel a friend up, hide', ['Hold E']],
+        ['Torch', ['F', 'Click']],
+        ['Phone map', ['C'], DRAINS],
+        ['Zoom the map', ['R']],
+        ['Throw a Mini Biggs', ['G', 'Right click'], TOSS],
+      ],
+    ],
+    [
+      'At a breaker box',
+      [
+        ['Choose', ['W A S D', '1–5']],
+        ['Act', ['E']],
+        ['Let go', ['X']],
+      ],
+    ],
+    [
+      'When you are flat',
+      [
+        ['Call out', ['Q']],
+        ['Watch a teammate', ['Space']],
+      ],
+    ],
   ],
   touch: [
-    ['Moving', [['Walk', ['Left thumb'], 'Anywhere on the left'], ['Look', ['Drag right']], ['Run', ['Run'], 'Lift to stop']]],
-    ['Working', [['Use, fix', ['Use']], ['Peel a friend up, hide', ['Hold Use']], ['Torch', ['Torch']], ['Phone map', ['Phone'], DRAINS], ['Zoom the map', ['Map']], ['Throw a Mini Biggs', ['Biggs'], TOSS]]],
+    [
+      'Moving',
+      [
+        ['Walk', ['Left thumb'], 'Anywhere on the left'],
+        ['Look', ['Drag right']],
+        ['Run', ['Run'], 'Lift to stop'],
+      ],
+    ],
+    [
+      'Working',
+      [
+        ['Use, fix', ['Use']],
+        ['Peel a friend up, hide', ['Hold Use']],
+        ['Torch', ['Torch']],
+        ['Phone map', ['Phone'], DRAINS],
+        ['Zoom the map', ['Map']],
+        ['Throw a Mini Biggs', ['Biggs'], TOSS],
+      ],
+    ],
     ['At a breaker box', [['Choose and act', ['Tap the parts']]]],
   ],
   pad: [
-    ['Moving', [['Walk', ['Left stick']], ['Look', ['Right stick']], ['Run', ['LB']]]],
-    ['Working', [['Use, fix', ['A']], ['Torch', ['X']], ['Phone map', ['B'], DRAINS], ['Zoom the map', ['D-pad up']], ['Throw a Mini Biggs', ['RT'], TOSS], ['Pause', ['Start']]]],
-    ['When you are flat', [['Call out', ['Y']], ['Watch a teammate', ['RB']]]],
+    [
+      'Moving',
+      [
+        ['Walk', ['Left stick']],
+        ['Look', ['Right stick']],
+        ['Run', ['LB']],
+      ],
+    ],
+    [
+      'Working',
+      [
+        ['Use, fix', ['A']],
+        ['Torch', ['X']],
+        ['Phone map', ['B'], DRAINS],
+        ['Zoom the map', ['D-pad up']],
+        ['Throw a Mini Biggs', ['RT'], TOSS],
+        ['Pause', ['Start']],
+      ],
+    ],
+    [
+      'When you are flat',
+      [
+        ['Call out', ['Y']],
+        ['Watch a teammate', ['RB']],
+      ],
+    ],
   ],
 };
-const controlGroups = groups => groups.map(([title, rows]) => `<section><h3 class="ts-f-group">${title}</h3><dl class="kv ts-f-keys">${rows.map(([what, how, note]) =>
-  `<dt>${what}${note ? `<span class="cn-meta">${note}</span>` : ''}</dt><dd>${how.map(k => `<kbd class="ts-key">${k}</kbd>`).join('')}</dd>`).join('')}</dl></section>`).join('');
+const controlGroups = groups =>
+  groups
+    .map(
+      ([title, rows]) =>
+        `<section><h3 class="ts-f-group">${title}</h3><dl class="kv ts-f-keys">${rows
+          .map(
+            ([what, how, note]) =>
+              `<dt>${what}${note ? `<span class="cn-meta">${note}</span>` : ''}</dt><dd>${how.map(k => `<kbd class="ts-key">${k}</kbd>`).join('')}</dd>`
+          )
+          .join('')}</dl></section>`
+    )
+    .join('');
 
-const el = (tag, cls, parent) => { const e = document.createElement(tag); e.className = cls; parent.append(e); return e; };
-const set = (e, text) => { if (e.textContent !== text) e.textContent = text; };
-const html = (e, markup) => { if (e._html !== markup) e.innerHTML = e._html = markup; };
-const data = (e, key, v) => { v = String(v); if (e.dataset[key] !== v) e.dataset[key] = v; };
+const el = (tag, cls, parent) => {
+  const e = document.createElement(tag);
+  e.className = cls;
+  parent.append(e);
+  return e;
+};
+const set = (e, text) => {
+  if (e.textContent !== text) e.textContent = text;
+};
+const html = (e, markup) => {
+  if (e._html !== markup) e.innerHTML = e._html = markup;
+};
+const data = (e, key, v) => {
+  v = String(v);
+  if (e.dataset[key] !== v) e.dataset[key] = v;
+};
 const esc = s => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
-const angDiff = (a, b) => { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
+const angDiff = (a, b) => {
+  let d = (a - b) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+};
 const metres = d => Math.max(1, Math.round(d)) + ' m';
 // "in the Kitchen", for a sentence.
 export function where(p) {
@@ -163,47 +278,117 @@ export function createHud(stage, player) {
     </div>
     <div class="ts-f-rotate"><div class="empty-state">${icon('rotate')}<strong>Turn your phone sideways</strong><span>The floor is walked in landscape.</span></div></div>`;
   const $ = sel => root.querySelector(sel);
-  const [time, night] = $('.ts-f-time').children, power = $('.ts-f-power'), powerBar = power.querySelector('i'), powerText = power.lastChild;
-  const compass = $('.ts-f-compass'), tasks = $('.ts-f-tasks'), toasts = $('.ts-f-toasts');
-  const crew = $('.ts-f-crew'), dot = $('.ts-f-dot');
-  const prompt = $('.ts-f-prompt'), [promptKey, promptText] = $('.ts-f-prompt-row').children, hold = $('.ts-f-hold'), holdBar = hold.firstChild;
-  const torch = $('.ts-f-torch'), stam = $('.ts-f-stam'), cells = [...$('.ts-f-cells').children], torchText = $('.ts-f-torch-row').lastChild;
-  const toy = $('.ts-f-toy'), toyText = toy.querySelector('span');
-  const start = $('.ts-f-start'), flat = $('.ts-f-flat'), [, flatHow, flatSub] = flat.children, callText = $('[data-do="call"] span'), watchBtn = $('[data-do="watch"]');
-  const pause = $('.ts-f-pause'), pauseIn = $('.ts-f-pause-in'), pauseWhen = $('.ts-f-pause-when'), keyList = $('[data-pane="controls"]'), sens = $('#ts-sens'), sensText = sens.nextElementSibling, invert = $('#ts-invert'), outline = $('#ts-outline'), third = $('#ts-third');
+  const [time, night] = $('.ts-f-time').children,
+    power = $('.ts-f-power'),
+    powerBar = power.querySelector('i'),
+    powerText = power.lastChild;
+  const compass = $('.ts-f-compass'),
+    tasks = $('.ts-f-tasks'),
+    toasts = $('.ts-f-toasts');
+  const crew = $('.ts-f-crew'),
+    dot = $('.ts-f-dot');
+  const prompt = $('.ts-f-prompt'),
+    [promptKey, promptText] = $('.ts-f-prompt-row').children,
+    hold = $('.ts-f-hold'),
+    holdBar = hold.firstChild;
+  const torch = $('.ts-f-torch'),
+    stam = $('.ts-f-stam'),
+    cells = [...$('.ts-f-cells').children],
+    torchText = $('.ts-f-torch-row').lastChild;
+  const toy = $('.ts-f-toy'),
+    toyText = toy.querySelector('span');
+  const start = $('.ts-f-start'),
+    flat = $('.ts-f-flat'),
+    [, flatHow, flatSub] = flat.children,
+    callText = $('[data-do="call"] span'),
+    watchBtn = $('[data-do="watch"]');
+  const pause = $('.ts-f-pause'),
+    pauseIn = $('.ts-f-pause-in'),
+    pauseWhen = $('.ts-f-pause-when'),
+    keyList = $('[data-pane="controls"]'),
+    sens = $('#ts-sens'),
+    sensText = sens.nextElementSibling,
+    invert = $('#ts-invert'),
+    outline = $('#ts-outline'),
+    third = $('#ts-third');
   const touch = createTouch(root, player);
   // Compass ticks, by bearing. Yaw 0 faces south and grows toward east, as in player.js.
-  const ticks = [['S', 0], ['', Math.PI / 4], ['E', Math.PI / 2], ['', Math.PI * .75], ['N', Math.PI], ['', -Math.PI * .75], ['W', -Math.PI / 2], ['', -Math.PI / 4]]
-    .map(([letter, b]) => { const e = el('span', 'ts-f-tick', compass); e.textContent = letter; return { e, b }; });
+  const ticks = [
+    ['S', 0],
+    ['', Math.PI / 4],
+    ['E', Math.PI / 2],
+    ['', Math.PI * 0.75],
+    ['N', Math.PI],
+    ['', -Math.PI * 0.75],
+    ['W', -Math.PI / 2],
+    ['', -Math.PI / 4],
+  ].map(([letter, b]) => {
+    const e = el('span', 'ts-f-tick', compass);
+    e.textContent = letter;
+    return { e, b };
+  });
 
   const actions = { resume: player.resume, pause: player.pause, call: player.call, watch: player.watchNext, full: toggleFullscreen };
   // The pause screen opens on Controls. Touch has no gamepad tab. The panes share one cell and the others are
   // only made invisible, so the panel keeps the tallest one's size and the tabs stay put.
-  const tabs = [...pause.querySelectorAll('[data-tab]')], panes = [...pause.querySelectorAll('[data-pane]')];
+  const tabs = [...pause.querySelectorAll('[data-tab]')],
+    panes = [...pause.querySelectorAll('[data-pane]')];
   const showTab = name => {
-    for (const t of tabs) { const on = t.dataset.tab === name; t.classList.toggle('active', on); t.setAttribute('aria-selected', on); }
-    for (const p of panes) { const off = p.dataset.pane !== name; p.classList.toggle('is-off', off); p.inert = off; }
+    for (const t of tabs) {
+      const on = t.dataset.tab === name;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on);
+    }
+    for (const p of panes) {
+      const off = p.dataset.pane !== name;
+      p.classList.toggle('is-off', off);
+      p.inert = off;
+    }
   };
   showTab('controls');
   root.addEventListener('click', e => {
-    const name = e.target.closest('[data-do]')?.dataset.do, tab = e.target.closest('[data-tab]')?.dataset.tab;
+    const name = e.target.closest('[data-do]')?.dataset.do,
+      tab = e.target.closest('[data-tab]')?.dataset.tab;
     if (name) actions[name]();
     else if (tab) showTab(tab);
-    else if (e.target === pause || e.target === pauseIn) player.resume();   // a click beside the panel
+    else if (e.target === pause || e.target === pauseIn) player.resume(); // a click beside the panel
   });
-  const showPrefs = () => { sens.value = prefs.sens; invert.checked = prefs.invert; outline.checked = prefs.outline; third.checked = prefs.third; set(sensText, `${Math.round(prefs.sens * 100)}% of normal`); };
-  sens.oninput = () => { prefs.sens = +sens.value; savePrefs(); showPrefs(); };
-  invert.onchange = () => { prefs.invert = invert.checked; savePrefs(); };
-  outline.onchange = () => { prefs.outline = outline.checked; savePrefs(); };
-  third.onchange = () => { prefs.third = third.checked; savePrefs(); };
+  const showPrefs = () => {
+    sens.value = prefs.sens;
+    invert.checked = prefs.invert;
+    outline.checked = prefs.outline;
+    third.checked = prefs.third;
+    set(sensText, `${Math.round(prefs.sens * 100)}% of normal`);
+  };
+  sens.oninput = () => {
+    prefs.sens = +sens.value;
+    savePrefs();
+    showPrefs();
+  };
+  invert.onchange = () => {
+    prefs.invert = invert.checked;
+    savePrefs();
+  };
+  outline.onchange = () => {
+    prefs.outline = outline.checked;
+    savePrefs();
+  };
+  third.onchange = () => {
+    prefs.third = third.checked;
+    savePrefs();
+  };
 
   /* ---------- toasts ---------- */
 
   const live = [];
-  function drop(t) { t.e.classList.add('is-gone'); setTimeout(() => t.e.remove(), 400); }
+  function drop(t) {
+    t.e.classList.add('is-gone');
+    setTimeout(() => t.e.remove(), 400);
+  }
   function say(text, kind = 'info', seconds = 4.5) {
     const e = el('div', 'ts-f-toast is-' + kind, toasts);
-    e.innerHTML = icon(TOAST_ICON[kind]) + '<span></span>'; e.lastChild.textContent = text;
+    e.innerHTML = icon(TOAST_ICON[kind]) + '<span></span>';
+    e.lastChild.textContent = text;
     live.push({ e, until: performance.now() + seconds * 1000 });
     while (live.length > MAX_TOASTS - +(root.clientHeight < SHORT)) drop(live.shift());
   }
@@ -213,10 +398,14 @@ export function createHud(stage, player) {
   // Marks point along the walking route, not through the walls: nobody knows
   // the building on their first night. routes: key -> the next corner to walk
   // to and how much further the thing is from there.
-  const routes = new Map(), marks = new Map(), pings = new Map();
-  let navAt = 0, navTurn = 0;
+  const routes = new Map(),
+    marks = new Map(),
+    pings = new Map();
+  let navAt = 0,
+    navTurn = 0;
   function findRoute(S, me, t) {
-    const r = route(me.x, me.z, t.x, t.z, { doors: S.doors }), path = r.path.length && !r.blocked ? r.path : [t];
+    const r = route(me.x, me.z, t.x, t.z, { doors: S.doors }),
+      path = r.path.length && !r.blocked ? r.path : [t];
     let far = 0;
     for (let i = 1; i < path.length; i++) far += Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z);
     routes.set(t.key, { x: path[0].x, z: path[0].z, far });
@@ -224,11 +413,25 @@ export function createHud(stage, player) {
   function drawCompass(S, me, mine, now) {
     const list = [];
     // A breaker box hangs on a wall. Aim at the floor in front of it.
-    S.faults?.forEach((f, i) => { if (f) list.push({ key: 'f' + i + '@' + f.at, kind: 'fault', x: BOXES[i].x + Math.sin(BOXES[i].face) * .9, z: BOXES[i].z + Math.cos(BOXES[i].face) * .9, hot: faultLeft(S, f) < HURRY }); });
-    for (const p of S.players) if (p.flat && p.id !== game.myId && p.x != null) list.push({ key: 'p' + p.id, kind: 'flat', x: p.x, z: p.z, name: p.name, ping: pings.get(p.id) > now });
-    if ((mine.bat ?? 1) < LOW_BAT && S.power > 0) list.push({ key: 'dock', kind: 'dock', x: CHARGER.x, z: CHARGER.z - .9, name: 'charger' });
-    if (S.power < GEN_MARK) list.push({ key: 'gen', kind: 'gen', x: GENERATOR.x + Math.sin(GENERATOR.face) * .9, z: GENERATOR.z + Math.cos(GENERATOR.face) * .9, name: 'crank' });
-    if (now - navAt > NAV_MS && list.length) { navAt = now; findRoute(S, me, list[navTurn++ % list.length]); }
+    S.faults?.forEach((f, i) => {
+      if (f)
+        list.push({
+          key: 'f' + i + '@' + f.at,
+          kind: 'fault',
+          x: BOXES[i].x + Math.sin(BOXES[i].face) * 0.9,
+          z: BOXES[i].z + Math.cos(BOXES[i].face) * 0.9,
+          hot: faultLeft(S, f) < HURRY,
+        });
+    });
+    for (const p of S.players)
+      if (p.flat && p.id !== game.myId && p.x != null) list.push({ key: 'p' + p.id, kind: 'flat', x: p.x, z: p.z, name: p.name, ping: pings.get(p.id) > now });
+    if ((mine.bat ?? 1) < LOW_BAT && S.power > 0) list.push({ key: 'dock', kind: 'dock', x: CHARGER.x, z: CHARGER.z - 0.9, name: 'charger' });
+    if (S.power < GEN_MARK)
+      list.push({ key: 'gen', kind: 'gen', x: GENERATOR.x + Math.sin(GENERATOR.face) * 0.9, z: GENERATOR.z + Math.cos(GENERATOR.face) * 0.9, name: 'crank' });
+    if (now - navAt > NAV_MS && list.length) {
+      navAt = now;
+      findRoute(S, me, list[navTurn++ % list.length]);
+    }
 
     for (const t of ticks) {
       const off = -angDiff(t.b, me.yaw) / HALF_SPAN;
@@ -239,7 +442,10 @@ export function createHud(stage, player) {
     for (const t of list) {
       if (!routes.has(t.key)) findRoute(S, me, t);
       let r = routes.get(t.key);
-      if (r.far && Math.hypot(r.x - me.x, r.z - me.z) < 1.2) { findRoute(S, me, t); r = routes.get(t.key); }   // reached the corner it pointed at
+      if (r.far && Math.hypot(r.x - me.x, r.z - me.z) < 1.2) {
+        findRoute(S, me, t);
+        r = routes.get(t.key);
+      } // reached the corner it pointed at
       t.dist = Math.hypot(r.x - me.x, r.z - me.z) + r.far;
       t.off = -angDiff(Math.atan2(r.x - me.x, r.z - me.z), me.yaw) / HALF_SPAN;
       if (t.kind === 'fault' && (!nearest || t.dist < nearest.dist)) nearest = t;
@@ -247,7 +453,11 @@ export function createHud(stage, player) {
     for (const t of list) {
       t.at = Math.max(-1, Math.min(1, t.off));
       let m = marks.get(t.key);
-      if (!m) { m = el('div', 'ts-f-mark is-' + t.kind, compass); m.innerHTML = '<i></i><b></b>'; marks.set(t.key, m); }
+      if (!m) {
+        m = el('div', 'ts-f-mark is-' + t.kind, compass);
+        m.innerHTML = '<i></i><b></b>';
+        marks.set(t.key, m);
+      }
       m.style.left = 50 + t.at * 50 + '%';
       // Off the end of the strip: it is that way, further round.
       data(m, 'side', t.off < -1 ? 'left' : t.off > 1 ? 'right' : '');
@@ -256,7 +466,12 @@ export function createHud(stage, player) {
       m.classList.toggle('is-hot', !!t.hot);
       set(m.lastChild, (t.name ? t.name + ' ' : '') + metres(t.dist));
     }
-    for (const [key, m] of marks) if (!list.some(t => t.key === key)) { m.remove(); marks.delete(key); routes.delete(key); }
+    for (const [key, m] of marks)
+      if (!list.some(t => t.key === key)) {
+        m.remove();
+        marks.delete(key);
+        routes.delete(key);
+      }
     spread(list);
   }
   // Where labels would overlap, lay them side by side instead, centred on
@@ -265,16 +480,24 @@ export function createHud(stage, player) {
   // so where it would sit unmoved can be measured.
   // Labels that would not fit in the strip side by side are hidden, furthest first, keeping their dots.
   function spread(list) {
-    const strip = compass.getBoundingClientRect(), W = strip.width, runs = [];
+    const strip = compass.getBoundingClientRect(),
+      W = strip.width,
+      runs = [];
     const place = run => Math.max(0, Math.min(W - run.w, run.mid - run.w / 2));
-    const rank = t => t.kind === 'flat' || t.ping ? 0 : t.hot || t.kind === 'gen' || t.kind === 'dock' ? 1 : 2;
+    const rank = t => (t.kind === 'flat' || t.ping ? 0 : t.hot || t.kind === 'gen' || t.kind === 'dock' ? 1 : 2);
     let room = W + LABEL_GAP;
-    const row = list.slice().sort((a, c) => rank(a) - rank(c) || a.dist - c.dist).flatMap(t => {
-      const m = marks.get(t.key), b = m.lastChild, r = b.getBoundingClientRect();
-      room -= r.width + LABEL_GAP;
-      m.classList.toggle('is-quiet', room < 0);
-      return room < 0 ? [] : [{ b, x: r.left - (b._dx || 0) - strip.left, w: r.width }];
-    }).sort((a, c) => a.x - c.x);
+    const row = list
+      .slice()
+      .sort((a, c) => rank(a) - rank(c) || a.dist - c.dist)
+      .flatMap(t => {
+        const m = marks.get(t.key),
+          b = m.lastChild,
+          r = b.getBoundingClientRect();
+        room -= r.width + LABEL_GAP;
+        m.classList.toggle('is-quiet', room < 0);
+        return room < 0 ? [] : [{ b, x: r.left - (b._dx || 0) - strip.left, w: r.width }];
+      })
+      .sort((a, c) => a.x - c.x);
     for (const l of row) {
       let run = { ls: [l], mid: l.x + l.w / 2, w: l.w };
       for (let last = runs.at(-1); last && place(last) + last.w + LABEL_GAP > place(run); last = runs.at(-1)) {
@@ -288,7 +511,10 @@ export function createHud(stage, player) {
       let x = place(run);
       for (const l of run.ls) {
         const dx = Math.round(x - l.x);
-        if (dx !== (l.b._dx || 0)) { l.b._dx = dx; l.b.style.translate = dx ? dx + 'px 0' : ''; }
+        if (dx !== (l.b._dx || 0)) {
+          l.b._dx = dx;
+          l.b.style.translate = dx ? dx + 'px 0' : '';
+        }
         x += l.w + LABEL_GAP;
       }
     }
@@ -299,11 +525,15 @@ export function createHud(stage, player) {
   // Every open fault, nearest first: the room, the job, and the seconds before it starts to burn the building's ceiling.
   // A short stage shows fewer rows, so the list stops above the stick and the torch.
   function drawTasks(S, me) {
-    const ours = (S.faults || []).map((f, i) => f && { f, i, d: Math.hypot(BOXES[i].x - me.x, BOXES[i].z - me.z) }).filter(Boolean).sort((a, b) => a.d - b.d);
+    const ours = (S.faults || [])
+      .map((f, i) => f && { f, i, d: Math.hypot(BOXES[i].x - me.x, BOXES[i].z - me.z) })
+      .filter(Boolean)
+      .sort((a, b) => a.d - b.d);
     const fit = Math.max(2, Math.floor((root.clientHeight - TASK_TOP - TASK_FOOT[me.touch ? 'touch' : 'keys']) / TASK_ROW));
-    const max = ours.length <= Math.min(fit, MAX_TASKS) ? ours.length : Math.max(1, Math.min(MAX_TASKS, fit - 1));   // the rest counted on one more row
+    const max = ours.length <= Math.min(fit, MAX_TASKS) ? ours.length : Math.max(1, Math.min(MAX_TASKS, fit - 1)); // the rest counted on one more row
     const rows = ours.slice(0, max).map(({ f, i }) => {
-      const left = faultLeft(S, f), state = left <= 0 ? 'burn' : left < HURRY ? 'hot' : '';
+      const left = faultLeft(S, f),
+        state = left <= 0 ? 'burn' : left < HURRY ? 'hot' : '';
       return `<li data-state="${state}"${me.task?.i === i ? ' class="is-here"' : ''}>${icon('fault')}<b>${esc(ROOMS3[BOXES[i].room]?.name || '')}</b><span>${FAULT_NAME[f.k]}</span><em class="cn-tabular">${left <= 0 ? 'burning' : Math.ceil(left) + 's'}</em></li>`;
     });
     if (ours.length > max) rows.push(`<li class="is-more">${ours.length - max} more</li>`);
@@ -313,24 +543,33 @@ export function createHud(stage, player) {
 
   /* ---------- once a frame ---------- */
 
-  let lastT = 1e9, was = { bat: 1, power: 100, dry: 0, empty: 0 }, calledAt = -1e9;
+  let lastT = 1e9,
+    was = { bat: 1, power: 100, dry: 0, empty: 0 },
+    calledAt = -1e9;
   return {
-    root, say,
+    root,
+    say,
     // Someone flat called out: their compass mark pulses for a few seconds.
-    ping(id) { if (id === game.myId) calledAt = performance.now(); else pings.set(id, performance.now() + 4000); },
+    ping(id) {
+      if (id === game.myId) calledAt = performance.now();
+      else pings.set(id, performance.now() + 4000);
+    },
     // scared: the catch has the camera (actors/scare.js), and the face fills the screen with nothing over it.
     update(S, me, scared) {
-      const now = performance.now(), mine = S.players.find(p => p.id === game.myId) || {}, bat = mine.bat ?? 1;
+      const now = performance.now(),
+        mine = S.players.find(p => p.id === game.myId) || {},
+        bat = mine.bat ?? 1;
       const mates = S.players.filter(p => p.id !== game.myId && p.x != null);
       root.hidden = S.phase !== 'play' || !!scared;
-      if (S.t < lastT) was = { bat: 1, power: 100, dry: me.dry, empty: me.empty };   // a night began
+      if (S.t < lastT) was = { bat: 1, power: 100, dry: me.dry, empty: me.empty }; // a night began
       lastT = S.t;
       for (let i = live.length - 1; i >= 0; i--) if (now > live[i].until) drop(live.splice(i, 1)[0]);
       if (root.hidden) return;
       data(root, 'flat', me.flat);
       data(root, 'hid', me.hid >= 0 && !me.flat);
 
-      set(time, clockF(S)); set(night, 'Night ' + S.night);
+      set(time, clockF(S));
+      set(night, 'Night ' + S.night);
       powerBar.style.width = S.power + '%';
       set(powerText, S.power > 0 ? Math.ceil(S.power) + '%' : 'Power out');
       data(power, 'level', S.power <= 0 ? 'out' : S.power < CRIT_POWER ? 'crit' : S.power < LOW_POWER ? 'low' : S.crank ? 'crank' : 'ok');
@@ -341,17 +580,43 @@ export function createHud(stage, player) {
       compass.hidden = me.flat;
       if (!me.flat) drawCompass(S, me, mine, now);
 
-      html(crew, mates.map(p => p.flat
-        ? `<div class="ts-f-mate is-flat"><span class="tag cn-tone-danger">flat</span><b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`
-        : `<div class="ts-f-mate">${p.hid >= 0 ? '<span class="tag">locker</span>' : ''}<b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`).join(''));
+      html(
+        crew,
+        mates
+          .map(p =>
+            p.flat
+              ? `<div class="ts-f-mate is-flat"><span class="tag cn-tone-danger">flat</span><b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`
+              : `<div class="ts-f-mate">${p.hid >= 0 ? '<span class="tag">locker</span>' : ''}<b>${esc(p.name)}</b><span>${esc(roomName(p))}</span></div>`
+          )
+          .join('')
+      );
 
       // The torch: lit bars for charge, yellow while it is on, red and blinking when nearly out.
-      const lit = Math.ceil(bat * CELLS - .001), state = bat <= 0 ? 'dead' : me.act === 'charge' ? 'charging' : bat < LOW_BAT ? 'low' : 'ok';
+      const lit = Math.ceil(bat * CELLS - 0.001),
+        state = bat <= 0 ? 'dead' : me.act === 'charge' ? 'charging' : bat < LOW_BAT ? 'low' : 'ok';
       torch.hidden = me.flat;
       cells.forEach((c, i) => c.classList.toggle('is-full', i < lit));
       // The phone draws on the same battery, four times as fast, so the bars count as on while it is up.
-      data(torch, 'state', state); data(torch, 'on', me.on || me.ph);
-      set(torchText, state === 'dead' ? 'Torch dead' : state === 'charging' ? 'Charging' : me.ph ? (me.on ? 'Torch and phone' : 'Phone') : state === 'low' ? (me.on ? 'Torch low' : 'Torch low, off') : me.on ? '' : 'Off');
+      data(torch, 'state', state);
+      data(torch, 'on', me.on || me.ph);
+      set(
+        torchText,
+        state === 'dead'
+          ? 'Torch dead'
+          : state === 'charging'
+            ? 'Charging'
+            : me.ph
+              ? me.on
+                ? 'Torch and phone'
+                : 'Phone'
+              : state === 'low'
+                ? me.on
+                  ? 'Torch low'
+                  : 'Torch low, off'
+                : me.on
+                  ? ''
+                  : 'Off'
+      );
       if (bat < LOW_BAT && was.bat >= LOW_BAT) say('Torch low.', 'torch', 7);
       if (bat <= 0 && was.bat > 0) say('Torch dead.', 'torch', 6);
       was.bat = bat;
@@ -380,10 +645,19 @@ export function createHud(stage, player) {
 
       flat.hidden = !me.flat || me.paused;
       if (me.flat) {
-        const up = mates.filter(p => !p.flat), near = up.reduce((a, p) => !a || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(a.x - me.x, a.z - me.z) ? p : a, null);
-        const watched = up.find(p => p.id === me.watch), next = up[up.indexOf(watched) + 1];
+        const up = mates.filter(p => !p.flat),
+          near = up.reduce((a, p) => (!a || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(a.x - me.x, a.z - me.z) ? p : a), null);
+        const watched = up.find(p => p.id === me.watch),
+          next = up[up.indexOf(watched) + 1];
         set(flatHow, `${MASC[mine.flatBy]?.name || 'Something'} ${HOW[mine.flatBy] || 'got you'}.`);
-        set(flatSub, watched ? `Watching ${watched.name}, ${where(watched)}.` : near ? `You stay flat until someone peels you up. ${near.name} is ${metres(Math.hypot(near.x - me.x, near.z - me.z))} away.` : 'Nobody is left standing.');
+        set(
+          flatSub,
+          watched
+            ? `Watching ${watched.name}, ${where(watched)}.`
+            : near
+              ? `You stay flat until someone peels you up. ${near.name} is ${metres(Math.hypot(near.x - me.x, near.z - me.z))} away.`
+              : 'Nobody is left standing.'
+        );
         set(callText, now - calledAt < F.CALL_GAP * 1000 ? 'Called' : 'Call out');
         watchBtn.hidden = !up.length;
         set(watchBtn.lastChild, next ? 'Watch ' + next.name : 'Back to the floor');

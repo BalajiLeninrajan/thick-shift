@@ -8,7 +8,7 @@ import * as THREE from 'three';
 // Render orders. Everything else is 0. The slats are drawn without a depth test, so whatever comes after them is on top.
 const SLATS_ORDER = 1;
 export const HANDS_ORDER = 2;
-const FADE = 8;   // per second: about a third of a second to come up or go
+const FADE = 8; // per second: about a third of a second to come up or go
 
 const FRAG = `
 uniform float uShow; varying vec2 vUv;
@@ -32,11 +32,18 @@ export function createSlats(scene) {
   const mat = new THREE.ShaderMaterial({
     uniforms: { uShow: { value: 0 } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4( position.xy, 0., 1. ); }',
-    fragmentShader: FRAG, depthTest: false, depthWrite: false,
-    blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    fragmentShader: FRAG,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.CustomBlending,
+    blendSrc: THREE.SrcAlphaFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
   });
   const slats = new THREE.Mesh(tri, mat);
-  slats.name = 'locker slats'; slats.frustumCulled = false; slats.renderOrder = SLATS_ORDER; slats.visible = false;
+  slats.name = 'locker slats';
+  slats.frustumCulled = false;
+  slats.renderOrder = SLATS_ORDER;
+  slats.visible = false;
   scene.add(slats);
   let show = 0;
   return {
@@ -44,7 +51,7 @@ export function createSlats(scene) {
     update(S, me, dt, busy) {
       const on = S.phase === 'play' && me.hid >= 0 && !me.flat && !busy;
       show += ((on ? 1 : 0) - show) * Math.min(1, dt * FADE);
-      slats.visible = show > .01;
+      slats.visible = show > 0.01;
       mat.uniforms.uShow.value = show;
     },
   };

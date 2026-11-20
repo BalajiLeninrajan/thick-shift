@@ -17,18 +17,25 @@ import { createUsables } from './world/usable.js';
 import { roomsSeenFrom } from './world/sight.js';
 
 export function buildWorld(scene) {
-  const mats = surfaces(), pics = art(), trim = new Batch();
+  const mats = surfaces(),
+    pics = art(),
+    trim = new Batch();
   buildShell(scene, mats, pics, trim);
-  const light = createLight(scene, trim, pics.art);   // adds the lamp housings to the trim
-  const trimMesh = trim.mesh(mats.trim); trimMesh.castShadow = trimMesh.receiveShadow = true; scene.add(trimMesh);
-  const props = createProps(scene), usables = createUsables(scene);
+  const light = createLight(scene, trim, pics.art); // adds the lamp housings to the trim
+  const trimMesh = trim.mesh(mats.trim);
+  trimMesh.castShadow = trimMesh.receiveShadow = true;
+  scene.add(trimMesh);
+  const props = createProps(scene),
+    usables = createUsables(scene);
   props.ready.then(has => light.glows(has));
-  scene.traverse(o => { if (o.isMesh) lit(o.material); });
+  scene.traverse(o => {
+    if (o.isMesh) lit(o.material);
+  });
 
   return {
     torchCookie,
-    parts: usables.parts,   // what outline.js can put a gold edge round
-    stop: 1,   // how far to stop the picture down against torch glare this frame (light.js)
+    parts: usables.parts, // what outline.js can put a gold edge round
+    stop: 1, // how far to stop the picture down against torch glare this frame (light.js)
     // torch: how bright the local guard's torch is, 0 to 1. dread, threat: 0 to 1.
     update(S, t, dt, camera, torch, dread, threat) {
       const inView = roomsSeenFrom(camera.position.x, camera.position.z);

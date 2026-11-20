@@ -8,14 +8,22 @@ import { game, platform } from './state.js';
 import { newState, stepFloor, actFloor, adoptFloor } from './three/sim3d.js';
 
 const TICK_MS = 100;
-const NO_HOST = 4404, CODE_TAKEN = 4409;   // close codes from the relay
-const MAX_BACKLOG = 256 * 1024;            // bytes queued before the host skips a state
-let ws = null, loop = 0;
+const NO_HOST = 4404,
+  CODE_TAKEN = 4409; // close codes from the relay
+const MAX_BACKLOG = 256 * 1024; // bytes queued before the host skips a state
+let ws = null,
+  loop = 0;
 
 const roomUrl = (code, query) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
-const ROOM = /^([A-Z]{4}|[a-z]-[\w-]{1,80})$/;   // a typed code, or a fixed one from an app's platform (worker/room.js)
-const newCode = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('');
-const parse = text => { try { return JSON.parse(text); } catch { return null; } };
+const ROOM = /^([A-Z]{4}|[a-z]-[\w-]{1,80})$/; // a typed code, or a fixed one from an app's platform (worker/room.js)
+const newCode = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[(Math.random() * 24) | 0]).join('');
+const parse = text => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
 const guard = (id, name = 'Guard') => ({ id, name });
 
 function broadcast() {
@@ -25,17 +33,29 @@ function broadcast() {
 
 // Tell the relay when this tab goes to the background, where timers crawl, so it hands the room to a guest who
 // is looking. Plain words, not JSON, so the relay can pick them out without parsing every message.
-const showing = () => { if (ws?.readyState === WebSocket.OPEN) ws.send(document.hidden ? 'hidden' : 'shown'); };
+const showing = () => {
+  if (ws?.readyState === WebSocket.OPEN) ws.send(document.hidden ? 'hidden' : 'shown');
+};
 document.addEventListener('visibilitychange', showing);
 
-const run = () => { loop ||= setInterval(() => { stepFloor(); broadcast(); }, TICK_MS); };
+const run = () => {
+  loop ||= setInterval(() => {
+    stepFloor();
+    broadcast();
+  }, TICK_MS);
+};
 
 // The host's end of the socket: one it opened, or a guest's that the relay handed the room to.
 function hostRoom(sock, opened) {
   ws = sock;
-  ws.onopen = () => { opened = true; game.netNote = ''; };
+  ws.onopen = () => {
+    opened = true;
+    game.netNote = '';
+  };
   ws.onmessage = e => {
-    const m = parse(e.data), id = m?.from, d = m?.d;
+    const m = parse(e.data),
+      id = m?.from,
+      d = m?.d;
     if (typeof id !== 'string' || id === game.myId || !d) return;
     if (d.t === 'join') game.players[id] = guard(id);
     else if (d.t === 'leave') delete game.players[id];
@@ -45,7 +65,10 @@ function hostRoom(sock, opened) {
     // Someone else is hosting under this code. In a fixed room that is everyone else, so go and join them.
     // Otherwise nobody has joined yet, so take another code.
     if (e.code === CODE_TAKEN && platform.fixedRoom) return becomeGuest();
-    if (e.code === CODE_TAKEN) { game.code = game.S.code = newCode(); return openRoom(); }
+    if (e.code === CODE_TAKEN) {
+      game.code = game.S.code = newCode();
+      return openRoom();
+    }
     for (const id in game.players) if (id !== game.myId) delete game.players[id];
     game.netNote = opened ? 'Lost the connection to the room. You can keep playing solo.' : 'Multiplayer unavailable. You can still play solo.';
   };
@@ -80,19 +103,19 @@ function becomeGuest() {
 function takeOver(guests) {
   game.isHost = true;
   game.joining = false;
-  game.S ||= newState(game.code);   // the old host left before it sent us anything
+  game.S ||= newState(game.code); // the old host left before it sent us anything
   const was = Object.fromEntries((game.S.players || []).map(p => [p.id, p]));
   game.players = {};
   for (const id of [game.myId, ...guests.filter(g => typeof g === 'string')]) game.players[id] = was[id] || guard(id);
   game.players[game.myId].name = game.myName;
   game.S.players = Object.values(game.players);
   game.netNote = 'The host left, so you are hosting now.';
-  if (game.S.phase !== 'lobby') adoptFloor();   // rebuild the mascots' thinking, which the old host kept to itself
+  if (game.S.phase !== 'lobby') adoptFloor(); // rebuild the mascots' thinking, which the old host kept to itself
   hostRoom(ws, true);
   run();
 }
 
-let rehosts = 0;   // fixed rooms only: times a join found nobody hosting and went back to hosting
+let rehosts = 0; // fixed rooms only: times a join found nobody hosting and went back to hosting
 export function join(code) {
   if (!/^[a-z]-/.test(code)) code = code.toUpperCase().trim();
   if (!ROOM.test(code)) return;
@@ -103,11 +126,16 @@ export function join(code) {
   ws = new WebSocket(roomUrl(code, 'id=' + game.myId));
   // Who we are. Sent again to a new host, who may have missed the first time.
   const hello = () => send({ t: 'name', n: game.myName });
-  ws.onopen = () => { if (document.hidden) showing(); hello(); };
+  ws.onopen = () => {
+    if (document.hidden) showing();
+    hello();
+  };
   ws.onmessage = e => {
     const d = parse(e.data);
-    if (d?.t === 's') { game.S = d.s; game.joining = false; }
-    else if (d?.t === 'host' && Array.isArray(d.guests)) takeOver(d.guests);
+    if (d?.t === 's') {
+      game.S = d.s;
+      game.joining = false;
+    } else if (d?.t === 'host' && Array.isArray(d.guests)) takeOver(d.guests);
     else if (d?.t === 'rehost') hello();
   };
   ws.onclose = e => {
@@ -117,7 +145,8 @@ export function join(code) {
     // The fixed room's host left between our try at hosting and our try at joining. Host after all.
     if (!wasIn && e.code === NO_HOST && platform.fixedRoom && rehosts++ < 3) return host(code);
     // A host leaving hands the room on (takeOver), so a close here is the connection failing.
-    game.error = wasIn ? { title: 'Lost the connection to the room', detail: 'Reload to start again.' }
+    game.error = wasIn
+      ? { title: 'Lost the connection to the room', detail: 'Reload to start again.' }
       : { title: 'Could not join room ' + code, detail: e.code === NO_HOST ? 'Nobody is hosting a room with that code.' : 'The connection failed.' };
   };
 }
