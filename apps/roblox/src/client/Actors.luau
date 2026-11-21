@@ -9,11 +9,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Data = require(Shared.Data)
+local Make = require(Shared.Make)
 local Map = require(Shared.Map)
 local Units = require(Shared.Units)
 local Util = require(Shared.Util)
 
 local SC = Units.SC
+local part = Make.part
 local STAGE = Data.STAGE
 
 -- By MASC index: body [width, height, depth], head size, colour, and what sticks out of the face.
@@ -29,18 +31,6 @@ local EYES = { Color3.fromRGB(240, 240, 230), Color3.fromRGB(255, 210, 60), Colo
 
 local function floorY(x: number, z: number): number
 	return if Map.roomAt(x, z) == STAGE.room and z < STAGE.edge then STAGE.rise else 0
-end
-
-local function part(props, parent)
-	local p = Instance.new("Part")
-	p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch = true, false, false, false
-	p.TopSurface, p.BottomSurface = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
-	p.Material = Enum.Material.SmoothPlastic
-	for k, v in props do
-		p[k] = v
-	end
-	p.Parent = parent
-	return p
 end
 
 local function darken(c: Color3, k: number): Color3
@@ -204,15 +194,7 @@ local function buildGuard(folder, name: string)
 		CastShadow = true,
 	}, model)
 	local cap = part({ Size = Units.size(0.32, 0.08, 0.36), Color = Color3.fromHex("#1a2238") }, model)
-	local holder = part({ Transparency = 1, Size = Vector3.one * 0.2 }, model)
-	local torch = Instance.new("SpotLight")
-	torch.Color = Color3.fromRGB(255, 240, 208)
-	torch.Angle = 60
-	torch.Range = math.min(60, 22 * SC)
-	torch.Shadows = true
-	torch.Brightness = 0
-	torch.Face = Enum.NormalId.Front
-	torch.Parent = holder
+	local holder, torch = Make.torch(model)
 	local tag = Instance.new("BillboardGui")
 	tag.Size = UDim2.fromOffset(160, 24)
 	tag.StudsOffset = Vector3.new(0, 0.5 * SC, 0)

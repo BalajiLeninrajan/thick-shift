@@ -18,6 +18,7 @@ local shared = {
 	Util = require("../src/shared/Util"),
 	Units = nil,
 	Text = nil,
+	Make = nil,
 }
 
 local datamodel = roblox.Instance.new("DataModel")
@@ -113,6 +114,7 @@ local function load(path: string)
 end
 shared.Units = load("apps/roblox/src/shared/Units.luau")
 shared.Text = load("apps/roblox/src/shared/Text.luau")
+shared.Make = load("apps/roblox/src/shared/Make.luau")
 local World = load("apps/roblox/src/client/World.luau")
 local Task = load("apps/roblox/src/client/Task.luau")
 local Controller = load("apps/roblox/src/client/Controller.luau")

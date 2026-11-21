@@ -10,6 +10,7 @@ local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Make = require(Shared.Make)
 local Map = require(Shared.Map)
 local Sim = require(Shared.Sim)
 local Text = require(Shared.Text)
@@ -56,20 +57,7 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 	local S = nil
 
 	-- The torch: a SpotLight on an invisible part that rides with the camera.
-	local holder = Instance.new("Part")
-	holder.Name = "Torch"
-	holder.Anchored, holder.CanCollide, holder.CanQuery, holder.CanTouch = true, false, false, false
-	holder.Transparency = 1
-	holder.Size = Vector3.one * 0.2
-	holder.Parent = workspace
-	local torch = Instance.new("SpotLight")
-	torch.Color = Color3.fromRGB(255, 240, 208)
-	torch.Angle = 60
-	torch.Range = math.min(60, 22 * Units.SC)
-	torch.Shadows = true
-	torch.Brightness = 0
-	torch.Face = Enum.NormalId.Front
-	torch.Parent = holder
+	local holder, torch = Make.torch(workspace)
 
 	local function playing()
 		return S and S.phase == "play"

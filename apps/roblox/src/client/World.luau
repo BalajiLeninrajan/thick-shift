@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Data = require(Shared.Data)
+local Make = require(Shared.Make)
 local Map = require(Shared.Map)
 local Sim = require(Shared.Sim)
 local Units = require(Shared.Units)
@@ -69,20 +70,9 @@ local PROP = {
 }
 
 local root: Folder
+-- A part of the building, under props.Parent or the Depot's own folder.
 local function part(props): Part
-	local p = Instance.new("Part")
-	p.Anchored = true
-	p.CanCollide = false
-	p.CanQuery = false
-	p.CanTouch = false
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	p.Material = M.SmoothPlastic
-	for k, v in props do
-		(p :: any)[k] = v
-	end
-	p.Parent = props.Parent or root
-	return p
+	return Make.part(props, props.Parent or root)
 end
 
 -- A box from (x0, y0, z0) to (x1, y1, z1), metres.

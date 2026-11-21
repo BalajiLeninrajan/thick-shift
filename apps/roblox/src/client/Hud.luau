@@ -12,6 +12,8 @@ local Sim = require(Shared.Sim)
 local Text = require(Shared.Text)
 local Util = require(Shared.Util)
 
+local new = require(Shared.Make).new
+
 local HURRY = 15 -- seconds left before a fault burns when its row turns red
 local MAX_TASKS = 6
 local CELLS = 5
@@ -44,14 +46,6 @@ local TOAST = {
 	hide = C.blue,
 }
 
-local function new(class: string, props, parent)
-	local o = Instance.new(class)
-	for k, v in props do
-		o[k] = v
-	end
-	o.Parent = parent
-	return o
-end
 local function label(props, parent)
 	local base = {
 		BackgroundTransparency = 1,

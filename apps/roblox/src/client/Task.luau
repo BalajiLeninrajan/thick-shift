@@ -13,6 +13,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Map = require(Shared.Map)
 local Text = require(Shared.Text)
 
+local new = require(Shared.Make).new
+
 local C = {
 	text = Color3.fromHex("#cdd6f4"),
 	sub = Color3.fromHex("#a6adc8"),
@@ -36,15 +38,6 @@ local function shuffle(list)
 		list[i], list[j] = list[j], list[i]
 	end
 	return list
-end
-
-local function new(class: string, props, parent)
-	local o = Instance.new(class)
-	for k, v in props do
-		o[k] = v
-	end
-	o.Parent = parent
-	return o
 end
 
 local Task = {}

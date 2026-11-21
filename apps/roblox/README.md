@@ -11,6 +11,7 @@ src/shared/            ReplicatedStorage.Shared: what both sides need
   Map.luau             packages/sim/src/map.ts: walking, sight lines, routes, walls and floors
   Sim.luau             packages/sim/src/sim.ts: the night. The server owns one
   Units.luau           metres to studs (3 to a metre) and yaw to CFrame
+  Make.luau            builders the client modules share: an instance from a table, a plain part, a torch
   Util.luau, Text.luau
 src/server/Main.server.luau   steps the sim ten times a second and sends every client the state
 src/client/            StarterPlayerScripts.Client
