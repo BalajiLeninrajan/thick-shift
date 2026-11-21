@@ -191,7 +191,7 @@ export interface NightState extends LobbyState {
   waveAt: number; // S.t when the mascots next stir or settle
   faults: (Fault | null)[]; // one per breaker box (BOXES)
   tally: Tally; // this night's
-  total: Tally | null; // the whole run's; null only between restartFloor and the night it starts
+  total: Tally; // the whole run's
   batN: number; // the night's batteries, lying about or due back
   bats: number[]; // the BATTERY_SPOTS that have one lying there
   toys: Toy[];
@@ -210,8 +210,7 @@ export interface Reach {
   z: number;
   t: number;
 }
-// What one mascot is thinking. It is never sent. Browsers get the result (m.st, m.x, m.z, m.yaw). since, was and
-// noShort are added the first time they are needed, after the rest, so a brain's keys keep today's order.
+// What one mascot is thinking. It is never sent. Browsers get the result (m.st, m.x, m.z, m.yaw).
 export interface Brain {
   path: Point[];
   repath: number;
@@ -235,11 +234,11 @@ export interface Brain {
   knows: number; // the locker it saw a guard step into, or -1
   sniff: number;
   checks: number[]; // the lockers it means to look in
-  since?: number;
-  was?: MascotState;
-  noShort?: number;
-  near?: number | undefined; // how close it has come to where it last saw its guard since it lost them
-  nearAt?: number; // and when it last got closer
+  since: number; // S.t when it took up what it is doing now
+  was: MascotState | null; // what that is, as of its last think; null before the first
+  noShort: number; // S.t before which it will not cut straight across to its guard again
+  near: number; // how close it has come to where it last saw its guard since it lost them
+  nearAt: number; // and when it last got closer
 }
 
 /* ---------- the wire ---------- */

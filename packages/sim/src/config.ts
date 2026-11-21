@@ -21,6 +21,11 @@ export const MASC: PerMascot<MascotKind> = [
   { k: 'toad', name: 'Squish', col: '#5f8f66' },
   { k: 'rhino', name: 'Stompy', col: '#7d8299' },
 ];
+// The cast by name, for the code that treats one of them differently.
+export const BIGGS = 0,
+  FLAN = 1,
+  SQUISH = 2,
+  STOMPY = 3;
 // Every MascotIndex in order, to walk the cast or build a table per mascot with MASCOTS.map(i => ...), where i is
 // a MascotIndex rather than the plain number MASC.map would give.
 export const MASCOTS: PerMascot<MascotIndex> = [0, 1, 2, 3];

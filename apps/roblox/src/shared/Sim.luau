@@ -262,11 +262,11 @@ local function newBrain(timer: number)
 		knows = -1,
 		sniff = 0,
 		checks = {},
-		was = nil,
 		since = 0,
-		noShort = nil,
-		near = nil,
-		nearAt = nil,
+		was = nil,
+		noShort = 0,
+		near = math.huge,
+		nearAt = 0,
 	}
 end
 
@@ -384,7 +384,7 @@ end
 
 function Sim:restart()
 	local S = self.S
-	S.deaths, S.total = 0, nil
+	S.deaths, S.total = 0, newTally()
 	self:startNight(1)
 end
 
@@ -698,7 +698,7 @@ function Sim:goTo(m, b, goal, speed: number, dt: number, eager: boolean): string
 			and #r.path > 1
 			and not r.blocked
 			and dist(m, goal) < 4
-			and not (b.noShort and b.noShort > S.t)
+			and b.noShort <= S.t
 			and clear(m.x, m.z, goal.x, goal.z, PLAYER_R, S.doors)
 		then
 			b.path = { goal }
@@ -789,7 +789,7 @@ function Sim:spot(m, b, p)
 	b.tgt = p.id
 	b.last = { x = p.x, z = p.z }
 	b.lost = 0
-	b.near = nil
+	b.near = math.huge
 end
 
 function Sim:openLockers(m, b, dt: number): boolean
@@ -1092,14 +1092,14 @@ function Sim:runMascot(m, b, dt: number)
 			b.lost = 0
 		elseif tp and not tp.flat and not hidden(tp) and b.lost < keeps then
 			b.last = { x = tp.x, z = tp.z }
-			b.near = nil
+			b.near = math.huge
 		end
 		local d = dist(m, b.last)
-		if b.near == nil or d < b.near - 0.3 then
+		if d < b.near - 0.3 then
 			b.near = d
 			b.nearAt = S.t
 		end
-		if not tp or tp.flat or S.t - (b.nearAt or S.t) > NEAREST then
+		if not tp or tp.flat or S.t - b.nearAt > NEAREST then
 			m.st = "search"
 			b.timer = self:rnd(4, 7)
 		end
