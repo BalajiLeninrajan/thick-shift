@@ -32,15 +32,14 @@ const TORCH_LIGHTS = 2,
 const nearest = (a: Guard, b: Guard): number => a.dist - b.dist;
 
 // What the actors are drawn for, set once a frame in sync(). x, y, z: the camera. id: the guard watching. flat: they
-// are on the floor. torch: their beam is on. watch: the guard a flat guard is watching through. third: they watch
-// from behind (prefs.third). frustum: what this screen shows, so a mascot only changes model off it.
+// are on the floor. watch: the guard a flat guard is watching through. third: they watch from behind (prefs.third).
+// frustum: what this screen shows, so a mascot only changes model off it.
 export interface View {
   x: number;
   y: number;
   z: number;
   id: string;
   flat: boolean;
-  torch: boolean;
   watch: string | null;
   third: boolean;
   frustum: THREE.Frustum;
@@ -52,7 +51,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     scare = createScare(camera, renderer.domElement),
     hands = createHands(camera),
     plush = createPlush(scene);
-  const view: View = { x: 0, y: 0, z: 0, id: '', flat: false, torch: false, watch: null, third: false, frustum: new THREE.Frustum() },
+  const view: View = { x: 0, y: 0, z: 0, id: '', flat: false, watch: null, third: false, frustum: new THREE.Frustum() },
     viewProj = new THREE.Matrix4();
   let lights: THREE.SpotLight[] | null = null; // made when the first other guard turns up, so a guard alone pays for none
   const lit: Guard[] = [],
@@ -122,7 +121,6 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
       view.z = camera.position.z;
       view.id = game.myId;
       view.flat = me.flat;
-      view.torch = me.on;
       view.watch = me.watch;
       view.third = prefs.third;
       for (const m of S.m) mascots[m.i].sync(m, S, dt, view);
