@@ -87,7 +87,6 @@ export class Room extends DurableObject<RoomEnv> {
     if (S.phase === 'play') adoptFloor(sim, S, now);
     for (const ws of this.open()) this.enter(att(ws).id);
     if (this.open().length) this.run();
-    else void this.ctx.storage.setAlarm(now + FORGET_MS);
   }
 
   open(): WebSocket[] {
@@ -149,7 +148,9 @@ export class Room extends DurableObject<RoomEnv> {
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ id } satisfies Attachment);
     this.enter(id);
-    void this.ctx.storage.deleteAlarm();
+    // The alarm stays set for as long as the room has a night, so it also fires for one whose instance died.
+    this.ctx.storage.kv.delete('empty');
+    void this.ctx.storage.setAlarm(Date.now() + FORGET_MS);
     this.changed();
     if (this.night.S.phase === 'play') this.run();
     return new Response(null, { status: 101, webSocket: client });
@@ -202,9 +203,15 @@ export class Room extends DurableObject<RoomEnv> {
     void this.ctx.storage.setAlarm(Date.now() + FORGET_MS);
   }
 
-  // Still nobody here: let the night go.
+  // Nobody here on two looks in a row: let the night go. The second look, GRACE_MS on, is for a room restarted a
+  // moment before the first, whose pages are still on their way back.
   async alarm(): Promise<void> {
-    if (this.open().length) return;
+    const empty = !this.open().length;
+    if (!empty || !this.ctx.storage.kv.get('empty')) {
+      this.ctx.storage.kv.put('empty', empty);
+      await this.ctx.storage.setAlarm(Date.now() + (empty ? GRACE_MS : FORGET_MS));
+      return;
+    }
     this.stop();
     this.night = null;
     this.away.clear();
