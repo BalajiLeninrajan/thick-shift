@@ -13,8 +13,9 @@ import * as THREE from 'three';
 import type { Me } from '../types';
 import { canvas } from './world/tex';
 
-export const MAP_W = 288,
+const MAP_W = 288,
   MAP_H = 224; // canvas pixels: the 4:3-ish shape of the phone's glass
+const PLAN = { w: 42, h: 44 }; // metres: the building, from the origin (ROOMS3 in the sim's map.ts)
 const NEAR = 11; // pixels per metre close up: 26 metres across
 const EVERY = 125; // milliseconds between redraws
 const INK = {
@@ -61,7 +62,7 @@ export function createMinimap() {
     // Doorways cut through the walls; a shut booth door is a red bar across its gap.
     for (const d of DOORWAYS) {
       const [x0, z0, x1, z1] = d.rect,
-        shut = d.key && S.doors?.[d.key],
+        shut = d.key && S.doors[d.key],
         g = 2 * px;
       c.fillStyle = shut ? INK.shut : INK.room;
       if (d.axis === 'x') c.fillRect(x0 - g, z0, x1 - x0 + g * 2, z1 - z0);
@@ -81,7 +82,7 @@ export function createMinimap() {
     }
     // Mascots off their marks: a blip with a ring that grows.
     const ring = (t % 900) / 900;
-    for (const m of S.m || [])
+    for (const m of S.m)
       if (m.st !== 'rest') {
         dot(m.x, m.z, 5 * px, INK.mascot);
         c.strokeStyle = INK.mascot;
@@ -93,7 +94,7 @@ export function createMinimap() {
         c.globalAlpha = 1;
       }
     // The other guards, and a cross for the flat ones.
-    for (const p of S.players || []) {
+    for (const p of S.players) {
       if (!isPlaced(p) || p.id === myId) continue;
       if (!p.flat) {
         box(p.x, p.z, 4 * px, INK.mate);
@@ -140,8 +141,8 @@ export function createMinimap() {
       const top = 26; // the status line
       c.save();
       if (zoom) {
-        const k = Math.min(MAP_W / 43, (MAP_H - top - 4) / 45),
-          ox = (MAP_W - 42 * k) / 2,
+        const k = Math.min(MAP_W / (PLAN.w + 1), (MAP_H - top - 4) / (PLAN.h + 1)),
+          ox = (MAP_W - PLAN.w * k) / 2,
           oy = top + 2;
         c.translate(ox, oy);
         c.scale(k, k);

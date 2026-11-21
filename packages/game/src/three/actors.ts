@@ -33,7 +33,7 @@ const nearest = (a: Guard, b: Guard): number => a.dist - b.dist;
 
 // What the actors are drawn for, set once a frame in sync(). x, y, z: the camera. id: the guard watching. flat: they
 // are on the floor. torch: their beam is on. watch: the guard a flat guard is watching through. third: they watch
-// from behind (prefs.third), set with the rest in sync(). frustum: what this screen shows.
+// from behind (prefs.third). frustum: what this screen shows, so a mascot only changes model off it.
 export interface View {
   x: number;
   y: number;
@@ -42,8 +42,8 @@ export interface View {
   flat: boolean;
   torch: boolean;
   watch: string | null;
+  third: boolean;
   frustum: THREE.Frustum;
-  third?: boolean;
 }
 
 export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) {
@@ -52,12 +52,16 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     scare = createScare(camera, renderer.domElement),
     hands = createHands(camera),
     plush = createPlush(scene);
-  // watch: the guard a flat guard is watching through. frustum: what this screen shows, so a mascot only changes model off it.
-  const view: View = { x: 0, y: 0, z: 0, id: '', flat: false, torch: false, watch: null, frustum: new THREE.Frustum() },
+  const view: View = { x: 0, y: 0, z: 0, id: '', flat: false, torch: false, watch: null, third: false, frustum: new THREE.Frustum() },
     viewProj = new THREE.Matrix4();
   let lights: THREE.SpotLight[] | null = null; // made when the first other guard turns up, so a guard alone pays for none
   const lit: Guard[] = [],
     list: Guard[] = []; // list: the guards in the scene, as an array to walk without garbage
+  // list is always guards.values() in order, so it is made again whenever guards changes.
+  function relist(): void {
+    list.length = 0;
+    list.push(...guards.values());
+  }
 
   function lendLights(): void {
     lights ||= Array.from({ length: TORCH_LIGHTS }, () => {
@@ -130,13 +134,12 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
           g?.dispose(scene);
           g = new Guard(scene, p);
           guards.set(p.id, g);
-          list.length = 0;
-          list.push(...guards.values());
+          relist();
         }
         g.here = true;
         g.sync(p, S, dt, view);
       }
-      // Gone from S.players: list is always guards.values() in order, so it is made again from what is left.
+      // Gone from S.players.
       let gone = false;
       for (const g of list)
         if (!g.here) {
@@ -144,10 +147,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
           guards.delete(g.id);
           gone = true;
         }
-      if (gone) {
-        list.length = 0;
-        list.push(...guards.values());
-      }
+      if (gone) relist();
       if (guards.size || lights) lendLights();
       plush.sync(S, view);
       scare.update(me, dt, torch);
