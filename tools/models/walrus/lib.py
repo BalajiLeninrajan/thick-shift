@@ -31,6 +31,14 @@ def mesh_obj(name, verts, faces):
     return o
 
 
+def fix_normals(o):
+    """Turn every face of a closed mesh to point outward."""
+    bm = bmesh.new(); bm.from_mesh(o.data)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(o.data); bm.free()
+    return o
+
+
 def from_bm(bm, name='m'):
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     me = bpy.data.meshes.new(name)
@@ -72,11 +80,7 @@ def tube(pts, radii, sides=8, flat=1.0):
             faces.append((a, b2, b2 + sides, a + sides))
     faces.append(tuple(range(sides))[::-1])
     faces.append(tuple(range((len(pts) - 1) * sides, len(pts) * sides)))
-    o = mesh_obj('tube', verts, faces)
-    bm = bmesh.new(); bm.from_mesh(o.data)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    bm.to_mesh(o.data); bm.free()
-    return o
+    return fix_normals(mesh_obj('tube', verts, faces))
 
 
 def curve_pts(ctrl, n):

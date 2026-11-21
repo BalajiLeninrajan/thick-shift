@@ -8,14 +8,15 @@
 # a key of the stage's FOCUS table below (face, hips, ...). `--only` skips
 # the build and renders the GLB already on disk; with `--json` as well it also
 # rewrites this stage's entry in walrus.json from that GLB. `--pose` writes a second,
-# throwaway GLB with the joints turned, to check that no seam opens.
+# throwaway GLB with the joints turned, to check that no seam opens, and
+# deletes it once the previews are rendered.
 #
 # Stage 0 is the costume as built, 1 is the costume going wrong, 2 is what is
 # underneath. Stages 0 and 1 stand on enormous hips, the rear wider than tall,
 # which is the joke of the game. Stage 2 drops the joke on purpose: a starved
 # frame with small hips under a narrow drape, so the long neck and the four
 # harvestman legs make the silhouette.
-import sys, os, json, math
+import bpy, bmesh, sys, os, json, math
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE); sys.path.insert(0, os.path.dirname(HERE))
 from common import *
@@ -61,7 +62,7 @@ def fur(src, n, seed, width=.02, **kw):
 
 
 parts = {}   # name -> dict(parent, pivot, tex=[], fib=[], glow=[])
-def P(name, parent, pivot):
+def add_part(name, parent, pivot):
     parts[name] = dict(parent=parent, pivot=V(pivot), tex=[], fib=[], glow=[])
     return parts[name]
 
@@ -131,8 +132,7 @@ def make_drape():
         for i in range(nth):
             a, b = j * nth + i, j * nth + (i + 1) % nth
             faces.append((a, b, b + nth, a + nth))
-    o = mesh_obj('drape', verts, faces)
-    bm = bmesh.new(); bm.from_mesh(o.data); bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(o.data); bm.free()
+    o = fix_normals(mesh_obj('drape', verts, faces))
     mod(o, 'SOLIDIFY', thickness=.014, offset=-1)
     displace(o, [(.014, 8, .3), (.005, 26, .3)], 31)
     smooth_shade(o)
@@ -179,7 +179,7 @@ def hip_forms():
 
 
 def make_body():
-    body = P('body', 'root', PELVIS)
+    body = add_part('body', 'root', PELVIS)
     f = hip_forms()
     if ST == 0:
         f += [ell((0, -.02, 1.5), (.52, .45, .5)), ell((0, -.22, 1.3), (.46, .38, .42)), ell((0, 0, 1.8), (.42, .36, .24))]
@@ -295,7 +295,7 @@ def make_legs():
             th_f = [ell(H, .1), tube([H, K], [.085, .055], 10), ell(K, .075)]
             sh_f = [ell(K, .072), tube([K, A], [.05, .035], 10), ell(A, .045), ell((sx * .19, -.08, .045), (.065, .15, .045))]
             vox = (.009, .008)
-        leg = P('leg_' + side, 'body', H); shin = P('shin_' + side, 'leg_' + side, K)
+        leg = add_part('leg_' + side, 'body', H); shin = add_part('shin_' + side, 'leg_' + side, K)
         o = sculpt(th_f, vox[0], 5, [(.01 if ST < 2 else .005, 9, .5)], 3)
         s = sculpt(sh_f, vox[1], 5, [(.008 if ST < 2 else .004, 10, .5)], 4)
         def fn(Pt, N):
@@ -320,7 +320,7 @@ def make_arms():
     for sx, side in ((1, 'L'), (-1, 'R')):
         if ST == 0: S, E, W, k = V((sx * .47, 0, 1.72)), V((sx * .7, -.04, 1.38)), V((sx * .74, -.16, 1.08)), 1
         else:       S, E, W, k = V((sx * .37, 0, 1.68)), V((sx * .56, -.02, 1.3)), V((sx * .6, -.1, .96)), .78   # thinner, hanging
-        arm = P('arm_' + side, 'body', S); fore = P('forearm_' + side, 'arm_' + side, E)
+        arm = add_part('arm_' + side, 'body', S); fore = add_part('forearm_' + side, 'arm_' + side, E)
         o = sculpt([ell(S, .18 * k), tube([S, E], [.165 * k, .135 * k], 12), ell(E, .135 * k)], .013, 5, [(.008, 10, .5)], 5)
         f = sculpt([ell(E, .13 * k), tube([E, W], [.13 * k, .1 * k], 12),
                     ell(W + V((0, -.03, -.1)), (.065 * k, .15, .2))], .012, 5, [(.006, 11, .5)], 6)
@@ -334,7 +334,7 @@ def make_arms():
 
 
 def make_neck():
-    neck = P('neck', 'body', NECK_PIVOT)
+    neck = add_part('neck', 'body', NECK_PIVOT)
     if ST == 1:   # the costume neck pulled out of the collar, rings of slack fur
         o = sculpt([ell(NECK_PIVOT, (.2, .19, .12)), tube([NECK_PIVOT, HEAD_PIVOT + V((0, 0, .05))], [.19, .165], 14)], .012, 4, [(.006, 12, .6)], 7)
         ringf, amp, pile = 60, .012, P_FUR
@@ -380,9 +380,7 @@ def block(x0, x1, y0, y1, zf, zb, nx=16):
         a, b = 4 * i, 4 * i + 4
         faces += [(a, a + 1, b + 1, b), (a + 2, b + 2, b + 3, a + 3), (a, b, b + 2, a + 2), (a + 1, a + 3, b + 3, b + 1)]
     faces += [(0, 2, 3, 1), (4 * nx, 4 * nx + 1, 4 * nx + 3, 4 * nx + 2)]
-    o = mesh_obj('block', verts, faces)
-    bm = bmesh.new(); bm.from_mesh(o.data); bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(o.data); bm.free()
-    return o
+    return fix_normals(mesh_obj('block', verts, faces))
 
 
 def tooth(c, w, h, t, rng, lower=False):
@@ -427,7 +425,7 @@ def cap(c, look, R, rad, rings=6, seg=20):
 
 def make_head(collide):
     s = HEAD_S
-    head = P('head', 'neck' if ST else 'body', HEAD_PIVOT)
+    head = add_part('head', 'neck' if ST else 'body', HEAD_PIVOT)
     R = np.array([.36, .34, .33]) * s
     f = [ell(HEAD_C, R), ell(hd(0, -.2, -.2), np.array([.2, .16, .12]) * s)]
     for sx in (-1, 1):
@@ -462,7 +460,7 @@ def make_head(collide):
             cav = ell(hd(0, -.15, -.2), np.array(cav_r) * s)
             boolean(o, cav, 'DIFFERENCE'); bpy.data.objects.remove(cav)
         bpy.data.objects.remove(bj); bpy.data.objects.remove(bh)
-        jaw = P('jaw', 'head', (0, yh, z0 + .03 * s))
+        jaw = add_part('jaw', 'head', (0, yh, z0 + .03 * s))
 
     pad_c = [np.array(hd(sx * .125, -.3, -.09)) for sx in (-1, 1)]
     def fn(o):
@@ -601,7 +599,7 @@ def make_head(collide):
 
     # eyes
     for side, (c, r) in eyes.items():
-        eye = P('eye_' + side, 'head', c)
+        eye = add_part('eye_' + side, 'head', c)
         if ST < 2:
             # googly: a white plastic ball in a black rim, and a pupil that sits proud of it
             head['tex'].append(tint(ell(c + V((0, .035, 0)), (r * 1.22, r * .7, r * 1.22), seg=16), INK, P_PLASTIC))
@@ -664,7 +662,7 @@ def make_head(collide):
 
     if ST == 1:   # out of the mouth
         for k, side in enumerate((1, -1)):
-            sw = P('sway_%d' % (k + 1), 'head', hd(side * .08, -.36, -.2))
+            sw = add_part('sway_%d' % (k + 1), 'head', hd(side * .08, -.36, -.2))
             for i in range(4):
                 x = side * (.02 + .045 * i)
                 h = hit(tree, (x, -3, z0 + gap * .4), (0, 1, 0))
@@ -677,7 +675,7 @@ def make_head(collide):
         for k, (a0, a1) in enumerate(groups):
             mid = math.radians((a0 + a1) / 2)
             mouth = k == 5
-            sw = P('sway_%d' % (k + 1), 'head', hd(0, -.36, -.2) if mouth else HEAD_C + V((.2 * math.sin(mid), -.2 * math.cos(mid), -.08)))
+            sw = add_part('sway_%d' % (k + 1), 'head', hd(0, -.36, -.2) if mouth else HEAD_C + V((.2 * math.sin(mid), -.2 * math.cos(mid), -.08)))
             for i in range(5 if mouth else 6):
                 a = math.radians(a0 + (a1 - a0) * (i + .5) / (5 if mouth else 6))
                 if mouth:
@@ -699,7 +697,7 @@ def make_extras():
         for j in range(3):
             name = 'extra_%d' % n if j == 0 else 'extra_%d_%d' % (n, j + 1)
             parent = 'body' if j == 0 else ('extra_%d' % n if j == 1 else 'extra_%d_%d' % (n, j))
-            pt = P(name, parent, pts[j])
+            pt = add_part(name, parent, pts[j])
             a, b = pts[j], pts[j + 1]
             d = (b - a)
             r0, r1 = [.036, .028, .022][j], [.028, .022, .006][j]
@@ -797,35 +795,39 @@ def write_json(info):
         'radius': round(max(abs(lo[0]), abs(hi[0]), abs(lo[1]), abs(hi[1])), 2),
         'face': [0, round(HEAD_C.z - .03, 2), round(-(HEAD_C.y - .33 * HEAD_S), 2)],   # three.js axes
         'floats': False, 'footprint': foot, 'nodes': info['nodes'], 'notes': notes(round(hi[2], 2), foot)}
-    json.dump(data, open(path, 'w'), indent=1)
+    with open(path, 'w') as f: json.dump(data, f, indent=1)
 
 
 POSE = {'head': (25, 30, 10), 'neck': (20, 0, 15), 'jaw': ([0, 40, 75][ST], 0, 0), 'arm_L': (-40, 0, 0), 'arm_R': (35, 0, 30), 'forearm_L': (-40, 0, 0),
         'leg_L': (-35, 0, 0), 'shin_L': (40, 0, 0), 'leg_R': (30, 0, 0), 'extra_1': (0, 0, 35), 'extra_1_2': (0, 35, 0), 'extra_2_2': (30, 0, 0),
         'extra_4': (0, 0, -30), 'extra_4_3': (0, -35, 0), 'sway_1': (10, 0, 0), 'eye_L': (0, 0, 35), 'eye_R': (20, 0, -35)}
 
-name = 'walrus_%d' % ST
-if '--only' not in ARGS:
-    reset()
-    collide = make_body(); lap('body')
-    make_legs(); lap('legs')
-    if ST < 2: make_arms()
-    if ST: make_neck()
-    if ST == 2:
-        make_extras()
-        parts['body']['tex'] = [join(parts['body']['tex'])]
-        collide = bvh(parts['body']['tex'][0])   # body and drape as one, for the hair to lie on
-    make_head(collide); lap('head')
-    if '--pose' in ARGS:
-        name += '_pose'
-        assemble(name, POSE)
-    else:
-        assemble(name)
+if __name__ == '__main__':
+    name = 'walrus_%d' % ST
+    if '--only' not in ARGS:
+        reset()
+        collide = make_body(); lap('body')
+        make_legs(); lap('legs')
+        if ST < 2: make_arms()
+        if ST: make_neck()
+        if ST == 2:
+            make_extras()
+            parts['body']['tex'] = [join(parts['body']['tex'])]
+            collide = bvh(parts['body']['tex'][0])   # body and drape as one, for the hair to lie on
+        make_head(collide); lap('head')
+        if '--pose' in ARGS:
+            name += '_pose'
+            assemble(name, POSE)
+        else:
+            assemble(name)
+            write_json(report(name))
+    elif '--json' in ARGS:
         write_json(report(name))
-elif '--json' in ARGS:
-    write_json(report(name))
-for spec in ARGS[1:]:
-    if spec.startswith('--'): continue
-    v, light, focus = (spec.split(':') + ['', ''])[:3]
-    light = light or 'flashlight'
-    preview(name, views=(v,), res=560, samples=20, light=light, focus=FOCUS.get(focus), tag=('_' + focus if focus else '') + ('_studio' if light == 'studio' else '') + ('_pose' if '--pose' in ARGS else ''))
+    try:
+        for spec in ARGS[1:]:
+            if spec.startswith('--'): continue
+            v, light, focus = (spec.split(':') + ['', ''])[:3]
+            light = light or 'flashlight'
+            preview(name, views=(v,), res=560, samples=20, light=light, focus=FOCUS.get(focus), tag=('_' + focus if focus else '') + ('_studio' if light == 'studio' else '') + ('_pose' if '--pose' in ARGS else ''))
+    finally:
+        if name.endswith('_pose'): os.remove(os.path.join(MODELS, name + '.glb'))
