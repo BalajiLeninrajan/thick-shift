@@ -1,6 +1,6 @@
 // Shapes that cross from one part of the client to another: the overlay screens, this guard as player.ts keeps it,
-// what it can reach, the look settings, the parts of the building outline.ts edges, and the handles app.ts builds
-// the frame from. Types only: nothing here exists at runtime. The state that goes over the wire (S, its guards and
+// what it can reach, the look settings, the parts of the building outline.ts edges, and the handles other modules
+// take. Types only: nothing here exists at runtime. The state that goes over the wire (S, its guards and
 // mascots, events, actions) is in @thick-shift/sim/types.
 //
 // A handle (what a create...() function returns) is typed from the function itself, so it follows the code as it
@@ -9,17 +9,8 @@
 import type { DoorKey, EventType, GuardAct, Point, SimEvent } from '@thick-shift/sim/types';
 import type { Object3D } from 'three';
 import type { createActors } from './three/actors';
-import type { createPhone } from './three/actors/phone';
-import type { createHud } from './three/hud';
-import type { createMinimap } from './three/minimap';
-import type { createOutlines } from './three/outline';
 import type { createPlayer } from './three/player';
-import type { createPost } from './three/post';
-import type { createSlats } from './three/slats';
-import type { createSound } from './three/sound';
 import type { createTask } from './three/task';
-import type { createTouch } from './three/touch';
-import type { buildWorld } from './three/world';
 
 /* ---------- the overlay (ui.ts, and an app's platform hooks in state.ts) ---------- */
 
@@ -115,19 +106,8 @@ export interface OutlineMark {
 // One event from S.evs, narrowed to its type: EventOf<'flat'>['x'] is { id, by, x, z }.
 export type EventOf<K extends EventType> = Extract<SimEvent, { type: K }>;
 
-// three/app.ts, which main.ts imports the first time a night is drawn, and what its frame() returns.
+// three/app.ts, which main.ts imports the first time a night is drawn.
 export type FloorModule = typeof import('./three/app');
-export type App = ReturnType<FloorModule['frame']>;
-
-export type World = ReturnType<typeof buildWorld>;
 export type Actors = ReturnType<typeof createActors>;
 export type PlayerHandle = ReturnType<typeof createPlayer>;
-export type Hud = ReturnType<typeof createHud>;
 export type Task = ReturnType<typeof createTask>;
-export type Touch = ReturnType<typeof createTouch>;
-export type Sound = ReturnType<typeof createSound>;
-export type Post = ReturnType<typeof createPost>;
-export type Phone = ReturnType<typeof createPhone>;
-export type Slats = ReturnType<typeof createSlats>;
-export type Outlines = ReturnType<typeof createOutlines>;
-export type Minimap = ReturnType<typeof createMinimap>;
