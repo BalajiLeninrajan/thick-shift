@@ -501,7 +501,6 @@ export function bang(): void {
 export function win(): void {
   for (const [i, f] of [523, 659, 784, 1047].entries()) tone(f, 0.5, 'triangle', 0.2, { at: i * 0.16 });
 }
-export const SFX = { win };
 
 /* ---------- ambience ---------- */
 

@@ -2,7 +2,7 @@
 
 import { dreadF } from '@thick-shift/sim';
 import type { State } from '@thick-shift/sim/types';
-import { ambience, SFX } from './audio';
+import { ambience, win } from './audio';
 import { CATCH_S, client, game, LINGER_S } from './state';
 import type { FloorModule } from './types';
 import { syncOverlay } from './ui';
@@ -18,7 +18,7 @@ function reactToEvents(S: State): void {
   for (const e of S.evs) {
     if (e.id <= lastEv) continue;
     lastEv = e.id;
-    if (e.type === 'win') SFX.win();
+    if (e.type === 'win') win();
     if (e.type === 'scare') client.holdUntil = performance.now() + (CATCH_S + LINGER_S) * 1000;
   }
 }
