@@ -36,7 +36,7 @@
 // faults a guard alone is near that and crews fall faster from night 3 (see the
 // README's "Balance on the floor").
 import { assert, defined, isNonEmpty, isPlaced } from './check.ts';
-import { BIGGS, DOORS, FINAL_NIGHT, FLAN, MASC, MASCOTS, SQUISH, STOMPY } from './config.ts';
+import { BIGGS, DEFAULT_NAME, DOORS, FINAL_NIGHT, FLAN, MASC, MASCOTS, NAME_MAX, SQUISH, STOMPY } from './config.ts';
 import {
   angDiff,
   BATTERY_SPOTS,
@@ -1217,7 +1217,7 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
     p = sim.players[pid];
   if (!p) return;
   if (a.t === 'name') {
-    p.name = String(a.n || 'Guard').slice(0, 12);
+    p.name = String(a.n || DEFAULT_NAME).slice(0, NAME_MAX);
     return;
   }
   if (S.phase !== 'play' || !isPlaced(p)) return;

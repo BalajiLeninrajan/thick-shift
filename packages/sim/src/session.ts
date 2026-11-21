@@ -3,7 +3,7 @@
 // message is someone else's JSON, so like actFloor this checks every field it reads.
 
 import { isPlaced } from './check.ts';
-import { FINAL_NIGHT } from './config.ts';
+import { DEFAULT_NAME, FINAL_NIGHT } from './config.ts';
 import { REST } from './map.ts';
 import { actFloor, F, hourF, restartFloor, type Sim, startFloorNight } from './sim.ts';
 import type { Command, Dev, DevCommand, DevDo, Player, State } from './types.ts';
@@ -14,7 +14,7 @@ export const DEV_OFF: Dev = { god: false, power: false, freeze: false, wake: fal
 // A guard comes into the room. One coming back keeps their record, and with it their place on the floor: was, or the
 // one S still has. Anyone else gets placed by the next step (stepFloor).
 export function joinFloor(sim: Sim, S: State, id: string, was?: Player): void {
-  if (!Object.hasOwn(sim.players, id)) sim.players[id] = was ?? S.players.find(p => p.id === id) ?? { id, name: 'Guard' };
+  if (!Object.hasOwn(sim.players, id)) sim.players[id] = was ?? S.players.find(p => p.id === id) ?? { id, name: DEFAULT_NAME };
   S.players = Object.values(sim.players);
 }
 

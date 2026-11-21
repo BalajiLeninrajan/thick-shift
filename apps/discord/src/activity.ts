@@ -10,7 +10,7 @@ import { byId, errorText } from '@thick-shift/game/dom';
 import { host } from '@thick-shift/game/net';
 import { game, platform } from '@thick-shift/game/state';
 import type { Invite, OverlayScreen } from '@thick-shift/game/types';
-import { card, esc, messageScreen } from '@thick-shift/game/ui';
+import { card, esc, guardName, INTRO, messageScreen } from '@thick-shift/game/ui';
 
 let sdk: DiscordSDK | null = null;
 const discord = { room: '', name: '' }; // both '' until Discord answers
@@ -45,21 +45,18 @@ async function signIn(ds: DiscordSDK, clientId: string): Promise<string> {
 // The room and the name come from Discord. The button is still needed, since sound can only start from a click.
 function titleScreen(): OverlayScreen {
   if (!discord.room) return messageScreen('discord', 'Connecting to Discord…', '', false);
-  const name = discord.name.slice(0, 12);
+  const name = discord.name && guardName(discord.name); // as the room will show it, or '' if Discord gave none
   return {
     key: 'discord-title',
     html: card(
-      `
-      <h1 class="ts-logo">Thick Shift 3D</h1>
-      <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
-      <p class="cn-meta cn-m-0">Keep the power on until 6 AM. The retired mascots are enormous, and at night they wander.</p>
+      `${INTRO}
       <p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel works the same night.</p>`,
       `<button class="btn btn-primary" id="hb">Clock in${name ? ` as ${esc(name)}` : ''}</button>`
     ),
     wire() {
       byId('hb').onclick = () => {
         unlockAudio();
-        game.myName = name || 'Guard';
+        game.myName = guardName(name);
         host(discord.room);
       };
     },

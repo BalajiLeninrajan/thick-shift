@@ -8,6 +8,10 @@ export const DOORS: readonly DoorKey[] = ['L', 'V', 'R']; // the booth's three w
 // (Guard.sp), so each client spends the breath itself, and so do the balance harness's guards.
 export const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 };
 
+// A guard's name: what one who gave none is called, and the most characters the sim keeps of one.
+export const DEFAULT_NAME = 'Guard',
+  NAME_MAX = 12;
+
 // The cast's model names, one per MascotKind.k.
 export type MascotKey = 'hippo' | 'walrus' | 'toad' | 'rhino';
 // One of the cast. k names the model files (packages/game/public/models/<k>_*.glb) and the tuning in

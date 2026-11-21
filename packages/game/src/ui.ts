@@ -3,7 +3,7 @@
 
 import { clockF } from '@thick-shift/sim';
 import { defined } from '@thick-shift/sim/check';
-import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
+import { DEFAULT_NAME, FINAL_NIGHT, MASC, NAME_MAX } from '@thick-shift/sim/config';
 import type { State, Tally } from '@thick-shift/sim/types';
 import { unlockAudio } from './audio';
 import { byId } from './dom';
@@ -22,6 +22,14 @@ const netBanner = (): string => (game.netNote ? `<div class="banner cn-tone-warn
 // Anyone in the room can start the next night. Whoever runs it acts on the first press (goFloor).
 const goButton = (label: string): string => `<button class="btn btn-primary" id="go">${label}</button>`;
 
+// The name a guard plays under, as the sim will keep it: Guard for none, and no longer than NAME_MAX.
+export const guardName = (name: string): string => (name || DEFAULT_NAME).slice(0, NAME_MAX);
+// What the title screen opens with, here and in an app's own (platform.title).
+export const INTRO = `
+      <h1 class="ts-logo">Thick Shift 3D</h1>
+      <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
+      <p class="cn-meta cn-m-0">Keep the power on until 6 AM. The retired mascots are enormous, and at night they wander.</p>`;
+
 /* ---------- screens ---------- */
 // Each returns { key, html, wire }. The overlay only re-renders when key changes. An app can swap in its own title
 // screen and lobby invite through platform (state.ts), built from the exported helpers here.
@@ -36,19 +44,15 @@ function titleScreen(): OverlayScreen {
   return {
     key: 'title',
     html: card(
-      `
-      <h1 class="ts-logo">Thick Shift 3D</h1>
-      <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
-      <p class="cn-meta cn-m-0">Keep the power on until 6 AM. The retired mascots are enormous, and at night they wander.</p>
-      <div class="field"><label for="nm">Your name</label><input id="nm" maxlength="12" placeholder="Guard" value="${esc(savedName)}"></div>
+      `${INTRO}
+      <div class="field"><label for="nm">Your name</label><input id="nm" maxlength="${NAME_MAX}" placeholder="${DEFAULT_NAME}" value="${esc(savedName)}"></div>
       <div class="field"><label for="rc">Room code</label><input id="rc" maxlength="4" placeholder="To join a friend" autocapitalize="characters" value="${esc((q.get('room') || '').slice(0, 4))}"></div>`,
       '<button class="btn btn-primary" id="hb">Host a night</button><button class="btn btn-secondary" id="jb">Join room</button>'
     ),
     wire() {
       const begin = (then: () => void) => (): void => {
         unlockAudio();
-        const name = byId('nm', HTMLInputElement).value;
-        game.myName = (name || 'Guard').slice(0, 12);
+        game.myName = guardName(byId('nm', HTMLInputElement).value);
         try {
           localStorage.setItem('tsName', game.myName);
         } catch {
