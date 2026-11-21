@@ -273,7 +273,7 @@ def paint(o, fn):
 
 # ---------------------------------------------------------------- fur geometry
 
-def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shade=1.0, lift=.35, min_fur=.8, tip=1.12):
+def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shade=1.0, lift=.35, tip=1.12):
     """Locks of fur as real geometry, so the outline is shaggy under a
     flashlight. Each lock is a flat two-sided leaf of three triangles that
     leaves the skin along the normal and bends over to hang. tip: colour of
@@ -287,7 +287,7 @@ def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shad
     me.loop_triangles.foreach_get('vertices', T); T = T.reshape(-1, 3)
     A = np.empty(len(me.loop_triangles)); me.loop_triangles.foreach_get('area', A)
     mid = P[T].mean(axis=1)
-    w = A * (prm[T][:, :, 0].mean(axis=1) > min_fur)
+    w = A * (prm[T][:, :, 0].mean(axis=1) > .8)
     if where is not None: w = w * where(mid)
     if w.sum() <= 0 or n <= 0: return None
     rng = np.random.RandomState(seed)

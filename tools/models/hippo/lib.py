@@ -339,18 +339,6 @@ def tufts(ob, n, length, width, seed, where=None, droop=.55, cls=FUR, jitter=.35
     return ob
 
 
-def strand(p0, length, r, rng, cls=STRAND, lean=(0, 0, 0), wave=.03, segs=5, sides=3):
-    """One hanging lock of hair: a thin tapering tube from p0 straight down,
-    with a little wander."""
-    p0 = np.asarray(p0, dtype=np.float64); lean = np.asarray(lean, dtype=np.float64)
-    pts = [p0]
-    for i in range(1, segs + 1):
-        t = i / segs
-        pts.append(p0 + np.array([0, 0, -length * t]) + lean * t + (rng.random(3) - .5) * np.array([wave, wave, 0]) * t)
-    rad = [r * (1 - .75 * i / segs) for i in range(segs + 1)]
-    return tube(pts, rad, seg=sides, sub=2, cls=cls, caps=False)
-
-
 # ---------------------------------------------------------------- noise
 
 _LATTICE = np.random.default_rng(20261116).random(64 ** 3, dtype=np.float32)
@@ -386,21 +374,6 @@ def fbm(p, octaves=4, seed=0, gain=.5):
         out += a * vnoise(p * (2 ** o) + o * 17.3, seed + o * 101)
         tot += a; a *= gain
     return out / tot
-
-
-def segdist(P, a, b):
-    """Distance from each point to the segment a-b, and the position along it (0..1)."""
-    a = np.asarray(a, dtype=np.float32); b = np.asarray(b, dtype=np.float32)
-    ab = b - a
-    t = np.clip(((P - a) @ ab) / (ab @ ab + 1e-12), 0, 1)
-    return np.linalg.norm(P - (a + t[:, None] * ab), axis=1), t
-
-
-def polydist(P, pts):
-    d = np.full(len(P), 1e9, dtype=np.float32)
-    for a, b in zip(pts[:-1], pts[1:]):
-        d = np.minimum(d, segdist(P, a, b)[0])
-    return d
 
 
 def ellmask(P, c, r, soft=.15, wob=0, seed=0, freq=8):

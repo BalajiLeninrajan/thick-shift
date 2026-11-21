@@ -61,7 +61,6 @@ def math_(op, a, b=None, c=None, clamp=False):
 
 def absf(a): return math_('ABSOLUTE', a)
 def maxf(a, b): return math_('MAXIMUM', a, b)
-def minf(a, b): return math_('MINIMUM', a, b)
 def sinf(a): return math_('SINE', a)
 def sat(a): return math_('ADD', a, 0.0, clamp=True)
 

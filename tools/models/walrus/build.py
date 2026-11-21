@@ -38,7 +38,7 @@ BONE = [srgb('#f3ead8'), srgb('#d6bf7c'), srgb('#c9b78a')][ST]       # tusks yel
 TOOTH = srgb('#d9cfa6')
 INK = np.array([.012, .011, .013])
 LINING = np.array([.06, .008, .01])                                  # inside of the mouth
-P_FUR, P_CLOTH, P_SATIN = (1, .92, 0), (.5, .8, 0), (.5, .42, 0)
+P_FUR, P_CLOTH = (1, .92, 0), (.5, .8, 0)
 P_PLASTIC, P_BONE, P_PEARL, P_WET = (0, .22, 0), (0, .38, 0), (0, .14, 0), (0, .25, 0)
 
 # What the shared material adds on top of the paint, per stage.

@@ -137,20 +137,6 @@ def place(at=(0, 0, 0), rot=(0, 0, 0), about=(0, 0, 0)):
     return Matrix.Translation(Vector(at)) @ Euler(rot).to_matrix().to_4x4() @ Matrix.Translation(-Vector(about))
 
 
-def mirror_x(ob, name=None):
-    """A mirrored copy across x = 0, with normals fixed."""
-    new = ob.copy(); new.data = ob.data.copy()
-    if name: new.name = name
-    bpy.context.scene.collection.objects.link(new)
-    a = co(new); a[:, 0] *= -1; setco(new, a)
-    at = new.data.attributes.get('rest')
-    if at is not None:
-        r = np.empty(len(a) * 3); at.data.foreach_get('vector', r); r = r.reshape(-1, 3); r[:, 0] *= -1
-        at.data.foreach_set('vector', r.ravel())
-    new.data.flip_normals()
-    return new
-
-
 def join(objs, name):
     """Join mesh objects into one. Every piece gets a 'rest' stamp first so
     the attribute survives the join."""
@@ -226,13 +212,6 @@ class Clay:
 
 
 # ---------- sculpting on a built mesh ----------
-
-def push(ob, c, rad, vec):
-    """Move the surface near c by vec, with a gaussian falloff."""
-    a = co(ob)
-    w = np.exp(-(np.linalg.norm(a - np.asarray(c, float), axis=1) / rad) ** 2)
-    setco(ob, a + w[:, None] * np.asarray(vec, float))
-
 
 def dent(ob, c, rad, depth):
     """Press the surface in along its own normals (negative depth raises it)."""

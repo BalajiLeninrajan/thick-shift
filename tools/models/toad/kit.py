@@ -329,9 +329,6 @@ def sculpt_material():
             if x is not None: feed(n.inputs[i], x)
         return n.outputs[0]
 
-    def vmul(a, b):   # colour * colour
-        n = node('ShaderNodeVectorMath', operation='MULTIPLY'); feed(n.inputs[0], a); feed(n.inputs[1], b); return n.outputs[0]
-
     def vscale(a, s):  # colour * scalar
         n = node('ShaderNodeVectorMath', operation='SCALE'); feed(n.inputs[0], a); feed(n.inputs['Scale'], s); return n.outputs[0]
 
