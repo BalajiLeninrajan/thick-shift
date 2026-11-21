@@ -134,7 +134,7 @@ if (!isMainThread) {
     }
   });
 
-  checkBuilding('the building');
+  checkBuilding();
 
   const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : 0);
   const sum = (runs: Outcome[], f: (r: Outcome) => number) => runs.reduce((s, r) => s + f(r), 0);
