@@ -85,3 +85,7 @@ jobs:
           tools/roblox/diff/run.sh "solo competent n1" 3
           tools/roblox/diff/run.sh "crew of 3 competent n4" 1
           tools/roblox/diff/run.sh "solo expert n5" 2
+
+      # The client modules played against the sim under Lune: a scripted night, then each minigame to the end.
+      - name: Smoke-test the Roblox client
+        run: lune run apps/roblox/test/smoke.luau

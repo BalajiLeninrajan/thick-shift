@@ -157,7 +157,6 @@ startNight(1)
 hud.update(sim.S, controller.me) -- the card is up between nights; this draws it with the night started instead
 local frames, t, dt = 0, 0, 1 / 30
 local acc = 0
-local opened = {}
 local phases = {}
 for _ = 1, 30 * 300 do
 	t += dt
@@ -184,8 +183,6 @@ for _ = 1, 30 * 300 do
 	end
 	key(K.E, frames % 20 < 12)
 	if fixPanel.active then
-		opened[controller.me.task and S.faults[controller.me.task.i + 1] and S.faults[controller.me.task.i + 1].k or -1] =
-			true
 		uis.InputBegan:Fire({ KeyCode = K.X })
 	end
 	controller.update(S, dt, t)
@@ -208,17 +205,14 @@ for k = 0, 2 do
 	fixPanel.open(0, k, function()
 		done = true
 	end, function() end)
-	for step = 1, 600 do
+	for _ = 1, 600 do
 		if done then
 			break
 		end
 		if k == 2 then
-			-- Hold the valve open to bring the needle up to the green, then feather it: just over half the time.
-			if step <= 22 or step % 20 < 11 then
-				uis.InputBegan:Fire({ KeyCode = K.E })
-			else
-				uis.InputEnded:Fire({ KeyCode = K.E })
-			end
+			-- Watch the needle: open the valve below the middle of the green, let go above it.
+			local held = if fixPanel.peek().p < 0.69 then uis.InputBegan else uis.InputEnded
+			held:Fire({ KeyCode = K.E })
 			fixPanel.tick(1 / 30)
 		else
 			-- Read the tags (breaker) or try each socket in turn (wires), as a player would.
@@ -229,10 +223,7 @@ for k = 0, 2 do
 			end
 		end
 	end
-	print(string.format("minigame %d: %s", k, if done then "finished" else "NOT finished"))
-	if fixPanel.active then
-		fixPanel.close()
-	end
+	assert(done, string.format("minigame %d was not finished", k))
 end
 
 -- The cards between nights.
