@@ -18,11 +18,14 @@
 # Files here: textures.py draws the textures (run automatically when ./tex is
 # missing), kit.py is the mesh and material toolkit, gameplay.py, booth.py
 # and service.py hold the props, guard.py the guard.
-import os, subprocess, sys
+import json, math, os, subprocess, sys
+
+import bpy
+from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE)); sys.path.insert(0, HERE)
-from common import *
+from common import MODELS, PREVIEWS, bounds, export_glb, part, preview, report, reset, tris
 import kit
 
 ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
