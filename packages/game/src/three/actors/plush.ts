@@ -78,9 +78,6 @@ export function createPlush(scene: THREE.Scene) {
     lamp.position.set(0, 0.045 * SIZE, 0.042 * SIZE);
     g.add(body, lamp);
     g.name = 'mini biggs';
-    g.traverse(o => {
-      o.castShadow = false;
-    });
     scene.add(g);
     return { g, lamp, wobble: Math.random() * 6 };
   }
