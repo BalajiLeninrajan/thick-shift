@@ -553,10 +553,6 @@ export function createSound() {
     calm(_x: EventData['calm'], _S: State, r: Rig): void {
       into(r.room, () => sample(pick('creak1', 'creak2'), { rate: 0.5, gain: 0.5 }));
     },
-    // It has run out of wind and given up the chase: a long breath out.
-    quit(x: EventData['quit'], _S: State, r: Rig): void {
-      into(r.mascots[x.i].e.in, () => noise(0.8, 1.2, { band: BREATH[x.i].hz * 2, band2: BREATH[x.i].hz, q: 1, attack: 0.12 }));
-    },
     // A locker door: a sheet-metal clank and the latch. Pulled open, it is wrenched.
     locker(x: EventData['locker'], S: State, r: Rig): void {
       const clank = () => {

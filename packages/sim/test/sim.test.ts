@@ -135,23 +135,13 @@ describe('adoptFloor', () => {
     expect(sim.crankNoise).toBe(0);
   });
 
-  it('gives a hunting Biggs half as much wind again as any other hunter', () => {
-    const T = savedState();
-    defined(T.m[1], 'Madame Flan').st = 'hunt';
-    const [biggs, other] = adopt(7, T).sim.brains;
-    assert(biggs && other, 'Biggs and Flan have brains');
-    expect(other.wind).toBeGreaterThan(0);
-    expect(biggs.wind).toBeCloseTo(1.5 * other.wind, 9);
-    expect(other.wind).toMatchSnapshot();
-  });
-
-  it('gives each mascot the timers and wind a seeded stream says', () => {
+  it('gives each mascot the timers a seeded stream says', () => {
     // The idle night below ends before most of these timers play out, so pin them here: the search timer for the
-    // lost charge, the feast timer, the rest timer, Stompy's full charge gap (CHARGE_GAP, 10 s) and the hunt's wind.
+    // lost charge, the feast timer, the rest timer and Stompy's full charge gap (CHARGE_GAP, 10 s).
     const { sim, T } = adopt(7);
     const r = (v: number) => Math.round(v * 1000) / 1000;
     expect(sim.brains[3]?.cool).toBe(10);
-    expect(sim.brains.map((b, i) => ({ st: T.m[i]?.st, tgt: b.tgt, timer: r(b.timer), cool: b.cool, wind: r(b.wind) }))).toMatchSnapshot();
+    expect(sim.brains.map((b, i) => ({ st: T.m[i]?.st, tgt: b.tgt, timer: r(b.timer), cool: b.cool }))).toMatchSnapshot();
     expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault) }).toMatchSnapshot();
   });
 
@@ -285,5 +275,56 @@ describe('actFloor', () => {
     const { S } = use('hide', hide.set, '"i":0').after;
     expect(S.players[0]?.hid).toBe(0);
     expect(S.evs.at(-1)).toMatchObject({ type: 'locker', x: { i: 0, in: true } });
+  });
+});
+
+describe('a hunt', () => {
+  // A night-1 guard in the Main Hall and Madame Flan coming for them from six metres south, the rest kept on their
+  // marks, rot held at stage 0 so a torch stops her dead.
+  function chase() {
+    const { sim, S } = start(1, 1, 1);
+    S.dev = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: 0, dread: -1 };
+    S.stir = false;
+    S.waveAt = 1e9;
+    const p = defined(S.players[0], 'g0'),
+      m = defined(S.m[1], 'Madame Flan'),
+      b = brainOf(sim, 1);
+    Object.assign(p, { x: 19.5, z: 18, yaw: 0, pitch: 0, on: true });
+    Object.assign(m, { x: 19.5, z: 24, yaw: Math.PI, st: 'hunt' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z } });
+    return { sim, S, p, m };
+  }
+
+  it('does not give up on a guard it can see, however long a torch holds it', () => {
+    const { sim, S, p, m } = chase();
+    for (let k = 1; k <= 400; k++) stepFloor(sim, S, k * 100);
+    expect(S.t).toBeCloseTo(40, 6);
+    expect(m.st).toBe('hunt');
+    expect(Math.hypot(m.x - 19.5, m.z - 24)).toBeLessThan(0.5); // held where it stood
+    expect(p.flat).toBe(false);
+  });
+
+  it('pulls a guard out of a locker and gives them a split second before it can touch them', () => {
+    const { sim, S } = start(1, 1, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    const h = defined(HIDES[0], 'locker 0'),
+      p = defined(S.players[0], 'g0'),
+      m = defined(S.m[1], 'Madame Flan'),
+      b = brainOf(sim, 1);
+    Object.assign(p, { hid: 0, x: h.at.x, z: h.at.z, on: false });
+    // Right outside the doors, close enough to touch them, and it saw them get in.
+    Object.assign(m, { x: h.at.x + Math.sin(h.face) * 0.6, z: h.at.z + Math.cos(h.face) * 0.6, st: 'search' });
+    Object.assign(b, { woke: true, knows: 0, last: { ...h.at }, timer: 5, since: 0, was: 'search' });
+    stepFloor(sim, S, 100);
+    expect(S.evs.some(e => e.type === 'found')).toBe(true);
+    expect(p).toMatchObject({ hid: -1, flat: false });
+    expect(m.st).toBe('hunt');
+    actFloor(sim, S, 'g0', { t: 'use', what: 'hide', i: 0 }); // straight back in: not allowed
+    expect(p.hid).toBe(-1);
+    for (let k = 2; k <= 6; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(false); // 0.6 s on, standing still within reach
+    for (let k = 7; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(true); // and then it has them
   });
 });

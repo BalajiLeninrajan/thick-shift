@@ -32,7 +32,7 @@ local F = {
 	CHARGE = 1 / 15,
 	REACH = 2.2,
 	PEEL_HOLD = 3,
-	HIDE_HOLD = 0.5,
+	HIDE_HOLD = 0.2,
 	FIX = { 1.8, 2.4, 2.2 },
 	BEAM_RANGE = 12,
 	BEAM_HALF = 0.3,
@@ -81,13 +81,13 @@ local CHARGE_GAP = 10
 local WINDUP = { time = 1.5, commit = 0.5 }
 local SEARCH_MAX = 14
 local NOTICE = 0.7
-local WIND = { 8, 0.75 }
 local RELENT = 8
 local NEAREST = 3
 local STIR, CALM = { 28, 42 }, { 24, 38 }
 local SPENT = { 18, 30 }
 local RAMP = { 0, 1, 2, 3.15, 4.3 }
 local SNIFF = { near = 1.6, time = 3 }
+local ESCAPE = { head = 0.6, barred = 8 }
 local CHECK = { near = 8, chance = 0.5, most = 2 }
 local LOCKER_NOISE = { 6, 0.5 }
 -- Mini Biggs, the plush that sings on the torch's battery: see TOY in sim.ts.
@@ -236,6 +236,7 @@ local function placeGuard(p, i: number)
 	p.pitch, p.on, p.ph, p.bat, p.flat, p.flatBy, p.sp, p.act, p.safe, p.callAt, p.hid =
 		0, false, false, 1, false, -1, false, "", 0, 0, -1
 	p.toy = true
+	p.barred = 0
 end
 
 local function newBrain(timer: number)
@@ -256,7 +257,6 @@ local function newBrain(timer: number)
 		spent = false,
 		woke = false,
 		notice = 0,
-		wind = 0,
 		stared = 0,
 		reach = nil,
 		knows = -1,
@@ -777,13 +777,11 @@ function Sim:catchGuards(m, b): boolean
 end
 
 function Sim:spot(m, b, p)
-	local S = self.S
 	if m.st ~= "hunt" then
 		self:emit("spot", { i = m.i, id = p.id, x = m.x, z = m.z })
 		b.notice = NOTICE
 		b.repath = 0
 		b.home = false
-		b.wind = (WIND[1] + WIND[2] * S.night) * (if m.i ~= 0 then 1 else 1.5)
 	end
 	m.st = "hunt"
 	b.tgt = p.id
@@ -816,7 +814,19 @@ function Sim:openLockers(m, b, dt: number): boolean
 	self:emit("found", { i = m.i, id = p.id, h = p.hid, x = h.x, z = h.z })
 	b.knows = -1
 	b.sniff = 0
-	self:flatten(p, m, b)
+	-- Out on the floor in front of the doors, with a split second's start on it.
+	p.hid = -1
+	p.safe = math.max(p.safe, S.t + ESCAPE.head)
+	p.barred = S.t + ESCAPE.barred
+	b.tgt = p.id
+	b.last = { x = p.x, z = p.z }
+	b.lost = 0
+	b.near = math.huge
+	b.notice = ESCAPE.head
+	b.home = false
+	b.repath = 0
+	b.path = {}
+	m.st = "hunt"
 	return true
 end
 
@@ -957,7 +967,13 @@ function Sim:runMascot(m, b, dt: number)
 		return
 	end
 	if m.st == "charge" then
+		local fx, fz = m.x, m.z
 		local got = slide(m, b.dir.x * SPEED.charge * dt, b.dir.z * SPEED.charge * dt, MASCOT_R, S.doors)
+		-- The vent is too low for it: charging into the ducts is charging into a wall.
+		if roomAt(m.x, m.z) == DUCTS then
+			m.x, m.z = fx, fz
+			got = 0
+		end
 		if self:catchGuards(m, b) then
 			return
 		end
@@ -1069,18 +1085,8 @@ function Sim:runMascot(m, b, dt: number)
 		return
 	end
 
-	local quit = false
-	if m.st == "hunt" and not S.out and b.notice <= 0 then
-		b.wind -= dt
-		quit = b.wind <= 0
-	end
-	if quit then
-		m.st = "roam"
-		b.tgt = nil
-		b.dest = nil
-		b.spent = true
-		self:emit("quit", { i = m.i, x = m.x, z = m.z })
-	elseif not seen and m.st == "hunt" then
+	-- A hunt does not tire: it ends in a catch, at a shut door or when the guard is lost.
+	if not seen and m.st == "hunt" then
 		local tp = find(S.players, function(p)
 			return p.id == b.tgt
 		end)
@@ -1199,12 +1205,18 @@ function Sim:runMascot(m, b, dt: number)
 		and seen ~= nil
 		and near < F.GRAB
 		and reaches(m.x, m.z, seen.x, seen.z, S.doors)
+	-- Rocking back out of arm's reach for a moment does not start it over, while the guard it means stays put in sight.
 	local r = b.reach
-	if not tucked or not r or r.id ~= seen.id or near < r.d - 0.3 or dist(seen, r) > 0.5 then
-		b.reach = if tucked then { id = seen.id, d = near, x = seen.x, z = seen.z, t = S.t } else nil
-	elseif S.t - r.t > GRAB_TIME then
-		self:flatten(seen, m, b)
-		return
+	local holds = seen ~= nil and r ~= nil and r.id == seen.id and dist(seen, r) <= 0.5
+	if tucked and holds and near >= r.d - 0.3 then
+		if S.t - r.t > GRAB_TIME then
+			self:flatten(seen, m, b)
+			return
+		end
+	elseif tucked then
+		b.reach = { id = seen.id, d = near, x = seen.x, z = seen.z, t = S.t }
+	elseif not (m.st == "hunt" and holds and near < F.GRAB + 1) then
+		b.reach = nil
 	end
 	if res == "blocked" then
 		m.st = "siege"
@@ -1442,9 +1454,14 @@ function Sim:act(pid: string, a: any)
 			p.hid = -1
 			self:emit("locker", { i = i, id = p.id, ["in"] = false, x = h.x, z = h.z })
 			self:noise(h.at.x, h.at.z, LOCKER_NOISE[1], LOCKER_NOISE[2])
-		elseif not hidden(p) and near(h.at) and not some(S.players, function(q)
-			return q.hid == i
-		end) then
+		elseif
+			not hidden(p)
+			and near(h.at)
+			and S.t >= (p.barred or 0)
+			and not some(S.players, function(q)
+				return q.hid == i
+			end)
+		then
 			p.hid, p.x, p.z, p.on, p.sp, p.act = i, h.at.x, h.at.z, false, false, ""
 			self:emit("locker", { i = i, id = p.id, ["in"] = true, x = h.x, z = h.z })
 			self:seenHiding(p)

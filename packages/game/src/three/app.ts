@@ -149,8 +149,8 @@ function create() {
       if (isMe(e.x.by)) hud.say('Fresh battery.', 'torch', 2.5);
     },
     found(e: EventOf<'found'>): void {
-      if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker.`, 'down', 4);
-      else hud.say(`${MASC[e.x.i].name} pulled ${guard(e.x.id)?.name || 'someone'} out of a locker ${where(e.x)}.`, 'hide', 6);
+      if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker. Run!`, 'hide', 3);
+      else hud.say(`${MASC[e.x.i].name} found ${guard(e.x.id)?.name || 'someone'} in a locker ${where(e.x)}.`, 'hide', 6);
     },
     fumble(e: EventOf<'fumble'>): void {
       if (isMe(e.x.by)) hud.say('Something is blocking the door.', 'info', 3);

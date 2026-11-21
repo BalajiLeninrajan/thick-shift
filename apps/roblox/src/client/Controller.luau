@@ -205,7 +205,7 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 			local taken = Util.some(S.players, function(p)
 				return p.hid == i - 1
 			end)
-			if not taken then
+			if not taken and S.t >= (m.barred or 0) then -- not straight after being pulled out of one
 				table.insert(
 					list,
 					{ what = "hide", i = i - 1, at = h.at, label = "Hide in the locker", hold = F.HIDE_HOLD }

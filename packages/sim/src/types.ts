@@ -51,9 +51,10 @@ export interface Guard extends Joined {
   flatBy: MascotIndex | -1; // the mascot that flattened them, or -1
   sp: boolean; // sprinting
   act: GuardAct;
-  safe: number; // S.t before which no mascot can flatten them (after a peel)
+  safe: number; // S.t before which no mascot can see or flatten them: just after a peel, or a mascot opening their locker
   callAt: number; // S.t before which their next call for help is ignored
   hid: number; // the locker (HIDES index) they are in, or -1
+  barred: number; // S.t before which they cannot get into a locker: just after a mascot pulled them out of one
   toy: boolean; // holding their Mini Biggs
 }
 // A guard in S.players at any time: a guard who joined after the night began has only their id and name until the
@@ -146,7 +147,6 @@ export interface EventData {
   crash: { x: number; z: number };
   bang: DoorKey;
   arrive: DoorKey;
-  quit: { i: MascotIndex; x: number; z: number };
   roar: { i: MascotIndex; x: number; z: number };
   call: { id: string; x: number; z: number };
   fix: { i: number; by: string; x: number; z: number };
@@ -228,7 +228,6 @@ export interface Brain {
   spent: boolean;
   woke: boolean;
   notice: number;
-  wind: number;
   stared: number;
   reach: Reach | null;
   knows: number; // the locker it saw a guard step into, or -1

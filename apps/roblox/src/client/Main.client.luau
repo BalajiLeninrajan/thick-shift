@@ -178,11 +178,11 @@ local SAY = {
 	found = function(e)
 		local m = Data.MASC[e.x.i + 1]
 		if isMe(e.x.id) then
-			hud.say(m.name .. " opened the locker.", "down", 4)
+			hud.say(m.name .. " opened the locker. Run!", "hide", 3)
 		else
 			local g = guard(e.x.id)
 			hud.say(
-				string.format("%s pulled %s out of a locker %s.", m.name, g and g.name or "someone", where(e.x)),
+				string.format("%s found %s in a locker %s.", m.name, g and g.name or "someone", where(e.x)),
 				"hide",
 				6
 			)

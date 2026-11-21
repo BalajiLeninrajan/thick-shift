@@ -339,7 +339,8 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     // Any Mini Biggs on the floor, into empty hands.
     if (!mine.toy) for (const t of S.toys) if (S.t >= t.land) list.push({ what: 'toy', id: t.id, at: t, label: 'Pick up the Mini Biggs', hold: 0 });
     HIDES.forEach((h, i) => {
-      if (!S.players.some(p => p.hid === i)) list.push({ what: 'hide', i, at: h.at, label: 'Hide in the locker', hold: F.HIDE_HOLD });
+      if (S.t >= (mine.barred || 0) && !S.players.some(p => p.hid === i))
+        list.push({ what: 'hide', i, at: h.at, label: 'Hide in the locker', hold: F.HIDE_HOLD });
     });
     let best: Target | null = null,
       bd = F.REACH - 0.2;
