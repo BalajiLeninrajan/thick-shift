@@ -19,7 +19,7 @@ import type { NightState, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { ART, uvOf } from './art';
 import type { UV, Vec3 } from './geo';
-import { Batch, isMesh } from './geo';
+import { Batch } from './geo';
 import { grid, H as LH, W as LW, open, G as PER_M, reach, roomData, roomOf, SIZE_X, SIZE_Z, sees } from './sight';
 import { canvas } from './tex';
 
@@ -529,7 +529,7 @@ export function createLight(scene: THREE.Scene, trim: Batch, artTex: THREE.Textu
       if (t - swept > 1) {
         swept = t;
         scene.traverse(o => {
-          if (isMesh(o)) for (const m of Array.isArray(o.material) ? o.material : [o.material]) lit(m);
+          if (o instanceof THREE.Mesh) for (const m of Array.isArray(o.material) ? o.material : [o.material]) lit(m);
         });
       }
     },

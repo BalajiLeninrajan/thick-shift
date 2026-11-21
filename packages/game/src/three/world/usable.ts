@@ -11,7 +11,6 @@ import { BATTERY_SPOTS, BOOTH, BOXES, CHARGER, DOOR_H, DOORWAYS, GENERATOR, PANE
 import type { DoorKey, NightState, Point, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { WorldParts } from '../../types';
-import { isMesh } from './geo';
 import { prop } from './props';
 import { floorY } from './shell';
 import { roomData } from './sight';
@@ -71,7 +70,7 @@ async function upgrade(group: THREE.Object3D, name: string, lamp?: THREE.Materia
     }); // a small thing's shadow is not worth a second draw
   if (lamp)
     model.traverse(o => {
-      if (isMesh(o) && !Array.isArray(o.material) && o.material.name === 'status_glow') {
+      if (o instanceof THREE.Mesh && !Array.isArray(o.material) && o.material.name === 'status_glow') {
         o.material = lamp;
         o.castShadow = false;
       }
@@ -101,7 +100,7 @@ function wallMap(scene: THREE.Scene): (S: NightState, t: number) => void {
   g.add(plain);
   upgrade(g, 'wall_map').then(model =>
     model?.traverse(o => {
-      if (isMesh(o) && !Array.isArray(o.material) && o.material.name === 'map') o.material = glbFace;
+      if (o instanceof THREE.Mesh && !Array.isArray(o.material) && o.material.name === 'map') o.material = glbFace;
     })
   );
   let next = 0;
@@ -262,7 +261,7 @@ export function createUsables(scene: THREE.Scene): {
     scene.add(g);
     upgrade(spin, 'battery').then(model =>
       model?.traverse(o => {
-        if (!isMesh(o)) return;
+        if (!(o instanceof THREE.Mesh)) return;
         const m = (o.material as THREE.MeshStandardMaterial).clone();
         m.emissive.setHex(0x3a3010);
         m.emissiveMap = m.map;

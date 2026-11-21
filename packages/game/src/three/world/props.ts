@@ -11,7 +11,7 @@ import { ROOMS3 } from '@thick-shift/sim/map';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { loadGLB } from '../assets';
-import { getOr, isMesh } from './geo';
+import { getOr } from './geo';
 import type { Levels } from './light';
 import { lit } from './light';
 import { floorY } from './shell';
@@ -39,7 +39,7 @@ const nodes: Promise<Map<string, THREE.Object3D>> = Promise.all(KITS.map(loadGLB
   for (const scene of scenes)
     for (const node of scene?.children || []) {
       node.traverse(o => {
-        if (isMesh(o)) rgb(o.geometry);
+        if (o instanceof THREE.Mesh) rgb(o.geometry);
       });
       byName.set(node.name, node);
     }
@@ -73,7 +73,7 @@ export async function prop(name: string): Promise<THREE.Object3D | null> {
   const copy = node.clone(true);
   copy.position.set(0, 0, 0);
   copy.traverse(o => {
-    if (!isMesh(o)) return;
+    if (!(o instanceof THREE.Mesh)) return;
     const mat = dressMaterial(o.material as THREE.MeshStandardMaterial);
     o.material = mat;
     o.castShadow = casts(mat);
@@ -144,7 +144,7 @@ export function createProps(scene: THREE.Scene) {
         copy.position.set(0, 0, 0);
         copy.updateMatrixWorld(true);
         copy.traverse(o => {
-          if (!isMesh(o)) return;
+          if (!(o instanceof THREE.Mesh)) return;
           const mat = dressMaterial(o.material as THREE.MeshStandardMaterial, opt.dead);
           getOr(buckets, mat, () => []).push(o.geometry.clone().applyMatrix4(m.clone().multiply(o.matrixWorld)));
         });
