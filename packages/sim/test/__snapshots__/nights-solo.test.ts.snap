@@ -37,51 +37,51 @@ exports[`solo nights > solo competent n1, seed 1 1`] = `
 exports[`solo nights > solo competent n3, seed 2 1`] = `
 {
   "burnt": 3,
-  "events": "burn 3, calm 4, door 16, fault 8, fix 6, flat 1, hour 4, quit 6, roar 1, scare 1, spot 11, stir 5",
-  "eventsDigest": "e50dbf468c58b9fa",
+  "events": "arrive 1, bang 4, burn 3, calm 6, crash 1, door 14, fault 11, fix 9, hour 6, quit 7, roar 1, spot 12, stir 6, toy 1, win 1",
+  "eventsDigest": "6e3400150fa1b49e",
   "failures": [],
-  "fixed": 6,
-  "flats": 1,
-  "outcome": "dead",
+  "fixed": 9,
+  "flats": 0,
+  "outcome": "win",
   "peels": 0,
-  "power": "35.598",
-  "stateDigest": "90f57c1a64fb0b91",
-  "t": "323.300",
-  "ticks": 3233,
+  "power": "18.224",
+  "stateDigest": "dc5431cc8f2b039b",
+  "t": "420.000",
+  "ticks": 4200,
 }
 `;
 
 exports[`solo nights > solo competent n5, seed 3 1`] = `
 {
-  "burnt": 3,
-  "events": "bat 1, burn 3, calm 3, check 1, door 18, fault 6, fix 2, flat 1, grab 1, hour 3, out 1, quit 5, scare 1, spot 9, stir 4, toy 1",
-  "eventsDigest": "735feb43a2b85128",
+  "burnt": 1,
+  "events": "arrive 1, bang 4, bat 1, burn 1, calm 3, crash 1, door 12, fault 6, fix 4, flat 1, grab 1, hour 3, quit 3, roar 1, scare 1, spot 8, stir 3, toy 1",
+  "eventsDigest": "dd8e50307b374007",
   "failures": [],
-  "fixed": 2,
+  "fixed": 4,
   "flats": 1,
   "outcome": "dead",
   "peels": 0,
-  "power": "0.000",
-  "stateDigest": "61a316aa96c8356f",
-  "t": "257.900",
-  "ticks": 2579,
+  "power": "48.703",
+  "stateDigest": "ec6f26e9504a4b7e",
+  "t": "220.500",
+  "ticks": 2205,
 }
 `;
 
 exports[`solo nights > solo competent, hides n3, seed 5 1`] = `
 {
   "burnt": 1,
-  "events": "bat 2, burn 1, calm 6, door 8, fault 9, fix 9, hour 6, locker 1, quit 6, spot 9, stir 6, toy 1, win 1",
-  "eventsDigest": "8334a459aa21aa0d",
+  "events": "bat 1, burn 1, calm 2, door 2, fault 4, fix 4, flat 1, hour 2, quit 3, scare 1, spot 5, stir 3",
+  "eventsDigest": "f9119d6a0ef2d8c2",
   "failures": [],
-  "fixed": 9,
-  "flats": 0,
-  "outcome": "win",
+  "fixed": 4,
+  "flats": 1,
+  "outcome": "dead",
   "peels": 0,
-  "power": "48.814",
-  "stateDigest": "edf9e484c49ad4cb",
-  "t": "420.000",
-  "ticks": 4200,
+  "power": "81.415",
+  "stateDigest": "bbc7db8afb38e6c2",
+  "t": "180.300",
+  "ticks": 1803,
 }
 `;
 

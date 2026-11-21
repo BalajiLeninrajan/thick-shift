@@ -164,6 +164,7 @@ const NOTICE = 0.7; // seconds a mascot stands and stares after spotting a guard
 // Biggs keeps on twice as long. With the power out nothing gives up.
 const WIND: [number, number] = [8, 0.75];
 const RELENT = 8; // seconds Biggs keeps knowing where its guard is after losing sight of them
+const NEAREST = 3; // seconds one that has lost its guard goes without getting closer to where it last saw them before it searches there
 // The mascots stir and settle in turns: seconds of each, before the night's heat stretches one and shrinks the other.
 const STIR: [number, number] = [28, 42],
   CALM: [number, number] = [24, 38];
@@ -826,6 +827,7 @@ function spot(S: NightState, m: Mascot, b: Brain, p: Guard) {
   b.tgt = p.id;
   b.last = { x: p.x, z: p.z };
   b.lost = 0;
+  b.near = undefined;
 }
 
 // The locker a searching mascot means to look in next, and its index in HIDES. Nothing when it has no check left or
@@ -1058,8 +1060,16 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     if (tp && hidden(tp) && b.knows === tp.hid) {
       b.last = { ...hideAt(tp.hid).at };
       b.lost = 0;
-    } else if (tp && !tp.flat && !hidden(tp) && b.lost < keeps) b.last = { x: tp.x, z: tp.z }; // it knows which way you went round the corner
-    if (!tp || tp.flat || b.lost > keeps + 3) {
+    } else if (tp && !tp.flat && !hidden(tp) && b.lost < keeps) {
+      b.last = { x: tp.x, z: tp.z }; // it knows which way you went round the corner
+      b.near = undefined;
+    }
+    // Otherwise it keeps on to the last place it knew they were, for as long as its wind lasts, and searches there:
+    // once it gets there, or once it has gone NEAREST seconds without getting any closer (the spot is somewhere a
+    // guard fits and it does not, and it is as near as it gets).
+    const d = dist(m, defined(b.last, 'the guard it is after'));
+    if (b.near === undefined || d < b.near - 0.3) Object.assign(b, { near: d, nearAt: S.t });
+    if (!tp || tp.flat || S.t - (b.nearAt ?? S.t) > NEAREST) {
       m.st = 'search';
       b.timer = rnd(sim, 4, 7);
     }
