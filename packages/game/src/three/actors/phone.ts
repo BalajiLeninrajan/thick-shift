@@ -12,8 +12,9 @@ import { createMinimap } from '../minimap';
 import { holdInFront } from '../slats';
 import { canvas } from '../world/tex';
 
-const HELD = { x: -0.15, y: -0.088, z: -0.235 },
-  DROP = 0.2; // metres from the eye, and how far below that it sits when put away
+const SIZE = 1.5; // the phone is drawn this much bigger than life, so the map on its glass is easy to read
+const HELD = { x: -0.15, y: -0.103, z: -0.235 },
+  DROP = 0.25; // metres from the eye, and how far below that it sits when put away
 const TURN = { x: 0.14, y: 0.24, z: 0.07 }; // radians: tipped back and turned in, toward the eye
 const BODY = { w: 0.074, h: 0.16, d: 0.026 };
 const SCREEN = { w: 0.062, h: 0.048, y: 0.03 }; // the glass, the minimap's shape, centred this far above the middle
@@ -90,6 +91,7 @@ export function createPhone(camera: THREE.Camera) {
   thumb.rotation.set(0.1, 0, 0.9);
   phone.add(hold);
   hold.rotation.set(TURN.x, TURN.y, TURN.z);
+  hold.scale.setScalar(SIZE);
   holdInFront(hold); // in a locker it is held inside the doors, so in front of their slats
   phone.position.set(HELD.x, HELD.y - DROP, HELD.z);
   phone.visible = false;
