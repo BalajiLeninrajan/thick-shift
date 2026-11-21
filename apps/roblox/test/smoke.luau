@@ -146,8 +146,14 @@ local function key(code, down)
 	)
 end
 
+-- Main.client.luau puts the guard where the server says when a night begins.
+local function startNight(n)
+	sim:startNight(n)
+	controller.reset(sim.S.players[1])
+end
+
 local K = roblox.Enum.KeyCode
-sim:startNight(1)
+startNight(1)
 hud.update(sim.S, controller.me) -- the card is up between nights; this draws it with the night started instead
 local frames, t, dt = 0, 0, 1 / 30
 local acc = 0
@@ -189,7 +195,7 @@ for _ = 1, 30 * 300 do
 	phases[S.phase] = true
 	if S.phase ~= "play" then
 		hud.update(S, controller.me)
-		sim:startNight(S.night)
+		startNight(S.night)
 	end
 end
 for _, f in delayed do

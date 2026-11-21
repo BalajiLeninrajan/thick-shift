@@ -50,7 +50,6 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 		ph = false,
 		task = nil,
 		hid = -1,
-		placed = false,
 	}
 	local keys: { [Enum.KeyCode]: boolean } = {}
 	local sinceSprint, lastSend, usedTap, lastCall, drop = 0, 0, false, -1e9, 0
@@ -80,17 +79,6 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 			me.task = nil
 			fixPanel.close()
 		end
-	end
-	local function mine()
-		if not S then
-			return nil
-		end
-		for _, p in S.players do
-			if p.id == myId then
-				return p
-			end
-		end
-		return nil
 	end
 	local function toggleTorch()
 		if playing() and not me.flat and me.hid < 0 then
@@ -226,12 +214,9 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 			return { what = "hide", i = m.hid, at = HIDES[m.hid + 1].at, label = "Step out of the locker", hold = 0 }
 		end
 		for i, h in HIDES do
-			local taken = false
-			for _, p in S.players do
-				if p.hid == i - 1 then
-					taken = true
-				end
-			end
+			local taken = Util.some(S.players, function(p)
+				return p.hid == i - 1
+			end)
 			if not taken then
 				table.insert(
 					list,
@@ -338,20 +323,21 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 		me.bob += dt * (if me.sp then 13 else 8.5) * me.moving
 	end
 
-	local self = { me = me, torch = torch }
+	local self = { me = me }
 
 	-- Put the guard where the server says they are: the start of a night, or after joining.
 	function self.reset(m)
 		letGo()
-		me.x, me.z, me.yaw, me.pitch = m.x, m.z, m.yaw or math.pi, 0
+		me.x, me.z, me.yaw, me.pitch = m.x, m.z, m.yaw, 0
 		me.on, me.ph, me.stam, me.bob, me.hold, me.watch, me.hid = false, false, 1, 0, 0, nil, -1
-		me.placed = true
 	end
 
 	function self.update(state, dt: number, now: number)
 		S = state
 		local camera = workspace.CurrentCamera
-		local m = mine()
+		local m = Util.find(S.players, function(p)
+			return p.id == myId
+		end)
 		local live = playing() and m and m.x ~= nil and not GuiService.MenuIsOpen
 		UserInputService.MouseBehavior = if live and not fixPanel.active
 			then Enum.MouseBehavior.LockCenter
@@ -360,17 +346,13 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 		if not m or m.x == nil then
 			return
 		end
-		if not me.placed then
-			self.reset(m)
-		end
 		if me.flat and not m.flat then
 			me.pitch = 0 -- peeled up: look ahead, not at the ceiling
 		end
 		me.flat = m.flat == true
-		local hid = m.hid or -1
-		local locker = HIDES[hid + 1]
-		if hid ~= me.hid then
-			me.hid = hid
+		local locker = HIDES[m.hid + 1]
+		if m.hid ~= me.hid then
+			me.hid = m.hid
 			if locker then
 				me.x, me.z, me.yaw, me.pitch, me.on, me.sp, me.moving =
 					locker.at.x, locker.at.z, locker.face, 0, false, false, 0
@@ -385,12 +367,9 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 		if S.phase ~= "play" then
 			letGo()
 		end
-		local stillWatching = false
-		for _, p in S.players do
-			if p.id == me.watch and not p.flat then
-				stillWatching = true
-			end
-		end
+		local stillWatching = Util.some(S.players, function(p)
+			return p.id == me.watch and not p.flat
+		end)
 		if not stillWatching or not me.flat then
 			me.watch = nil
 		end
@@ -438,7 +417,7 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 			end
 		end
 		-- Low battery: the beam dims and stutters. With hands in a box the torch hangs at the floor.
-		local bat = m.bat or 1
+		local bat = m.bat
 		local weak = if bat < 0.15 then (if math.sin(now * 50) > -0.2 then 0.5 else 0.1) else 1
 		torch.Brightness = if me.on and bat > 0 then TORCH_FULL * weak * (0.55 + 0.45 * math.min(1, bat * 3)) else 0
 		drop += ((if me.ph or me.task then 1 else 0) - drop) * math.min(1, dt * 8)
@@ -464,12 +443,6 @@ function Controller.new(myId: string, send: (any) -> (), fixPanel)
 			* CFrame.Angles(-0.05 - 0.75 * drop, 0, 0)
 	end
 
-	function self.isPlaying()
-		return playing()
-	end
-	function self.holdKey()
-		return held()
-	end
 	return self
 end
 

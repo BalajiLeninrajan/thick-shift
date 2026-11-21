@@ -12,6 +12,7 @@ local Data = require(Shared.Data)
 local Map = require(Shared.Map)
 local Sim = require(Shared.Sim)
 local Text = require(Shared.Text)
+local Util = require(Shared.Util)
 
 local World = require(script.Parent:WaitForChild("World"))
 local Controller = require(script.Parent:WaitForChild("Controller"))
@@ -53,12 +54,9 @@ stateEvent.OnClientEvent:Connect(function(state)
 end)
 
 local function guard(id)
-	for _, p in S.players do
-		if p.id == id then
-			return p
-		end
-	end
-	return nil
+	return Util.find(S.players, function(p)
+		return p.id == id
+	end)
 end
 local function isMe(id)
 	return id == myId
@@ -93,12 +91,9 @@ local SAY = {
 		)
 	end,
 	fix = function(e)
-		local left = 0
-		for _, f in S.faults do
-			if f then
-				left += 1
-			end
-		end
+		local left = Util.count(S.faults, function(f)
+			return f ~= false
+		end)
 		local rest = if left > 0 then left .. " still open." else "All clear."
 		if isMe(e.x.by) then
 			hud.say("Fixed. " .. rest, "fixed", 3)
@@ -203,7 +198,7 @@ local SAY = {
 -- How scared this guard should be right now, 0 to 1: something hunting, close.
 local function threat(me)
 	local worst = 0
-	for _, m in S.m or {} do
+	for _, m in S.m do
 		if m.st == "hunt" or m.st == "windup" or m.st == "charge" or m.st == "search" then
 			local k = (if m.st == "search" then 0.5 else 1)
 				* math.max(0, 1 - math.sqrt((m.x - me.x) ^ 2 + (m.z - me.z) ^ 2) / 16)
@@ -237,7 +232,7 @@ RunService.RenderStepped:Connect(function(dt)
 				f(e)
 			end
 			if e.type == "flat" and isMe(e.x.id) then
-				catchUntil, catchBy = now + 1.6, e.x.by
+				catchUntil, catchBy = now + Hud.CATCH, e.x.by
 			end
 		end
 	end
