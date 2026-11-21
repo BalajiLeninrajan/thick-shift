@@ -57,7 +57,7 @@ export interface Guard extends Joined {
   toy: boolean; // holding their Mini Biggs
 }
 // A guard in S.players at any time: a guard who joined after the night began has only their id and name until the
-// next step places them (stepFloor), and a state from before the toys has no toy.
+// next step places them (stepFloor).
 export type Player = Joined & Partial<Omit<Guard, keyof Joined>>;
 
 // What a mascot is doing. rest: standing on its mark, switched off. roam: walking somewhere. search: going to look at
@@ -197,8 +197,7 @@ export interface NightState extends LobbyState {
   toys: Toy[];
   toyId: number;
 }
-// S as it is sent and received: a lobby state, or a night's. A state from a build before some fields existed (batN,
-// waveAt, toys) may not have them; adoptFloor fills them in.
+// S as it is sent and received: a lobby state, or a night's.
 export type State = LobbyState & Partial<Omit<NightState, keyof LobbyState>>;
 
 /* ---------- the mascots' thinking ---------- */

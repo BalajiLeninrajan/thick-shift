@@ -466,16 +466,7 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
     return b;
   });
   // Batteries taken are back in 30 to 50 s. How long ago these went is lost, so they come back any time in that.
-  // A state from a build before S.batN and S.waveAt existed has neither, so guess those from the crew and the wave.
-  // One from before S.bats has no batteries lying about, so they are all due back.
-  state.bats ??= [];
-  const missing = (state.batN ?? Math.min(BATTERY_SPOTS.length, 3 + S.players.length)) - state.bats.length;
-  sim.batTimers = Array.from({ length: Math.max(0, missing) }, () => rnd(sim, 5, 50)).sort((a, b) => a - b);
-  state.waveAt ??= S.t + rnd(sim, 0.2, 1) * (S.stir ? rnd(sim, ...STIR) * (1 + h) : rnd(sim, ...CALM) * (1 - 0.7 * h));
-  // A state from before the toys has none, so everyone has theirs in hand.
-  state.toys ||= [];
-  state.toyId ||= 0;
-  for (const p of state.players) p.toy ??= true;
+  sim.batTimers = Array.from({ length: S.batN - S.bats.length }, () => rnd(sim, 5, 50)).sort((a, b) => a - b);
   // When the next fault was due is lost too, so it comes any time in a usual gap.
   sim.nextFault = faultGap(S) * rnd(sim, 0.2, 1);
   sim.crankNoise = 0;

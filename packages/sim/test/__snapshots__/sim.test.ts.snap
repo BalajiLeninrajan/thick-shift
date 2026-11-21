@@ -4,9 +4,9 @@ exports[`adoptFloor > carries the night on from there the same way every time 1`
 {
   "events": "fault 1, flat 2, scare 1, spot 2, stir 1",
   "phase": "dead",
-  "power": "98.189",
-  "state": "2d50d682f31a482c",
-  "t": "29.500",
+  "power": "98.082",
+  "state": "e2c32423665649a0",
+  "t": "30.200",
 }
 `;
 
@@ -53,8 +53,7 @@ exports[`adoptFloor > gives each mascot the timers and wind a seeded stream says
     24.589,
     44.621,
   ],
-  "nextFault": 14.642,
-  "waveAt": 12.364,
+  "nextFault": 10.416,
 }
 `;
 

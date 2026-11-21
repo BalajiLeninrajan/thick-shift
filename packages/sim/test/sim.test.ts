@@ -90,8 +90,8 @@ describe('startFloorNight', () => {
 });
 
 describe('adoptFloor', () => {
-  // A night saved by a build from before batN, waveAt and the toys, part way in: one mascot hunting, one charging, one
-  // feasting and one at rest.
+  // A saved night, part way in: one mascot hunting, one charging, one feasting and one at rest, and one battery left
+  // lying about.
   function savedState() {
     const { S } = start(5, 2, 3);
     const T = JSON.parse(JSON.stringify(S)) as State;
@@ -101,16 +101,10 @@ describe('adoptFloor', () => {
     flan.st = 'charge';
     squish.st = 'feast';
     stompy.st = 'rest';
-    delete T.batN;
-    delete T.waveAt;
-    delete T.toys;
-    delete T.toyId;
-    for (const p of T.players) delete p.toy;
     T.bats = (T.bats as number[]).slice(0, 1);
     return T;
   }
-  function adopt(seed: number) {
-    const T = savedState();
+  function adopt(seed: number, T = savedState()) {
     const sim = newSim({ rng: seeded(seed), now: 0 });
     for (const p of T.players) sim.players[p.id] = p;
     adoptFloor(sim, T, 5000);
@@ -136,11 +130,6 @@ describe('adoptFloor', () => {
       expect(s).toBeGreaterThanOrEqual(5);
       expect(s).toBeLessThan(50);
     }
-    // What the old build did not save is filled in.
-    expect(T.waveAt).toBeGreaterThan(T.t);
-    expect(T.toys).toEqual([]);
-    expect(T.toyId).toBe(0);
-    expect(T.players.every(p => p.toy === true)).toBe(true);
     expect(sim.nextFault).toBeGreaterThan(0);
     expect(sim.crankNoise).toBe(0);
   });
@@ -148,10 +137,7 @@ describe('adoptFloor', () => {
   it('gives a hunting Biggs half as much wind again as any other hunter', () => {
     const T = savedState();
     defined(T.m[1], 'Madame Flan').st = 'hunt';
-    const sim = newSim({ rng: seeded(7), now: 0 });
-    for (const p of T.players) sim.players[p.id] = p;
-    adoptFloor(sim, T, 5000);
-    const [biggs, other] = sim.brains;
+    const [biggs, other] = adopt(7, T).sim.brains;
     assert(biggs && other, 'Biggs and Flan have brains');
     expect(other.wind).toBeGreaterThan(0);
     expect(biggs.wind).toBeCloseTo(1.5 * other.wind, 9);
@@ -165,26 +151,7 @@ describe('adoptFloor', () => {
     const r = (v: number) => Math.round(v * 1000) / 1000;
     expect(sim.brains[3]?.cool).toBe(10);
     expect(sim.brains.map((b, i) => ({ st: T.m[i]?.st, tgt: b.tgt, timer: r(b.timer), cool: b.cool, wind: r(b.wind) }))).toMatchSnapshot();
-    expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault), waveAt: r(T.waveAt) }).toMatchSnapshot();
-  });
-
-  it('starts an empty S.bats for a state from before it, so batteries can be dropped and picked up', () => {
-    const T = savedState();
-    delete T.bats;
-    const sim = newSim({ rng: seeded(7), now: 0 });
-    for (const p of T.players) sim.players[p.id] = p;
-    adoptFloor(sim, T, 5000);
-    const S = T as NightState;
-    expect(S.bats).toEqual([]);
-    // Every battery of the night is due back: five for two guards, as batN is guessed too.
-    expect(sim.batTimers).toHaveLength(5);
-    const g = defined(S.players[0], 'g0'),
-      spot = defined(BATTERY_SPOTS[0], 'battery spot 0');
-    Object.assign(g, { x: spot.x, z: spot.z, bat: 0.5 });
-    expect(() => actFloor(sim, S, g.id, { t: 'use', what: 'bat', i: 0 })).not.toThrow();
-    // The first one back lands within 50 s.
-    idle(sim, S, 5000, 500);
-    expect(S.bats.length).toBeGreaterThan(0);
+    expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault) }).toMatchSnapshot();
   });
 
   it('walks a searching mascot to where it lost the guard when it means to check a locker that is not there', () => {
