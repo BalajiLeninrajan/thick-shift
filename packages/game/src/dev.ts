@@ -1,33 +1,24 @@
 // Dev menu. Loaded only when the URL has ?dev (see main.ts). Toggle with ` or
 // the Dev button beside pause and in the touch menu.
 //
-// Cheats that change the simulation live in S.dev, so packages/sim/src/sim.ts can read
-// them and guests see their effects. Only the host can set them.
+// Every control sends a dev command (devFloor in packages/sim/src/session.ts) to whoever runs the night, so anyone in
+// the room can use it and everyone sees the effect. Switches live in S.dev, where the sim reads them.
 
-import { clockF, dreadF, F, hourF, startFloorNight } from '@thick-shift/sim';
-import { defined, isPlaced } from '@thick-shift/sim/check';
-import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
-import { REST } from '@thick-shift/sim/map';
-import type { Dev, Mascot, State } from '@thick-shift/sim/types';
+import { clockF, DEV_OFF, dreadF, F } from '@thick-shift/sim';
+import { MASC } from '@thick-shift/sim/config';
+import type { Dev, DevCommand, DevDo } from '@thick-shift/sim/types';
 import { byId } from './dom';
-import { sim } from './net';
-import { currentState, game } from './state';
+import { send } from './net';
+import { game } from './state';
 
 // The menu's sliders and switches.
 const input = (id: string): HTMLInputElement => byId(id, HTMLInputElement);
-const DEFAULTS: Dev = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: -1, dread: -1 };
 const SWITCHES: ('god' | 'power' | 'freeze' | 'wake')[] = ['god', 'power', 'freeze', 'wake'];
-const isFull = (dev: Partial<Dev> | undefined): dev is Dev => !!dev && Object.keys(DEFAULTS).every(k => k in dev);
-// S.dev, made whole. Every caller has checked game.S. This menu is the one thing in the game that writes S.dev, and
-// always a full Dev; only the balance harness sets part of one, and a missing field is filled from DEFAULTS.
-function cheats(): Dev {
-  const S = currentState();
-  if (isFull(S.dev)) return S.dev;
-  const dev: Dev = { ...DEFAULTS, ...S.dev };
-  S.dev = dev;
-  return dev;
-}
-const playing = (): boolean => !!game.S && game.S.phase === 'play';
+// The night's cheats as the last state had them, with a missing field off.
+const cheats = (): Dev => ({ ...DEV_OFF, ...game.S?.dev });
+const dev = (c: DevCommand): void => {
+  if (game.S) send(c);
+};
 const STAGES: [number, string][] = [
   [-1, 'Auto'],
   [0, 'Cute'],
@@ -67,93 +58,42 @@ const HTML = `
 
 /* ---------- actions ---------- */
 
-const ACTIONS: Record<string, (S: State) => void> = {
-  'dv-hour'(S) {
-    S.t = Math.min(6 * F.HOUR - 1, (hourF(S) + 1) * F.HOUR);
-  },
-  'dv-late'(S) {
-    S.t = 6 * F.HOUR - F.HOUR / 6;
-  },
-  'dv-win'(S) {
-    S.t = 6 * F.HOUR;
-  },
-  'dv-next'(S) {
-    startFloorNight(sim, S, S.night + 1);
-  },
-  'dv-final'(S) {
-    startFloorNight(sim, S, FINAL_NIGHT);
-  },
-  'dv-out'(S) {
-    S.power = 0.01;
-  },
-  'dv-bat'(S) {
-    for (const p of S.players) p.bat = 1;
-  },
-  'dv-peel'(S) {
-    for (const p of S.players) p.flat = false;
-  },
-  'dv-low'(S) {
-    S.power = 5;
-  },
-};
-
-// Bring a mascot to stand in front of the host, or send it back to its mark.
-const MASCOT_ACTIONS: Record<string, (S: State, m: Mascot) => void> = {
-  near(S, m) {
-    const me = S.players.find(p => p.id === game.myId);
-    if (!me || !isPlaced(me)) return;
-    m.x = me.x + Math.sin(me.yaw) * 4;
-    m.z = me.z + Math.cos(me.yaw) * 4;
-    m.st = 'roam';
-    cheats().wake = true;
-  },
-  home(_S, m) {
-    Object.assign(m, { x: REST[m.i].x, z: REST[m.i].z, yaw: REST[m.i].yaw, st: 'rest' });
-  },
+// The buttons, by id, and the dev command each sends. Each does nothing outside a night.
+const ACTIONS: Record<string, DevDo> = {
+  'dv-hour': 'hour',
+  'dv-late': 'late',
+  'dv-win': 'win',
+  'dv-next': 'next',
+  'dv-final': 'final',
+  'dv-out': 'out',
+  'dv-bat': 'bat',
+  'dv-peel': 'peel',
+  'dv-low': 'low',
 };
 
 function bind(el: HTMLDialogElement): void {
-  const host = (fn: (S: State) => void) => (): void => {
-    if (game.isHost && playing()) {
-      fn(currentState());
-      sync(el);
-    }
-  };
+  // The controls catch up with the change when the next state arrives (the timer in mountDev).
+  const set = (c: Partial<Dev>): void => dev({ t: 'dev', set: c });
   for (const key of SWITCHES) {
     const box = input(`dv-${key}`);
-    box.onchange = () => {
-      if (game.isHost && game.S) cheats()[key] = box.checked;
-      sync(el);
-    };
+    box.onchange = () => set({ [key]: box.checked });
   }
   byId('dv-rot').onclick = e => {
     const b = e.target instanceof Element && e.target.closest('button');
-    if (b && game.isHost && game.S) {
-      cheats().rot = Number(b.dataset.v);
-      sync(el);
-    }
+    if (b) set({ rot: Number(b.dataset.v) });
   };
   const speed = input('dv-speed');
-  speed.oninput = () => {
-    if (game.isHost && game.S) cheats().speed = Number(speed.value);
-    sync(el);
-  };
-  const dread = (): void => {
-    if (game.isHost && game.S) cheats().dread = input('dv-dread-on').checked ? Number(input('dv-dread').value) / 100 : -1;
-    sync(el);
-  };
-  input('dv-dread-on').onchange = dread;
-  input('dv-dread').oninput = dread;
-  for (const [id, fn] of Object.entries(ACTIONS)) byId(id).onclick = host(fn);
+  speed.oninput = () => set({ speed: Number(speed.value) });
+  // Moving the slider overrides dread, so it does not read the switch, which the room may not have confirmed yet.
+  const level = (): number => Number(input('dv-dread').value) / 100;
+  input('dv-dread-on').onchange = () => set({ dread: input('dv-dread-on').checked ? level() : -1 });
+  input('dv-dread').oninput = () => set({ dread: level() });
+  for (const [id, what] of Object.entries(ACTIONS)) byId(id).onclick = () => dev({ t: 'dev', do: what });
   byId('dv-mascots').onclick = e => {
-    const b = e.target instanceof Element && e.target.closest('button');
-    if (b && game.isHost && playing()) {
-      // sync builds every button in the list with data-act and data-i, the mascot's MASC index.
-      const S = currentState(),
-        { act, i } = b.dataset;
-      defined(MASCOT_ACTIONS[act ?? ''], `mascot action ${act}`)(S, defined(S.m[Number(i)], `mascot ${i}`));
-      sync(el);
-    }
+    const b = e.target instanceof Element ? e.target.closest('button') : null;
+    // sync builds every button in the list with data-act, 'near' or 'home', and data-i, the mascot's MASC index.
+    const act = b?.dataset.act;
+    if (b && (act === 'near' || act === 'home')) dev({ t: 'dev', do: act, i: Number(b.dataset.i) });
   };
   byId('dv-close').onclick = () => el.close();
 }
@@ -163,12 +103,8 @@ function bind(el: HTMLDialogElement): void {
 // Bring every control in line with the state. Runs on a timer while the menu is open.
 function sync(el: HTMLDialogElement): void {
   const S = game.S,
-    on = !!S && game.isHost;
-  byId('dv-note').textContent = !S
-    ? 'Host a night to use these.'
-    : game.isHost
-      ? 'Changes apply to everyone in the room.'
-      : 'Only the host can change the night.';
+    on = !!S;
+  byId('dv-note').textContent = S ? 'Changes apply to everyone in the room.' : 'Host or join a night to use these.';
   for (const control of el.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')) if (control.id !== 'dv-close') control.disabled = !on;
   if (!S) return;
   const dv = cheats();

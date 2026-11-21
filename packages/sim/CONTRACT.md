@@ -16,6 +16,7 @@ use by the game and the tools.
 | `@thick-shift/sim/data` | `src/data.ts` | `LAMPS`, `DEAD_TUBES`, the tube colours, `STAGE` (moved out of `light.ts` and `shell.ts`) |
 | `@thick-shift/sim/random` | `src/random.ts` | `seeded(seed)`, the seeded `Rng` the balance harness and the tests play with |
 | `@thick-shift/sim/types` | `src/types.ts` | `State`, `NightState`, `Guard`, `Mascot`, `SimEvent`, `Brain`, `Action`, the relay messages, `Rng` |
+| `@thick-shift/sim/session` | `src/session.ts` | what whoever runs a night does with the guards' browsers: `joinFloor`, `leaveFloor`, `commandFloor` (an action, `go` for the next night, or a dev cheat), `DEV_OFF` |
 | `@thick-shift/sim/sim` | `src/sim.ts` | the night: `newSim`, `newState`, `startFloorNight`, `stepFloor`, `actFloor`, `adoptFloor`, ... |
 
 The package is TypeScript that Node 22 runs by stripping the types, so relative imports name the `.ts` file and the

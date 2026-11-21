@@ -26,7 +26,7 @@ The game, the simulation, the apps and the balance tools are TypeScript. Vite st
 
 Rooms need the Worker. `vite dev` runs it, Durable Object and all, so hosting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server that serves it at the root of a domain runs the game solo. The page loads its scripts from `/assets/`, so it does not work from a sub-path.
 
-Add `?dev` to the URL for the dev menu (the backtick key, or the Dev button on the pause screen and in the touch menu): god mode, infinite power, freeze, wake every mascot, game speed, forced rot stage and dread, time skips, power and torch buttons, and per-mascot controls. Only the host's changes reach the simulation. Add `?debug` to get `window.ts` (the live `game` and `client` state) in the console.
+Add `?dev` to the URL for the dev menu (the backtick key, or the Dev button on the pause screen and in the touch menu): god mode, infinite power, freeze, wake every mascot, game speed, forced rot stage and dread, time skips, power and torch buttons, and per-mascot controls. Anyone in the room can use it: each control sends a dev command that whoever runs the night checks and applies (`devFloor` in `packages/sim/src/session.ts`), so everyone sees the change. Add `?debug` to get `window.ts` (the live `game` and `client` state) in the console.
 
 ## Layout
 

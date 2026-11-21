@@ -5,8 +5,8 @@
 // When an app fixes the room (platform.fixedRoom, as the Discord Activity does), nobody
 // chooses to host: everyone tries to, and whoever finds it taken joins instead (becomeGuest).
 
-import { actFloor, adoptFloor, newSim, newState, stepFloor } from '@thick-shift/sim';
-import type { Action, GuestInbox, HostInbox, Player } from '@thick-shift/sim/types';
+import { adoptFloor, commandFloor, newSim, newState, stepFloor } from '@thick-shift/sim';
+import type { Command, GuestInbox, HostInbox, Player } from '@thick-shift/sim/types';
 import { currentState, game, platform } from './state';
 
 const TICK_MS = 100;
@@ -68,7 +68,7 @@ function hostRoom(sock: WebSocket, opened: boolean): void {
     if (typeof id !== 'string' || id === game.myId || !d) return;
     if (d.t === 'join') sim.players[id] = guard(id);
     else if (d.t === 'leave') delete sim.players[id];
-    else actFloor(sim, currentState(), id, d); // S is set before a host opens or takes over its socket
+    else commandFloor(sim, currentState(), id, d); // S is set before a host opens or takes over its socket
   };
   ws.onclose = e => {
     // Someone else is hosting under this code. In a fixed room that is everyone else, so go and join them.
@@ -165,8 +165,8 @@ export function join(code: string): void {
   };
 }
 
-// Route an action to the simulation, locally if we are the host. A host has S, from host() or takeOver().
-export function send(a: Action): void {
-  if (game.isHost) actFloor(sim, currentState(), game.myId, a);
+// Route a command to the simulation, locally if we are the host. A host has S, from host() or takeOver().
+export function send(a: Command): void {
+  if (game.isHost) commandFloor(sim, currentState(), game.myId, a);
   else if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(a));
 }

@@ -261,6 +261,14 @@ export type Action =
   // Target); JSON drops those for a guest's.
   | { t: 'use'; what: UseWhat; i?: number | undefined; k?: DoorKey | undefined; id?: string | number | undefined };
 
+// The dev menu's cheats (packages/game/src/dev.ts), which devFloor runs: switch cheats on or off (set), a one-off
+// change to the night (do), or one for a mascot (i, its MASC index). Like an action, it comes off the wire.
+export type DevDo = 'hour' | 'late' | 'win' | 'next' | 'final' | 'low' | 'out' | 'bat' | 'peel';
+export type DevCommand = { t: 'dev'; set: Partial<Dev> } | { t: 'dev'; do: DevDo } | { t: 'dev'; do: 'near' | 'home'; i: number };
+// Anything a guard's browser sends whoever runs the night (commandFloor): an action, 'go' to start the next night
+// from the card between nights, or a dev cheat.
+export type Command = Action | { t: 'go' } | DevCommand;
+
 // The relay's close codes (worker/room.ts): nobody is hosting this code, somebody already is, or a guest id it
 // will not use (1008, policy violation).
 export type CloseCode = 1008 | 4404 | 4409;
@@ -277,7 +285,7 @@ export type GuestInbox = StateMessage | RelayToGuest;
 // Relay to host: a guest's message, wrapped with who sent it, or a guest coming or going.
 export interface HostInbox {
   from: string;
-  d: Action | { t: 'join' } | { t: 'leave' };
+  d: Command | { t: 'join' } | { t: 'leave' };
 }
 // Either end to relay, as plain text, not JSON: this tab has gone to the background or come back.
 export type Visibility = 'hidden' | 'shown';
