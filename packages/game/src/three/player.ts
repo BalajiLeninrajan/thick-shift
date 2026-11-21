@@ -72,7 +72,6 @@ const DOOR_NAME: Record<DoorKey, string> = { L: 'left door', R: 'right door', V:
 // and how far in front of the locker's middle the eye is: just past the doors, so their insides are behind it.
 const LOCKER_LOOK = { yaw: 0.85, pitch: 0.5, eye: 0.34 };
 const THROW_MS = 1000; // a second throw is not sent before the room has had time to take the first
-// This guard as the room has them, or undefined before they have joined its state.
 
 // task: the minigame panel (task.ts).
 export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement, task: Task) {
