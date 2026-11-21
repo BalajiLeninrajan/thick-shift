@@ -1,7 +1,7 @@
 name: CI
 
-# Pull requests run against any base branch, not just main, because the TypeScript move lands as a stack of PRs that
-# target each other's branches, and each one needs the checks before it merges down the stack.
+# Pull requests run against any base branch, not just main, so a stack of PRs that target each other's branches
+# gets checked at every layer.
 on:
   pull_request:
   push:
