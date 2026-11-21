@@ -11,11 +11,11 @@ import { BATTERY_SPOTS, BOXES, CHARGER, DOORWAYS, GENERATOR, ROOMS3, roomAt } fr
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { Me } from '../types';
+import { SIZE_X, SIZE_Z } from './world/sight';
 import { canvas } from './world/tex';
 
 const MAP_W = 288,
   MAP_H = 224; // canvas pixels: the 4:3-ish shape of the phone's glass
-const PLAN = { w: 42, h: 44 }; // metres: the building, from the origin (ROOMS3 in the sim's map.ts)
 const NEAR = 11; // pixels per metre close up: 26 metres across
 const EVERY = 125; // milliseconds between redraws
 const INK = {
@@ -141,8 +141,8 @@ export function createMinimap() {
       const top = 26; // the status line
       c.save();
       if (zoom) {
-        const k = Math.min(MAP_W / (PLAN.w + 1), (MAP_H - top - 4) / (PLAN.h + 1)),
-          ox = (MAP_W - PLAN.w * k) / 2,
+        const k = Math.min(MAP_W / (SIZE_X + 1), (MAP_H - top - 4) / (SIZE_Z + 1)),
+          ox = (MAP_W - SIZE_X * k) / 2,
           oy = top + 2;
         c.translate(ox, oy);
         c.scale(k, k);
