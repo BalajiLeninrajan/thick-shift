@@ -7,11 +7,10 @@
 // off its mark, as the booth's wall map does.
 
 import { defined, isPlaced } from '@thick-shift/sim/check';
-import { BATTERY_SPOTS, BOXES, CHARGER, DOORWAYS, GENERATOR, ROOMS3, roomAt } from '@thick-shift/sim/map';
+import { BATTERY_SPOTS, BOXES, CHARGER, DOORWAYS, GENERATOR, ROOMS3, roomAt, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { Me } from '../types';
-import { SIZE_X, SIZE_Z } from './world/sight';
 import { canvas } from './world/tex';
 
 const MAP_W = 288,

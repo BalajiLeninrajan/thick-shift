@@ -8,10 +8,10 @@
 // into(). Nothing here runs until the audio context is running, and events
 // that happen before then are dropped, not queued.
 
-import { lightsF } from '@thick-shift/sim';
+import { COMING, lightsF } from '@thick-shift/sim';
 import { defined, isPlaced } from '@thick-shift/sim/check';
 import { DOORS, perMascot } from '@thick-shift/sim/config';
-import { BOXES, CHARGER, DOORWAYS, DUCTS, EYE, GENERATOR, PANELS, ROOMS3, roomAt, sees } from '@thick-shift/sim/map';
+import { BOXES, CHARGER, DOORWAYS, DUCTS, dist, doorwayOf, EYE, GENERATOR, PANELS, ROOMS3, rectMid, roomAt, sees } from '@thick-shift/sim/map';
 import type { DoorKey, Doors, EventData, EventType, Mascot, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
 import { bang, boom, type Engine, into, live, muffle, noise, oneOf, pick, roomFor, sample, shriek, song, tone, voices, whiteFor } from '../audio';
 import { game, rnd } from '../state';
@@ -131,14 +131,7 @@ const squeeze = (level: number): void => {
 // Picked up again: the squeak of its belly in a hand.
 const squeak = (level: number): void => tone(1100, 0.1, 'triangle', 0.07 * level, { to: 1500 });
 
-const doorAt = (key: DoorKey): Point => {
-  const way = defined(
-    DOORWAYS.find(d => d.key === key),
-    `the doorway of door ${key}`
-  );
-  const [x0, z0, x1, z1] = way.rect;
-  return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
-};
+const doorAt = (key: DoorKey): Point => rectMid(doorwayOf(key).rect);
 // Doorways between two rooms by the shortest way, a shut door counting double. FAR is "a long way".
 const FAR = 9;
 function doorwaysBetween(a: number, b: number, doors: Doors): number {
@@ -614,7 +607,7 @@ export function createSound() {
   function mascot(S: State, m: Mascot, v: MascotVoice, dt: number): void {
     const b = BREATH[m.i],
       awake = m.st !== 'rest',
-      far = Math.hypot(m.x - head.x, m.z - head.z),
+      far = dist(m, head),
       busy = voices() >= BUSY;
     const moved = v.x == null ? 0 : Math.hypot(m.x - v.x, m.z - v.z);
     v.x = m.x;
@@ -631,7 +624,7 @@ export function createSound() {
         });
     }
     // Breath: faster when it is after someone, lower and louder as it rots. None while it eats.
-    const keen = ['hunt', 'windup', 'charge'].includes(m.st) ? 1.7 : m.lit ? 1.4 : 1;
+    const keen = COMING.includes(m.st) ? 1.7 : m.lit ? 1.4 : 1;
     v.phase += dt * b.rate * keen * Math.PI * 2;
     aim(v.breath.gain, awake && m.st !== 'feast' ? b.level * (1 + m.rot * 0.35) * Math.max(0, Math.sin(v.phase)) ** b.sharp : 0, 0.05);
     aim(v.band.frequency, b.hz * (1 - m.rot * 0.15));
@@ -685,7 +678,7 @@ export function createSound() {
         r.guards.set(p.id, g);
       }
       here.add(p.id);
-      const moved = Math.hypot(p.x - g.x, p.z - g.z);
+      const moved = dist(p, g);
       g.x = p.x;
       g.z = p.z;
       place(g.e, S, p.x, p.z);
@@ -776,7 +769,7 @@ export function createSound() {
       c.wait -= dt;
       if (c.wait > 0) continue;
       c.wait = rnd(...FIZZ);
-      if (Math.hypot(c.box.x - head.x, c.box.z - head.z) < HEAR) at(r, S, c.box, fizz);
+      if (dist(c.box, head) < HEAR) at(r, S, c.box, fizz);
     }
   }
 

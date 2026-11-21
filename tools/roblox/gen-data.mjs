@@ -43,6 +43,7 @@ const data = {
   FINAL_NIGHT: config.FINAL_NIGHT,
   DOORS: config.DOORS,
   MASC: config.MASC,
+  STAMINA: config.STAMINA,
   PLAYER_R: map.PLAYER_R,
   MASCOT_R: map.MASCOT_R,
   EYE: map.EYE,

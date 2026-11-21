@@ -7,7 +7,7 @@ import { lightsF } from '@thick-shift/sim';
 import { isNight, isPlaced } from '@thick-shift/sim/check';
 import { DOORS, MASC } from '@thick-shift/sim/config';
 import { GEN_BACK } from '@thick-shift/sim/dressing';
-import { BATTERY_SPOTS, BOOTH, BOXES, CHARGER, DOOR_H, DOORWAYS, GENERATOR, PANELS, ROOMS3, roomAt, WALL_MAP } from '@thick-shift/sim/map';
+import { BATTERY_SPOTS, BOOTH, BOXES, CHARGER, DOOR_H, DOORWAYS, doorwayOf, GENERATOR, PANELS, ROOMS3, roomAt, WALL_MAP } from '@thick-shift/sim/map';
 import type { DoorKey, NightState, Point, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { WorldParts } from '../../types';
@@ -273,9 +273,8 @@ export function createUsables(scene: THREE.Scene): {
 
   // The booth's doors: shutters that drop from above the doorway.
   const shutter = (k: DoorKey): Shutter => {
-    const d = DOORWAYS.find(w => w.key === k);
-    if (!d) throw new Error(`door ${k} has no doorway`);
-    const [x0, z0, x1, z1] = d.rect,
+    const d = doorwayOf(k),
+      [x0, z0, x1, z1] = d.rect,
       h = d.h || DOOR_H,
       wide = d.axis === 'x' ? z1 - z0 : x1 - x0;
     const g = new THREE.Group(),

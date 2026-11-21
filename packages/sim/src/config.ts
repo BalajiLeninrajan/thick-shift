@@ -3,6 +3,10 @@ import type { DoorKey, MascotIndex, PerMascot } from './types.ts';
 
 export const FINAL_NIGHT = 5; // survive this one and the game is won
 export const DOORS: readonly DoorKey[] = ['L', 'V', 'R']; // the booth's three ways in: left door, vent, right door
+// A guard's breath for running, from 0 to 1: what a second of sprinting costs, what a second of rest gives back, and
+// the seconds without sprinting before it starts to come back. The sim only reads whether a guard is sprinting
+// (Guard.sp), so each client spends the breath itself, and so do the balance harness's guards.
+export const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 };
 
 // The cast's model names, one per MascotKind.k.
 export type MascotKey = 'hippo' | 'walrus' | 'toad' | 'rhino';

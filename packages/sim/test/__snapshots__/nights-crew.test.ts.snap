@@ -4,7 +4,7 @@ exports[`crew nights > crew of 2 competent n2, seed 1 1`] = `
 {
   "burnt": 4,
   "events": "bat 3, burn 4, call 7, calm 5, door 40, fault 15, fix 12, flat 1, grab 5, hour 6, peel 1, quit 6, roar 1, spot 13, stir 6, toy 7, win 1",
-  "eventsDigest": "0d6d95d6ce19940f",
+  "eventsDigest": "0a3500c9cfe0df78",
   "failures": [],
   "fixed": 12,
   "flats": 1,
@@ -55,7 +55,7 @@ exports[`crew nights > crew of 4 competent n5, seed 2 1`] = `
 {
   "burnt": 4,
   "events": "bat 15, burn 4, call 21, calm 5, crash 4, door 39, fault 33, fix 31, flat 1, fumble 4, grab 4, hour 6, peel 1, quit 15, roar 5, spot 28, stir 6, toy 5, win 1",
-  "eventsDigest": "0ff767545b4acf14",
+  "eventsDigest": "12fe6715d07eb149",
   "failures": [],
   "fixed": 31,
   "flats": 1,

@@ -6,15 +6,14 @@
 
 import { F, TOY } from '@thick-shift/sim';
 import { assert, defined, isNight, isPlaced } from '@thick-shift/sim/check';
-import { DOORS } from '@thick-shift/sim/config';
-import { BATTERY_SPOTS, BOXES, CHARGER, EYE, GENERATOR, HIDES, PANELS, PLAYER_R, slide, walkable } from '@thick-shift/sim/map';
+import { DOORS, STAMINA } from '@thick-shift/sim/config';
+import { angDiff, BATTERY_SPOTS, BOXES, CHARGER, dist, EYE, GENERATOR, HIDES, PANELS, PLAYER_R, slide, walkable } from '@thick-shift/sim/map';
 import type { DoorKey, Guard, NightState, Player, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { unlockAudio } from '../audio';
 import { send } from '../net';
 import { currentState, game } from '../state';
 import type { Me, Prefs, Target, Task } from '../types';
-import { wrap } from './actors/track';
 import { faultName } from './task';
 
 // What drives the guard besides the keys: touch.ts (pad) and the gamepad (gp, which also keeps the stick's last
@@ -68,7 +67,6 @@ export function savePrefs(): void {
   }
 }
 const typing = (e: Event): boolean => e.target instanceof Element && !!e.target.closest('input, textarea, select, [contenteditable]');
-const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 }; // per second, and seconds before it starts coming back
 const DOOR_NAME: Record<DoorKey, string> = { L: 'left door', R: 'right door', V: 'vent' };
 // In a locker: how far the view turns either side of straight out through the doors, and up or down (radians),
 // and how far in front of the locker's middle the eye is: just past the doors, so their insides are behind it.
@@ -367,7 +365,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       // Hands in the box until the job is done or let go. Fixed by someone else, or out of reach: let go.
       const f = S.faults[me.task.i],
         box = defined(BOXES[me.task.i], `box ${me.task.i}`);
-      if (!f || f.at !== me.task.at || Math.hypot(box.x - me.x, box.z - me.z) > F.REACH) letGo();
+      if (!f || f.at !== me.task.at || dist(box, me) > F.REACH) letGo();
       else {
         me.act = 'fix';
         return;
@@ -488,7 +486,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       arrowLook(dt);
       if (locker) {
         // Looking out through the slats: only so far round, up or down.
-        me.yaw = locker.face + Math.max(-LOCKER_LOOK.yaw, Math.min(LOCKER_LOOK.yaw, wrap(me.yaw - locker.face)));
+        me.yaw = locker.face + Math.max(-LOCKER_LOOK.yaw, Math.min(LOCKER_LOOK.yaw, angDiff(me.yaw, locker.face)));
         me.pitch = Math.max(-LOCKER_LOOK.pitch, Math.min(LOCKER_LOOK.pitch, me.pitch));
       }
       // The screens between nights need the mouse back.

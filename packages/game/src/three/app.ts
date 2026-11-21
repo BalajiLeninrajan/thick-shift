@@ -4,7 +4,7 @@
 import { dreadF } from '@thick-shift/sim';
 import { defined, isPlaced } from '@thick-shift/sim/check';
 import { MASC } from '@thick-shift/sim/config';
-import { BOXES, EYE, ROOMS3, reaches, roomAt } from '@thick-shift/sim/map';
+import { angDiff, BOXES, dist, EYE, ROOMS3, reaches, roomAt } from '@thick-shift/sim/map';
 import type { EventType, Player, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { query } from '../dom';
@@ -12,7 +12,6 @@ import { client, currentState, game } from '../state';
 import type { EventOf } from '../types';
 import { createActors } from './actors';
 import { createPhone } from './actors/phone';
-import { wrap } from './actors/track';
 import { createHud, where } from './hud';
 import { createOutlines } from './outline';
 import { createPlayer, myPlayer, prefs, TORCH_FULL } from './player';
@@ -92,7 +91,7 @@ function create() {
     seat.x += (p.x - seat.x) * k;
     seat.z += (p.z - seat.z) * k;
     seat.pitch += (p.pitch - seat.pitch) * k;
-    seat.yaw += wrap(p.yaw - seat.yaw) * k;
+    seat.yaw += angDiff(p.yaw, seat.yaw) * k;
     if (!prefs.third) {
       camera.position.set(seat.x, EYE, seat.z);
       camera.rotation.set(seat.pitch, seat.yaw + Math.PI, 0, 'YXZ');
@@ -173,8 +172,7 @@ function create() {
     const S = currentState(),
       me = player.me;
     let worst = 0;
-    for (const m of S.m)
-      if (HUNTING.has(m.st)) worst = Math.max(worst, (m.st === 'search' ? 0.5 : 1) * Math.max(0, 1 - Math.hypot(m.x - me.x, m.z - me.z) / 16));
+    for (const m of S.m) if (HUNTING.has(m.st)) worst = Math.max(worst, (m.st === 'search' ? 0.5 : 1) * Math.max(0, 1 - dist(m, me) / 16));
     return worst;
   }
 

@@ -14,13 +14,13 @@ import { defined, isNight } from '@thick-shift/sim/check';
 import type { Lamp, LampGroup, RGB } from '@thick-shift/sim/data';
 // The lamps and the dead fittings are plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read them too.
 import { DEAD_TUBES, GREEN, LAMPS, TUBE } from '@thick-shift/sim/data';
-import { BOXES, DOOR_H, ROOMS3 } from '@thick-shift/sim/map';
+import { BOXES, DOOR_H, ROOMS3, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
 import type { NightState, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { ART, uvOf } from './art';
 import type { UV, Vec3 } from './geo';
 import { Batch } from './geo';
-import { grid, H as LH, W as LW, open, G as PER_M, reach, roomData, roomOf, SIZE_X, SIZE_Z, sees } from './sight';
+import { grid, H as LH, W as LW, open, G as PER_M, reach, roomData, roomOf, sees } from './sight';
 import { canvas } from './tex';
 
 // How bright each lamp group is this frame, 0 to 1 (createLight's level): the props' glow materials follow these too.

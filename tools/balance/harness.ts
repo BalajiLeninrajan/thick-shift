@@ -7,11 +7,14 @@
 // slide() the game uses, at the game's speeds, and react late.
 import {
   actFloor,
+  angDiff,
   assert,
   brainOf,
+  COMING,
   DOORS,
   darkRoom,
   defined,
+  dist,
   F,
   faultLeft,
   isPlaced,
@@ -21,6 +24,7 @@ import {
   MASCOTS,
   newSim,
   newState,
+  STAMINA,
   seeded,
   startFloorNight,
   stepFloor,
@@ -215,22 +219,13 @@ interface Objective {
 }
 
 const DT = 0.1;
-const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 }; // the same as player.ts, which cannot be imported without three.js
-const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 const ang = (a: Point, b: Point) => Math.atan2(b.x - a.x, b.z - a.z);
-const angDiff = (a: number, b: number) => {
-  let d = (a - b) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-};
 // The one of list nearest to p, by where at() puts each, or undefined from an empty list. The first of equals.
 const nearestBy = <T>(p: Point, list: readonly T[], at: (v: T) => Point) =>
   list.reduce<T | undefined>((best, v) => (best !== undefined && dist(p, at(best)) <= dist(p, at(v)) ? best : v), undefined);
 const nearest = <T extends Point>(p: Point, list: readonly T[]) => nearestBy(p, list, v => v);
 const pick = <T>(list: readonly T[]): T => defined(list[(random() * list.length) | 0], 'a pick from an empty list');
-const MOVING: MascotState[] = ['roam', 'search', 'hunt', 'charge'],
-  COMING: MascotState[] = ['hunt', 'windup', 'charge'];
+const MOVING: MascotState[] = ['roam', 'search', 'hunt', 'charge'];
 const BOOTH_MID = { x: 21, z: 40.5 };
 // A guard's guess at whether a resting mascot wakes this night. Rougher than the sim's rule (WAKE in sim.ts), on
 // purpose: Squish sleeps through a solo night 1, and Stompy through any night 1.
@@ -238,13 +233,7 @@ const mayWake = (S: NightState, i: MascotIndex) => (i === 3 ? S.night > 1 : i !=
 // How fast a mascot comes with a torch on it, as a share of its pace, by its rot.
 const LIT_PACE = [0.05, 0.3, 0.5];
 const inBooth = (p: Point) => M.roomAt(p.x, p.z) === M.BOOTH;
-const doorMid = (k: DoorKey) => {
-  const [x0, z0, x1, z1] = defined(
-    M.DOORWAYS.find(d => d.key === k),
-    `the ${k} doorway`
-  ).rect;
-  return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
-};
+const doorMid = (k: DoorKey) => M.rectMid(M.doorwayOf(k).rect);
 // Where to stand to work a door's button from outside the booth: the wall is thin enough to reach through.
 const OUTSIDE: Record<DoorKey, Point> = { L: { x: 13.9, z: 39.7 }, R: { x: 28.1, z: 39.7 }, V: { x: 23.3, z: 35.5 } };
 const front = (t: Point & { face?: number }): Point => (t.face == null ? t : { x: t.x + Math.sin(t.face) * 0.9, z: t.z + Math.cos(t.face) * 0.9 });
@@ -1185,14 +1174,12 @@ const DEGENERATE = {
 
 /* ---------- the things that must never happen ---------- */
 
-// The building's floor, in metres: x from 0 to EXTENT.x, z from 0 to EXTENT.z.
-const EXTENT = { x: 42, z: 44 };
-const inside = (x: number, z: number) => x >= 0 && z >= 0 && x < EXTENT.x && z < EXTENT.z;
+const inside = (x: number, z: number) => x >= 0 && z >= 0 && x < M.SIZE_X && z < M.SIZE_Z;
 // Flood the floor a mascot can stand on, from where the mascots start.
 function flood(ducts: boolean): { has: (x: number, z: number) => boolean } {
   const step = 0.25,
-    W = Math.ceil(EXTENT.x / step),
-    H = Math.ceil(EXTENT.z / step),
+    W = Math.ceil(M.SIZE_X / step),
+    H = Math.ceil(M.SIZE_Z / step),
     seen = new Uint8Array(W * H),
     cell = (x: number, z: number) => Math.round(z / step) * W + Math.round(x / step);
   const ok = (x: number, z: number) => M.walkable(x, z, M.MASCOT_R) && (ducts || M.roomAt(x, z) !== M.DUCTS);
@@ -1255,8 +1242,8 @@ export function checkBuilding(): string[] {
     R = F.GRAB - 0.25;
   let safe = 0,
     where = '';
-  for (let x = 0.25; x < EXTENT.x; x += 0.25)
-    for (let z = 0.25; z < EXTENT.z; z += 0.25) {
+  for (let x = 0.25; x < M.SIZE_X; x += 0.25)
+    for (let z = 0.25; z < M.SIZE_Z; z += 0.25) {
       if (!M.walkable(x, z, 0.2)) continue;
       const f = M.roomAt(x, z) === M.DUCTS ? squish : walkers;
       let caught = false;

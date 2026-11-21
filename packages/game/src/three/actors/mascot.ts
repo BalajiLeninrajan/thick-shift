@@ -8,7 +8,7 @@ import { lightsF } from '@thick-shift/sim';
 import { isPlaced } from '@thick-shift/sim/check';
 import type { MascotKind } from '@thick-shift/sim/config';
 import { MASC } from '@thick-shift/sim/config';
-import { EYE, glimpses, MASCOT_R } from '@thick-shift/sim/map';
+import { angDiff, dist, EYE, glimpses, MASCOT_R } from '@thick-shift/sim/map';
 import type { MascotIndex, MascotState, Mascot as SimMascot, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { View } from '../actors';
@@ -18,7 +18,7 @@ import type { Part, Rig } from './rig';
 import { bounds, buildRig, eachMesh, glowTexture, lag } from './rig';
 import type { PerStage, Stage, Style } from './styles';
 import { CH, hash, isLitState, isStage, RATE, standIn, styleOf, ZERO } from './styles';
-import { hostClock, TAU, Track, wrap } from './track';
+import { hostClock, TAU, Track } from './track';
 
 const { clamp } = THREE.MathUtils,
   smooth = (u: number): number => THREE.MathUtils.smoothstep(u, 0, 1);
@@ -245,7 +245,7 @@ export class Mascot {
     // Can the camera see any of it? Only walls and shut doors count: sees() also stops at furniture, which is the
     // sim's rule for hiding, but a table hides none of a mascot from the eye. Lines across its whole width, close
     // enough together that one half in view past a door jamb is not hidden with the rest.
-    this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
+    this.dist = dist(tr, view);
     this.lookT -= dt;
     if (this.lookT <= 0) {
       this.lookT = LOOK_EVERY;
@@ -329,7 +329,7 @@ export class Mascot {
 
     const x = tr.x + (seat.x - tr.x) * seat.w,
       z = tr.z + (seat.z - tr.z) * seat.w,
-      yaw = tr.yaw + wrap(seat.yaw - tr.yaw) * seat.turn;
+      yaw = tr.yaw + angDiff(seat.yaw, tr.yaw) * seat.turn;
     this.group.position.set(x, 0, z);
     this.group.rotation.y = yaw;
     this.group.visible = this.seen;

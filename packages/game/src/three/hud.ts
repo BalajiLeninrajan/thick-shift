@@ -11,12 +11,11 @@
 import { clockF, F, faultLeft, TOY } from '@thick-shift/sim';
 import { defined, isNight, isNonEmpty, isPlaced } from '@thick-shift/sim/check';
 import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
-import { BOXES, CHARGER, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
+import { angDiff, BOXES, CHARGER, dist, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
 import type { Guard, NightState, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
 import { query } from '../dom';
 import { game } from '../state';
 import type { Me, PlayerHandle } from '../types';
-import { wrap } from './actors/track';
 import { type IconName, icon } from './icons';
 import { myPlayer, prefs, savePrefs } from './player';
 import { faultName } from './task';
@@ -469,7 +468,7 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
     let far = 0,
       prev = path[0];
     for (const p of path.slice(1)) {
-      far += Math.hypot(p.x - prev.x, p.z - prev.z);
+      far += dist(p, prev);
       prev = p;
     }
     const leg = { x: path[0].x, z: path[0].z, far };
@@ -505,7 +504,7 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
     }
 
     for (const t of ticks) {
-      const off = -wrap(t.b - me.yaw) / HALF_SPAN;
+      const off = -angDiff(t.b, me.yaw) / HALF_SPAN;
       t.e.hidden = Math.abs(off) > 1;
       t.e.style.left = `${50 + off * 50}%`;
     }
@@ -513,11 +512,11 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
     const shown: Placed[] = [];
     for (const t of list) {
       let r = routes.get(t.key) ?? findRoute(S, me, t);
-      if (r.far && Math.hypot(r.x - me.x, r.z - me.z) < 1.2) r = findRoute(S, me, t); // reached the corner it pointed at
+      if (r.far && dist(r, me) < 1.2) r = findRoute(S, me, t); // reached the corner it pointed at
       const p: Placed = {
         ...t,
-        dist: Math.hypot(r.x - me.x, r.z - me.z) + r.far,
-        off: -wrap(Math.atan2(r.x - me.x, r.z - me.z) - me.yaw) / HALF_SPAN,
+        dist: dist(r, me) + r.far,
+        off: -angDiff(Math.atan2(r.x - me.x, r.z - me.z), me.yaw) / HALF_SPAN,
       };
       if (p.kind === 'fault' && (!nearest || p.dist < nearest.dist)) nearest = p;
       shown.push(p);
@@ -601,7 +600,7 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
     // S.faults has one slot per box.
     const ours = BOXES.flatMap((box, i) => {
       const f = S.faults[i];
-      return f ? [{ f, i, box, d: Math.hypot(box.x - me.x, box.z - me.z) }] : [];
+      return f ? [{ f, i, box, d: dist(box, me) }] : [];
     }).sort((a, b) => a.d - b.d);
     const fit = Math.max(2, Math.floor((root.clientHeight - TASK_TOP - TASK_FOOT[me.touch ? 'touch' : 'keys']) / TASK_ROW));
     const max = ours.length <= Math.min(fit, MAX_TASKS) ? ours.length : Math.max(1, Math.min(MAX_TASKS, fit - 1)); // the rest counted on one more row
@@ -728,7 +727,7 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
       flat.hidden = !me.flat || me.paused;
       if (me.flat) {
         const up = mates.filter(p => !p.flat),
-          near = up.reduce<Guard | null>((a, p) => (!a || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(a.x - me.x, a.z - me.z) ? p : a), null);
+          near = up.reduce<Guard | null>((a, p) => (!a || dist(p, me) < dist(a, me) ? p : a), null);
         // Watching nobody offers the first.
         const watched = up.find(p => p.id === me.watch),
           next = up[(watched ? up.indexOf(watched) : -1) + 1];
@@ -740,7 +739,7 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
           watched
             ? `Watching ${watched.name}, ${where(watched)}.`
             : near
-              ? `You stay flat until someone peels you up. ${near.name} is ${metres(Math.hypot(near.x - me.x, near.z - me.z))} away.`
+              ? `You stay flat until someone peels you up. ${near.name} is ${metres(dist(near, me))} away.`
               : 'Nobody is left standing.'
         );
         set(callText, now - calledAt < F.CALL_GAP * 1000 ? 'Called' : 'Call out');

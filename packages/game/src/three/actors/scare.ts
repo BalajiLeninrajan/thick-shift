@@ -3,13 +3,13 @@
 // Stompy at the end, the worm's mouth), the mascot plays its scare pose and
 // lunges, then the camera is dropped to the floor and left looking up at it
 // as it sits down. After that player.ts has the camera back, where we left it.
+import { angDiff } from '@thick-shift/sim/map';
 import type { PerMascot } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { context2d } from '../../dom';
 import type { Me } from '../../types';
 import type { Mascot } from './mascot';
 import type { PerStage } from './styles';
-import { wrap } from './track';
 
 // The cues of a catch in the order they come, and the seconds from the catch at which each comes. The sound hangs its
 // stinger on these.
@@ -134,7 +134,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
         const wantYaw = Math.atan2(look.x, look.z),
           wantPitch = Math.atan2(look.y, Math.hypot(look.x, look.z)),
           turn = smooth(t / CUES.face);
-        yaw = a.yaw0 + wrap(wantYaw - a.yaw0) * turn;
+        yaw = a.yaw0 + angDiff(wantYaw, a.yaw0) * turn;
         pitch = a.pitch0 + (wantPitch - a.pitch0) * turn;
         const rattle = 0.012 + m.scareBite * 0.03,
           step = Math.floor(t * 40);
@@ -160,7 +160,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
         look.subVectors(face, pos);
         a.yawEnd = Math.atan2(look.x, look.z);
         a.pitchEnd = Math.max(0.3, Math.min(1.3, Math.atan2(look.y, Math.hypot(look.x, look.z))));
-        yaw = a.yawDrop + wrap(a.yawEnd - a.yawDrop) * smooth(fall);
+        yaw = a.yawDrop + angDiff(a.yawEnd, a.yawDrop) * smooth(fall);
         pitch = a.pitchDrop + (a.pitchEnd - a.pitchDrop) * smooth(fall);
         const thud = fall >= 1 ? 1 - settle : 0;
         roll = (1 - g) * 0.25 + thud * Math.sin(t * 60) * 0.05;

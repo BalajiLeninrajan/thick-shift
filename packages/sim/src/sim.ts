@@ -38,6 +38,7 @@
 import { assert, defined, isNonEmpty, isPlaced } from './check.ts';
 import { BIGGS, DOORS, FINAL_NIGHT, FLAN, MASC, MASCOTS, SQUISH, STOMPY } from './config.ts';
 import {
+  angDiff,
   BATTERY_SPOTS,
   BOOTH,
   BOXES,
@@ -45,6 +46,7 @@ import {
   clear,
   DOORWAYS,
   DUCTS,
+  dist,
   GENERATOR,
   HIDES,
   hypot,
@@ -203,13 +205,6 @@ const LOCKER_NOISE: [number, number] = [6, 0.5];
 export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3 };
 
 const OPEN = (): Doors => ({ L: false, V: false, R: false });
-const dist = (a: Point, b: Point) => hypot(a.x - b.x, a.z - b.z);
-const angDiff = (a: number, b: number) => {
-  let d = (a - b) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-};
 // The night's random numbers, all drawn from sim.rng. The Roblox port draws in the same order (CONTRACT.md).
 const rnd = (sim: Sim, a: number, b: number) => a + sim.rng() * (b - a);
 // A draw in [0, 1) times the length of a list that is not empty always lands on an entry.
@@ -255,7 +250,8 @@ const pack = (S: NightState) => (S.out ? 4 : 1 + Math.floor(heat(S) * 1.2 + (S.p
 // night 3, 3 AM on night 4 and 1 AM on night 5. A crew of three meets all four from 2 AM on night 1, four or more
 // from the start.
 const roster = (S: NightState) => (S.out ? 4 : 2 + Math.floor(heat(S) * 3.3 + (S.players.length - 1) * 0.75));
-const COMING: MascotState[] = ['hunt', 'windup', 'charge'];
+// The states in which a mascot is coming for a guard.
+export const COMING: readonly MascotState[] = ['hunt', 'windup', 'charge'];
 const inDucts = (p: Guard) => !p.flat && roomAt(p.x, p.z) === DUCTS;
 // When each mascot first comes out, by MASC index: hours of the run (six to a night), and how many hours sooner
 // for each guard past the first. Alone, Squish turns up at 3 AM on night 1. Stompy turns up on night 2 for every

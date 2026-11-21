@@ -5,11 +5,8 @@
 
 import { defined } from '@thick-shift/sim/check';
 import type { Doorway, Room } from '@thick-shift/sim/map';
-import { DOORWAYS, ROOMS3 } from '@thick-shift/sim/map';
+import { DOORWAYS, ROOMS3, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
 
-// The building's footprint in metres. Every floor-plan grid and texture covers this.
-export const SIZE_X = 42,
-  SIZE_Z = 44;
 export const G = 4,
   W = SIZE_X * G,
   H = SIZE_Z * G; // grid cells per metre (walls are two cells thick), and the building's size in cells

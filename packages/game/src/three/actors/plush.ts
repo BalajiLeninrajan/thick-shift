@@ -6,6 +6,7 @@
 
 import { TOY } from '@thick-shift/sim';
 import { MASC } from '@thick-shift/sim/config';
+import { dist } from '@thick-shift/sim/map';
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -101,7 +102,7 @@ export function createPlush(scene: THREE.Scene) {
           toys.set(t.id, s);
         }
         const { g, lamp } = s;
-        g.visible = Math.hypot(t.x - view.x, t.z - view.z) < SHOW;
+        g.visible = dist(t, view) < SHOW;
         if (!g.visible) continue;
         const run = Math.hypot(t.x - t.x0, t.z - t.z0),
           heading = Math.atan2(t.x - t.x0, t.z - t.z0),

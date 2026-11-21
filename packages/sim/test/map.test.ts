@@ -29,6 +29,14 @@ describe('rooms', () => {
     expect(M.ROOMS3[M.DUCTS]?.name).toBe('Ducts');
   });
 
+  it('keeps every room and doorway inside the footprint, and reaches each edge of it', () => {
+    const rects = [...M.ROOMS3.flatMap(r => r.rects), ...M.DOORWAYS.map(d => d.rect)];
+    expect(Math.min(...rects.map(r => r[0]))).toBeGreaterThanOrEqual(0);
+    expect(Math.min(...rects.map(r => r[1]))).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...rects.map(r => r[2]))).toBe(M.SIZE_X);
+    expect(Math.max(...rects.map(r => r[3]))).toBe(M.SIZE_Z);
+  });
+
   it('finds the room a point is in', () => {
     expect(M.roomAt(21, 40.5)).toBe(M.BOOTH);
     expect(M.roomAt(5, 15)).toBe(2); // Arcade

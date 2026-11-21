@@ -24,7 +24,7 @@ local BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES =
 local SENS = 0.0022 -- radians per pixel of mouse travel
 local SEND = 0.08
 local PITCH_MAX = 1.45
-local STAMINA = { drain = 1 / 4.5, gain = 1 / 7, rest = 1 }
+local STAMINA = require(Shared.Data).STAMINA
 local LOCKER_LOOK = { yaw = 0.85, pitch = 0.5, eye = 0.34 }
 local TORCH_FULL = 3 -- SpotLight brightness on a full battery
 

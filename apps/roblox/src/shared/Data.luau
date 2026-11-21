@@ -27,6 +27,11 @@ return {
 			col = "#7d8299",
 		},
 	},
+	STAMINA = {
+		drain = 0.2222222222222222,
+		gain = 0.14285714285714285,
+		rest = 1,
+	},
 	PLAYER_R = 0.35,
 	MASCOT_R = 0.7,
 	EYE = 1.65,

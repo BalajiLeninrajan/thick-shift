@@ -10,9 +10,9 @@
 //   phone.ts   your own phone, held in view, with the minimap (app.ts makes it)
 //   plush.ts   the Mini Biggs guards throw, in the air and singing on the floor
 
-import { defined, isPlaced } from '@thick-shift/sim/check';
+import { isPlaced } from '@thick-shift/sim/check';
 import { perMascot } from '@thick-shift/sim/config';
-import { DOORWAYS } from '@thick-shift/sim/map';
+import { dist, doorwayOf, rectMid } from '@thick-shift/sim/map';
 import type { SimEvent, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { game } from '../state';
@@ -100,12 +100,8 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
         else mascots[by].sitOn(x, z, false);
       } else if (e.type === 'bang') {
         // The hit lands with the sound: whichever of them is at that door. A bang carries the key of a doorway that has one.
-        const key = e.x,
-          door = DOORWAYS.find(d => d.key === key),
-          d = defined(door, `the doorway ${key}`),
-          cx = (d.rect[0] + d.rect[2]) / 2,
-          cz = (d.rect[1] + d.rect[3]) / 2;
-        for (const m of S.m) if (m.st === 'siege' && Math.hypot(m.x - cx, m.z - cz) < 4) mascots[m.i].bang();
+        const door = rectMid(doorwayOf(e.x).rect);
+        for (const m of S.m) if (m.st === 'siege' && dist(m, door) < 4) mascots[m.i].bang();
       } else if (e.type === 'crash') {
         for (const m of S.m) if (m.st === 'stun') mascots[m.i].crash();
       } else if (e.type === 'spot') mascots[e.x.i].spotted();

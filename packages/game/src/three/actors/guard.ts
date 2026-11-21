@@ -4,7 +4,7 @@
 // guards: being flattened and being peeled back up.
 
 import { F } from '@thick-shift/sim';
-import { glimpses, PLAYER_R } from '@thick-shift/sim/map';
+import { dist, glimpses, PLAYER_R } from '@thick-shift/sim/map';
 import type { Joined, Guard as SimGuard, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { context2d } from '../../dom';
@@ -217,7 +217,7 @@ export class Guard {
     this.t += dt;
     this.group.position.set(tr.x, 0, tr.z);
     this.group.rotation.y = tr.yaw;
-    this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
+    this.dist = dist(tr, view);
     // Any of them in view past walls and shut doors (see mascot.ts): a shoulder past a door jamb keeps them, and their torch.
     this.lookT -= dt;
     if (this.lookT <= 0) {

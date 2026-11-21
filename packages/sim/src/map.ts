@@ -34,6 +34,20 @@ export const EYE = 1.65,
 // The length of (x, z) by the plain formula. Math.hypot rounds differently in the last bits, and the Roblox port
 // (Util.hypot) has to come out the same.
 export const hypot = (x: number, z: number): number => Math.sqrt(x * x + z * z);
+export const dist = (a: Point, b: Point): number => hypot(a.x - b.x, a.z - b.z);
+// The turn from yaw b to yaw a by the short way round, between -pi and pi.
+export const angDiff = (a: number, b: number): number => {
+  let d = (a - b) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+};
+// The building's footprint in metres, from the origin. Every room and doorway lies inside it (map.test.ts), and
+// the floor-plan grids, the lightmap and the wall map cover exactly this.
+export const SIZE_X = 42,
+  SIZE_Z = 44;
+// The middle of a rect.
+export const rectMid = ([x0, z0, x1, z1]: Rect): Point => ({ x: (x0 + x1) / 2, z: (z0 + z1) / 2 });
 
 // rects: [x0, z0, x1, z1]. A room with two overlaps them so you can walk from one into the other.
 // h: ceiling height.
@@ -367,10 +381,13 @@ export function roomAt(x: number, z: number): number {
   }
   return -1;
 }
-export const roomCentre = (i: number): Point => {
-  const [x0, z0, x1, z1] = defined(ROOMS3[i], `room ${i}`).rects[0];
-  return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
-};
+export const roomCentre = (i: number): Point => rectMid(defined(ROOMS3[i], `room ${i}`).rects[0]);
+// The doorway that booth door k shuts.
+export const doorwayOf = (k: DoorKey): Doorway =>
+  defined(
+    DOORWAYS.find(d => d.key === k),
+    `the doorway of door ${k}`
+  );
 
 /* ---------- walls, for the renderer ---------- */
 

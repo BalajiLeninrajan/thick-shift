@@ -15,7 +15,7 @@
 import { faultLeft } from '@thick-shift/sim';
 import { defined, isNight } from '@thick-shift/sim/check';
 import { DOORS } from '@thick-shift/sim/config';
-import { BATTERY_SPOTS, CHARGER, GENERATOR, PANELS } from '@thick-shift/sim/map';
+import { BATTERY_SPOTS, CHARGER, dist, GENERATOR, PANELS } from '@thick-shift/sim/map';
 import type { Point, State } from '@thick-shift/sim/types';
 import type { Object3D } from 'three';
 import { game } from '../state';
@@ -59,7 +59,7 @@ export function createOutlines(parts: WorldParts, actors: Actors) {
     pick(S: State, me: Me, t: number): OutlineMark[] {
       marks.length = 0;
       if (!prefs.outline || S.phase !== 'play' || me.flat) return marks;
-      const near = (at: Point): boolean => Math.hypot(at.x - me.x, at.z - me.z) < NEAR;
+      const near = (at: Point): boolean => dist(at, me) < NEAR;
       // The thing the use key would act on. findTarget (player.ts) sets i for a box or battery and k for a door.
       const aim = me.task ? null : me.target,
         aimed = aim && partFor(aim);

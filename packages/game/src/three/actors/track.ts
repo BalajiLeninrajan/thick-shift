@@ -5,14 +5,11 @@
 // little in the past, between two of them.
 
 import { defined } from '@thick-shift/sim/check';
+import { angDiff } from '@thick-shift/sim/map';
 
 const KEEP = 8;
 const TELEPORT = 5; // metres between two snapshots that mean a jump, not a walk
 export const TAU = Math.PI * 2;
-export const wrap = (a: number): number => {
-  a %= TAU;
-  return a > Math.PI ? a - TAU : a < -Math.PI ? a + TAU : a;
-};
 
 // One clock for every track: what time on the night's clock to draw at.
 export const hostClock = {
@@ -82,7 +79,7 @@ export class Track {
     this.xs[i] = x;
     this.zs[i] = z;
     this.pitches[i] = pitch;
-    this.yaws[i] = i ? at(this.yaws, i - 1) + wrap(yaw - at(this.yaws, i - 1)) : yaw; // unwrapped, so it never turns the long way
+    this.yaws[i] = i ? at(this.yaws, i - 1) + angDiff(yaw, at(this.yaws, i - 1)) : yaw; // unwrapped, so it never turns the long way
     if (!i) {
       this.x = x;
       this.z = z;
