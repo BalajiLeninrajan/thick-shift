@@ -1,13 +1,13 @@
-// The Discord Activity's Worker. It relays rooms like the web game's, and also signs players in and carries the
+// The Discord Activity's Worker. It runs rooms like the web game's, and also signs players in and carries the
 // page's stylesheets and fonts, which Discord's sandbox will not fetch from their CDNs. Requests for / and
 // /index.html reach it before the static files (run_worker_first in wrangler.jsonc), so it can rewrite those
 // links; every other static file is served before this code runs.
-import { type RelayEnv, relay } from '@thick-shift/game/worker';
+import { type RoomEnv, toRoom } from '@thick-shift/game/worker';
 
 export { Room } from '@thick-shift/game/worker';
 
 // The Worker's bindings (wrangler.jsonc). DISCORD_CLIENT_SECRET is a secret, set with wrangler secret put.
-interface Env extends RelayEnv {
+interface Env extends RoomEnv {
   ASSETS: Fetcher;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
@@ -20,7 +20,7 @@ export default {
     if (path === '/api/discord/token' && req.method === 'POST') return discordToken(req, env);
     if (path === '/' || path === '/index.html') return discordPage(req, env);
     if (path.startsWith('/ext/')) return external(req, path.slice(5));
-    return relay(req, env);
+    return toRoom(req, env);
   },
 } satisfies ExportedHandler<Env>;
 

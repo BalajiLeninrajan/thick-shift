@@ -1,29 +1,34 @@
-// Room hosting and joining. The host runs the simulation and sends the whole
-// state to every guest ten times a second, through a WebSocket relay on the
-// same origin (worker/room.ts). If the host leaves, the relay makes the guest
-// who has been there longest the host, and the night carries on (takeOver).
-// When an app fixes the room (platform.fixedRoom, as the Discord Activity does), nobody
-// chooses to host: everyone tries to, and whoever finds it taken joins instead (becomeGuest).
+// Rooms. A room's Durable Object (worker/room.ts) runs the night and sends everyone in it the whole state ten times a
+// second, through a WebSocket on the same origin. This page only sends what its own guard does (send). With no room to
+// reach, the page runs the night itself and plays solo, with the same code the room runs (packages/sim/src/session.ts).
+// When an app fixes the room (platform.fixedRoom, as the Discord Activity does), everyone opens the same one, and the
+// first to arrive starts it.
 
-import { actFloor, adoptFloor, newSim, newState, stepFloor } from '@thick-shift/sim';
-import type { Action, GuestInbox, HostInbox, Player } from '@thick-shift/sim/types';
-import { currentState, game, platform } from './state';
+import { adoptFloor, commandFloor, joinFloor, newSim, newState, type Sim, stepFloor } from '@thick-shift/sim';
+import type { Command, State, StateMessage } from '@thick-shift/sim/types';
+import { game, platform } from './state';
 
-const TICK_MS = 100;
-const NO_HOST = 4404,
-  CODE_TAKEN = 4409; // close codes from the relay
-const MAX_BACKLOG = 256 * 1024; // bytes queued before the host skips a state
+const TICK_MS = 100; // a solo night's step, as the room's
+const RETRY_MS = [500, 1000, 2000, 4000, 8000]; // waits between tries to get back into a room we lost, 15 s in all
+const QUIET_MS = 4000; // a night in play that has sent nothing for this long has lost its connection
+const PROTOCOL = 2; // worker/room.ts's PROTOCOL
+const NO_ROOM = 4404,
+  CODE_TAKEN = 4409,
+  OUTDATED = 4426; // close codes from the room
 
-// The host's side of the night, which S does not carry: the guards in the room (sim.players, peer id -> that guard's
-// record in S.players) and what the mascots are thinking. Made at import, so the first step measures its time from
-// when the page loaded. A guest's stays empty until a takeover makes it the host. The game's draws are not seeded.
-export const sim = newSim({ rng: Math.random, now: performance.now() });
-let ws: WebSocket | null = null,
-  loop = 0;
+// How this page comes into a room: start one, join one, or either, for a fixed room (worker/room.ts).
+type Mode = 'make' | 'join' | 'either';
+
+let ws: WebSocket | null = null;
+let retries = 0, // tries so far to get back into the room
+  heard = 0; // performance.now() of the last state
+// A night this page runs itself, with no room: the room's thinking and the timer that steps it.
+let solo: { sim: Sim; S: State; loop: ReturnType<typeof setInterval> } | null = null;
 
 const roomUrl = (code: string, query: string): string => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
 const ROOM = /^([A-Z]{4}|[a-z]-[\w-]{1,80})$/; // a typed code, or a fixed one from an app's platform (worker/room.ts)
 const newCode = (): string => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[(Math.random() * 24) | 0]).join('');
+const newId = (): string => `g${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
 const parse = (text: string): unknown => {
   try {
     return JSON.parse(text);
@@ -31,142 +36,107 @@ const parse = (text: string): unknown => {
     return null;
   }
 };
-const guard = (id: string, name = 'Guard'): Player => ({ id, name });
+const isState = (m: unknown): m is StateMessage => typeof m === 'object' && m !== null && 't' in m && m.t === 's' && 's' in m;
 
-function broadcast(): void {
-  const guests = Object.keys(sim.players).length - 1;
-  if (guests > 0 && ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < MAX_BACKLOG) ws.send(JSON.stringify({ t: 's', s: game.S }));
-}
-
-// Tell the relay when this tab goes to the background, where timers crawl, so it hands the room to a guest who
-// is looking. Plain words, not JSON, so the relay can pick them out without parsing every message.
-const showing = (): void => {
-  if (ws?.readyState === WebSocket.OPEN) ws.send(document.hidden ? 'hidden' : 'shown');
-};
-document.addEventListener('visibilitychange', showing);
-
-// Only a host runs the loop, and a host always has S (becomeGuest stops the loop before it clears S).
-const run = (): void => {
-  loop ||= setInterval(() => {
-    stepFloor(sim, currentState(), performance.now());
-    broadcast();
-  }, TICK_MS);
-};
-
-// The host's end of the socket: one it opened, or a guest's that the relay handed the room to.
-function hostRoom(sock: WebSocket, opened: boolean): void {
-  ws = sock;
-  ws.onopen = () => {
-    opened = true;
-    game.netNote = '';
-  };
-  // Every peer and the relay send JSON text.
-  ws.onmessage = (e: MessageEvent<string>) => {
-    const m = parse(e.data) as HostInbox | null,
-      id = m?.from,
-      d = m?.d;
-    if (typeof id !== 'string' || id === game.myId || !d) return;
-    if (d.t === 'join') sim.players[id] = guard(id);
-    else if (d.t === 'leave') delete sim.players[id];
-    else actFloor(sim, currentState(), id, d); // S is set before a host opens or takes over its socket
-  };
-  ws.onclose = e => {
-    // Someone else is hosting under this code. In a fixed room that is everyone else, so go and join them.
-    // Otherwise nobody has joined yet, so take another code.
-    if (e.code === CODE_TAKEN && platform.fixedRoom) return becomeGuest();
-    if (e.code === CODE_TAKEN) {
-      const code = newCode();
-      currentState().code = code; // host() made S before opening the room
-      game.code = code;
-      return openRoom();
-    }
-    for (const id in sim.players) if (id !== game.myId) delete sim.players[id];
-    game.netNote = opened ? 'Lost the connection to the room. You can keep playing solo.' : 'Multiplayer unavailable. You can still play solo.';
-  };
-}
-
-function openRoom(): void {
-  game.netNote = 'Opening room…';
-  hostRoom(new WebSocket(roomUrl(game.code, 'role=host')), false);
-}
-
+// Start a room, from the title screen, or open the app's fixed one. Without a room to reach, play solo.
 export function host(code = newCode()): void {
-  game.isHost = true;
-  game.code = code;
-  game.S = newState(game.code);
-  game.myId = 'host';
-  sim.players = { host: guard('host', game.myName) };
-  run();
-  openRoom();
+  open(code, platform.fixedRoom ? 'either' : 'make');
 }
 
-// Drop the night we were about to host and join the one already running under our code.
-function becomeGuest(): void {
-  clearInterval(loop);
-  loop = 0;
-  game.S = null;
-  sim.players = {};
-  join(game.code);
-}
-
-// The host left and the relay picked us, on sock, the socket we joined with. Carry on from the last state it sent,
-// with the guards still in the room: the old host is dropped, and so is anyone whose leaving it had not passed on yet.
-function takeOver(sock: WebSocket, guests: string[]): void {
-  game.isHost = true;
-  game.joining = false;
-  game.S ||= newState(game.code); // the old host left before it sent us anything
-  const was = Object.fromEntries((game.S.players || []).map(p => [p.id, p]));
-  const me = was[game.myId] || guard(game.myId);
-  me.name = game.myName;
-  sim.players = { [game.myId]: me };
-  for (const id of guests.filter(g => typeof g === 'string')) sim.players[id] = was[id] || guard(id);
-  game.S.players = Object.values(sim.players);
-  game.netNote = 'The host left, so you are hosting now.';
-  if (game.S.phase !== 'lobby') adoptFloor(sim, game.S, performance.now()); // rebuild the mascots' thinking, which the old host kept to itself
-  hostRoom(sock, true);
-  run();
-}
-
-let rehosts = 0; // fixed rooms only: times a join found nobody hosting and went back to hosting
+// Join a friend's room by its code.
 export function join(code: string): void {
   if (!/^[a-z]-/.test(code)) code = code.toUpperCase().trim();
-  if (!ROOM.test(code)) return;
+  if (ROOM.test(code)) open(code, 'join');
+}
+
+// back: trying to get back into a room this page was in.
+function open(code: string, mode: Mode, back = false): void {
   game.code = code;
-  game.isHost = false;
   game.joining = true;
-  game.myId = `g${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
-  const sock = new WebSocket(roomUrl(code, `id=${game.myId}`));
+  game.myId ||= newId();
+  const sock = new WebSocket(roomUrl(code, `v=${PROTOCOL}&mode=${mode}&id=${game.myId}`));
   ws = sock;
-  // Who we are. Sent again to a new host, who may have missed the first time.
-  const hello = () => send({ t: 'name', n: game.myName });
+  let opened = false;
   sock.onopen = () => {
-    if (document.hidden) showing();
-    hello();
+    opened = true;
+    retries = 0;
+    heard = performance.now();
+    game.netNote = '';
+    send({ t: 'name', n: game.myName });
   };
-  // Every peer and the relay send JSON text.
+  // The room sends JSON text, and only states.
   sock.onmessage = (e: MessageEvent<string>) => {
-    const d = parse(e.data) as GuestInbox | null;
-    if (d?.t === 's') {
-      game.S = d.s;
-      game.joining = false;
-    } else if (d?.t === 'host' && Array.isArray(d.guests)) takeOver(sock, d.guests);
-    else if (d?.t === 'rehost') hello();
+    const m = parse(e.data);
+    if (!isState(m)) return;
+    heard = performance.now();
+    game.S = m.s;
+    game.joining = false;
   };
   sock.onclose = e => {
-    const wasIn = !!game.S;
-    game.S = null;
+    if (ws !== sock) return;
+    ws = null;
+    // Someone is already in a room under the code we drew. Draw another.
+    if (e.code === CODE_TAKEN && mode === 'make') return open(newCode(), 'make');
     game.joining = false;
-    // The fixed room's host left between our try at hosting and our try at joining. Host after all.
-    if (!wasIn && e.code === NO_HOST && platform.fixedRoom && rehosts++ < 3) return host(code);
-    // A host leaving hands the room on (takeOver), so a close here is the connection failing.
-    game.error = wasIn
-      ? { title: 'Lost the connection to the room', detail: 'Reload to start again.' }
-      : { title: `Could not join room ${code}`, detail: e.code === NO_HOST ? 'Nobody is hosting a room with that code.' : 'The connection failed.' };
+    if (e.code === OUTDATED) return fail('The game has been updated', 'Reload to play the new version.');
+    if (e.code === NO_ROOM) return fail(`Could not join room ${code}`, 'Nobody is playing in a room with that code.');
+    if (opened || back) return retry(code);
+    if (mode === 'join') return fail(`Could not join room ${code}`, 'The connection failed.');
+    // No room to reach: play alone.
+    playSolo(code, 'Multiplayer unavailable. You can still play solo.');
   };
 }
 
-// Route an action to the simulation, locally if we are the host. A host has S, from host() or takeOver().
-export function send(a: Action): void {
-  if (game.isHost) actFloor(sim, currentState(), game.myId, a);
-  else if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(a));
+// The room's connection dropped, or a deploy restarted it. Go back in as the same guard, which keeps their place in
+// the night (worker/room.ts), a few times before carrying on alone from where the night was.
+function retry(code: string): void {
+  const wait = RETRY_MS[retries++];
+  if (wait === undefined) {
+    const lost = 'Lost the connection to the room. You are playing solo now.';
+    playSolo(code, lost);
+    // Over the game this is news, not a state to keep showing.
+    setTimeout(() => {
+      if (game.netNote === lost) game.netNote = '';
+    }, 10_000);
+  } else {
+    game.netNote = 'Reconnecting to the room…';
+    setTimeout(() => open(code, 'either', true), wait);
+  }
+}
+
+// A connection can die without closing, and the page would wait on it for good. During a night the room sends ten
+// states a second, so a long silence means it has gone: drop it and go back in.
+setInterval(() => {
+  const sock = ws;
+  if (sock?.readyState !== WebSocket.OPEN || game.S?.phase !== 'play' || performance.now() - heard < QUIET_MS) return;
+  ws = null;
+  sock.close();
+  retry(game.code);
+}, 1000);
+
+function fail(title: string, detail: string): void {
+  game.S = null;
+  game.error = { title, detail };
+}
+
+// Run the night here: a new one, or the last state the room sent, with only this guard in it. The mascots' thinking
+// stayed with the room, so it is made up from S (adoptFloor).
+function playSolo(code: string, note: string): void {
+  const S = game.S ?? newState(code),
+    now = performance.now(),
+    sim = newSim({ rng: Math.random, now });
+  const me = S.players.find(p => p.id === game.myId);
+  S.players = [];
+  joinFloor(sim, S, game.myId, me);
+  commandFloor(sim, S, game.myId, { t: 'name', n: game.myName });
+  if (S.phase === 'play') adoptFloor(sim, S, now);
+  game.S = S;
+  game.netNote = note;
+  solo = { sim, S, loop: setInterval(() => stepFloor(sim, S, performance.now()), TICK_MS) };
+}
+
+// What this guard does, to whoever runs the night: the room, or this page.
+export function send(c: Command): void {
+  if (solo) commandFloor(solo.sim, solo.S, game.myId, c);
+  else if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(c));
 }

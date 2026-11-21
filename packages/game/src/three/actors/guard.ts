@@ -1,5 +1,5 @@
 // Another guard: guard.glb (or a stand-in with the same parts) walking where
-// the host says they are, looking where they look, with their torch, their
+// the room says they are, looking where they look, with their torch, their
 // phone when they have it up, a name tag, and the two things that happen to
 // guards: being flattened and being peeled back up.
 

@@ -1,11 +1,12 @@
-// The night simulation, host side. Only the host calls stepFloor() and actFloor(); net.ts
-// sends the state S it keeps to every guest. S.phase is 'lobby' until the host
-// starts night 1, then 'play', and a night ends in 'win', 'dead' or, after the
-// last one, 'won'.
+// The night simulation. The room's object (packages/game/worker/room.ts) runs a night and sends the state S it keeps
+// to every guard's browser, or a page with no room runs it alone. Only they call stepFloor() and actFloor(). S.phase
+// is 'lobby' until a guard starts night 1, then 'play', and a night ends in 'win', 'dead' or, after the last one,
+// 'won'.
 //
-// Nothing here keeps a night's state at module level. The host's thinking (the guards in the room, the mascots'
-// brains, the timers) lives on a Sim the caller makes with newSim() and passes in, beside S. Every random draw goes
-// through sim.rng and the time comes in as `now`, so the balance harness can seed one and fake the other.
+// Nothing here keeps a night's state at module level. The thinking that never leaves whoever runs the night (the
+// guards in the room, the mascots' brains, the timers) lives on a Sim the caller makes with newSim() and passes in,
+// beside S. Every random draw goes through sim.rng and the time comes in as `now`, so the balance harness can seed
+// one and fake the other.
 // packages/sim/CONTRACT.md says how to call it.
 //
 // The night in one paragraph: faults break out in the breaker boxes around the
@@ -285,13 +286,13 @@ export interface SimOptions {
   shuffle?: Shuffle; // 'sort' unless given
 }
 
-// What only the host knows: the guards in the room and the mascots' thinking. The caller makes one with newSim() and
-// passes it, with S, to every call below. Nothing else in the package keeps state about a night.
+// What only whoever runs the night knows: the guards in the room and the mascots' thinking. The caller makes one with
+// newSim() and passes it, with S, to every call below. Nothing else in the package keeps state about a night.
 export interface Sim {
   rng: Rng; // the caller may swap it between calls
   shuffle: Shuffle;
-  players: Record<string, Player>; // peer id -> that guard's record, the same object as their entry in S.players
-  // What each mascot is thinking, by MASC index. Host only: guests get the result (m.st, m.x, m.z, m.yaw).
+  players: Record<string, Player>; // guard id -> that guard's record, the same object as their entry in S.players
+  // What each mascot is thinking, by MASC index. It is never sent. Browsers get the result (m.st, m.x, m.z, m.yaw).
   brains: Brain[];
   batTimers: number[]; // seconds until a taken battery turns up somewhere else
   crankNoise: number; // seconds until the turning crank is heard again
@@ -369,7 +370,7 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
   });
   S.m = MASCOTS.map(i => ({ i, x: REST[i].x, z: REST[i].z, yaw: REST[i].yaw, st: 'rest', rot: 0, lit: false, ire: 0 }));
   // Nothing moves for the first half minute of night 1, and a quarter minute after that.
-  // S.waveAt is when the mascots next stir or settle, on S.t, kept in S so a guest who takes over as host has it.
+  // S.waveAt is when the mascots next stir or settle, on S.t, kept in S so a night picked up from S alone has it.
   const quiet = n === 1 ? 34 : Math.max(12, 26 - n * 3);
   S.waveAt = quiet + rnd(sim, 0, 6);
   sim.brains = MASC.map((_d, _i) => ({
@@ -431,8 +432,9 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
   sim.crankNoise = 0;
 }
 
-// A guest taking over from a host who left has S but none of the host's thinking, so make it up from S.
-// Each mascot keeps its place and state, except the ones that need what the old host knew (a charge's
+// A night picked up from S alone has none of the mascots' thinking, so make it up from S. That happens when a room's
+// object restarts (after a deploy, say) and has only the S it saved, and when a page loses its room mid-night and
+// carries on solo. Each mascot keeps its place and state, except the ones that need what was lost (a charge's
 // heading, a besieged door): those look round where they stand. One on a hunt goes after the nearest guard.
 // What is lost errs toward the crew: Stompy waits out a full gap before it charges, and one standing where it
 // stands stays put as long as one that has given up would. now: as for stepFloor.
@@ -476,13 +478,13 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
     return b;
   });
   // Batteries taken are back in 30 to 50 s. How long ago these went is lost, so they come back any time in that.
-  // A host from before S.batN and S.waveAt existed did not send them, so guess those from the crew and the wave. One
-  // from before S.bats sent no batteries lying about, so they are all due back.
+  // A state from a build before S.batN and S.waveAt existed has neither, so guess those from the crew and the wave.
+  // One from before S.bats has no batteries lying about, so they are all due back.
   state.bats ??= [];
   const missing = (state.batN ?? Math.min(BATTERY_SPOTS.length, 3 + S.players.length)) - state.bats.length;
   sim.batTimers = Array.from({ length: Math.max(0, missing) }, () => rnd(sim, 5, 50)).sort((a, b) => a - b);
   state.waveAt ??= S.t + rnd(sim, 0.2, 1) * (S.stir ? rnd(sim, ...STIR) * (1 + h) : rnd(sim, ...CALM) * (1 - 0.7 * h));
-  // A host from before the toys sent none: everyone has theirs in hand.
+  // A state from before the toys has none, so everyone has theirs in hand.
   state.toys ||= [];
   state.toyId ||= 0;
   for (const p of state.players) p.toy ??= true;
@@ -1268,7 +1270,7 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
   if (S.phase !== 'play' || !isPlaced(who)) return;
   const p = who;
   if (a.t === 'p') {
-    // The guard's own browser moves them; the host only refuses a position inside a wall or a shut door.
+    // The guard's own browser moves them. Whoever runs the night only refuses a position inside a wall or a shut door.
     // In a locker they stay where they stepped in, with the torch off.
     if (hidden(p)) {
       p.yaw = num(a.yaw, -1e3, 1e3, p.yaw);

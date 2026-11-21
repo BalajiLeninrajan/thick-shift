@@ -10,7 +10,7 @@
 //
 // Everything works from the keyboard (W A S D or the number keys to choose,
 // E or Space to act, X or Esc to let go), a gamepad (stick or d-pad, A, B) and
-// touch (tap the parts). The host is told only when the job is done.
+// touch (tap the parts). The room is told only when the job is done.
 import { defined } from '@thick-shift/sim/check';
 import { BOXES, ROOMS3 } from '@thick-shift/sim/map';
 import { query } from '../dom';

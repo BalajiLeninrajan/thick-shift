@@ -1,5 +1,6 @@
-// The shapes of everything the simulation shares: the state S the host keeps and sends to every guest ten times a
-// second, the host's own thinking that never leaves it, and every message that goes over the room's socket
+// The shapes of everything the simulation shares: the state S the room keeps and sends to every guard's browser ten
+// times a second, the thinking that never leaves whoever runs the night, and every message that goes over the room's
+// socket
 // (packages/game/src/net.ts and packages/game/worker/room.ts). Types only: nothing here exists at runtime.
 
 /* ---------- small things ---------- */
@@ -25,7 +26,7 @@ export type Doors = Record<DoorKey, boolean>;
 
 /* ---------- the state S ---------- */
 
-// 'lobby' until the host starts night 1, then 'play'. A night ends in 'win', 'dead' or, after the last one, 'won'.
+// 'lobby' until a guard starts night 1, then 'play'. A night ends in 'win', 'dead' or, after the last one, 'won'.
 export type Phase = 'lobby' | 'play' | 'win' | 'dead' | 'won';
 
 // What a guard's hands are on while they hold the use key: the generator's crank, the charging dock, or a breaker box.
@@ -33,11 +34,11 @@ export type GuardAct = '' | 'crank' | 'charge' | 'fix';
 
 // A guard as they join the room: what net.ts knows before their first night places them.
 export interface Joined {
-  id: string; // 'host' for the first host, or the guest's peer id
+  id: string; // made up by the guard's own page (newId in packages/game/src/net.ts)
   name: string;
 }
-// A guard on the floor. The same object sits in S.players and in the host's Sim.players, so the host's changes to
-// one are changes to the other.
+// A guard on the floor. The same object sits in S.players and in Sim.players, so a change to one is a change to the
+// other.
 export interface Guard extends Joined {
   x: number;
   z: number;
@@ -56,7 +57,7 @@ export interface Guard extends Joined {
   toy: boolean; // holding their Mini Biggs
 }
 // A guard in S.players at any time: a guard who joined after the night began has only their id and name until the
-// next step places them (stepFloor), and a host from before the toys sent no toy.
+// next step places them (stepFloor), and a state from before the toys has no toy.
 export type Player = Joined & Partial<Omit<Guard, keyof Joined>>;
 
 // What a mascot is doing. rest: standing on its mark, switched off. roam: walking somewhere. search: going to look at
@@ -69,7 +70,7 @@ export type MascotState = 'rest' | 'roam' | 'search' | 'hunt' | 'windup' | 'char
 export type MascotIndex = 0 | 1 | 2 | 3;
 export type PerMascot<T> = readonly [T, T, T, T];
 
-// A mascot as every guest sees it. i: its MASC index. rot: how far it has come apart, 0 to 2. lit: a torch is on it.
+// A mascot as every guard's browser sees it. i: its MASC index. rot: how far it has come apart, 0 to 2. lit: a torch is on it.
 // ire: what torchlight and slammed doors have added to its rot.
 export interface Mascot {
   i: MascotIndex;
@@ -112,7 +113,8 @@ export interface Tally {
   peels: string[];
 }
 
-// The dev menu's cheats (packages/game/src/dev.ts). Only the host sets them; the sim reads them.
+// The dev menu's cheats (packages/game/src/dev.ts). Any guard in the room sets them with a dev command (devFloor in
+// session.ts), and the sim reads them.
 // rot and dread: -1 leaves them to the night. The dev menu sets all of them; the balance harness sets only some
 // (`{ freeze: true }`), so S.dev is a Partial<Dev>, and a missing field reads as off everywhere the sim looks at it.
 export interface Dev {
@@ -197,11 +199,11 @@ export interface NightState extends LobbyState {
   toys: Toy[];
   toyId: number;
 }
-// S as it is sent and received: a lobby state, or a night's. A host from before some fields existed (batN, waveAt,
-// toys) may not have sent them; adoptFloor fills them in.
+// S as it is sent and received: a lobby state, or a night's. A state from a build before some fields existed (batN,
+// waveAt, toys) may not have them; adoptFloor fills them in.
 export type State = LobbyState & Partial<Omit<NightState, keyof LobbyState>>;
 
-/* ---------- the host's thinking ---------- */
+/* ---------- the mascots' thinking ---------- */
 
 // Where a mascot reaching over furniture for a guard started: who, how far, where they stood, and when.
 export interface Reach {
@@ -211,8 +213,8 @@ export interface Reach {
   z: number;
   t: number;
 }
-// What one mascot is thinking. Host only: guests get the result (m.st, m.x, m.z, m.yaw). since, was and noShort are
-// added the first time they are needed, after the rest, so a brain's keys keep today's order.
+// What one mascot is thinking. It is never sent. Browsers get the result (m.st, m.x, m.z, m.yaw). since, was and
+// noShort are added the first time they are needed, after the rest, so a brain's keys keep today's order.
 export interface Brain {
   path: Point[];
   repath: number;
@@ -245,8 +247,9 @@ export interface Brain {
 
 /* ---------- the wire ---------- */
 
-// A guard's action, sent by their own browser (packages/game/src/three/player.ts) or, for the host, handed straight
-// to actFloor. It comes off the wire as JSON from someone else's browser, so actFloor checks every field.
+// A guard's action, sent by their own browser (packages/game/src/three/player.ts) to the room, or in a night played
+// solo handed straight to commandFloor. It comes off the wire as JSON from someone else's browser, so actFloor checks
+// every field.
 export type UseWhat = 'fix' | 'door' | 'bat' | 'toy' | 'hide' | 'peel';
 export type Action =
   | { t: 'name'; n: string }
@@ -256,28 +259,25 @@ export type Action =
   | { t: 'call' }
   // A Mini Biggs thrown along yaw, d metres.
   | { t: 'throw'; yaw: number; d: number }
-  // i: a box, battery spot or locker. k: a door. id: a toy (number) or a flat guard (string). The host's own browser
-  // hands actFloor the object it built, which can carry a field set to undefined (player.ts copies them from its
-  // Target); JSON drops those for a guest's.
+  // i: a box, battery spot or locker. k: a door. id: a toy (number) or a flat guard (string). A solo night hands
+  // actFloor the object player.ts built, which can carry a field set to undefined (copied from its Target); JSON drops
+  // those on the way to a room.
   | { t: 'use'; what: UseWhat; i?: number | undefined; k?: DoorKey | undefined; id?: string | number | undefined };
 
-// The relay's close codes (worker/room.ts): nobody is hosting this code, somebody already is, or a guest id it
-// will not use (1008, policy violation).
-export type CloseCode = 1008 | 4404 | 4409;
+// The dev menu's cheats (packages/game/src/dev.ts), which devFloor runs: switch cheats on or off (set), a one-off
+// change to the night (do), or one for a mascot (i, its MASC index). Like an action, it comes off the wire.
+export type DevDo = 'hour' | 'late' | 'win' | 'next' | 'final' | 'low' | 'out' | 'bat' | 'peel';
+export type DevCommand = { t: 'dev'; set: Partial<Dev> } | { t: 'dev'; do: DevDo } | { t: 'dev'; do: 'near' | 'home'; i: number };
+// Anything a guard's browser sends whoever runs the night (commandFloor): an action, 'go' to start the next night
+// from the card between nights, or a dev cheat.
+export type Command = Action | { t: 'go' } | DevCommand;
 
-// Host to relay to every guest: the whole state, ten times a second.
+// Why a room turned a socket away (worker/room.ts): an id or mode it will not use (1008, policy violation), nobody playing
+// under the code someone tried to join, a code taken when someone tried to start a room, or a page from an older build.
+export type CloseCode = 1008 | 4404 | 4409 | 4426;
+
+// Room to every guard in it: the whole state, ten times a second during a night and whenever it changes between nights.
 export interface StateMessage {
   t: 's';
   s: State;
 }
-// Relay to a guest: you are the host now (guests: the others' ids), or a new host has taken over (say your name again).
-export type RelayToGuest = { t: 'host'; guests: string[] } | { t: 'rehost' };
-// What a guest's socket receives.
-export type GuestInbox = StateMessage | RelayToGuest;
-// Relay to host: a guest's message, wrapped with who sent it, or a guest coming or going.
-export interface HostInbox {
-  from: string;
-  d: Action | { t: 'join' } | { t: 'leave' };
-}
-// Either end to relay, as plain text, not JSON: this tab has gone to the background or come back.
-export type Visibility = 'hidden' | 'shown';

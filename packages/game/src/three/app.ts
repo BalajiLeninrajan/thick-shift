@@ -55,6 +55,7 @@ function create() {
   const slats = createSlats(scene); // the locker doors, drawn behind the hands
   let last = performance.now(),
     lastT = 1e9,
+    lastNight = 0,
     lastEv = 0,
     shown = false,
     seat: { x: number; z: number; yaw: number; pitch: number; back: number } | null = null;
@@ -70,7 +71,7 @@ function create() {
   }
 
   // A flat guard can watch a standing teammate (player.me.watch is their id): through their eyes, or with
-  // prefs.third from behind and above them. seat is that view, eased between the host's updates.
+  // prefs.third from behind and above them. seat is that view, eased between the room's updates.
   const LINGER = 1.5; // seconds a caught guard lies looking up at what sat on them before the night's end card
   const BACK = 3,
     ABOVE = 2.2,
@@ -184,11 +185,16 @@ function create() {
       show(true);
       post.fit(canvas, camera);
       const mine = S.players.find(p => p.id === game.myId);
-      if (S.t < lastT && mine?.x != null) {
+      // A night began: another night, or this one from the start. A room brought back from storage can rewind the
+      // clock by the two seconds since its last save, which is not a new night.
+      if ((S.night !== lastNight || S.t < lastT - 3) && mine?.x != null) {
         player.reset(mine);
         actors.reset();
-      } // a night began
-      if (mine?.x != null) lastT = S.t;
+      }
+      if (mine?.x != null) {
+        lastT = S.t;
+        lastNight = S.night;
+      }
       for (const e of S.evs)
         if (e.id > lastEv) {
           lastEv = e.id;

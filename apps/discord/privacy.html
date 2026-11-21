@@ -14,7 +14,7 @@
 </header>
 <main class="page-main is-reading">
   <h1>Privacy Policy</h1>
-  <p class="cn-meta">Last updated November 19, 2026</p>
+  <p class="cn-meta">Last updated November 21, 2026</p>
 
   <p>Thick Shift 3D is a co-op game you play in a browser or as a Discord Activity. It has no accounts, no ads, no analytics and no cookies. This page lists everything the game handles and where it goes.</p>
 
@@ -23,7 +23,7 @@
   <p>The game doesn't read your email, your servers, your friends or your messages, and it doesn't keep your Discord user ID. If you decline, you play as "Guard".</p>
 
   <h2 class="cn-mt-32">Rooms</h2>
-  <p>Players in one room connect to a relay that runs on Cloudflare. The relay passes game messages (where you are, what you used, your name) between players and saves none of them. While you are connected it holds a random player ID it made up for you, whether you host, when you joined and whether your tab is in the background. That goes away when you leave. Inside Discord, the room is named after the Activity's instance ID, which Discord shares with everyone who joins that Activity in the same channel.</p>
+  <p>Players in one room connect to a server on Cloudflare that runs the night. Your game sends it where you are, what you used and your name, and it sends everyone in the room the state of the night, which includes each guard's name and where they are. It saves that state so a night survives the server restarting, and deletes it 5 minutes after the last player leaves. It knows you by a random player ID your game made up, not by your Discord account. The server's logs record the web address of each connection, which includes the room and that player ID, and Cloudflare keeps those logs for up to 7 days. Inside Discord, the room is named after the Activity's instance ID, which Discord shares with everyone who joins that Activity in the same channel.</p>
 
   <h2 class="cn-mt-32">On your device</h2>
   <p>The game saves the name you typed (on the web version), your control settings and which tips you've seen in your browser's local storage. That stays on your device. Clear your site data to remove it.</p>

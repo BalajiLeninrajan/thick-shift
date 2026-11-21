@@ -25,7 +25,7 @@ test/
   smoke.luau           runs the client modules against the sim under Lune
 ```
 
-The server works like the web game's host. Clients own their own positions and send the same actions a guest's browser sends (`p`, `use`, `call`), plus `next` from the cards between nights. Nobody has a Roblox character: each client draws the building, the mascots and the other guards itself from the state, as each browser does.
+The server works like the web game's room (`packages/game/worker/room.ts`). Clients own their own positions and send the same actions a guard's browser sends (`p`, `use`, `call`), plus `next` from the cards between nights. Nobody has a Roblox character: each client draws the building, the mascots and the other guards itself from the state, as each browser does.
 
 ## Tools
 

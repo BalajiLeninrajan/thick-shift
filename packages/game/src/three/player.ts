@@ -1,5 +1,5 @@
 // This guard: walking, looking, the torch, and using things. The browser
-// owns its own position and tells the host about twelve times a second
+// owns its own position and tells the room about twelve times a second
 // (a 'p' action); everything else about the guard comes back in S.
 // Keyboard (WASD to walk, and arrow keys to look for anyone without a mouse), mouse and gamepad are read here. Touch is in touch.ts, which
 // drives the same guard through pad, look(), toggleTorch(), togglePhone(), toggleZoom() and throwToy().
@@ -64,7 +64,7 @@ const DOOR_NAME: Record<DoorKey, string> = { L: 'left door', R: 'right door', V:
 // In a locker: how far the view turns either side of straight out through the doors, and up or down (radians),
 // and how far in front of the locker's middle the eye is: just past the doors, so their insides are behind it.
 const LOCKER_LOOK = { yaw: 0.85, pitch: 0.5, eye: 0.34 };
-const THROW_MS = 1000; // a second throw is not sent before the host has had time to take the first
+const THROW_MS = 1000; // a second throw is not sent before the room has had time to take the first
 const angDiff = (a: number, b: number): number => {
   let d = (a - b) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
@@ -99,7 +99,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     dry: 0, // and of the last try with empty hands (empty)
     empty: 0,
     hid: -1,
-  }; // the locker (HIDES index) this guard is standing in, as the host has it, or -1
+  }; // the locker (HIDES index) this guard is standing in, as the room has it, or -1
   const keys = new Set<string>();
   // Touch and gamepad code can drive the guard through these instead of keys.
   const pad: Pad = { fwd: 0, strafe: 0, sprint: false, use: false };
@@ -151,7 +151,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   }
   // The guard's Mini Biggs, thrown where they are looking: as far as the floor the view meets, or as far as one goes
   // when looking level or up. It sings on a bar of the torch's battery, so it needs that much, and it has to be picked
-  // up again before the next throw. The host works out where it comes down (landing in sim.ts) and takes the
+  // up again before the next throw. The room works out where it comes down (landing in sim.ts) and takes the
   // battery. Not from a locker, and not with both hands in a breaker box.
   function throwToy(): void {
     if (!playing() || me.flat || me.paused || me.hid >= 0 || me.task) return;
@@ -166,7 +166,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       me.dry = now;
       return;
     }
-    if (now - lastThrow < THROW_MS) return; // the host has not said it has gone yet
+    if (now - lastThrow < THROW_MS) return; // the room has not said it has gone yet
     lastThrow = me.threw = now;
     const d = me.pitch < -0.05 ? Math.min(TOY.range, (EYE - 0.2) / Math.tan(-me.pitch)) : TOY.range;
     send({ t: 'throw', yaw: me.yaw, d });
@@ -189,7 +189,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     keys.clear();
     if (mouseLocked) document.exitPointerLock();
   }
-  // A flat guard shouts. The host rate-limits it too.
+  // A flat guard shouts. The room rate-limits it too.
   function call(): void {
     if (!playing() || !me.flat || performance.now() - lastCall < F.CALL_GAP * 1000) return;
     lastCall = performance.now();
@@ -458,7 +458,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     resume,
     call,
     watchNext,
-    // Put the guard where the host says they are: the start of a night, or after joining.
+    // Put the guard where the room says they are: the start of a night, or after joining.
     reset(mine: Player): void {
       letGo();
       Object.assign(me, {
@@ -482,7 +482,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       // Peeled up: stand looking ahead, not at the ceiling the catch left the camera facing.
       if (me.flat && !mine.flat) me.pitch = 0;
       me.flat = mine.flat;
-      // Into a locker, or out of one: the host has moved us to the floor in front of its doors.
+      // Into a locker, or out of one: the room has moved us to the floor in front of its doors.
       const hid = mine.hid,
         locker = HIDES[hid];
       if (hid !== me.hid) {
@@ -520,7 +520,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
             letGo();
           }
         } else {
-          // A door shut on top of us, or the host put us somewhere else.
+          // A door shut on top of us, or the room put us somewhere else.
           if (!walkable(me.x, me.z, PLAYER_R * 0.5, S.doors)) {
             me.x = mine.x;
             me.z = mine.z;

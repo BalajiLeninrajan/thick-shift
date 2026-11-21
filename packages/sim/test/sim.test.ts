@@ -1,5 +1,5 @@
-// The night's entry points called directly, without the harness's guards: the clock, starting a night, a guest taking
-// over as host (adoptFloor), starting the run again (restartFloor) and a guard's actions (actFloor).
+// The night's entry points called directly, without the harness's guards: the clock, starting a night, picking a
+// night up from S alone (adoptFloor), starting the run again (restartFloor) and a guard's actions (actFloor).
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
 import { BATTERY_SPOTS, BOXES, HIDES, PANELS, REST, spawnPoint } from '../src/map.ts';
@@ -90,9 +90,9 @@ describe('startFloorNight', () => {
 });
 
 describe('adoptFloor', () => {
-  // A night as a guest holds it after a host from before batN, waveAt and the toys has been sending it, part way in:
-  // one mascot hunting, one charging, one feasting and one at rest.
-  function guestState() {
+  // A night saved by a build from before batN, waveAt and the toys, part way in: one mascot hunting, one charging, one
+  // feasting and one at rest.
+  function savedState() {
     const { S } = start(5, 2, 3);
     const T = JSON.parse(JSON.stringify(S)) as State;
     const [biggs, flan, squish, stompy] = T.m;
@@ -110,14 +110,14 @@ describe('adoptFloor', () => {
     return T;
   }
   function adopt(seed: number) {
-    const T = guestState();
+    const T = savedState();
     const sim = newSim({ rng: seeded(seed), now: 0 });
     for (const p of T.players) sim.players[p.id] = p;
     adoptFloor(sim, T, 5000);
     return { sim, T: T as NightState };
   }
 
-  it('makes up the host thinking it does not have from S', () => {
+  it("makes up the mascots' thinking from S", () => {
     const { sim, T } = adopt(7);
     expect(sim.lastStep).toBe(5000);
     expect(sim.brains).toHaveLength(4);
@@ -136,7 +136,7 @@ describe('adoptFloor', () => {
       expect(s).toBeGreaterThanOrEqual(5);
       expect(s).toBeLessThan(50);
     }
-    // What the old host did not send is filled in.
+    // What the old build did not save is filled in.
     expect(T.waveAt).toBeGreaterThan(T.t);
     expect(T.toys).toEqual([]);
     expect(T.toyId).toBe(0);
@@ -146,7 +146,7 @@ describe('adoptFloor', () => {
   });
 
   it('gives a hunting Biggs half as much wind again as any other hunter', () => {
-    const T = guestState();
+    const T = savedState();
     defined(T.m[1], 'Madame Flan').st = 'hunt';
     const sim = newSim({ rng: seeded(7), now: 0 });
     for (const p of T.players) sim.players[p.id] = p;
@@ -168,8 +168,8 @@ describe('adoptFloor', () => {
     expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault), waveAt: r(T.waveAt) }).toMatchSnapshot();
   });
 
-  it('starts an empty S.bats for a host from before it, so batteries can be dropped and picked up', () => {
-    const T = guestState();
+  it('starts an empty S.bats for a state from before it, so batteries can be dropped and picked up', () => {
+    const T = savedState();
     delete T.bats;
     const sim = newSim({ rng: seeded(7), now: 0 });
     for (const p of T.players) sim.players[p.id] = p;
@@ -235,7 +235,7 @@ describe('restartFloor', () => {
 
 describe('actFloor', () => {
   // Each kind of use: a night set up so that the action does something for g0, the field it reads, and wrong values
-  // for that field, as JSON from a guest's browser can carry.
+  // for that field, as JSON from a guard's browser can carry.
   const box = defined(BOXES[0], 'box 0'),
     spot = defined(BATTERY_SPOTS[0], 'battery spot 0'),
     locker = defined(HIDES[0], 'locker 0');

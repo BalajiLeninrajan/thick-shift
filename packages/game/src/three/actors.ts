@@ -1,6 +1,6 @@
 // Everyone who moves and is not you: the four mascots and the other guards.
 // This file owns them and passes events along; the work is in actors/:
-//   track.ts   the host sends positions ten times a second; drawing between snapshots
+//   track.ts   the room sends positions ten times a second; drawing between snapshots
 //   rig.ts     a model's named parts, and the offsets animation adds to them
 //   mascot.ts  one mascot: stages of rot, states, gait, head and eyes
 //   styles.ts  what makes each of the four itself at each stage
@@ -89,7 +89,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
       plush.reset();
       for (const m of mascots) m.reset();
     },
-    // Every new event from the host comes through here.
+    // Every new event in S.evs comes through here.
     event(e: SimEvent, S: State, me: Me): void {
       if (e.type === 'flat') {
         const { id, by, x, z } = e.x;

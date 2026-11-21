@@ -4,7 +4,6 @@ import type { GameError, Invite, OverlayScreen } from './types';
 
 export interface Game {
   S: State | null;
-  isHost: boolean;
   code: string;
   myName: string;
   myId: string;
@@ -13,20 +12,19 @@ export interface Game {
   error: GameError | null;
 }
 
-// game: the session. S is the authoritative state the host simulates and
-// broadcasts; guests only ever read it.
+// game: the session. S is the state the room runs and sends (net.ts), or that this page runs itself in a night
+// played solo. Nothing outside net.ts and the sim changes it.
 export const game: Game = {
   S: null,
-  isHost: false,
   code: '',
   myName: '',
-  myId: '', // this player's id in S.players: 'host', or the guest's peer id
+  myId: '', // this guard's id in S.players, made up by net.ts
   netNote: '', // status line shown in the lobby
   joining: false,
   error: null, // { title, detail } when the session cannot continue
 };
 
-// game.S, for code that runs only once a room exists: the floor's frame, the host's step, the dev menu. Code that
+// game.S, for code that runs only once a room exists: the floor's frame and the guard's own controls. Code that
 // can run before then (the title screen, the overlay) checks game.S itself.
 export function currentState(): State {
   if (!game.S) throw new Error('no room state yet');
@@ -53,7 +51,7 @@ export interface Platform {
 // platform: what changes when an app runs the game inside something else, such as a Discord Activity
 // (apps/discord). Set by that app's src/boot.ts before start(). The web game leaves it as it is.
 export const platform: Platform = {
-  fixedRoom: false, // the room comes from outside: everyone tries to host it, and whoever finds it taken joins (net.ts)
+  fixedRoom: false, // the room comes from outside, and everyone opens the same one (net.ts)
   title: null, // () => screen ({ key, html, wire }), shown in place of the title screen (ui.ts)
   invite: null, // () => { html, wire }, shown in the lobby in place of the room code and link (ui.ts)
 };

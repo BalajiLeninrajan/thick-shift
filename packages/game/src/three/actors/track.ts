@@ -1,7 +1,7 @@
-// Where something the host moves is right now. The host sends positions ten
+// Where something the room moves is right now. The room sends positions ten
 // times a second; drawing the latest one stutters and easing toward it lags by
 // an amount that depends on speed, so feet slide. Instead each actor keeps its
-// last few snapshots, stamped with the host's clock (S.t), and is drawn a
+// last few snapshots, stamped with the night's clock (S.t), and is drawn a
 // little in the past, between two of them.
 
 import { defined } from '@thick-shift/sim/check';
@@ -23,7 +23,7 @@ export interface HostClock {
   see(St: number, now: number): void;
 }
 
-// One clock for every track: what host time to draw at.
+// One clock for every track: what time on the night's clock to draw at.
 export const hostClock: HostClock = {
   off: 0,
   gap: 0.1,
@@ -46,7 +46,8 @@ export const hostClock: HostClock = {
       this.last = St;
     }
     // One and a half gaps back: far enough that there is nearly always a
-    // snapshot on each side, and on the host (which steps every frame) it is 25 ms.
+    // snapshot on each side. A new state comes every 100 ms, from the room or
+    // from a solo night's own step, so that is 150 ms.
     this.now = now + this.off - Math.min(0.25, this.gap * 1.5);
   },
 };
@@ -120,7 +121,7 @@ export class Track {
       this.jumped = true;
     }
   }
-  // Move to host time t. Also works out how fast it is going, along its facing
+  // Move to time t on the night's clock. Also works out how fast it is going, along its facing
   // (vf), sideways (vs) and round (spin), from the distance it actually moved.
   sample(t: number, dt: number): void {
     const n = this.n;
