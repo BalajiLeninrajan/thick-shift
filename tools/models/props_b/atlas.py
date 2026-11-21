@@ -15,12 +15,6 @@
 import numpy as np
 
 SIZE, CELL, N, GUT = 2048, 512, 448, 32
-TILES = ['fur', 'velvet', 'steel', 'paint', 'plastic', 'wood', 'paper', 'grille',
-         'gift', 'gunk', 'wrap', 'laminate', 'mirror', 'rust', 'cardboard', 'vinyl']
-# Metres of surface one repeat of each swatch covers by default.
-SCALE = dict(fur=.45, velvet=.6, steel=.7, paint=.8, plastic=.6, wood=.7, paper=.6, grille=.25,
-             gift=.3, gunk=.3, wrap=.55, laminate=.7, mirror=.9, rust=.4, cardboard=.6, vinyl=.45)
-
 Y, X = np.mgrid[0:N, 0:N].astype(np.float32)
 
 
@@ -137,7 +131,7 @@ def tile_paint(r):
     run = drip(chips, 50, .95) * (1 - chips)
     peel = fbm(r, 180, octs=1)
     col = rgb(.88 - .1 * ss(fbm(r, 6, octs=4), .4, .8), (1, 1, 1))
-    col = mix(col, np.broadcast_to(np.array((.5, .27, .1), np.float32), (N, N, 3)), run * .55)
+    col = mix(col, np.array((.5, .27, .1), np.float32), run * .55)
     col = mix(col, rgb(.5 + .5 * fbm(r, 60, octs=2), (.36, .17, .07)), chips)
     return col, peel * .08 - chips * .7, .42 + .5 * chips + .2 * run, chips * .5
 
@@ -153,21 +147,21 @@ def tile_wood(r):
     g = fbm(r, 36, 3, octs=3)
     grain = np.sin(g * 46) * .5 + .5
     fine = fbm(r, 224, 12, octs=1)
-    col = mix(np.broadcast_to(np.array((.66, .48, .28), np.float32), (N, N, 3)),
-              np.broadcast_to(np.array((.4, .26, .13), np.float32), (N, N, 3)), grain * .8)
+    col = mix(np.array((.66, .48, .28), np.float32),
+              np.array((.4, .26, .13), np.float32), grain * .8)
     damp = fbm(r, 4, octs=4)
     col *= (.82 + .18 * fine - .3 * ss(damp, .55, .7) - .3 * rings(damp, .55, .015))[..., None]
-    return col, grain * .3 + fine * .15, .72 + 0 * g, 0
+    return col, grain * .3 + fine * .15, .72, 0
 
 
 def tile_paper(r):
     s = fbm(r, 4, octs=5)
     wet = ss(s, .55, .57)
-    col = np.broadcast_to(np.array((.93, .9, .82), np.float32), (N, N, 3)) * (.92 + .08 * fbm(r, 150, octs=2))[..., None]
+    col = np.array((.93, .9, .82), np.float32) * (.92 + .08 * fbm(r, 150, octs=2))[..., None]
     col = mix(col, col * np.array((.86, .74, .52), np.float32), wet * (.45 + .4 * fbm(r, 9, octs=3)))
     col *= (1 - .45 * rings(s, .55))[..., None]
     crease = scratches(r, 14, 380, bend=.02)
-    return col * (1 - .2 * crease)[..., None], fbm(r, 9, octs=3) * .5 + crease * .5, .9 + 0 * s, 0
+    return col * (1 - .2 * crease)[..., None], fbm(r, 9, octs=3) * .5 + crease * .5, .9, 0
 
 
 def tile_grille(r):
@@ -202,7 +196,7 @@ def tile_gunk(r):
     wetm = ss(fbm(r, 6, octs=3), .55, .7)
     col = rgb(.55 + .45 * lump, (.9, .8, .6))
     col = mix(col, rgb(.5 + .5 * fbm(r, 80, octs=1), (.2, .27, .16)), mould * .9)
-    col = mix(col, np.broadcast_to(np.array((.75, .8, .74), np.float32), (N, N, 3)), fuzz * .7)
+    col = mix(col, np.array((.75, .8, .74), np.float32), fuzz * .7)
     return col, lump * 1.2 + fuzz * .5, .8 - .5 * wetm * (1 - mould), 0
 
 
@@ -247,16 +241,16 @@ def tile_mirror(r):
 def tile_rust(r):
     a, pit = fbm(r, 8, octs=5), fbm(r, 60, octs=3)
     col = mix(rgb(.5 + .5 * pit, (.42, .2, .08)), rgb(.4 + .6 * pit, (.16, .09, .06)), ss(a, .4, .65))
-    col = mix(col, np.broadcast_to(np.array((.62, .34, .1), np.float32), (N, N, 3)), ss(pit, .68, .8) * .7)
-    return col, pit * 1.3 + a * .5, .9 + 0 * a, .25 + 0 * a
+    col = mix(col, np.array((.62, .34, .1), np.float32), ss(pit, .68, .8) * .7)
+    return col, pit * 1.3 + a * .5, .9, .25
 
 
 def tile_cardboard(r):
     s = fbm(r, 4, octs=5)
     flute = np.sin(Y * 6.283 / 8) * .5 + .5
-    col = np.broadcast_to(np.array((.64, .49, .32), np.float32), (N, N, 3)) * (.86 + .1 * fbm(r, 120, 30, octs=2) + .04 * flute)[..., None]
+    col = np.array((.64, .49, .32), np.float32) * (.86 + .1 * fbm(r, 120, 30, octs=2) + .04 * flute)[..., None]
     col *= (1 - .42 * ss(s, .55, .58) - .3 * rings(s, .55))[..., None]
-    return col, flute * .15 + ss(s, .55, .6) * .3, .9 + 0 * s, 0
+    return col, flute * .15 + ss(s, .55, .6) * .3, .9, 0
 
 
 def tile_vinyl(r):
@@ -265,15 +259,35 @@ def tile_vinyl(r):
     grain = fbm(r, 110, octs=2)
     grime = ss(fbm(r, 5, octs=4), .5, .8)
     col = rgb(.82 - .3 * grime + .1 * grain, (1, 1, 1))
-    col = mix(col, np.broadcast_to(np.array((.5, .38, .16), np.float32), (N, N, 3)), crack)
+    col = mix(col, np.array((.5, .38, .16), np.float32), crack)
     return col, grain * .25 - crack * 1.2, .4 + .3 * grime + .5 * crack, 0
 
 
-# Mean brightness (sRGB) each swatch is brought to. A prop multiplies the
-# swatch by its tint and then by baked occlusion, so a swatch painted around
-# mid grey leaves a dark red curtain black under the torch.
-BRIGHT = dict(fur=.76, velvet=.78, steel=.74, paint=.8, plastic=.82, wood=.62, paper=.82, grille=.6,
-              gift=.74, gunk=.7, wrap=.76, laminate=.8, mirror=.76, rust=.46, cardboard=.7, vinyl=.78)
+# Atlas A in cell order: name=(painter, metres one repeat covers by default,
+# mean sRGB brightness the swatch is brought to). A prop multiplies the swatch
+# by its tint and then by baked occlusion, so a swatch painted around mid grey
+# leaves a dark red curtain black under the torch. The order sets each
+# swatch's cell and seed, and props store a swatch as its index.
+SWATCHES = dict(
+    fur=(tile_fur, .45, .76),
+    velvet=(tile_velvet, .6, .78),
+    steel=(tile_steel, .7, .74),
+    paint=(tile_paint, .8, .8),
+    plastic=(tile_plastic, .6, .82),
+    wood=(tile_wood, .7, .62),
+    paper=(tile_paper, .6, .82),
+    grille=(tile_grille, .25, .6),
+    gift=(tile_gift, .3, .74),
+    gunk=(tile_gunk, .3, .7),
+    wrap=(tile_wrap, .55, .76),
+    laminate=(tile_laminate, .7, .8),
+    mirror=(tile_mirror, .9, .76),
+    rust=(tile_rust, .4, .46),
+    cardboard=(tile_cardboard, .6, .7),
+    vinyl=(tile_vinyl, .45, .78),
+)
+TILES = list(SWATCHES)
+SCALE = {name: scale for name, (_, scale, _) in SWATCHES.items()}
 
 
 def lift(c, target):
@@ -290,9 +304,9 @@ def build_a():
     col = np.zeros((SIZE, SIZE, 3), np.float32)
     nrm = np.zeros((SIZE, SIZE, 3), np.float32); nrm[...] = (.5, .5, 1)
     orm = np.ones((SIZE, SIZE, 3), np.float32)
-    for i, name in enumerate(TILES):
-        c, h, rough, metal = globals()['tile_' + name](np.random.default_rng(100 + i))
-        c = lift(np.asarray(c, np.float32), BRIGHT[name]).astype(np.float32)
+    for i, (paint, _, bright) in enumerate(SWATCHES.values()):
+        c, h, rough, metal = paint(np.random.default_rng(100 + i))
+        c = lift(np.asarray(c, np.float32), bright).astype(np.float32)
         h = np.asarray(h, np.float32) * 3.0
         nx = -(np.roll(h, -1, 1) - np.roll(h, 1, 1)) * .5
         ny = -(np.roll(h, -1, 0) - np.roll(h, 1, 0)) * .5
