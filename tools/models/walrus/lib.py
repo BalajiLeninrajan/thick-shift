@@ -321,13 +321,11 @@ def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shad
     return o
 
 
-def strand(pts, r0, r1, col, sides=3, tipcol=None):
+def strand(pts, r0, r1, col, sides=3):
     """One hair, whisker or thread: a thin tapering tube for the fibre material."""
     n = len(pts)
     o = tube(pts, [r0 + (r1 - r0) * (i / (n - 1)) for i in range(n)], sides=sides)
-    c = np.repeat(np.linspace(0, 1, n), sides)[:, None]
-    tipcol = col if tipcol is None else tipcol
-    set_attr(o.data, 'Col', np.asarray(col)[None, :] * (1 - c) + np.asarray(tipcol)[None, :] * c)
+    set_attr(o.data, 'Col', col)
     smooth_shade(o)
     return o
 

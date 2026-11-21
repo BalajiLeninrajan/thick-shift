@@ -265,9 +265,10 @@ def make_body():
             f = max(0, math.cos(a))
             x, y = rx * math.sin(a), -.03 - ry * math.cos(a) - .05 * f
             z = zc - [.12, .2][ST] * f ** 2
-            h = hit(tree, (x * 3, y * 3, z + .5), (-x * 3, -y * 3, -.5 - .2))
             c = V((x, y, z))
-            if h[0] is not None and (h[0] - V((0, 0, z))).length > c.length - .02 and ST == 0: c = h[0] + h[1] * .04
+            if ST == 0:
+                h = hit(tree, (x * 3, y * 3, z + .5), (-x * 3, -y * 3, -.5 - .2))
+                if h[0] is not None and (h[0] - V((0, 0, z))).length > c.length - .02: c = h[0] + h[1] * .04
             ring.append(c)
         gone = {4, 9, 10} if ST == 1 else set()
         for i in range(n):
@@ -417,7 +418,6 @@ def cap(c, look, R, rad, rings=6, seg=20):
         b0, b1 = 1 + j * seg, 1 + (j + 1) * seg
         faces += [(b0 + k, b1 + k, b1 + (k + 1) % seg, b0 + (k + 1) % seg) for k in range(seg)]
     o = mesh_obj('cap', [tuple(p) for p in verts], faces)
-    o.data.update()
     if sum((p.normal.dot(look) for p in o.data.polygons)) < 0:
         bm = bmesh.new(); bm.from_mesh(o.data); bmesh.ops.reverse_faces(bm, faces=bm.faces); bm.to_mesh(o.data); bm.free()
     return o
