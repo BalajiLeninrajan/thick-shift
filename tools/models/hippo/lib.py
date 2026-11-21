@@ -24,7 +24,7 @@ from common import *
 # Face classes. The painter picks colour, roughness and relief by class.
 # HFUR and JFUR are fur on the head and jaw: same fur, but the painter also
 # applies the face (muzzle, mouth, blush), which is laid out in head space.
-FUR, HAT, POM, TOOTH, EYE, DARK, GUM, SKIN, BONE, MEAT, GUT, STRAND, MASK, ZIP, GLOW, NAIL, BSTRAND, BALL, FLESH, HFUR, JFUR = range(1, 22)
+FUR, HAT, POM, TOOTH, EYE, DARK, SKIN, BONE, MEAT, GUT, STRAND, MASK, ZIP, GLOW, NAIL, BSTRAND, FLESH, HFUR, JFUR = range(1, 20)
 _CLS = {}
 
 
