@@ -15,11 +15,10 @@ const QUIET_MS = 4000; // a night in play that has sent nothing for this long ha
 let ws: WebSocket | null = null;
 let retries = 0, // tries so far to get back into the room
   heard = 0; // performance.now() of the last state
-// A night this page runs itself, with no room: the room's thinking and the timer that steps it.
-let solo: { sim: Sim; S: State; loop: ReturnType<typeof setInterval> } | null = null;
+// A night this page runs itself, with no room, until the page reloads.
+let solo: { sim: Sim; S: State } | null = null;
 
 const roomUrl = (code: string, query: string): string => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
-const ROOM = /^([A-Z]{4}|[a-z]-[\w-]{1,80})$/; // a typed code, or a fixed one from an app's platform (worker/room.ts)
 const newCode = (): string => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[(Math.random() * 24) | 0]).join('');
 const newId = (): string => `g${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
 const isState = (m: unknown): m is StateMessage => typeof m === 'object' && m !== null && 't' in m && m.t === 's' && 's' in m;
@@ -29,10 +28,11 @@ export function host(code = newCode()): void {
   open(code, platform.fixedRoom ? 'either' : 'make');
 }
 
-// Join a friend's room by its code.
+// Join a friend's room by the code they typed.
 export function join(code: string): void {
-  if (!/^[a-z]-/.test(code)) code = code.toUpperCase().trim();
-  if (ROOM.test(code)) open(code, 'join');
+  code = code.trim().toUpperCase();
+  if (/^[A-Z]{4}$/.test(code)) open(code, 'join');
+  else fail('That is not a room code', 'Room codes are four letters.');
 }
 
 // back: trying to get back into a room this page was in.
@@ -118,7 +118,8 @@ function playSolo(code: string, note: string): void {
   if (S.phase === 'play') adoptFloor(sim, S, now);
   game.S = S;
   game.netNote = note;
-  solo = { sim, S, loop: setInterval(() => stepFloor(sim, S, performance.now()), TICK_MS) };
+  solo = { sim, S };
+  setInterval(() => stepFloor(sim, S, performance.now()), TICK_MS);
 }
 
 // What this guard does, to whoever runs the night: the room, or this page.
