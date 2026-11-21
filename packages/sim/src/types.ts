@@ -32,7 +32,7 @@ export type Phase = 'lobby' | 'play' | 'win' | 'dead' | 'won';
 // What a guard's hands are on while they hold the use key: the generator's crank, the charging dock, or a breaker box.
 export type GuardAct = '' | 'crank' | 'charge' | 'fix';
 
-// A guard as they join the room: what net.ts knows before their first night places them.
+// A guard as they join the room (joinFloor), before their first night places them.
 export interface Joined {
   id: string; // made up by the guard's own page (newId in packages/game/src/net.ts)
   name: string;
