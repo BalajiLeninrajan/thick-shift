@@ -5,22 +5,17 @@
 import { DurableObject } from 'cloudflare:workers';
 import { adoptFloor, commandFloor, joinFloor, leaveFloor, newSim, newState, type Sim, stepFloor } from '@thick-shift/sim';
 import type { CloseCode, Player, State, StateMessage } from '@thick-shift/sim/types';
+import { CLOSE, type Mode, PROTOCOL, parse, TICK_MS } from '../src/protocol';
 
-const TICK_MS = 100;
 const SAVE_TICKS = 20; // how often a night in play is saved, in ticks: every 2 s
 const FORGET_MS = 5 * 60_000; // how long a room with nobody in it keeps its night, for guards who lost their connection
 // How long a guard whose connection dropped mid-night stays in it, still standing (or still flat) where they were,
 // before the room takes them out. Longer than a page spends reconnecting (RETRY_MS in src/net.ts).
 const GRACE_MS = 20_000;
 const MAX_MESSAGE = 2000; // characters. A guard's commands are tiny.
-// The room's half of the protocol with src/net.ts. A page from a build that speaks another is told to reload.
-const PROTOCOL = '2';
-const NO_ROOM = 4404,
-  CODE_TAKEN = 4409,
-  OUTDATED = 4426;
 
 // A room is a four-letter code someone typed, or a lowercase letter, a dash and an id that an app gets from its
-// platform, such as d- and a Discord Activity's instance id (apps/discord). Matches ROOM in src/net.ts.
+// platform, such as d- and a Discord Activity's instance id (apps/discord).
 const ROOM = /^\/room\/([A-Z]{4}|[a-z]-[\w-]{1,80})$/;
 
 // The bindings toRoom() needs from an app's Worker (its wrangler.jsonc).
@@ -34,10 +29,6 @@ export function toRoom(req: Request, env: RoomEnv): Promise<Response> | Response
   return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(req);
 }
 
-// How a page comes into a room (?mode= from net.ts): make a new one under a code nobody is using, join one that has a
-// night, or either, for a room an app fixes (everyone in a Discord channel opens the same one) and for a guard coming
-// back after losing their connection.
-type Mode = 'make' | 'join' | 'either';
 const isMode = (m: string | null): m is Mode => m === 'make' || m === 'join' || m === 'either';
 
 // Each socket's guard, kept on the socket so it outlasts the object sleeping between nights (hibernation). gone: its
@@ -53,13 +44,6 @@ function att(ws: WebSocket): Attachment {
 }
 const OPEN = 1;
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-};
 // The ids net.ts makes up (newId): a g and lowercase letters and digits. Nothing that could name an Object property.
 const GUARD_ID = /^g[a-z0-9]{8,40}$/;
 const isPosition = (c: unknown): boolean => typeof c === 'object' && c !== null && 't' in c && c.t === 'p';
@@ -142,12 +126,12 @@ export class Room extends DurableObject<RoomEnv> {
       server.close(code, why);
       return new Response(null, { status: 101, webSocket: client });
     };
-    if (q.get('v') !== PROTOCOL) return refuse(OUTDATED, 'reload for the new version');
-    if (!isMode(mode) || !GUARD_ID.test(id)) return refuse(1008, 'bad id or mode');
+    if (q.get('v') !== String(PROTOCOL)) return refuse(CLOSE.OUTDATED, 'reload for the new version');
+    if (!isMode(mode) || !GUARD_ID.test(id)) return refuse(CLOSE.BAD, 'bad id or mode');
     const mine = this.open().filter(s => att(s).id === id),
       others = this.open().length - mine.length;
-    if (mode === 'make' && others) return refuse(CODE_TAKEN, 'room code in use');
-    if (mode === 'join' && !this.night) return refuse(NO_ROOM, 'no such room');
+    if (mode === 'make' && others) return refuse(CLOSE.CODE_TAKEN, 'room code in use');
+    if (mode === 'join' && !this.night) return refuse(CLOSE.NO_ROOM, 'no such room');
     // A new night: nobody has one here, or someone starting a room under a code whose night everyone has left.
     if (!this.night || (mode === 'make' && !others)) {
       this.stop();
