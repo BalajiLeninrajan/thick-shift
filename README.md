@@ -289,7 +289,7 @@ Materials named `eye_glow` are drawn unlit and without fog (`loadActor` in `asse
 
 ## Recordings
 
-Doors, bangs, footsteps, creaks, wind and growls are recordings in `public/sfx`. The hum, heartbeat and chimes are synthesised in `audio.ts`, because they change with dread and threat as you play. Each recording has a synthesised stand-in that plays if the file has not loaded.
+Doors, bangs, footsteps, creaks, wind and growls are recordings in `public/sfx`. The hum, heartbeat and chimes are synthesised in `audio.ts`, because they change with dread and threat as you play. The sounds you play by (footsteps, door motors, bangs, growls) have a synthesised stand-in that plays if the file has not loaded.
 
 All recordings are CC0, converted to mono MP3:
 
