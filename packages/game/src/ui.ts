@@ -85,31 +85,13 @@ const RULES = [
 // The night's tallies as a list: S.tally for one night, S.total for the run (see packages/sim/src/sim.ts).
 // Flats are grouped by guard, with who did it for a night and a count for the run.
 function floorStats(t: Tally, run?: boolean): string {
-  const group = <T, V>(list: T[], key: (e: T) => string, val: (e: T) => V): [string, V[]][] => {
-    const by: Record<string, V[]> = {};
-    for (const e of list) {
-      const k = key(e),
-        vals = by[k];
-      if (vals) vals.push(val(e));
-      else by[k] = [val(e)];
-    }
-    return Object.entries(by);
-  };
-  const flats = group(
-    t.flats,
-    e => e[0],
-    e => MASC[e[1]].name
-  )
-    .map(([name, by]) => `${esc(name)} ${run ? by.length : `(${by.map(esc).join(', ')})`}`)
+  const flats = Object.entries(Object.groupBy(t.flats, ([name]) => name))
+    .map(([name, by = []]) => `${esc(name)} ${run ? by.length : `(${by.map(([, i]) => esc(MASC[i].name)).join(', ')})`}`)
     .join(', ');
-  const peels = group(
-    t.peels,
-    e => e,
-    () => 1
-  )
-    .map(([name, n]) => `${esc(name)}${n.length > 1 || run ? ` ${n.length}` : ''}`)
+  const peels = Object.entries(Object.groupBy(t.peels, name => name))
+    .map(([name, by = []]) => `${esc(name)}${by.length > 1 || run ? ` ${by.length}` : ''}`)
     .join(', ');
-  return `<dl class="kv"><dt>Faults fixed</dt><dd class="cn-tabular">${t.fixed ?? 0}</dd><dt>Left to burn</dt><dd class="cn-tabular">${t.burnt ?? 0}</dd>
+  return `<dl class="kv"><dt>Faults fixed</dt><dd class="cn-tabular">${t.fixed}</dd><dt>Left to burn</dt><dd class="cn-tabular">${t.burnt}</dd>
     <dt>Flattened</dt><dd>${flats || 'Nobody'}</dd><dt>Peeled a friend up</dt><dd>${peels || 'Nobody'}</dd></dl>`;
 }
 
