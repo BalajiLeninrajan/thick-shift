@@ -4,6 +4,7 @@
 //
 // It serves public/ (models and sound) as the app's static files, as-is.
 import { fileURLToPath } from 'node:url';
+import type { Plugin } from 'vite';
 
 const publicDir = fileURLToPath(new URL('public', import.meta.url));
 
@@ -11,15 +12,7 @@ const publicDir = fileURLToPath(new URL('public', import.meta.url));
 // the glTF set in libs/draco/gltf/ (src/three/assets.ts). These are the general-purpose ones, which nothing fetches.
 const unusedDraco = /\/three\/examples\/jsm\/libs\/draco\/draco_[^/]+$/;
 
-// The parts of Vite's Plugin type this plugin uses. packages/game does not depend on vite, so it says them itself.
-type BundleFile = { type: 'asset'; originalFileNames: string[] } | { type: 'chunk' };
-export interface GamePlugin {
-  name: string;
-  config: () => { publicDir: string; build: { chunkSizeWarningLimit: number } };
-  generateBundle: (options: unknown, bundle: Record<string, BundleFile>) => void;
-}
-
-export function game(): GamePlugin {
+export function game(): Plugin {
   return {
     name: 'thick-shift:game',
     config: () => ({
@@ -27,7 +20,7 @@ export function game(): GamePlugin {
       // app.ts, the lazy three.js chunk, is about 800 kB on its own.
       build: { chunkSizeWarningLimit: 900 },
     }),
-    generateBundle(_: unknown, bundle: Record<string, BundleFile>): void {
+    generateBundle(_, bundle) {
       for (const [file, out] of Object.entries(bundle)) {
         if (out.type === 'asset' && out.originalFileNames.some(name => unusedDraco.test(name))) delete bundle[file];
       }
