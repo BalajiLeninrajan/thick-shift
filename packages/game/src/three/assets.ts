@@ -3,7 +3,6 @@
 import * as THREE from 'three';
 import { DRACO_GLTF_CONFIG, DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import type { StageInfo } from './actors/styles';
 
 // three's own glTF-only Draco decoder. DRACOLoader names its files with import.meta.url,
 // so the bundler serves them in dev and copies them, hashed, into the build. Given these
@@ -25,9 +24,14 @@ function once<T>(cache: Map<string, T>, name: string, load: () => T): T {
   return made;
 }
 // models/<mascot>.json, as far as actors/mascot.ts reads it: one entry per stage of the mascot's model. The file is
-// written by the Blender scripts in tools/models and not checked here, so stages is not taken for granted.
+// written by the Blender scripts in tools/models and not checked here, so nothing in it is taken for granted.
+// face: where the stage's face is, in model space.
+export interface ModelStage {
+  face?: [number, number, number];
+  height?: number;
+}
 interface ModelInfo {
-  stages?: StageInfo[];
+  stages?: ModelStage[];
 }
 
 // The scene of models/<name>.glb. Loaded once; clone it before adding it twice.
