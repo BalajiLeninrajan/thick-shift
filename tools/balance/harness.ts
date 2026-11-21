@@ -39,7 +39,7 @@ let random = Math.random;
 // Records the night for tools/roblox/diff when REC_OUT is set.
 const rec = process.env.REC_OUT ? await import('../roblox/diff/rec.ts') : null;
 // One sim per thread, made once: like the module state it replaces, it carries the last step's time between nights.
-export const sim = newSim({ rng: () => random(), now: 0 });
+const sim = newSim({ rng: () => random(), now: 0 });
 const night: Night = { startFloorNight, stepFloor, actFloor };
 const api: Night = rec ? rec.wrapSim(night, sim) : night;
 
@@ -248,7 +248,7 @@ function guardOf(bot: Bot): Guard {
   return p;
 }
 
-export function seedRandom(seed: number): void {
+function seedRandom(seed: number): void {
   random = seeded(seed);
 }
 
@@ -306,7 +306,6 @@ function makeBot(id: string, i: number, policy: Policy): Bot {
     still: 0,
     firstSeen: [null, null, null, null],
     lastSeen: [-9, -9, -9, -9],
-    // play() sets these once the night has placed the guard.
     bat: 1,
     flat: false,
   };
@@ -472,7 +471,7 @@ function wayTo(S: NightState, bot: Bot, goal: Point, ducts?: boolean): Way {
 }
 
 // Walk toward a point. Returns the key of a shut door in the way, if there is one.
-function walk(S: NightState, bot: Bot, goal: Point, dt: number, sprint?: boolean, face?: number | null, ducts?: boolean): DoorKey | null {
+function walk(S: NightState, bot: Bot, goal: Point, sprint?: boolean, face?: number | null, ducts?: boolean): DoorKey | null {
   const way = wayTo(S, bot, goal, ducts),
     path = way.path;
   let next = path[0];
@@ -484,7 +483,7 @@ function walk(S: NightState, bot: Bot, goal: Point, dt: number, sprint?: boolean
   const dir = ang(bot, next);
   bot.yaw = face ?? dir;
   bot.sp = !!sprint && bot.stam > 0 && Math.abs(angDiff(dir, bot.yaw)) < 1;
-  const step = Math.min(dist(bot, next), (bot.sp ? F.SPRINT : F.WALK) * dt);
+  const step = Math.min(dist(bot, next), (bot.sp ? F.SPRINT : F.WALK) * DT);
   // Nobody walks into one they can see: no step that ends nearer to it than two metres.
   const to = { x: bot.x + Math.sin(dir) * step, z: bot.z + Math.cos(dir) * step };
   if (known(S, bot, 1).some(h => h.how !== 'map' && dist(to, h) < 2 && dist(to, h) < dist(bot, h))) {
@@ -503,8 +502,8 @@ function walk(S: NightState, bot: Bot, goal: Point, dt: number, sprint?: boolean
   return null;
 }
 
-// Do what bot.want says for one tick, then tell the host, as player.ts does.
-function act(S: NightState, bot: Bot, dt: number): void {
+// Do what bot.want says for one tick, then tell the sim, as player.ts does.
+function act(S: NightState, bot: Bot): void {
   const w = bot.want,
     before = { x: bot.x, z: bot.z };
   bot.sp = false;
@@ -527,7 +526,7 @@ function act(S: NightState, bot: Bot, dt: number): void {
           bot.holding = u.key;
           bot.hold = 0;
         }
-        bot.hold += dt;
+        bot.hold += DT;
         if (u.what === 'fix') bot.act = 'fix'; // hands in the box: the torch hangs and holds nothing
         if (bot.hold >= u.hold + 0.05) {
           api.actFloor(sim, S, bot.id, { t: 'use', what: u.what, i: u.i, k: u.k, id: u.id });
@@ -545,10 +544,10 @@ function act(S: NightState, bot: Bot, dt: number): void {
     // No time to think about a route: straight that way, flat out.
     bot.yaw = w.dash;
     bot.sp = bot.stam > 0;
-    const step = (bot.sp ? F.SPRINT : F.WALK) * dt;
+    const step = (bot.sp ? F.SPRINT : F.WALK) * DT;
     M.slide(bot, Math.sin(w.dash) * step, Math.cos(w.dash) * step, M.PLAYER_R, S.doors);
   } else if (goal && dist(bot, goal) > 0.15) {
-    const shut = walk(S, bot, goal, dt, w.sprint, face, w.ducts);
+    const shut = walk(S, bot, goal, w.sprint, face, w.ducts);
     // A shut booth door in the way: go and press its button, from whichever side we are on.
     if (shut && lightsF(S) && !w.keep?.includes(shut)) {
       const panel = M.PANELS[shut],
@@ -558,18 +557,18 @@ function act(S: NightState, bot: Bot, dt: number): void {
           bot.pressed = S.t;
           api.actFloor(sim, S, bot.id, { t: 'use', what: 'door', k: shut });
         }
-      } else walk(S, bot, at, dt, w.sprint, face, w.ducts);
+      } else walk(S, bot, at, w.sprint, face, w.ducts);
     }
   } else if (face != null) bot.yaw = face;
   if (bot.sp) {
-    bot.stam = Math.max(0, bot.stam - STAMINA.drain * dt);
+    bot.stam = Math.max(0, bot.stam - STAMINA.drain * DT);
     bot.rested = 0;
   } else {
-    bot.rested += dt;
-    if (bot.rested > STAMINA.rest) bot.stam = Math.min(1, bot.stam + STAMINA.gain * dt);
+    bot.rested += DT;
+    if (bot.rested > STAMINA.rest) bot.stam = Math.min(1, bot.stam + STAMINA.gain * DT);
   }
   bot.on = !!w.on && bot.bat > 0;
-  bot.still = dist(bot, before) < 0.01 && goal && dist(bot, goal) > 3 ? bot.still + dt : 0;
+  bot.still = dist(bot, before) < 0.01 && goal && dist(bot, goal) > 3 ? bot.still + DT : 0;
   api.actFloor(sim, S, bot.id, { t: 'p', x: bot.x, z: bot.z, yaw: bot.yaw, pitch: 0, on: bot.on, sp: bot.sp, act: bot.act });
 }
 
@@ -678,7 +677,7 @@ function race(S: NightState, bot: Bot, hs: Memory[], pace: (h: Memory) => number
 }
 // Where to run: the waypoint furthest (in their time) from everything after this guard, out of those the guard
 // can reach first. Kept to unless another is clearly better.
-function fleeTo(_S: NightState, bot: Bot, r: Race): Point {
+function fleeTo(bot: Bot, r: Race): Point {
   // A doorway beats the far corner of a room, and the next room beats both: a corner is where it ends.
   const { nodes } = M.nav(),
     st = bot.state,
@@ -901,7 +900,7 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   }
   // Otherwise the booth, if we can be in it with time to shut a door, or wherever gives the longest lead.
   const home = canHole && !booth ? fieldAt(S, r.mine, BOOTH_MID) : 1e9;
-  const goal = home + 2.5 < Math.min(...hs.map(k => dist(k, BOOTH_MID) / speed(k))) ? BOOTH_MID : fleeTo(S, bot, r);
+  const goal = home + 2.5 < Math.min(...hs.map(k => dist(k, BOOTH_MID) / speed(k))) ? BOOTH_MID : fleeTo(bot, r);
   w.goal = goal;
   w.use = null;
   w.sprint = eta < 3 && (!beam || speed(h) > 2.4);
@@ -1007,7 +1006,6 @@ const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => 
         ? BOOTH_MID
         : nearest && dist(bot, nearest) < 8
           ? fleeTo(
-              S,
               bot,
               race(S, bot, [nearest], () => 3, 'waitRace')
             )
@@ -1023,28 +1021,27 @@ const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => 
 
 // Mini Biggs. The nearest thing this guard can see wandering or searching (not after anyone): throw one where it will
 // hear it sing, and where walking to it takes it away from the guard and from where the guard is going (to). Sixteen
-// ways round are tried. Only with skill.spare of the battery left after it. Returns true if one was thrown.
-function lure(S: NightState, bot: Bot, to: Point): boolean {
+// ways round are tried. Only with skill.spare of the battery left after it.
+function lure(S: NightState, bot: Bot, to: Point): void {
   const me = guardOf(bot),
     st = bot.state;
-  if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < bot.skill.spare || S.t < (st.lureAt || 0)) return false;
+  if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < bot.skill.spare || S.t < (st.lureAt || 0)) return;
   const h = known(S, bot, 1.5)
     .filter(k => k.how !== 'map' && (k.st === 'roam' || k.st === 'search') && dist(bot, k) < 14)
     .sort((a, b) => dist(bot, a) - dist(bot, b))[0];
-  if (!h) return false;
+  if (!h) return;
   let best: { yaw: number; d: number; score: number } | null = null;
   for (let k = 0; k < 16; k++) {
     const yaw = (k * Math.PI) / 8,
-      at = landing(S, me.x, me.z, yaw, TOY.range); // from where the host has them
+      at = landing(S, me.x, me.z, yaw, TOY.range); // from where the sim has them
     if ([M.DUCTS, M.BOOTH].includes(M.roomAt(at.x, at.z)) || dist(at, h) > TOY.hear - 2 || dist(at, bot) < 6 || dist(at, to) < 6 || segDist(h, at, bot) < 4)
       continue;
     const score = dist(at, bot) + dist(at, to) - dist(at, h);
-    if (!best || score > best.score) best = { yaw, d: dist(me, at) + 0.05, score }; // a hair over, so the host's own steps reach the same spot
+    if (!best || score > best.score) best = { yaw, d: dist(me, at) + 0.05, score }; // a hair over, so the sim's own steps reach the same spot
   }
-  if (!best) return false;
+  if (!best) return;
   st.lureAt = S.t + 6; // and give that one time to work before throwing another
   api.actFloor(sim, S, bot.id, { t: 'throw', yaw: best.yaw, d: best.d });
-  return true;
 }
 
 // Lockers (M.HIDES). The nearest one nobody is in, within `within` metres, as something to use.
@@ -1286,7 +1283,6 @@ export interface Outcome {
   firstFlat: number;
   notes: string[];
   hunted: number;
-  quiet: number;
   calms: number;
   stood: number;
   lit: number;
@@ -1328,7 +1324,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
   if (sc.dev) S.dev = sc.dev; // the sim reads only the cheats that are there
   for (const b of team.bots) {
     const { x, z } = guardOf(b);
-    Object.assign(b, { x, z, bat: 1, flat: false });
+    Object.assign(b, { x, z });
   }
   const out: Outcome = {
     win: false,
@@ -1340,7 +1336,6 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     firstFlat: 1e9,
     notes: [],
     hunted: 0,
-    quiet: 0,
     calms: 0,
     stood: 0,
     lit: 0,
@@ -1398,7 +1393,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
       bot.want = { on: false };
       if ((tickNo + bot.i) % 3 === 0) perceive(S, bot);
       bot.policy.think(S, bot, team);
-      act(S, bot, DT);
+      act(S, bot);
       if (bot.still > 45) {
         fail(sc.name, `seed ${seed}: guard ${bot.i} could not move at ${bot.x.toFixed(1)}, ${bot.z.toFixed(1)} for 45 s`);
         bot.still = 0;
@@ -1456,10 +1451,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     if (anyHunted) {
       if (calm >= 20) out.calms++;
       calm = 0;
-    } else {
-      calm += DT;
-      out.quiet += DT;
-    }
+    } else calm += DT;
     for (const e of S.evs)
       if (e.id > seenEv) {
         seenEv = e.id;
