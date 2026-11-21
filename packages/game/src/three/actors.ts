@@ -153,7 +153,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     },
     // After the frame is drawn.
     after(): void {
-      scare.after(renderer.domElement);
+      scare.after();
     },
   };
 }

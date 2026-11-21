@@ -172,7 +172,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
       camera.rotation.set(pitch, yaw + Math.PI, roll, 'YXZ');
     },
     // Call after the frame is rendered: strobe and tear what was just drawn.
-    after(t3d: HTMLCanvasElement): void {
+    after(): void {
       if (!on) return;
       const t = on.t,
         w = over.width,
@@ -191,7 +191,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
         for (let i = 0, n = 2 + (on.mascot.scareBite > 0.5 ? 4 : 1); i < n; i++) {
           const y = Math.random() * h,
             sh = 6 + Math.random() * 30;
-          c.drawImage(t3d, 0, (y / h) * t3d.height, t3d.width, (sh / h) * t3d.height, (Math.random() - 0.5) * 90, y, w, sh);
+          c.drawImage(canvas, 0, (y / h) * canvas.height, canvas.width, (sh / h) * canvas.height, (Math.random() - 0.5) * 90, y, w, sh);
         }
         if (Math.floor(t * 30) % 5 === 0 && t > CUES.face) {
           c.fillStyle = 'rgba(8,8,14,.88)';
