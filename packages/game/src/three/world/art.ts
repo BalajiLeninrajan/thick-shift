@@ -409,7 +409,7 @@ function drawArt(): CanvasRenderingContext2D {
   });
   {
     // stains and marks
-    let [x, y, w] = ART.damp;
+    const [x, y, w] = ART.damp;
     for (let i = 0; i < 14; i++) {
       const bx = x + w / 2 + (rnd() - 0.5) * w * 0.5,
         by = y + w / 2 + (rnd() - 0.5) * w * 0.5,
@@ -421,7 +421,9 @@ function drawArt(): CanvasRenderingContext2D {
       c.fillStyle = g;
       c.fillRect(bx - r, by - r, r * 2, r * 2);
     }
-    [x, y, w] = ART.hand;
+  }
+  {
+    const [x, y] = ART.hand;
     c.fillStyle = '#2a0a08c0';
     for (const [hx, hy, a] of [
       [50, 60, -0.2],
@@ -441,7 +443,9 @@ function drawArt(): CanvasRenderingContext2D {
       c.fillRect(-9, 12, 18, 60);
       c.restore();
     }
-    [x, y, w] = ART.hole;
+  }
+  {
+    const [x, y, w] = ART.hole;
     c.fillStyle = '#020202';
     c.beginPath();
     for (let i = 0; i < 20; i++) {
@@ -458,7 +462,9 @@ function drawArt(): CanvasRenderingContext2D {
       c.quadraticCurveTo(x + w * rnd(), y + w * 0.6, x + w * (0.3 + rnd() * 0.4), y + w * 0.8);
       c.stroke();
     }
-    [x, y, w] = ART.mark;
+  }
+  {
+    const [x, y, w] = ART.mark;
     c.strokeStyle = '#d8c81ee0';
     c.lineWidth = 9;
     c.lineCap = 'butt';
@@ -474,7 +480,9 @@ function drawArt(): CanvasRenderingContext2D {
     c.arc(x + w / 2, y + w / 2, w / 2 - 8, 0, 7);
     c.stroke();
     c.setLineDash([]);
-    [x, y] = ART.tally;
+  }
+  {
+    const [x, y] = ART.tally;
     c.strokeStyle = '#d8d0c0c0';
     c.lineWidth = 2.5;
     c.lineCap = 'round';
@@ -492,13 +500,17 @@ function drawArt(): CanvasRenderingContext2D {
       c.lineTo(gx + 24, gy + 8);
       c.stroke();
     }
-    [x, y, w] = ART.exit;
+  }
+  {
+    const [x, y, w] = ART.exit;
     c.fillStyle = '#04140a';
     c.fillRect(x, y, w, 64);
     c.fillStyle = '#5dff9a';
     c.font = `bold 44px ${FONT}`;
     c.fillText('EXIT', x + w / 2, y + 34);
-    [x, y, w] = ART.scrawl;
+  }
+  {
+    const [x, y, w] = ART.scrawl;
     c.fillStyle = '#b01c14d0';
     c.font = `italic bold 30px ${FONT}`;
     c.save();
@@ -506,34 +518,37 @@ function drawArt(): CanvasRenderingContext2D {
     c.rotate(-0.06);
     c.fillText('IT WAVED BACK', 0, 0);
     c.restore();
-    let hgt: number;
-    [x, y, w, hgt] = ART.scallop;
+  }
+  {
+    const [x, y, w, h] = ART.scallop;
     c.fillStyle = '#5a1418';
-    c.fillRect(x, y, w, hgt * 0.45);
-    for (let i = 0; i < 8; i++) {
-      c.beginPath();
-      c.arc(x + ((i + 0.5) * w) / 8, y + hgt * 0.42, w / 16, 0, Math.PI);
-      c.fill();
-    }
+    c.fillRect(x, y, w, h * 0.45);
     c.strokeStyle = '#b89a2a';
     c.lineWidth = 3;
     for (let i = 0; i < 8; i++) {
+      const cx = x + ((i + 0.5) * w) / 8,
+        cy = y + h * 0.42;
       c.beginPath();
-      c.arc(x + ((i + 0.5) * w) / 8, y + hgt * 0.42, w / 16 - 3, 0, Math.PI);
+      c.arc(cx, cy, w / 16, 0, Math.PI);
+      c.fill();
+      c.beginPath();
+      c.arc(cx, cy, w / 16 - 3, 0, Math.PI);
       c.stroke();
     }
-    [x, y, w, hgt] = ART.hazard;
+  }
+  {
+    const [x, y, w, h] = ART.hazard;
     c.save();
     c.beginPath();
-    c.rect(x, y, w, hgt);
+    c.rect(x, y, w, h);
     c.clip();
     c.fillStyle = '#c9a81e';
-    c.fillRect(x, y, w, hgt);
+    c.fillRect(x, y, w, h);
     c.fillStyle = '#101010';
     for (let i = -1; i < 9; i++) {
       c.beginPath();
-      c.moveTo(x + i * 32, y + hgt);
-      c.lineTo(x + i * 32 + 16, y + hgt);
+      c.moveTo(x + i * 32, y + h);
+      c.lineTo(x + i * 32 + 16, y + h);
       c.lineTo(x + i * 32 + 48, y);
       c.lineTo(x + i * 32 + 32, y);
       c.fill();
@@ -543,32 +558,36 @@ function drawArt(): CanvasRenderingContext2D {
   return c;
 }
 
-// Room names in stencil capitals, two columns of five. Each cell is 512 by 100.
-export const NAME_CELL: [number, number] = [512, 100];
+// Room names in stencil capitals, two columns of five: the canvas's size and a name's cell, in pixels.
+export const NAMES_SIZE: [number, number] = [1024, 512],
+  NAME_CELL: [number, number] = [512, 100];
 function drawNames(): { c: CanvasRenderingContext2D; widths: number[] } {
-  const c = canvas(1024, 512),
+  const [W, H] = NAMES_SIZE,
+    [cw, ch] = NAME_CELL,
+    fit = cw - 22, // the widest a name is painted
+    c = canvas(W, H),
     rnd = rand(5),
     widths: number[] = [];
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   c.fillStyle = '#e6dcc0';
   ROOMS3.forEach((room, i) => {
-    const x = (i % 2) * 512 + 256,
-      y = (i >> 1) * 100 + 52;
+    const x = (i % 2) * cw + cw / 2,
+      y = (i >> 1) * ch + ch / 2 + 2;
     c.font = `bold 78px ${FONT}`;
     const text = room.name.toUpperCase(),
       w = c.measureText(text).width,
-      k = Math.min(1, 490 / w);
+      k = Math.min(1, fit / w);
     c.font = `bold ${(78 * k) | 0}px ${FONT}`;
     c.fillText(text, x, y);
-    widths.push(Math.min(490, w) + 12);
+    widths.push(Math.min(fit, w) + 12);
   });
   // stencil bridges and paint that did not take
   c.globalCompositeOperation = 'destination-out';
-  for (let x = 9; x < 1024; x += 19) c.fillRect(x, 0, 2.5, 512);
+  for (let x = 9; x < W; x += 19) c.fillRect(x, 0, 2.5, H);
   for (let i = 0; i < 2600; i++) {
     c.globalAlpha = rnd();
-    c.fillRect(rnd() * 1024, rnd() * 512, 1 + rnd() * 3, 1 + rnd() * 3);
+    c.fillRect(rnd() * W, rnd() * H, 1 + rnd() * 3, 1 + rnd() * 3);
   }
   return { c, widths };
 }
