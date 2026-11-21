@@ -21,11 +21,7 @@ async function connect(): Promise<void> {
   const ds = new DiscordSDK(clientId);
   sdk = ds;
   await ds.ready();
-  const room =
-    'd-' +
-    String(ds.instanceId)
-      .replace(/[^\w-]/g, '')
-      .slice(0, 80);
+  const room = `d-${ds.instanceId.replace(/[^\w-]/g, '').slice(0, 80)}`;
   discord.name = await signIn(ds, clientId);
   discord.room = room;
 }
@@ -84,6 +80,6 @@ const invite = (): Invite => ({
 platform.fixedRoom = true;
 platform.title = titleScreen;
 platform.invite = invite;
-connect().catch(err => {
-  game.error = { title: 'Could not reach Discord', detail: String(err.message || err) };
+connect().catch((err: unknown) => {
+  game.error = { title: 'Could not reach Discord', detail: err instanceof Error && err.message ? err.message : String(err) };
 });
