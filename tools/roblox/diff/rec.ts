@@ -26,8 +26,8 @@ export function wrapSim(night: Night, sim: Sim): Night {
     if (REC.on) REC.rands.push(v);
     return v;
   };
-  // extra: fields that follow the draws, as the lines have always been laid out. S: the state to record after.
-  const run = (f: () => void, entry: Record<string, unknown>, extra: Record<string, unknown>, S: State | null) => {
+  // S: the state to record after.
+  const run = (f: () => void, entry: Record<string, unknown>, S: State | null) => {
     REC.rands = [];
     REC.on = true;
     try {
@@ -36,7 +36,6 @@ export function wrapSim(night: Night, sim: Sim): Night {
       REC.on = false;
     }
     entry.rands = REC.rands;
-    Object.assign(entry, extra);
     if (S) entry.S = snap(S);
     // Numbers go out as "#<shortest form>": Lune's JSON reader misreads about one double in ten by a bit, and
     // Luau's tonumber reads this form back exactly.
@@ -45,17 +44,17 @@ export function wrapSim(night: Night, sim: Sim): Night {
   return {
     startFloorNight(sim, S, n) {
       const players = Object.values(sim.players).map(p => ({ id: p.id, name: p.name }));
-      run(() => night.startFloorNight(sim, S, n), { op: 'start', n, players }, {}, S);
+      run(() => night.startFloorNight(sim, S, n), { op: 'start', n, players }, S);
     },
     stepFloor(sim, S, now) {
       // The step's real elapsed time, before the sim caps it, so the replay steps by the same amount.
       const dt = (now - sim.lastStep) / 1000;
-      run(() => night.stepFloor(sim, S, now), { op: 'step' }, { dt }, S);
+      run(() => night.stepFloor(sim, S, now), { op: 'step', dt }, S);
     },
     actFloor(sim, S, id, a) {
       // A copy as JSON has it, taken before the call.
       const copy: unknown = JSON.parse(JSON.stringify(a));
-      run(() => night.actFloor(sim, S, id, a), { op: 'act', id, a: copy }, {}, null);
+      run(() => night.actFloor(sim, S, id, a), { op: 'act', id, a: copy }, null);
     },
   };
 }

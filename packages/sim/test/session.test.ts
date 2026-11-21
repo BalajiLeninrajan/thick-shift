@@ -1,7 +1,7 @@
 // What whoever runs a night does with the guards' browsers (src/session.ts): letting them in and out, the next night
 // from the card between nights, the dev menu's cheats, and messages that are not what they claim to be.
 import { describe, expect, it } from 'vitest';
-import { assert } from '../src/check.ts';
+import { assert, isNight } from '../src/check.ts';
 import { FINAL_NIGHT } from '../src/config.ts';
 import { REST } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
@@ -16,7 +16,7 @@ function room(...ids: string[]): { sim: Sim; S: State } {
   return { sim, S };
 }
 function night(S: State): asserts S is NightState {
-  assert(S.phase !== 'lobby', 'a night has started');
+  assert(isNight(S), 'a night has started');
 }
 
 describe('joinFloor and leaveFloor', () => {

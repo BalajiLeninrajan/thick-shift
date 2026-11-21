@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
 import { BATTERY_SPOTS, BOXES, HIDES, PANELS, REST, spawnPoint } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
+import { DEV_OFF } from '../src/session.ts';
 import { actFloor, adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor } from '../src/sim.ts';
 import type { Guard, NightState, SimEvent, State } from '../src/types.ts';
 import { countEvents, digest, eventsSince } from './nights.ts';
@@ -20,7 +21,7 @@ function start(seed: number, n: number, night: number, now = 0): { sim: Sim; S: 
 // Step a night on with nobody doing anything, a tenth of a second at a time from `now`, and sum it up.
 function idle(sim: Sim, S: NightState, now: number, ticks: number) {
   const events: SimEvent[] = [];
-  let seen = Math.max(0, ...S.evs.map(e => e.id));
+  let seen = S.evId;
   for (let k = 1; k <= ticks && S.phase === 'play'; k++) {
     stepFloor(sim, S, now + k * 100);
     seen = eventsSince(S, seen, events);
@@ -53,7 +54,7 @@ describe('the clock', () => {
     stepFloor(sim, S, 11_100); // ten seconds later: capped
     expect(S.t).toBeCloseTo(0.35, 12);
     expect(sim.lastStep).toBe(11_100);
-    S.dev = { god: false, power: false, freeze: false, wake: false, speed: 2, rot: -1, dread: -1 };
+    S.dev = { ...DEV_OFF, speed: 2 };
     stepFloor(sim, S, 11_200);
     expect(S.t).toBeCloseTo(0.55, 12);
   });
