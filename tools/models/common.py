@@ -48,12 +48,10 @@ def part(obj, name, parent=None, pivot=None):
     return obj
 
 
-def empty(name, parent=None, at=(0, 0, 0)):
+def empty(name):
     e = bpy.data.objects.new(name, None)
     bpy.context.scene.collection.objects.link(e)
-    e.location = at
     bpy.context.view_layer.update()
-    if parent is not None: part(e, name, parent)
     return e
 
 

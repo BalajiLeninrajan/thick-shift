@@ -290,7 +290,7 @@ def foot(c, ankle, M, sx, size=1.0):
 
 # ---------- small costume fittings ----------
 
-def zipper(rig, body, M, z0, z1, stage):
+def zipper(body, M, z0, z1, stage):
     """The zip down the back: tape, teeth and a pull tab, laid on the body."""
     surf = Surface(body)
     zs = np.linspace(z0, z1, 26)
@@ -325,7 +325,8 @@ def worm(rig, M, ctrl, links, rng, r0=.2, r1=.135):
     """A chain of rigid beads along the spline through ctrl. Each link's
     origin is its joint with the one before. Neighbours end in matching
     half-spheres centred on the shared joint, so a joint can bend about 25
-    degrees before the skin opens. Returns [(name, parent, start, end, R)]."""
+    degrees before the skin opens. Returns one
+    (name, start, end, R, points, radii, N, B) per link."""
     path, total = spline(ctrl, 600)
     s = np.linspace(0, total, 600)
     at = lambda u: np.array([np.interp(u, s, path[:, k]) for k in range(3)])
@@ -389,7 +390,7 @@ def worm(rig, M, ctrl, links, rng, r0=.2, r1=.135):
         parent = 'body' if i == 0 else ('extra_1' if i == 1 else f'extra_1_{i}')
         rig.add(name, parent, at(a), pieces)
         out.append((name, at(a), at(b), R[i], pts, rad, N, B))
-    return out, at(total)
+    return out
 
 
 def worm_mouth(rig, M, name, parent, tip, rj, rng, first_ring=2):

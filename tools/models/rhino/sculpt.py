@@ -114,14 +114,12 @@ def fix_normals(ob):
     return ob
 
 
-def stamp_rest(ob, force=False):
+def stamp_rest(ob):
     """Store the current vertex positions in the attribute 'rest'. The
     materials read it instead of the real position, so a part can be built in
     a convenient pose, textured there, and moved into place afterwards."""
-    at = ob.data.attributes.get('rest')
-    if at is not None and not force: return ob
-    if at is None: at = ob.data.attributes.new('rest', 'FLOAT_VECTOR', 'POINT')
-    at.data.foreach_set('vector', co(ob).ravel())
+    if ob.data.attributes.get('rest') is None:
+        ob.data.attributes.new('rest', 'FLOAT_VECTOR', 'POINT').data.foreach_set('vector', co(ob).ravel())
     return ob
 
 
@@ -321,7 +319,7 @@ def tube(pts, radii, n=8, name='tube', caps=True, squash=1.0, phase=0.0):
     return mesh_obj(name, verts, faces)
 
 
-def revolve(profile, n=48, name='lathe', mod=None, closed=False):
+def revolve(profile, n=48, name='lathe', mod=None):
     """Turn a profile [(y, r), ...] about the Y axis. mod(i, angle) -> (dy, dr)
     reshapes ring i at each angle, for lobes and folds."""
     ang = np.arange(n) / n * math.tau
@@ -332,13 +330,11 @@ def revolve(profile, n=48, name='lathe', mod=None, closed=False):
         verts.append(np.stack([rr * np.cos(ang), y + dy + ang * 0, rr * np.sin(ang)], 1))
     verts = np.concatenate(verts)
     faces = []
-    for i in range(m - (0 if closed else 1)):
-        i2 = (i + 1) % m
+    for i in range(m - 1):
         for j in range(n):
             k = (j + 1) % n
-            faces.append((i * n + j, i2 * n + j, i2 * n + k, i * n + k))
-    ob = mesh_obj(name, verts, faces)
-    return ob
+            faces.append((i * n + j, (i + 1) * n + j, (i + 1) * n + k, i * n + k))
+    return mesh_obj(name, verts, faces)
 
 
 def spline(ctrl, n=200):
@@ -431,13 +427,11 @@ def tube_rest(pts, radii, n=8, name='tube', length=None, origin=(0, 0, 0), **kw)
     return ob
 
 
-def loop(centre, R, r, normal=(0, -1, 0), n=28, m=6, name='loop', wobble=0.0, rng=None):
+def loop(centre, R, r, normal=(0, -1, 0), n=28, m=6, name='loop'):
     """A torus-like ring: a tube bent round a circle of radius R facing `normal`."""
     nrm = np.asarray(normal, float); nrm /= np.linalg.norm(nrm)
     a = np.cross(nrm, [0, 0, 1.0]) if abs(nrm[2]) < .9 else np.cross(nrm, [1.0, 0, 0])
     a /= np.linalg.norm(a); b = np.cross(nrm, a)
     t = np.linspace(0, math.tau, n + 1)
-    RR = R * (1 + (rng.uniform(-wobble, wobble, n + 1) if rng is not None else 0))
-    if rng is not None: RR[-1] = RR[0]
-    pts = np.asarray(centre, float) + (np.cos(t) * RR)[:, None] * a + (np.sin(t) * RR)[:, None] * b
+    pts = np.asarray(centre, float) + (np.cos(t) * R)[:, None] * a + (np.sin(t) * R)[:, None] * b
     return tube(pts, r, n=m, name=name, caps=False)

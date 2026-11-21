@@ -148,7 +148,7 @@ def stage0(rig, rng):
     body = c.build('body', .016, 6)
     rear_detail(body, .98)
     M = materials(0, body=dict(pale=[((0, -.62, 1.24), (.46, .5, .5))]), head=dict(pale=[((0, -.46, .17), (.34, .32, .22))]))
-    fit = zipper(rig, body, M, 1.7, 1.24, 0)
+    fit = zipper(body, M, 1.7, 1.24, 0)
     tail(rig, body, M, 1.22, 0, rng)
     tf = tufts(body, 90, .035, rng, lambda p, n: (p[:, 2] > 1.6) | (p[:, 1] > .85), width=.012, droop=.5)
     decimate(body, 13000)
@@ -215,7 +215,7 @@ def stage1(rig, rng):
     M = materials(1, body=dict(pale=[((0, -.3, .98), (.26, .34, .34))], blood=[(tuple(chest), .13)]),
                   limb=dict(blood=[((.2, -.65, .05), .12)]),
                   head=dict(pale=[((0, -.46, .17), (.34, .32, .22))], blood=[((.12, -.66, .08), .07)]))
-    fit = zipper(rig, body, M, 1.12, .78, 1)
+    fit = zipper(body, M, 1.12, .78, 1)
     tail(rig, body, M, PZ + .22, 1, rng)
     tf = tufts(body, 330, .08, rng, lambda p, n: (p[:, 2] > .5) & ~((p[:, 1] < -.1) & (np.abs(p[:, 0]) < .25)), width=.017, droop=1.0)
     decimate(body, 14000)
@@ -283,7 +283,7 @@ def stage2(rig, rng):
                             tears=[((sx * EYE_X + sx * .01, -.42, EYE_Z - .08), .3 if sx > 0 else .38) for sx in (1, -1)],
                             sockets=[((sx * EYE_X, -.45, EYE_Z), .15) for sx in (1, -1)]),
                   links=LINKS, rng=rng)
-    fit = zipper(rig, body, M, 1.98, 1.3, 2)
+    fit = zipper(body, M, 1.98, 1.3, 2)
     tail(rig, body, M, PZ + .22, 2, rng)
     tf = tufts(body, 250, .085, rng, lambda p, n: ~((p[:, 1] < -.1) & (np.abs(p[:, 0]) < .35) & (p[:, 2] > 1.0) & (p[:, 2] < 1.65)), width=.017, droop=1.0)
     decimate(body, 9500)
@@ -317,14 +317,14 @@ def stage2(rig, rng):
         fl = tube(pts, [rng.uniform(.04, .065), .045, .03, .004], n=7, name='flap', squash=.22, phase=a)
         roughen(fl, .006, 30, seed=i)
         mat(fl, M['meat'] if i % 3 else M['limb'])
-        (hanging if out[2] < -.5 else pieces).append((fl, rim) if out[2] < -.5 else fl)
+        (hanging if out[2] < -.5 else pieces).append(fl)
     rig.add('body', 'root', (0, PY, PZ), pieces)
     drips = []
     for i in range(7):
         top, _ = bsurf.ray(wound + ((i - 3) * .05 + rng.uniform(-.02, .02), -1, -.22 - rng.uniform(0, .05)), (0, 1, 0))
         if top is None: top = wound + ((i - 3) * .05, 0, -.24)
         drips.append(mat(strand(top + (0, -.01, .02), rng.uniform(.2, .75), rng.uniform(.006, .011), rng, wave=.02, blob=.013), M['crust']))
-    rig.sway('body', wound + (0, 0, -.24), [f for f, _ in hanging] + drips, 'torn flaps of belly and ropes of dried blood hanging from the bottom of the wound, under the worm')
+    rig.sway('body', wound + (0, 0, -.24), hanging + drips, 'torn flaps of belly and ropes of dried blood hanging from the bottom of the wound, under the worm')
 
     for side, sx in (('L', 1), ('R', -1)):
         hip = np.array([sx * .21, PY, .96])
@@ -354,11 +354,9 @@ def stage2(rig, rng):
     # the worm: out of the belly, down, forward, up past the head, mouth to the front
     tip = np.array([.28, -.64, 2.62])
     ctrl = [wound + (0, .22, 0), wound + (.01, -.12, -.14), (.05, -.7, .9), (.12, -.81, 1.22), (.2, -.76, 1.66), (.27, -.56, 2.1), (.29, -.45, 2.4), tip + (0, .1, -.045), tip, tip + (0, -.3, 0)]
-    segs, end = worm(rig, M, ctrl[:-1], LINKS, rng)
+    segs = worm(rig, M, ctrl[:-1], LINKS, rng)
     last = segs[-1]
     worm_mouth(rig, M, f'extra_1_{LINKS + 1}', last[0], tip, .8 * last[3], rng)
-    for name in ['extra_1'] + [f'extra_1_{i}' for i in range(2, LINKS + 1)]:
-        rig.notes[name] = 'worm link'
     for idx, count in ((3, 4), (6, 3), (9, 3)):                     # slime off the underside
         nm, a, b, R, pts, rad, N, B = segs[idx]
         ss, tops = [], []
@@ -428,11 +426,13 @@ def finalize(rig, stage, info):
         if p['glow']: obs[p['name']] = join([obs[p['name']]] + p['glow'], p['name'])
     root = empty('root')
     done, todo = {'root': root}, list(rig.parts)
-    while todo:
+    while todo:   # parts.head() registers the eyes before the head, so one pass is not enough
+        left = len(todo)
         for p in list(todo):
             if p['parent'] in done:
                 done[p['name']] = part(obs[p['name']], p['name'], done[p['parent']], p['pivot'])
                 todo.remove(p)
+        if len(todo) == left: raise ValueError(f"no such parent for {[(p['name'], p['parent']) for p in todo]}")
     export_glb(name, [root])
     clock('exported')
 
@@ -440,7 +440,7 @@ def finalize(rig, stage, info):
 def describe(rig, stage, info):
     """One stage's entry in rhino.json, measured from the exported file."""
     rep = report(f'{KEY}_{stage}')
-    extras = '; '.join(f'{k}: {v}' for k, v in sorted(rig.notes.items()) if v != 'worm link')
+    extras = '; '.join(f'{k}: {v}' for k, v in sorted(rig.notes.items()))
     fx, fy, fz = info['face']
     return dict(file=rep['file'], height=rep['max'][2], radius=round(max(abs(rep['min'][0]), rep['max'][0], abs(rep['min'][1]), rep['max'][1]), 2),
                 face=[round(float(fx), 2), round(float(fz), 2), round(float(-fy), 2)], floats=False, nodes=rep['nodes'],
@@ -477,7 +477,7 @@ def main():
             clock('sculpted')
             finalize(rig, stage, info)
             doc['stages'][stage] = describe(rig, stage, info)
-            json.dump(doc, open(path, 'w'), indent=1)
+            with open(path, 'w') as f: json.dump(doc, f, indent=1)
             if 'fast' not in args: looks(stage, info)
             clock('previews')
         except Exception:
