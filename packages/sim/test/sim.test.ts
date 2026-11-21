@@ -211,12 +211,12 @@ describe('restartFloor', () => {
   it('clears the run and starts night 1 as a fresh room would, apart from the event log', () => {
     const { sim, S } = start(9, 2, 4);
     idle(sim, S, 0, 900);
-    Object.assign(S, { deaths: 2, slams: 5, flats: 3 });
+    S.deaths = 2;
     S.total = { fixed: 4, burnt: 1, flats: [['G0', 1]], peels: ['G1'] };
     sim.rng = seeded(11);
     restartFloor(sim, S);
 
-    expect([S.deaths, S.slams, S.flats]).toEqual([0, 0, 0]);
+    expect(S.deaths).toBe(0);
     expect(S.total).toEqual({ fixed: 0, burnt: 0, flats: [], peels: [] });
     expect(S.total).not.toBe(S.tally);
     expect([S.phase, S.night, S.t, S.power]).toEqual(['play', 1, 0, 100]);
@@ -225,7 +225,7 @@ describe('restartFloor', () => {
     });
 
     const fresh = start(11, 2, 1);
-    const { evs, evId, flats, ...restarted } = S;
+    const { evs, evId, ...restarted } = S;
     const { evs: _evs, evId: _evId, ...started } = fresh.S;
     expect(restarted).toEqual(started);
     expect(sim.brains).toEqual(fresh.sim.brains);

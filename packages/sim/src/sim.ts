@@ -340,9 +340,9 @@ function placeGuard(p: Player, i: number): asserts p is Guard {
   });
 }
 
-// A room's state before its first night. evs is the event list (emit); deaths and slams count the whole run.
+// A room's state before its first night. evs is the event list (emit); deaths counts the whole run.
 export function newState(code: string): State {
-  return { phase: 'lobby', night: 1, t: 0, power: 100, doors: OPEN(), m: [], players: [], killer: -1, evs: [], evId: 0, deaths: 0, slams: 0, code };
+  return { phase: 'lobby', night: 1, t: 0, power: 100, doors: OPEN(), m: [], players: [], killer: -1, evs: [], evId: 0, deaths: 0, code };
 }
 
 // Start night n: the guards in sim.players on their spawn points, the mascots on their marks.
@@ -483,7 +483,7 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
 
 // Back to night 1 with the run's counts cleared.
 export function restartFloor(sim: Sim, S: State): void {
-  Object.assign(S, { deaths: 0, slams: 0, flats: 0, total: null });
+  Object.assign(S, { deaths: 0, total: null });
   startFloorNight(sim, S, 1);
 }
 
@@ -775,7 +775,6 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
 function flatten(S: NightState, p: Guard, m: Mascot, b: Brain) {
   if (S.dev?.god) return;
   Object.assign(p, { flat: true, on: false, ph: false, flatBy: m.i, act: '', hid: -1 });
-  S.flats = (S.flats || 0) + 1;
   recordFlat(S, [p.name, m.i]);
   emit(S, 'flat', { id: p.id, by: m.i, x: p.x, z: p.z });
   p.bat *= FLAT_BAT;
@@ -1002,7 +1001,6 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     b.timer -= dt;
     if (b.timer > 0) return;
     emit(S, 'bang', key);
-    S.slams++;
     m.ire += BANG_IRE;
     b.bangs++;
     if (sim.rng() < FAULT.bang) breakOut(sim, S, BANG_BOX[key]);

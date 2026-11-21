@@ -11,7 +11,7 @@ exports[`solo nights > solo careless n3, seed 1 1`] = `
   "outcome": "dead",
   "peels": 0,
   "power": "77.140",
-  "stateDigest": "24e693b3090484d7",
+  "stateDigest": "789e3cc0e9519991",
   "t": "276.200",
   "ticks": 2762,
 }
@@ -28,7 +28,7 @@ exports[`solo nights > solo competent n1, seed 1 1`] = `
   "outcome": "win",
   "peels": 0,
   "power": "58.809",
-  "stateDigest": "df38d2a021991832",
+  "stateDigest": "671d68b8ef1f1444",
   "t": "420.000",
   "ticks": 4200,
 }
@@ -45,7 +45,7 @@ exports[`solo nights > solo competent n3, seed 2 1`] = `
   "outcome": "dead",
   "peels": 0,
   "power": "57.175",
-  "stateDigest": "847fa26a7668a61f",
+  "stateDigest": "27374d2b9968d8c8",
   "t": "128.000",
   "ticks": 1280,
 }
@@ -62,7 +62,7 @@ exports[`solo nights > solo competent n5, seed 3 1`] = `
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "d919aa8201d7a501",
+  "stateDigest": "2394e6fcd7087a77",
   "t": "279.700",
   "ticks": 2797,
 }
@@ -79,7 +79,7 @@ exports[`solo nights > solo competent, hides n3, seed 5 1`] = `
   "outcome": "win",
   "peels": 0,
   "power": "15.877",
-  "stateDigest": "25e33a89de62951e",
+  "stateDigest": "edc2a808668845ca",
   "t": "420.000",
   "ticks": 4200,
 }
@@ -96,7 +96,7 @@ exports[`solo nights > solo expert n5, seed 2 1`] = `
   "outcome": "won",
   "peels": 0,
   "power": "21.267",
-  "stateDigest": "48995fbbe9311deb",
+  "stateDigest": "f13b1281f028829c",
   "t": "420.000",
   "ticks": 4200,
 }

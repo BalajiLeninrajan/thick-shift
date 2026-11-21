@@ -163,7 +163,7 @@ export type SimEvent = {
   [K in EventType]: EventData[K] extends undefined ? { id: number; type: K; x?: undefined } : { id: number; type: K; x: EventData[K] };
 }[EventType];
 
-// A room's state before its first night (newState). deaths and slams count the whole run.
+// A room's state before its first night (newState). deaths counts the whole run.
 export interface LobbyState {
   phase: Phase;
   night: number;
@@ -176,7 +176,6 @@ export interface LobbyState {
   evs: SimEvent[]; // the last ten events
   evId: number;
   deaths: number;
-  slams: number;
   code: string;
   dev?: Partial<Dev>;
 }
@@ -193,7 +192,6 @@ export interface NightState extends LobbyState {
   faults: (Fault | null)[]; // one per breaker box (BOXES)
   tally: Tally; // this night's
   total: Tally | null; // the whole run's; null only between restartFloor and the night it starts
-  flats?: number; // guards flattened over the run
   batN: number; // the night's batteries, lying about or due back
   bats: number[]; // the BATTERY_SPOTS that have one lying there
   toys: Toy[];

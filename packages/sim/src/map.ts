@@ -237,11 +237,7 @@ export const spawnPoint = (i: number): Pose => ({ x: 18.5 + (i % 4) * 1.6, z: 41
 // Solid things standing on the floor: [x0, z0, x1, z1]. Players and mascots
 // walk round them. They come from the furniture table in dressing.ts,
 // which is plain data, so the simulation knows them without loading a model.
-export const OBSTACLES: Rect[] = obstacles(GENERATOR);
-export function addObstacle(x0: number, z0: number, x1: number, z1: number): void {
-  OBSTACLES.push([x0, z0, x1, z1]);
-  resetNav();
-}
+export const OBSTACLES: readonly Rect[] = obstacles(GENERATOR);
 
 /* ---------- standing and seeing ---------- */
 
@@ -580,11 +576,6 @@ export const nav = (): Nav => {
   NAV ||= buildNav();
   return NAV;
 };
-// Props added after the first path was asked for change what is walkable.
-export function resetNav(): void {
-  NAV = null;
-  buckets = null;
-}
 
 // The nearest waypoint that a walker of radius r can reach in a straight line: one of the dozen nearest, or failing that the nearest.
 // ducts: false leaves out the waypoints inside the ducts, for a walker that cannot go in. Undefined when there is no

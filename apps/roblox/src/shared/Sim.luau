@@ -297,7 +297,6 @@ function Sim.new(code: string, rng: (() -> number)?)
 		evs = {},
 		evId = 0,
 		deaths = 0,
-		slams = 0,
 		code = code,
 	}
 	return self
@@ -390,7 +389,7 @@ end
 
 function Sim:restart()
 	local S = self.S
-	S.deaths, S.slams, S.flats, S.total = 0, 0, 0, nil
+	S.deaths, S.total = 0, nil
 	self:startNight(1)
 end
 
@@ -758,7 +757,6 @@ function Sim:flatten(p, m, b)
 		return
 	end
 	p.flat, p.on, p.ph, p.flatBy, p.act, p.hid = true, false, false, m.i, "", -1
-	S.flats = (S.flats or 0) + 1
 	record(S, "flats", { p.name, m.i })
 	self:emit("flat", { id = p.id, by = m.i, x = p.x, z = p.z })
 	p.bat *= FLAT_BAT
@@ -1039,7 +1037,6 @@ function Sim:runMascot(m, b, dt: number)
 			return
 		end
 		self:emit("bang", b.key)
-		S.slams += 1
 		m.ire += BANG_IRE
 		b.bangs += 1
 		if self.rng() < FAULT.bang then

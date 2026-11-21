@@ -11,7 +11,7 @@ exports[`odd nights > empty building x2 n1, seed 1 1`] = `
   "outcome": "win",
   "peels": 0,
   "power": "60.569",
-  "stateDigest": "b8cb070de75d900a",
+  "stateDigest": "f818012c32f483b5",
   "t": "420.000",
   "ticks": 4200,
 }
@@ -28,7 +28,7 @@ exports[`odd nights > x1 sit in a locker all night n1, seed 2 1`] = `
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "2dace9e689fff131",
+  "stateDigest": "b8ed7daabde971a1",
   "t": "245.100",
   "ticks": 2451,
 }
@@ -45,7 +45,7 @@ exports[`odd nights > x4 camp the charger n3, seed 1 1`] = `
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "1728a239acd99854",
+  "stateDigest": "4293bdb1311a794b",
   "t": "112.600",
   "ticks": 1126,
 }
@@ -62,7 +62,7 @@ exports[`odd nights > x4 sit in the ducts n1, seed 3 1`] = `
   "outcome": "dead",
   "peels": 0,
   "power": "97.169",
-  "stateDigest": "13a225eddb689d87",
+  "stateDigest": "04242bb418965199",
   "t": "52.400",
   "ticks": 524,
 }
@@ -79,7 +79,7 @@ exports[`odd nights > x4 turtle, toys at the doors n1, seed 2 1`] = `
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "4b25187e8ba0a1d9",
+  "stateDigest": "09eb839044febc3a",
   "t": "145.800",
   "ticks": 1458,
 }
@@ -96,7 +96,7 @@ exports[`odd nights > x4 turtle: doors shut, nobody moves n3, seed 1 1`] = `
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "b9a5709f0e310e7a",
+  "stateDigest": "6990d40888e550bb",
   "t": "84.800",
   "ticks": 848,
 }

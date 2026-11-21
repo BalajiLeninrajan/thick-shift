@@ -11,7 +11,7 @@ exports[`crew nights > crew of 2 competent n2, seed 1 1`] = `
   "outcome": "win",
   "peels": 0,
   "power": "10.458",
-  "stateDigest": "0bd738aa2872b7b7",
+  "stateDigest": "3fc8b3fc21b21d43",
   "t": "420.000",
   "ticks": 4200,
 }
@@ -28,7 +28,7 @@ exports[`crew nights > crew of 3 competent n4, seed 1 1`] = `
   "outcome": "dead",
   "peels": 0,
   "power": "56.633",
-  "stateDigest": "2e9ccbdb262372a5",
+  "stateDigest": "782e26b35b726134",
   "t": "186.300",
   "ticks": 1863,
 }
@@ -45,7 +45,7 @@ exports[`crew nights > crew of 4 careless n1, seed 1 1`] = `
   "outcome": "dead",
   "peels": 2,
   "power": "73.503",
-  "stateDigest": "d9790b8695e37613",
+  "stateDigest": "85ab071c061f5ae3",
   "t": "323.000",
   "ticks": 3230,
 }
@@ -62,7 +62,7 @@ exports[`crew nights > crew of 4 competent n5, seed 2 1`] = `
   "outcome": "won",
   "peels": 4,
   "power": "7.889",
-  "stateDigest": "8a59a512a74ee10b",
+  "stateDigest": "d3cf2e651a5cce57",
   "t": "420.000",
   "ticks": 4200,
 }
@@ -79,7 +79,7 @@ exports[`crew nights > crew of 6 competent n1, seed 3 1`] = `
   "outcome": "win",
   "peels": 1,
   "power": "65.721",
-  "stateDigest": "e1419e2e2a9fa543",
+  "stateDigest": "b1f883f5ac4c0b56",
   "t": "420.000",
   "ticks": 4200,
 }
