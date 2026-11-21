@@ -614,16 +614,15 @@ def texture(objs, key, paint, W=2048, dense=(), glow_colour=(.9, .88, .8), norma
     Pa, Na, Ca, Aa = maps['P'][idx].astype(np.float32), N.astype(np.float32), maps['cls'][idx], np.clip(maps['ao'][idx], 0, 1)
     log(f'paint {len(Pa)} texels, {100 * len(Pa) / W / W:.0f}% of the atlas')
     # The painter is a pure function of each texel, so it runs in slices to keep memory flat.
-    T = Tex(Pa[:0], Na[:0], Ca[:0], Aa[:0]); outs = []
-    step = 300000
+    outs, step = [], 300000
     for i in range(0, len(Pa), step):
         t = Tex(Pa[i:i + step], Na[i:i + step], Ca[i:i + step], Aa[i:i + step])
         paint(t); outs.append((t.col, t.rough, t.h))
-    T.col, T.rough, T.h = (np.concatenate([o[k] for o in outs]) for k in range(3))
+    col_t, rough_t, h_t = (np.concatenate([o[k] for o in outs]) for k in range(3))
     log('painted')
-    col = np.full((W, W, 3), .3, dtype=np.float32); col[idx] = T.col
-    rough = np.full((W, W, 1), .9, dtype=np.float32); rough[idx] = T.rough[:, None]
-    H = np.zeros((W, W), dtype=np.float32); H[idx] = T.h
+    col = np.full((W, W, 3), .3, dtype=np.float32); col[idx] = col_t
+    rough = np.full((W, W, 1), .9, dtype=np.float32); rough[idx] = rough_t[:, None]
+    H = np.zeros((W, W), dtype=np.float32); H[idx] = h_t
     nrm = normal_from_height(H, maps['P'], valid, normal_strength)
     col = _fill(col, valid); rough = _fill(rough, valid)
     k = W // small
