@@ -54,15 +54,15 @@ exports[`solo nights > solo competent n3, seed 2 1`] = `
 exports[`solo nights > solo competent n5, seed 3 1`] = `
 {
   "burnt": 3,
-  "events": "arrive 2, bang 8, bat 1, burn 3, calm 4, door 22, fault 9, fix 7, flat 1, grab 2, hour 3, out 1, quit 3, scare 1, spot 11, stir 5, toy 2",
-  "eventsDigest": "6924fc321e24d063",
+  "events": "arrive 2, bang 8, bat 1, burn 3, calm 4, door 22, fault 9, fix 6, flat 1, grab 2, hour 3, out 1, quit 3, roar 1, scare 1, spot 10, stir 5, toy 2",
+  "eventsDigest": "0e5163b162cb471a",
   "failures": [],
-  "fixed": 7,
+  "fixed": 6,
   "flats": 1,
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "2394e6fcd7087a77",
+  "stateDigest": "5efa6ed858421d60",
   "t": "279.700",
   "ticks": 2797,
 }
@@ -89,14 +89,14 @@ exports[`solo nights > solo expert n5, seed 2 1`] = `
 {
   "burnt": 4,
   "events": "bat 2, burn 4, calm 5, check 1, crash 1, door 24, fault 11, fix 9, grab 1, hour 6, quit 5, roar 1, spot 15, stir 6, toy 1, win 1",
-  "eventsDigest": "8e397f0bee652366",
+  "eventsDigest": "fb7797255f04475f",
   "failures": [],
   "fixed": 9,
   "flats": 0,
   "outcome": "won",
   "peels": 0,
   "power": "21.267",
-  "stateDigest": "f13b1281f028829c",
+  "stateDigest": "f089c5b98181176e",
   "t": "420.000",
   "ticks": 4200,
 }

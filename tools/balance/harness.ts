@@ -120,6 +120,7 @@ interface BotState extends DoorTimes {
   seenAt?: number;
   hideCool?: number;
   race?: Race;
+  waitRace?: Race; // the same for the one thing being waited out (honest.think)
   fleeNode?: number;
   drift?: { until: number; to: Point }; // a careless guard wandering off
 
@@ -662,15 +663,17 @@ function fieldAt(S: NightState, f: Float64Array, p: Point): number {
 }
 
 // Where everyone could be and when: seconds for this guard to walk to each waypoint keeping clear of what it knows
-// about, and seconds for the nearest of the things after it to get there. Worked out twice a second.
-function race(S: NightState, bot: Bot, hs: Memory[], pace: (h: Memory) => number): Race {
-  const st = bot.state;
-  if (st.race && S.t - st.race.at < 0.5) return st.race;
+// about, and seconds for the nearest of the things after it to get there. Worked out twice a second, and kept under
+// slot: the callers ask about different mascots at different paces, so each keeps its own.
+function race(S: NightState, bot: Bot, hs: Memory[], pace: (h: Memory) => number, slot: 'race' | 'waitRace' = 'race'): Race {
+  const st = bot.state,
+    had = st[slot];
+  if (had && S.t - had.at < 0.5) return had;
   const mine = field(S, bot, berths(S, bot)).map(d => d / F.WALK),
     theirs = new Float64Array(mine.length).fill(1e9);
   for (const h of hs) for (const [i, d] of field(S, h).entries()) theirs[i] = Math.min(costAt(theirs, i), d / pace(h));
   const r = { mine, theirs, at: S.t };
-  st.race = r;
+  st[slot] = r;
   return r;
 }
 // Where to run: the waypoint furthest (in their time) from everything after this guard, out of those the guard
@@ -1006,7 +1009,7 @@ const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => 
           ? fleeTo(
               S,
               bot,
-              race(S, bot, [nearest], () => 3)
+              race(S, bot, [nearest], () => 3, 'waitRace')
             )
           : null;
       w.use = null;
