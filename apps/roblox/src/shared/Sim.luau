@@ -1,7 +1,7 @@
 --!nonstrict
 -- The night, ported from packages/sim/src/sim.ts. The server owns one Sim and steps it; clients get S. Read the JS
 -- file for why each number is what it is: the comments there are the tuning record, and this port keeps the same
--- numbers and the same order of random draws so tools/roblox/diff-sim checks it tick by tick against the original.
+-- numbers and the same order of random draws so tools/roblox/diff/run.sh checks it tick by tick against the original.
 --
 -- Index-valued fields in S (m.i, flatBy, killer, a fault's box, p.hid, S.bats) stay 0-based, as on the web.
 -- S.faults holds false where the JS holds null.
@@ -119,7 +119,6 @@ end
 local Sim = {}
 Sim.__index = Sim
 Sim.F = F
-Sim.TOY = TOY
 
 function Sim.hourF(S): number
 	return math.min(6, math.floor(S.t / F.HOUR))
@@ -340,10 +339,6 @@ function Sim:removePlayer(id: string)
 	if k then
 		table.remove(self.order, k)
 	end
-end
-
-function Sim:brainOf(i: number)
-	return self.brains[i + 1]
 end
 
 function Sim:startNight(n: number)
@@ -1263,7 +1258,7 @@ end
 
 --[[ the tick ]]
 
--- dt is real seconds since the last step; the caller caps it (the web game caps at .25).
+-- dt is real seconds since the last step, capped at a quarter second as stepFloor caps it.
 function Sim:step(dt: number)
 	local S = self.S
 	dt = math.min(0.25, dt) * (S.dev and S.dev.speed or 1)
@@ -1320,15 +1315,12 @@ local function num(v: any, lo: number, hi: number, fallback: number): number
 	return if Util.isFinite(v) then math.max(lo, math.min(hi, v)) else fallback
 end
 
--- One guard's action. a.t: 'name', 'p' (where they are and what they hold), 'call', or 'use' with a.what.
+-- One guard's action. a.t: 'p' (where they are and what they hold), 'call', 'throw', or 'use' with a.what. There is
+-- no 'name': the server takes names from Roblox.
 function Sim:act(pid: string, a: any)
 	local S = self.S
 	local p = self.players[pid]
 	if not p or type(a) ~= "table" then
-		return
-	end
-	if a.t == "name" then
-		p.name = string.sub(tostring(a.n or "Guard"), 1, 12)
 		return
 	end
 	if S.phase ~= "play" or p.x == nil then
@@ -1444,7 +1436,7 @@ function Sim:act(pid: string, a: any)
 		table.remove(S.toys, k)
 		p.toy = true
 		self:emit("grab", { by = p.id, x = t.x, z = t.z })
-	elseif a.what == "hide" and HIDES[i + 1] and i >= 0 then
+	elseif a.what == "hide" and HIDES[i + 1] then
 		local h = HIDES[i + 1]
 		if p.hid == i then
 			p.hid = -1

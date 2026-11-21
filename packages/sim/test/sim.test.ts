@@ -40,7 +40,7 @@ describe('seeded', () => {
       expect(x).toBeGreaterThanOrEqual(0);
       expect(x).toBeLessThan(1);
     }
-    // The stream the balance harness, the snapshots and the Roblox port's Util.seeded all depend on.
+    // The stream the balance harness and the snapshots depend on.
     expect(Array.from({ length: 4 }, seeded(1))).toMatchSnapshot();
   });
 });
