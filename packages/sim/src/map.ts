@@ -1,7 +1,7 @@
 // The Depot as geometry: rooms, doorways, the things on the walls, and the
-// questions both the host simulation and the renderer ask about them (can I
+// questions both the simulation and the renderer ask about them (can I
 // stand here, can I see that, how do I walk there). No three.js in this file;
-// the host runs it without a renderer.
+// the room runs it without a renderer.
 //
 // Metres. x runs east, z runs south, so the plan below reads like a map.
 // The building:
@@ -233,7 +233,7 @@ export const spawnPoint = (i: number): Pose => ({ x: 18.5 + (i % 4) * 1.6, z: 41
 
 // Solid things standing on the floor: [x0, z0, x1, z1]. Players and mascots
 // walk round them. They come from the furniture table in dressing.ts,
-// which is plain data, so the host knows them without loading a model.
+// which is plain data, so the simulation knows them without loading a model.
 export const OBSTACLES: Rect[] = obstacles(GENERATOR);
 export function addObstacle(x0: number, z0: number, x1: number, z1: number): void {
   OBSTACLES.push([x0, z0, x1, z1]);

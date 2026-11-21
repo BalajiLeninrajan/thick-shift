@@ -127,8 +127,13 @@ describe("commandFloor's dev cheats", () => {
     expect(S.dev?.wake).toBe(true);
     commandFloor(sim, S, 'a', { t: 'dev', do: 'home', i: 1 });
     expect(S.m[1]).toMatchObject({ x: REST[1].x, z: REST[1].z, st: 'rest' });
-    commandFloor(sim, S, 'a', { t: 'dev', do: 'home', i: 99 });
+    // An index that is not a whole number, or past the mascots, moves nobody.
+    commandFloor(sim, S, 'a', { t: 'dev', do: 'near', i: 1 });
+    const there = { ...S.m[1] };
     commandFloor(sim, S, 'a', { t: 'dev', do: 'home', i: '1' });
+    commandFloor(sim, S, 'a', { t: 'dev', do: 'home', i: 1.5 });
+    commandFloor(sim, S, 'a', { t: 'dev', do: 'home', i: 99 });
+    expect(S.m[1]).toEqual(there);
   });
 });
 
@@ -139,6 +144,18 @@ describe('commandFloor', () => {
     expect(S.phase).toBe('lobby');
     for (const junk of [null, 3, 'go', [], {}, { t: 'nope' }, { t: 'use', what: 'door' }]) commandFloor(sim, S, 'a', junk);
     expect(S.phase).toBe('lobby');
+  });
+
+  it('does not take an id named after an Object property as someone in the room', () => {
+    const { sim, S } = room('a');
+    for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+      commandFloor(sim, S, id, { t: 'go' });
+      commandFloor(sim, S, id, { t: 'name', n: 'sneaky' });
+    }
+    expect(S.phase).toBe('lobby');
+    expect(({} as { name?: string }).name).toBeUndefined();
+    joinFloor(sim, S, 'constructor');
+    expect(S.players.map(p => p.id)).toEqual(['a', 'constructor']);
   });
 
   it('passes actions to actFloor', () => {

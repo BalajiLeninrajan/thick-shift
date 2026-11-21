@@ -297,7 +297,7 @@ export class Mascot {
       lit = litSt !== null;
 
     // Can the camera see any of it? Only walls and shut doors count: sees() also stops at furniture, which is the
-    // host's rule for hiding, but a table hides none of a mascot from the eye. Lines across its whole width, close
+    // sim's rule for hiding, but a table hides none of a mascot from the eye. Lines across its whole width, close
     // enough together that one half in view past a door jamb is not hidden with the rest.
     this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
     this.lookT -= dt;

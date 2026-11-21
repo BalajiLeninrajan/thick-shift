@@ -15,7 +15,7 @@ use by the game and the tools.
 | `@thick-shift/sim/dressing` | `src/dressing.ts` | `FOOT`, `GEN_BACK`, `DRESSING`, `footprint`, `obstacles` |
 | `@thick-shift/sim/data` | `src/data.ts` | `LAMPS`, `DEAD_TUBES`, the tube colours, `STAGE` (moved out of `light.ts` and `shell.ts`) |
 | `@thick-shift/sim/random` | `src/random.ts` | `seeded(seed)`, the seeded `Rng` the balance harness and the tests play with |
-| `@thick-shift/sim/types` | `src/types.ts` | `State`, `NightState`, `Guard`, `Mascot`, `SimEvent`, `Brain`, `Action`, the relay messages, `Rng` |
+| `@thick-shift/sim/types` | `src/types.ts` | `State`, `NightState`, `Guard`, `Mascot`, `SimEvent`, `Brain`, `Action`, the wire messages (`Command`, `StateMessage`, `CloseCode`), `Rng` |
 | `@thick-shift/sim/session` | `src/session.ts` | what whoever runs a night does with the guards' browsers: `joinFloor`, `leaveFloor`, `commandFloor` (an action, `go` for the next night, or a dev cheat), `DEV_OFF` |
 | `@thick-shift/sim/sim` | `src/sim.ts` | the night: `newSim`, `newState`, `startFloorNight`, `stepFloor`, `actFloor`, `adoptFloor`, ... |
 
@@ -38,7 +38,7 @@ interface SimOptions { rng: Rng; now: number; shuffle?: 'sort' | 'fisher-yates' 
 interface Sim {
   rng: Rng;                        // every random draw the night makes; the caller may swap it between calls
   shuffle: 'sort' | 'fisher-yates';
-  players: Record<string, Player>; // was game.players: peer id -> that guard's record
+  players: Record<string, Player>; // was game.players: guard id -> that guard's record
   brains: Brain[];                 // was the module's `brains`
   batTimers: number[];             // was `batTimers`
   crankNoise: number;              // was `crankNoise`
@@ -65,10 +65,11 @@ darkRoom(S, room), faultLeft(S, f), landing(S, x, z, yaw, d)
 
 The sim no longer imports `state.ts`. Everything sim3d.js kept at module level, and `game.players`, lives on the
 `Sim` record the caller makes with `newSim()` and passes in. `S` is passed beside it, never stored on it, because
-guests hold an `S` and no `Sim`.
+the pages in a room hold an `S` and no `Sim`.
 
-- A `Sim` lives as long as sim3d.js's module state did: one per host page in the game, one per worker (or per
-  process in `--trace`) in the balance harness. `startFloorNight` resets `brains`, `nextFault`, `batTimers` and
+- A `Sim` lives as long as sim3d.js's module state did. Since the room runs the night, that is one per room's Durable
+  Object (`packages/game/worker/room.ts`) or per page playing solo, and one per worker (or per process in `--trace`)
+  in the balance harness. `startFloorNight` resets `brains`, `nextFault`, `batTimers` and
   `crankNoise` as it does today. It does not touch `lastStep` or `players`.
 - `sim.players[id]` and that guard's entry in `S.players` are the same object. `stepFloor` sets
   `S.players = Object.values(sim.players)` on every call, as `guards()` does today, and `startFloorNight` does the
@@ -126,14 +127,13 @@ treats `a` as untrusted JSON: every field it reads is checked as today (`num()`,
 ### Types
 
 `State` is what goes over the wire: a `LobbyState` (what `newState` returns) with the night's fields optional, because
-the lobby has none of them and a host from before some fields existed may not send them. `NightState` is the state
+the lobby has none of them and a state saved before some fields existed may not have them. `NightState` is the state
 once `startFloorNight` has run, with every field present and `players: Guard[]`. `startFloorNight` is an assertion
 function, so after the call the caller's `S` is a `NightState`. Inside a night the sim narrows `State` to `NightState`. `Player` is a guard as net.ts adds them (`{ id, name }`) with the body's fields optional;
 `stepFloor` places one whose `x` is missing. `SimEvent` is a union keyed on `type`, with each event's `x` typed. The
-wire messages are `Action` (guest to host, and the host's own actions), `StateMessage` (`{ t: 's', s }`, host to
-guests), `RelayToGuest` (`{ t: 'host', guests }`, `{ t: 'rehost' }`), `HostInbox` (`{ from, d }`, where `d` is an
-`Action` or `{ t: 'join' | 'leave' }`), `Visibility` (the plain-text `'hidden'` and `'shown'`) and `CloseCode`
-(4404 no host, 4409 code taken).
+wire messages are `Command` (page to room: an `Action`, `{ t: 'go' }` or a `DevCommand`), `StateMessage`
+(`{ t: 's', s }`, room to every page) and `CloseCode` (1008 a bad id or mode, 4404 no such room, 4409 code taken, 4426 a page
+from an older build).
 
 ## (e) Keeping the tools' output byte-identical
 
@@ -203,6 +203,9 @@ the same way, are now `test/floor-plan.test.ts`.
 ## (f) What has to change
 
 ### Game (packages/game, still JS in PR 3; ported to TS in PR 5)
+
+This was the plan when the browser that hosted a room ran its night. The room's Durable Object runs it now, and
+`net.ts` keeps no `Sim` except for a night played solo; see `src/session.ts` and the README's "How the pieces talk".
 
 - `src/three/sim3d.js`: moves into `packages/sim/src/sim.ts` behind the signatures above, then is deleted.
 - `src/net.ts`:

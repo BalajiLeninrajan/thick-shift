@@ -1,7 +1,7 @@
 --!strict
--- The server is the web game's host: it owns the one Sim, steps it ten times a second as net.ts does, and sends
--- every client the whole state. Clients send the same actions a guest's browser sends (Shared/Sim.luau act), plus
--- 'next' from the cards between nights, which any guard may press.
+-- The server is what the web game's room is (packages/game/worker/room.ts): it owns the one Sim, steps it ten times
+-- a second, and sends every client the whole state. Clients send the same actions a guard's browser sends
+-- (Shared/Sim.luau act), plus 'next' from the cards between nights, which any guard may press.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")

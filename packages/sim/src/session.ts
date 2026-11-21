@@ -6,15 +6,15 @@ import { isPlaced } from './check.ts';
 import { FINAL_NIGHT } from './config.ts';
 import { REST } from './map.ts';
 import { actFloor, F, hourF, restartFloor, type Sim, startFloorNight } from './sim.ts';
-import type { Command, Dev, DevCommand, DevDo, State } from './types.ts';
+import type { Command, Dev, DevCommand, DevDo, Player, State } from './types.ts';
 
 // Every cheat off. A missing field in S.dev reads as this.
 export const DEV_OFF: Dev = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: -1, dread: -1 };
 
-// A guard comes into the room. One whose record S still has (a room brought back from storage) keeps it, and with it
-// their place on the floor. Anyone else gets placed by the next step (stepFloor).
-export function joinFloor(sim: Sim, S: State, id: string): void {
-  sim.players[id] ??= S.players.find(p => p.id === id) ?? { id, name: 'Guard' };
+// A guard comes into the room. One coming back keeps their record, and with it their place on the floor: was, or the
+// one S still has. Anyone else gets placed by the next step (stepFloor).
+export function joinFloor(sim: Sim, S: State, id: string, was?: Player): void {
+  if (!Object.hasOwn(sim.players, id)) sim.players[id] = was ?? S.players.find(p => p.id === id) ?? { id, name: 'Guard' };
   S.players = Object.values(sim.players);
 }
 
@@ -106,7 +106,7 @@ export function devFloor(sim: Sim, S: State, pid: string, d: DevCommand): void {
 
 // Anything pid's browser sent. Someone not in the room is ignored, and so is a message that is not one of these.
 export function commandFloor(sim: Sim, S: State, pid: string, c: unknown): void {
-  if (typeof c !== 'object' || c === null || !('t' in c) || !sim.players[pid]) return;
+  if (typeof c !== 'object' || c === null || !('t' in c) || !Object.hasOwn(sim.players, pid)) return;
   const cmd = c as Command;
   if (cmd.t === 'go') goFloor(sim, S);
   else if (cmd.t === 'dev') devFloor(sim, S, pid, cmd);

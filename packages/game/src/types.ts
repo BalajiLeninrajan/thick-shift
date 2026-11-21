@@ -64,7 +64,7 @@ export type Target = { at: Point; label: string; hold: number } & (
   | { what: 'crank' | 'charge'; i?: never; k?: never; id?: never }
 );
 
-// This guard as their own browser has them (player.me), ahead of what the host sends back. yaw 0 faces south (+z).
+// This guard as their own browser has them (player.me), ahead of what the room sends back. yaw 0 faces south (+z).
 // Read by the HUD, touch, sound, outline, the actors, the phone and the slats; only player.ts writes it, apart from
 // touch, which sets touch.
 export interface Me {
@@ -91,7 +91,7 @@ export interface Me {
   threw: number; // performance.now() of the last Mini Biggs thrown,
   dry: number; // of the last try without the battery for one,
   empty: number; // and of the last try with empty hands
-  hid: number; // the locker (HIDES index) this guard is in, as the host has it, or -1
+  hid: number; // the locker (HIDES index) this guard is in, as the room has it, or -1
 }
 
 /* ---------- the frame (three/app.ts and what it puts together) ---------- */
