@@ -1,5 +1,5 @@
 // The mutable objects every module shares.
-import type { State } from '@thick-shift/sim/types';
+import type { Player, State } from '@thick-shift/sim/types';
 import type { GameError, Invite, OverlayScreen } from './types';
 
 export interface Game {
@@ -30,6 +30,8 @@ export function currentState(): State {
   if (!game.S) throw new Error('no room state yet');
   return game.S;
 }
+// This guard as S has them, once the room has let them in.
+export const myPlayer = (S: State): Player | undefined => S.players.find(p => p.id === game.myId);
 
 export interface Client {
   holdUntil: number;
@@ -44,6 +46,8 @@ export const client: Client = {
 // before the night's end card.
 export const CATCH_S = 1.5,
   LINGER_S = 1.5;
+// How high the camera of a flat guard is held, in metres.
+export const FLAT_EYE = 0.22;
 
 export interface Platform {
   fixedRoom: boolean;
@@ -58,5 +62,3 @@ export const platform: Platform = {
   title: null, // () => screen ({ key, html, wire }), shown in place of the title screen (ui.ts)
   invite: null, // () => { html, wire }, shown in the lobby in place of the room code and link (ui.ts)
 };
-
-export const rnd = (a: number, b: number): number => a + Math.random() * (b - a);

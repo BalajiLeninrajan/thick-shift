@@ -7,7 +7,7 @@
 import { adoptFloor, commandFloor, joinFloor, newSim, newState, type Sim, stepFloor } from '@thick-shift/sim';
 import type { Command, State, StateMessage } from '@thick-shift/sim/types';
 import { CLOSE, type Mode, PROTOCOL, parse, TICK_MS } from './protocol';
-import { game, platform } from './state';
+import { game, myPlayer, platform } from './state';
 
 const RETRY_MS = [500, 1000, 2000, 4000, 8000]; // waits between tries to get back into a room we lost, 15 s in all
 const QUIET_MS = 4000; // a night in play that has sent nothing for this long has lost its connection
@@ -111,7 +111,7 @@ function playSolo(code: string, note: string): void {
   const S = game.S ?? newState(code),
     now = performance.now(),
     sim = newSim({ rng: Math.random, now });
-  const me = S.players.find(p => p.id === game.myId);
+  const me = myPlayer(S);
   S.players = [];
   joinFloor(sim, S, game.myId, me);
   commandFloor(sim, S, game.myId, { t: 'name', n: game.myName });

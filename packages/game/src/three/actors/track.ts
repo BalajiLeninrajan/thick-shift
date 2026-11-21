@@ -12,7 +12,7 @@ const TELEPORT = 5; // metres between two snapshots that mean a jump, not a walk
 export const TAU = Math.PI * 2;
 
 // One clock for every track: what time on the night's clock to draw at.
-export const hostClock = {
+export const nightClock = {
   off: 0,
   gap: 0.1,
   last: -1,

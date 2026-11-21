@@ -6,7 +6,7 @@
 // SDK their own chunk, so elsewhere the SDK is never fetched.
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { unlockAudio } from '@thick-shift/game/audio';
-import { byId } from '@thick-shift/game/dom';
+import { byId, errorText } from '@thick-shift/game/dom';
 import { host } from '@thick-shift/game/net';
 import { game, platform } from '@thick-shift/game/state';
 import type { Invite, OverlayScreen } from '@thick-shift/game/types';
@@ -81,5 +81,5 @@ platform.fixedRoom = true;
 platform.title = titleScreen;
 platform.invite = invite;
 connect().catch((err: unknown) => {
-  game.error = { title: 'Could not reach Discord', detail: err instanceof Error && err.message ? err.message : String(err) };
+  game.error = { title: 'Could not reach Discord', detail: errorText(err) };
 });

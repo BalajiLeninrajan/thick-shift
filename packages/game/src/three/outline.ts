@@ -18,10 +18,10 @@ import { DOORS } from '@thick-shift/sim/config';
 import { BATTERY_SPOTS, CHARGER, dist, GENERATOR, PANELS } from '@thick-shift/sim/map';
 import type { Point, State } from '@thick-shift/sim/types';
 import type { Object3D } from 'three';
-import { game } from '../state';
+import { game, myPlayer } from '../state';
 import type { Actors, Me, OutlineMark, Target, WorldParts } from '../types';
 import { HURRY } from './hud';
-import { myPlayer, prefs } from './player';
+import { prefs } from './player';
 
 const NEAR = 6;
 const GOLD: OutlineMark['col'] = [1, 0.78, 0.28],

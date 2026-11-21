@@ -3,6 +3,7 @@
 import { dreadF } from '@thick-shift/sim';
 import type { State } from '@thick-shift/sim/types';
 import { ambience, win } from './audio';
+import { errorText } from './dom';
 import { CATCH_S, client, game, LINGER_S } from './state';
 import type { FloorModule } from './types';
 import { syncOverlay } from './ui';
@@ -35,8 +36,8 @@ function drawFloor(): void {
         m => {
           floor = m;
         },
-        err => {
-          game.error = { title: 'The game failed to load', detail: String(err.message || err) };
+        (err: unknown) => {
+          game.error = { title: 'The game failed to load', detail: errorText(err) };
         }
       );
     }

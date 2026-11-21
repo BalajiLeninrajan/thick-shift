@@ -8,10 +8,9 @@ import { TOY } from '@thick-shift/sim';
 import { isPlaced } from '@thick-shift/sim/check';
 import { unlockAudio } from '../audio';
 import { query } from '../dom';
-import { game } from '../state';
+import { game, myPlayer } from '../state';
 import type { PlayerHandle } from '../types';
 import { icon } from './icons';
-import { myPlayer } from './player';
 
 const STICK_R = 48; // pixels the knob travels for full speed
 const STICK_ZONE = 0.45; // the left part of the screen where a touch starts the stick

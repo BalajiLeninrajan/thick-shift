@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { View } from '../actors';
 import { floorY } from '../world/shell';
-import { hostClock } from './track';
+import { nightClock } from './track';
 
 const SIZE = 1.4; // a big keyring, so it shows across a room in a torch beam
 const HAND = 1.3; // metres off the floor it leaves the hand
@@ -91,7 +91,7 @@ export function createPlush(scene: THREE.Scene) {
       toys.clear();
     },
     sync(S: State, view: View): void {
-      const now = hostClock.now,
+      const now = nightClock.now,
         list = S.toys || [],
         here = new Set<number>();
       for (const t of list) {

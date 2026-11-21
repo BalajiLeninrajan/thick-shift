@@ -14,7 +14,7 @@ import { DOORS, perMascot } from '@thick-shift/sim/config';
 import { BOXES, CHARGER, DOORWAYS, DUCTS, dist, doorwayOf, EYE, GENERATOR, PANELS, ROOMS3, rectMid, roomAt, sees } from '@thick-shift/sim/map';
 import type { DoorKey, Doors, EventData, EventType, Mascot, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
 import { bang, boom, type Engine, into, live, muffle, noise, oneOf, pick, roomFor, sample, shriek, song, tone, voices, whiteFor } from '../audio';
-import { game, rnd } from '../state';
+import { game, myPlayer } from '../state';
 import type { EventOf, Me } from '../types';
 import { CUES } from './actors/scare';
 
@@ -131,6 +131,7 @@ const squeeze = (level: number): void => {
 // Picked up again: the squeak of its belly in a hand.
 const squeak = (level: number): void => tone(1100, 0.1, 'triangle', 0.07 * level, { to: 1500 });
 
+const rnd = (a: number, b: number): number => a + Math.random() * (b - a);
 const doorAt = (key: DoorKey): Point => rectMid(doorwayOf(key).rect);
 // Doorways between two rooms by the shortest way, a shut door counting double. FAR is "a long way".
 const FAR = 9;
@@ -881,7 +882,7 @@ export function createSound() {
       throws(S, r);
       for (const m of S.m) mascot(S, m, r.mascots[m.i], dt);
       otherGuards(S, r);
-      self(me, S.players.find(p => mine(p.id))?.bat ?? 1, dt);
+      self(me, myPlayer(S)?.bat ?? 1, dt);
       for (const e of fresh) play(e.type, e.x, S, r);
       // Flat on the floor the world is somewhere above you, from the moment the catch drops you there.
       const down = me.flat && now - stingAt > CUES.floor,

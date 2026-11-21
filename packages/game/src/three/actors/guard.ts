@@ -12,7 +12,7 @@ import type { View } from '../actors';
 import { instance, loadActor } from '../assets';
 import type { Rig } from './rig';
 import { bounds, buildRig, eachMesh, glowTexture } from './rig';
-import { hostClock, TAU, Track } from './track';
+import { nightClock, TAU, Track } from './track';
 
 const { clamp } = THREE.MathUtils;
 const TAG_NEAR = 7,
@@ -212,8 +212,8 @@ export class Guard {
     const tr = this.track,
       rig = this.rig,
       flat = p.flat;
-    if (hostClock.fresh) tr.push(S.t, p.x, p.z, p.yaw, p.pitch);
-    tr.sample(hostClock.now, dt);
+    if (nightClock.fresh) tr.push(S.t, p.x, p.z, p.yaw, p.pitch);
+    tr.sample(nightClock.now, dt);
     this.t += dt;
     this.group.position.set(tr.x, 0, tr.z);
     this.group.rotation.y = tr.yaw;

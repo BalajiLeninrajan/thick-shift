@@ -8,13 +8,13 @@ import { angDiff, BOXES, dist, EYE, ROOMS3, reaches, roomAt } from '@thick-shift
 import type { EventType, Player, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { query } from '../dom';
-import { client, currentState, game } from '../state';
+import { client, currentState, game, LINGER_S, myPlayer } from '../state';
 import type { EventOf } from '../types';
 import { createActors } from './actors';
 import { createPhone } from './actors/phone';
 import { createHud, where } from './hud';
 import { createOutlines } from './outline';
-import { createPlayer, myPlayer, prefs, TORCH_FULL } from './player';
+import { createPlayer, prefs, TORCH_FULL } from './player';
 import { createPost } from './post';
 import { createSlats } from './slats';
 import { createSound } from './sound';
@@ -75,7 +75,6 @@ function create() {
 
   // A flat guard can watch a standing teammate (player.me.watch is their id): through their eyes, or with
   // prefs.third from behind and above them. seat is that view, eased between the room's updates.
-  const LINGER = 1.5; // seconds a caught guard lies looking up at what sat on them before the night's end card
   const BACK = 3,
     ABOVE = 2.2,
     AIM = 1.4; // third person: metres behind, camera height, and the height looked at
@@ -212,8 +211,8 @@ function create() {
       fog.density = FOG + FOG_DREAD * dread;
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch); // also runs the catch, which takes the camera
-      // The end card (ui.ts) waits until LINGER after the catch is over, however long a slow machine takes over it.
-      if (actors.scare.active) client.holdUntil = Math.max(client.holdUntil, now + LINGER * 1000);
+      // The end card (ui.ts) waits until LINGER_S after the catch is over, however long a slow machine takes over it.
+      if (actors.scare.active) client.holdUntil = Math.max(client.holdUntil, now + LINGER_S * 1000);
       phone.update(S, player.me, dt, now, actors.scare.active);
       slats.update(S, player.me, dt, actors.scare.active);
       sound.update(S, player.me, dt);

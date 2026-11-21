@@ -32,7 +32,8 @@ export interface Maps {
   roughnessMap: THREE.CanvasTexture;
 }
 
-// A seeded random number generator, so the building looks the same every night.
+// A seeded random number generator, so the building looks the same every night. It is mulberry32, as the sim's
+// seeded() is, but takes the seed as it comes: seeded() spreads it first, and switching would repaint every surface.
 export const rand = (seed: number) => (): number => {
   seed = (seed + 0x6d2b79f5) | 0;
   let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);

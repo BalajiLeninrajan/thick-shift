@@ -18,7 +18,7 @@ import type { Part, Rig } from './rig';
 import { bounds, buildRig, eachMesh, glowTexture, lag } from './rig';
 import type { PerStage, Stage, Style } from './styles';
 import { CH, hash, isLitState, isStage, RATE, standIn, styleOf, ZERO } from './styles';
-import { hostClock, TAU, Track } from './track';
+import { nightClock, TAU, Track } from './track';
 
 const { clamp } = THREE.MathUtils,
   smooth = (u: number): number => THREE.MathUtils.smoothstep(u, 0, 1);
@@ -236,8 +236,8 @@ export class Mascot {
   sync(m: SimMascot, S: State, dt: number, view: View): void {
     const tr = this.track,
       st = m.st;
-    if (hostClock.fresh) tr.push(S.t, m.x, m.z, m.yaw);
-    tr.sample(hostClock.now, dt);
+    if (nightClock.fresh) tr.push(S.t, m.x, m.z, m.yaw);
+    tr.sample(nightClock.now, dt);
     this.load(m.rot);
     const litSt = m.lit && isLitState(st) ? st : null,
       lit = litSt !== null;

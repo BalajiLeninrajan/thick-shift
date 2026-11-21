@@ -14,10 +14,11 @@ import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
 import { angDiff, BOXES, CHARGER, dist, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
 import type { Guard, NightState, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
 import { query } from '../dom';
-import { game } from '../state';
+import { game, myPlayer } from '../state';
 import type { Me, PlayerHandle } from '../types';
+import { esc } from '../ui';
 import { type IconName, icon } from './icons';
-import { myPlayer, prefs, savePrefs } from './player';
+import { prefs, savePrefs } from './player';
 import { faultName } from './task';
 import { canFullscreen, createTouch, toggleFullscreen } from './touch';
 
@@ -232,7 +233,6 @@ const data = (e: HTMLElement, key: string, v: string | boolean): void => {
   v = String(v);
   if (e.dataset[key] !== v) e.dataset[key] = v;
 };
-const esc = (s: string): string => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
 const metres = (d: number): string => `${Math.max(1, Math.round(d))} m`;
 const roomName = (p: Point): string => ROOMS3[roomAt(p.x, p.z)]?.name || '';
 // "in the Kitchen", for a sentence.

@@ -3,17 +3,19 @@
 // Stompy at the end, the worm's mouth), the mascot plays its scare pose and
 // lunges, then the camera is dropped to the floor and left looking up at it
 // as it sits down. After that player.ts has the camera back, where we left it.
+
 import { angDiff } from '@thick-shift/sim/map';
 import type { PerMascot } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { context2d } from '../../dom';
+import { CATCH_S, FLAT_EYE } from '../../state';
 import type { Me } from '../../types';
 import type { Mascot } from './mascot';
 import type { PerStage } from './styles';
 
 // The cues of a catch in the order they come, and the seconds from the catch at which each comes. The sound hangs its
 // stinger on these.
-export const CUES = { grab: 0, face: 0.12, bite: 0.62, drop: 1.05, floor: 1.3, end: 1.5 };
+export const CUES = { grab: 0, face: 0.12, bite: 0.62, drop: 1.05, floor: 1.3, end: CATCH_S };
 // How close the camera is held to the face, by mascot (Big Biggs, Madame Flan, Squish, Stompy) and stage: near enough
 // that the face (or the mouth) is all there is. Stompy's worm mouth is small.
 const FILL: PerMascot<PerStage<number>> = [
@@ -24,7 +26,6 @@ const FILL: PerMascot<PerStage<number>> = [
 ];
 const BITE = 0.72; // at the bite it comes this much closer again
 const GLARE = 45; // the torch is forced on through the catch, stuttering, or in a dark building there would be nothing to see
-const FLOOR_Y = 0.22; // where player.ts holds the camera of a flat guard
 const FOV_IN = 86; // the lens goes wide as the face arrives
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
 const smooth = (u: number): number => THREE.MathUtils.smoothstep(u, 0, 1);
@@ -156,7 +157,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
           g = fall * fall,
           settle = smooth((t - CUES.floor) / (CUES.end - CUES.floor));
         // With dt capped at 0.1 s (app.ts) the first frame of a catch, which sets px..pz, comes long before the drop.
-        pos.set(a.px + (me.x - a.px) * g, a.py + (FLOOR_Y - a.py) * g, a.pz + (me.z - a.pz) * g);
+        pos.set(a.px + (me.x - a.px) * g, a.py + (FLAT_EYE - a.py) * g, a.pz + (me.z - a.pz) * g);
         look.subVectors(face, pos);
         a.yawEnd = Math.atan2(look.x, look.z);
         a.pitchEnd = Math.max(0.3, Math.min(1.3, Math.atan2(look.y, Math.hypot(look.x, look.z))));

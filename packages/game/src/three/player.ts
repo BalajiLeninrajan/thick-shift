@@ -11,8 +11,9 @@ import { angDiff, BATTERY_SPOTS, BOXES, CHARGER, dist, EYE, GENERATOR, HIDES, PA
 import type { DoorKey, Guard, NightState, Player, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { unlockAudio } from '../audio';
+import { typing } from '../dom';
 import { send } from '../net';
-import { currentState, game } from '../state';
+import { currentState, FLAT_EYE, game, myPlayer } from '../state';
 import type { Me, Prefs, Target, Task } from '../types';
 import { faultName } from './task';
 
@@ -66,14 +67,12 @@ export function savePrefs(): void {
     /* storage blocked */
   }
 }
-const typing = (e: Event): boolean => e.target instanceof Element && !!e.target.closest('input, textarea, select, [contenteditable]');
 const DOOR_NAME: Record<DoorKey, string> = { L: 'left door', R: 'right door', V: 'vent' };
 // In a locker: how far the view turns either side of straight out through the doors, and up or down (radians),
 // and how far in front of the locker's middle the eye is: just past the doors, so their insides are behind it.
 const LOCKER_LOOK = { yaw: 0.85, pitch: 0.5, eye: 0.34 };
 const THROW_MS = 1000; // a second throw is not sent before the room has had time to take the first
 // This guard as the room has them, or undefined before they have joined its state.
-export const myPlayer = (S: State): Player | undefined => S.players.find(p => p.id === game.myId);
 
 // task: the minigame panel (task.ts).
 export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement, task: Task) {
@@ -540,7 +539,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       // With the phone up, or hands in a box, the torch hangs, lighting the floor a step ahead (and holding nothing: sim.ts beamOn).
       drop += ((me.ph || me.task ? 1 : 0) - drop) * Math.min(1, dt * 8);
       torch.target.position.set(0.05, -0.05 - 2.4 * drop, -3 + 1.2 * drop);
-      const y = me.flat ? 0.22 : EYE + Math.sin(me.bob) * 0.045;
+      const y = me.flat ? FLAT_EYE : EYE + Math.sin(me.bob) * 0.045;
       if (locker && !me.flat)
         camera.position.set(locker.x + Math.sin(locker.face) * LOCKER_LOOK.eye, EYE - 0.05, locker.z + Math.cos(locker.face) * LOCKER_LOOK.eye);
       else camera.position.set(me.x, y, me.z);

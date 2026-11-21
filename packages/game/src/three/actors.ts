@@ -22,7 +22,7 @@ import { createHands } from './actors/hands';
 import { Mascot } from './actors/mascot';
 import { createPlush } from './actors/plush';
 import { createScare } from './actors/scare';
-import { hostClock } from './actors/track';
+import { nightClock } from './actors/track';
 import { prefs } from './player';
 
 // Other guards' torches are real lights, but every light costs every pixel, so
@@ -109,7 +109,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     },
     // me, torch: player.ts's guard and its light. Call after player.update, which has put the camera where the guard is.
     sync(S: State, dt: number, me: Me, torch: THREE.SpotLight): void {
-      hostClock.see(S.t, performance.now() / 1000);
+      nightClock.see(S.t, performance.now() / 1000);
       camera.updateMatrixWorld();
       view.frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
       view.x = camera.position.x;
