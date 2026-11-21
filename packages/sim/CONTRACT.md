@@ -53,7 +53,7 @@ brainOf(sim: Sim, i: number): Brain
 // session.ts: a guard in or out of the room, and anything their browser sends
 joinFloor(sim: Sim, S: State, id: string, was?: Player): void
 leaveFloor(sim: Sim, S: State, id: string): void
-commandFloor(sim: Sim, S: State, pid: string, c: unknown): void
+commandFloor(sim: Sim, S: State, pid: string, c: unknown): boolean   // true if it started a night
 
 // Pure. Clients call them with any S.
 F, TOY

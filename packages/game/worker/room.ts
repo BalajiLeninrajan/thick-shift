@@ -159,18 +159,14 @@ export class Room extends DurableObject<RoomEnv> {
   webSocketMessage(ws: WebSocket, msg: string | ArrayBuffer): void {
     if (typeof msg !== 'string' || msg.length > MAX_MESSAGE || !this.night) return;
     const { sim, S } = this.night,
-      c = parse(msg),
-      { phase, night, t } = S;
-    commandFloor(sim, S, att(ws).id, c);
+      c = parse(msg);
+    if (commandFloor(sim, S, att(ws).id, c)) {
+      this.away.clear();
+      this.changed();
+    }
     // A night in play goes out on the next tick. Between nights, anything but a position goes out now.
-    if (S.phase === 'play') {
-      // A night started: from a card between nights ('go'), or a dev skip to another night or back to its start.
-      if (phase !== 'play' || S.night !== night || S.t < t) {
-        this.away.clear();
-        this.changed();
-      }
-      this.run();
-    } else if (!isPosition(c)) this.changed();
+    if (S.phase === 'play') this.run();
+    else if (!isPosition(c)) this.changed();
   }
 
   webSocketClose(ws: WebSocket): void {

@@ -24,12 +24,14 @@ export function leaveFloor(sim: Sim, S: State, id: string): void {
 }
 
 // The next night, from the card between nights: night 1 from the lobby, the next one after a win, the same one again
-// after everyone went flat, and night 1 of a new run after the last.
-function goFloor(sim: Sim, S: State): void {
+// after everyone went flat, and night 1 of a new run after the last. True if it started one.
+function goFloor(sim: Sim, S: State): boolean {
+  if (S.phase === 'play') return false;
   if (S.phase === 'lobby') startFloorNight(sim, S, 1);
   else if (S.phase === 'win') startFloorNight(sim, S, S.night + 1);
   else if (S.phase === 'dead') startFloorNight(sim, S, S.night);
-  else if (S.phase === 'won') restartFloor(sim, S);
+  else restartFloor(sim, S);
+  return true;
 }
 
 /* ---------- the dev menu ---------- */
@@ -64,12 +66,15 @@ const DO: Record<DevDo, (sim: Sim, S: State) => void> = {
   },
 };
 const isDo = (v: unknown): v is DevDo => typeof v === 'string' && Object.hasOwn(DO, v);
+// The one-off cheats that start a night.
+const STARTS: readonly DevDo[] = ['next', 'final'];
 
 const flag = (v: unknown, was: boolean): boolean => (typeof v === 'boolean' ? v : was);
 const within = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && v >= lo && v <= hi;
 
-// A dev cheat from pid's browser. Switches apply whenever there is a room; the rest only during a night.
-function devFloor(sim: Sim, S: State, pid: string, d: DevCommand): void {
+// A dev cheat from pid's browser. Switches apply whenever there is a room; the rest only during a night. True if
+// it started a night.
+function devFloor(sim: Sim, S: State, pid: string, d: DevCommand): boolean {
   if ('set' in d) {
     const set: Partial<Record<keyof Dev, unknown>> = typeof d.set === 'object' && d.set ? d.set : {},
       dev: Dev = { ...DEV_OFF, ...S.dev };
@@ -81,34 +86,38 @@ function devFloor(sim: Sim, S: State, pid: string, d: DevCommand): void {
     if (set.rot === -1 || set.rot === 0 || set.rot === 1 || set.rot === 2) dev.rot = set.rot;
     if (set.dread === -1 || within(set.dread, 0, 1)) dev.dread = set.dread;
     S.dev = dev;
-    return;
+    return false;
   }
-  if (S.phase !== 'play') return;
+  if (S.phase !== 'play') return false;
   if (d.do === 'near' || d.do === 'home') {
     const m = Number.isInteger(d.i) ? S.m[d.i] : undefined;
-    if (!m) return;
+    if (!m) return false;
     if (d.do === 'home') {
       const rest = REST[m.i];
       Object.assign(m, { x: rest.x, z: rest.z, yaw: rest.yaw, st: 'rest' });
-      return;
+      return false;
     }
     // In front of the guard who asked, and every mascot awake.
     const me = sim.players[pid];
-    if (!me || !isPlaced(me)) return;
+    if (!me || !isPlaced(me)) return false;
     Object.assign(m, { x: me.x + Math.sin(me.yaw) * 4, z: me.z + Math.cos(me.yaw) * 4, st: 'roam' });
     S.dev = { ...DEV_OFF, ...S.dev, wake: true };
-    return;
+    return false;
   }
-  if (isDo(d.do)) DO[d.do](sim, S);
+  if (!isDo(d.do)) return false;
+  DO[d.do](sim, S);
+  return STARTS.includes(d.do);
 }
 
 /* ---------- a guard's message ---------- */
 
 // Anything pid's browser sent. Someone not in the room is ignored, and so is a message that is not one of these.
-export function commandFloor(sim: Sim, S: State, pid: string, c: unknown): void {
-  if (typeof c !== 'object' || c === null || !('t' in c) || !Object.hasOwn(sim.players, pid)) return;
+// True if it started a night: 'go' from a card between nights, or a dev skip to another night.
+export function commandFloor(sim: Sim, S: State, pid: string, c: unknown): boolean {
+  if (typeof c !== 'object' || c === null || !('t' in c) || !Object.hasOwn(sim.players, pid)) return false;
   const cmd = c as Command;
-  if (cmd.t === 'go') goFloor(sim, S);
-  else if (cmd.t === 'dev') devFloor(sim, S, pid, cmd);
-  else actFloor(sim, S, pid, cmd);
+  if (cmd.t === 'go') return goFloor(sim, S);
+  if (cmd.t === 'dev') return devFloor(sim, S, pid, cmd);
+  actFloor(sim, S, pid, cmd);
+  return false;
 }

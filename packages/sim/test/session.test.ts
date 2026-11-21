@@ -55,10 +55,11 @@ describe('joinFloor and leaveFloor', () => {
 describe("commandFloor's go", () => {
   it('starts night 1 from the lobby, the next after a win and the same one after everyone went flat', () => {
     const { sim, S } = room('a');
-    commandFloor(sim, S, 'a', { t: 'go' });
+    expect(commandFloor(sim, S, 'a', { t: 'go' })).toBe(true);
     expect([S.phase, S.night]).toEqual(['play', 1]);
+    expect(commandFloor(sim, S, 'a', { t: 'go' })).toBe(false); // already playing
     S.phase = 'win';
-    commandFloor(sim, S, 'a', { t: 'go' });
+    expect(commandFloor(sim, S, 'a', { t: 'go' })).toBe(true);
     expect([S.phase, S.night]).toEqual(['play', 2]);
     S.phase = 'dead';
     commandFloor(sim, S, 'a', { t: 'go' });
@@ -102,14 +103,14 @@ describe("commandFloor's dev cheats", () => {
 
   it('runs one-off cheats only during a night', () => {
     const { sim, S } = room('a');
-    commandFloor(sim, S, 'a', { t: 'dev', do: 'next' });
+    expect(commandFloor(sim, S, 'a', { t: 'dev', do: 'next' })).toBe(false);
     expect(S.phase).toBe('lobby');
     commandFloor(sim, S, 'a', { t: 'go' });
-    commandFloor(sim, S, 'a', { t: 'dev', do: 'hour' });
+    expect(commandFloor(sim, S, 'a', { t: 'dev', do: 'hour' })).toBe(false);
     expect(S.t).toBe(F.HOUR);
     commandFloor(sim, S, 'a', { t: 'dev', do: 'low' });
     expect(S.power).toBe(5);
-    commandFloor(sim, S, 'a', { t: 'dev', do: 'final' });
+    expect(commandFloor(sim, S, 'a', { t: 'dev', do: 'final' })).toBe(true);
     expect([S.night, S.t]).toEqual([FINAL_NIGHT, 0]);
     commandFloor(sim, S, 'a', { t: 'dev', do: 'constructor' });
     commandFloor(sim, S, 'a', { t: 'dev', do: 'toString' });
