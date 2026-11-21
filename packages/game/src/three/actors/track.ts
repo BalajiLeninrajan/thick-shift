@@ -8,23 +8,14 @@ import { defined } from '@thick-shift/sim/check';
 
 const KEEP = 8;
 const TELEPORT = 5; // metres between two snapshots that mean a jump, not a walk
-const TAU = Math.PI * 2;
+export const TAU = Math.PI * 2;
 export const wrap = (a: number): number => {
   a %= TAU;
   return a > Math.PI ? a - TAU : a < -Math.PI ? a + TAU : a;
 };
 
-export interface HostClock {
-  off: number;
-  gap: number;
-  last: number;
-  fresh: boolean;
-  now: number;
-  see(St: number, now: number): void;
-}
-
 // One clock for every track: what time on the night's clock to draw at.
-export const hostClock: HostClock = {
+export const hostClock = {
   off: 0,
   gap: 0.1,
   last: -1,
@@ -58,48 +49,27 @@ const at = (a: Float32Array | Float64Array, i: number): number => defined(a[i], 
 const mix = (arr: Float32Array, a: number, i: number, u: number): number => at(arr, a) + (at(arr, i) - at(arr, a)) * u;
 
 export class Track {
-  declare t: Float64Array;
-  declare xs: Float32Array;
-  declare zs: Float32Array;
-  declare yaws: Float32Array;
-  declare pitches: Float32Array;
-  declare n: number;
-  declare x: number;
-  declare z: number;
-  declare yaw: number;
-  declare pitch: number;
-  declare speed: number;
-  declare vf: number;
-  declare vs: number;
-  declare spin: number;
-  declare moved: number;
-  declare jumped: boolean;
-  constructor() {
-    this.t = new Float64Array(KEEP);
-    this.xs = new Float32Array(KEEP);
-    this.zs = new Float32Array(KEEP);
-    this.yaws = new Float32Array(KEEP);
-    this.pitches = new Float32Array(KEEP);
-    this.n = 0;
-    this.x = 0;
-    this.z = 0;
-    this.yaw = 0;
-    this.pitch = 0;
-    this.speed = 0;
-    this.vf = 0;
-    this.vs = 0;
-    this.spin = 0;
-    this.moved = 0;
-    this.jumped = false;
-  }
-  push(t: number, x: number, z: number, yaw: number, pitch = 0): undefined {
-    const n = this.n,
-      last = n - 1;
-    if (n && (t < at(this.t, last) || Math.hypot(x - at(this.xs, last), z - at(this.zs, last)) > TELEPORT)) {
-      this.n = 0;
-      return this.push(t, x, z, yaw, pitch);
-    }
-    if (n === KEEP) {
+  t = new Float64Array(KEEP);
+  xs = new Float32Array(KEEP);
+  zs = new Float32Array(KEEP);
+  yaws = new Float32Array(KEEP);
+  pitches = new Float32Array(KEEP);
+  n = 0;
+  x = 0;
+  z = 0;
+  yaw = 0;
+  pitch = 0;
+  speed = 0;
+  vf = 0;
+  vs = 0;
+  spin = 0;
+  moved = 0;
+  jumped = false;
+  push(t: number, x: number, z: number, yaw: number, pitch = 0): void {
+    const last = this.n - 1;
+    // Back in time, or too far to have walked: start again from this snapshot.
+    if (this.n && (t < at(this.t, last) || Math.hypot(x - at(this.xs, last), z - at(this.zs, last)) > TELEPORT)) this.n = 0;
+    if (this.n === KEEP) {
       this.t.copyWithin(0, 1);
       this.xs.copyWithin(0, 1);
       this.zs.copyWithin(0, 1);
