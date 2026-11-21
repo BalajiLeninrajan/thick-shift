@@ -74,7 +74,7 @@ def head(rig, M, stage, T, parent, rng, tris):
         dent(skull, hit, .1, [.03, .035, .075][stage])
 
     # mouth: a printed smile, later a slit pulled shut with thread
-    pieces, glow = [], []
+    pieces = []
     if stage == 0:
         xs = np.linspace(-.17, .17, 17)
         line = [(x, -1.2, .105 + .075 * (x / .17) ** 2) for x in xs]

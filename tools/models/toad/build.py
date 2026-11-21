@@ -54,7 +54,7 @@ def lip(H, phi, slope, inset=0.):
     """A point on the mouth line. The mouth is a flat cut that rises from the
     front of the face to the hinge, so on the curve of the head it makes a
     smile. phi is the angle round the head from straight ahead."""
-    (cx, cy, cz), (rx, ry, rz) = H['c'], H['r']
+    (_, cy, cz), (rx, ry, rz) = H['c'], H['r']
     z = H['zh']
     for _ in range(4):
         k = math.sqrt(max(0, 1 - ((z - cz) / rz) ** 2))

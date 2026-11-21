@@ -6,8 +6,8 @@
 # The game loads GLB files from packages/game/public/models. A model is a tree of rigid,
 # named parts (no armature); the game animates the parts in code. See
 # README.md here for the naming contract.
-import bpy, json, math, os, sys
-from mathutils import Vector
+import bpy, json, math, os
+from mathutils import Matrix, Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MODELS = os.path.join(ROOT, 'packages', 'game', 'public', 'models')
@@ -33,7 +33,7 @@ def part(obj, name, parent=None, pivot=None):
         obj.matrix_world.identity()
         if pivot is not None:
             p = Vector(pivot)
-            obj.data.transform(__import__('mathutils').Matrix.Translation(-p))
+            obj.data.transform(Matrix.Translation(-p))
             obj.location = p
     elif pivot is not None:
         obj.location = Vector(pivot)

@@ -11,7 +11,7 @@
 #   3. finish(): unwrap every part into one atlas, bake that material to
 #      colour (with AO folded in), normal and roughness images, swap in a plain
 #      image material that glTF can carry, export.
-import bpy, bmesh, math, os, random, sys, tempfile
+import bpy, bmesh, math, os, sys, tempfile
 import numpy as np
 from mathutils import Vector, Matrix, Euler
 
@@ -425,7 +425,7 @@ def unwrap(objs):
     """Smart-project each part, then pack all of them into one square at an even texel density."""
     bpy.ops.object.select_all(action='DESELECT')
     for o in objs:
-        m = o.modifiers.new('t', 'TRIANGULATE'); apply_mods(o)
+        o.modifiers.new('t', 'TRIANGULATE'); apply_mods(o)
         for p in o.data.polygons: p.use_smooth = True
         o.data.uv_layers.new(name='uv')
         bpy.context.view_layer.objects.active = o

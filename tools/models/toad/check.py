@@ -4,7 +4,7 @@
 #   tools/models/bl tools/models/toad/check.py -- 2 front low --studio    chosen views, even light
 #   tools/models/bl tools/models/toad/check.py -- 1 front --focus 0,-.6,1.2,.6 --tag _face
 #   tools/models/bl tools/models/toad/check.py -- 2 front side --pose     joints turned, to find seams that open
-import math, os, sys
+import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import common

@@ -1,8 +1,7 @@
 # Stage and backstage props. Front is -Y, sizes in metres.
 import math
 from mathutils import Vector, noise
-from kit import prop, hexc, mixc, xf, D
-import atlas
+from kit import prop, hexc, mixc, D
 
 BLACK = (.1, .1, .11)
 STEEL = (.8, .8, .82)

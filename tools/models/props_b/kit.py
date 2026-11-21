@@ -17,7 +17,6 @@ from mathutils import Vector, Matrix, Euler, noise
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE); sys.path.insert(0, os.path.dirname(HERE))
 import atlas
-from common import *   # noqa: F401,F403
 
 MATS = ['kit_a', 'kit_b', 'glass', 'lamp_glow', 'screen_glow', 'sign_glow']
 GLOW = {'lamp_glow', 'screen_glow', 'sign_glow'}

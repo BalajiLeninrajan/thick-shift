@@ -18,7 +18,6 @@ import sys, os, json, math, time, traceback
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
-from mathutils import Vector
 from common import *
 from sculpt import *
 from parts import *

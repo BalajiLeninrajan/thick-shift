@@ -1,7 +1,7 @@
 # Snack bar props. Front is -Y, sizes in metres.
 import math
 from mathutils import Vector, noise
-from kit import prop, mixc, D
+from kit import prop, D
 from party import cup, PASTEL
 
 BLACK = (.1, .1, .11)

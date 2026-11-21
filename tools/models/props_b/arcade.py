@@ -1,8 +1,8 @@
 # Arcade props. Front is -Y, sizes in metres.
 import math
 from mathutils import Vector, noise
-from kit import prop, hexc, mixc, fill2d, D
-from stage import FUR, BELLY, faded
+from kit import prop, mixc, fill2d, D
+from stage import FUR, faded
 
 BLACK = (.1, .1, .11)
 CHROME = dict(t='steel', c=(.8, .8, .82))

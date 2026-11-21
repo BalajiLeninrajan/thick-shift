@@ -302,7 +302,6 @@ def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shad
         L = rng.uniform(*length); wd = width * rng.uniform(.7, 1.3)
         out = nn * lift + down * droop + rng.normal(0, .25, 3); out /= np.linalg.norm(out)
         side = np.cross(out, nn + rng.normal(0, .3, 3)); side /= np.linalg.norm(side) + 1e-9
-        up = np.cross(side, out)
         p0 = p - nn * .012
         p1 = p0 + out * L * .55 + nn * L * .12
         p2 = p1 + (out * .5 + down * .5) * L * .45

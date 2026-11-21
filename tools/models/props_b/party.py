@@ -1,6 +1,6 @@
 # Party hall props. Front is -Y, sizes in metres.
 import math
-from mathutils import Vector, noise
+from mathutils import noise
 from kit import prop, mixc, fill2d, spline, D
 from stage import FUR, faded
 import atlas
@@ -53,7 +53,6 @@ def table_round(p):
         return mixc((.8, .86, .95), (.5, .5, .42), k * .6)
     p.sheet(cloth, 56, 9, size=(4.7, 1.05), keep=lambda u, v: not (v > .78 and .30 < u < .36), t='paper', c=tint, ts=1.2)
     T = H + .006
-    r = p.rng
     for i in range(6):   # six places
         a = D(i * 60 + 12)
         x, y = math.cos(a) * .45, math.sin(a) * .45
