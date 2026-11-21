@@ -42,7 +42,6 @@ function att(ws: WebSocket): Attachment {
   if (!a) throw new Error('a room socket has no attachment');
   return a;
 }
-const OPEN = 1;
 
 // The ids net.ts makes up (newId): a g and lowercase letters and digits. Nothing that could name an Object property.
 const GUARD_ID = /^g[a-z0-9]{8,40}$/;
@@ -64,11 +63,8 @@ export class Room extends DurableObject<RoomEnv> {
 
   constructor(ctx: DurableObjectState, env: RoomEnv) {
     super(ctx, env);
-    void ctx.blockConcurrencyWhile(async () => {
-      const saved = await ctx.storage.get<State | Player[]>(['S', 'away']),
-        S = saved.get('S') as State | undefined;
-      if (S) this.restore(S, (saved.get('away') as Player[] | undefined) ?? []);
-    });
+    const S = ctx.storage.kv.get<State>('S');
+    if (S) this.restore(S, ctx.storage.kv.get<Player[]>('away') ?? []);
   }
 
   // The night as storage has it, with whoever is still connected (the object woke from sleep) or nobody yet (it was
@@ -95,7 +91,7 @@ export class Room extends DurableObject<RoomEnv> {
   }
 
   open(): WebSocket[] {
-    return this.ctx.getWebSockets().filter(s => s.readyState === OPEN && !att(s).gone);
+    return this.ctx.getWebSockets().filter(s => s.readyState === WebSocket.READY_STATE_OPEN && !att(s).gone);
   }
 
   enter(id: string): void {
@@ -128,8 +124,9 @@ export class Room extends DurableObject<RoomEnv> {
     };
     if (q.get('v') !== String(PROTOCOL)) return refuse(CLOSE.OUTDATED, 'reload for the new version');
     if (!isMode(mode) || !GUARD_ID.test(id)) return refuse(CLOSE.BAD, 'bad id or mode');
-    const mine = this.open().filter(s => att(s).id === id),
-      others = this.open().length - mine.length;
+    const socks = this.open(),
+      mine = socks.filter(s => att(s).id === id),
+      others = socks.length - mine.length;
     if (mode === 'make' && others) return refuse(CLOSE.CODE_TAKEN, 'room code in use');
     if (mode === 'join' && !this.night) return refuse(CLOSE.NO_ROOM, 'no such room');
     // A new night: nobody has one here, or someone starting a room under a code whose night everyone has left.
