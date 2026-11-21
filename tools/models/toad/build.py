@@ -6,7 +6,7 @@
 # Blender axes while building: x is the model's left, -y is its front, z is up.
 # Stage 0 is the costume, stage 1 has lost its torso, stage 2 is a head, a
 # rear and a spine hanging in the air. See stage0(), stage1(), stage2().
-import bpy, json, math, os, random, sys
+import bpy, bmesh, json, math, os, random, sys, traceback
 import numpy as np
 from mathutils import Vector
 
@@ -126,7 +126,6 @@ def paint_head(o, H, stage, warts):
         inward = np.einsum('ij,ij->i', N, q) < 0
         lipz = H['zh'] - H['sl'] * (H['yh'] - P[:, 1])
         lipu = H['zh'] - H['su'] * (H['yh'] - P[:, 1])
-        # the flat faces the mouth cut left: they face up or down, not inward, so find them by the planes
         # the flat faces the mouth cut left: on one of the two planes and facing along its normal (the lip edge is split, see make_head)
         plane = lambda s_: np.abs(N @ (np.array((0, -s_, 1)) / math.hypot(1, s_))) > .9
         cut = (P[:, 1] < H['yh'] + .01) & (((np.abs(P[:, 2] - lipz) < .01) & plane(H['sl'])) | ((np.abs(P[:, 2] - lipu) < .01) & plane(H['su'])))
@@ -215,7 +214,7 @@ def teeth(H, stage, upper, n, size, span, seed):
     return join(out[0], out[1:])
 
 
-def torus(c, R, r, axis='y', name='ring', major=28, minor=6):
+def torus(c, R, r, major=28, minor=6):
     bm = bmesh.new()
     rings = []
     for i in range(major):
@@ -224,13 +223,13 @@ def torus(c, R, r, axis='y', name='ring', major=28, minor=6):
         for k in range(minor):
             b = k / minor * math.tau
             rad, off = R + r * math.cos(b), r * math.sin(b)
-            ring.append(bm.verts.new(Vector(c) + (Vector((rad * math.cos(a), off, rad * math.sin(a))) if axis == 'y' else Vector((rad * math.cos(a), rad * math.sin(a), off)))))
+            ring.append(bm.verts.new(Vector(c) + Vector((rad * math.cos(a), off, rad * math.sin(a)))))
         rings.append(ring)
     for i in range(major):
         a, b = rings[i], rings[(i + 1) % major]
         for k in range(minor): bm.faces.new((a[k], a[(k + 1) % minor], b[(k + 1) % minor], b[k]))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    return bm_obj(bm, name)
+    return bm_obj(bm, 'ring')
 
 
 def googly(c, r, stage, sx):
@@ -348,7 +347,7 @@ def zip_down(o, zs, rng):
     return paint(z, lambda P, N: dict(rgb=lin('#8f8668') * (.7 + .5 * vnoise(P, 90, 1))[:, None], rough=.32, fuzz=0))
 
 
-def body_seams(P, stage):
+def body_seams(P):
     """The zip's tape down the back, as a stitched seam."""
     back = P[:, 1] > 0
     return (np.where(back, np.abs(np.abs(P[:, 0]) - .018), 1), P[:, 2])
@@ -400,7 +399,7 @@ def stage0():
         belly = sstep(1.0, .93, e) * (N[:, 1] < .1) * (P[:, 1] < 0)
         rgb = mixc(rgb, lin(BELLY), belly)
         patch = (np.where(P[:, 1] < 0, np.abs(e - 1) * .45, 1), np.arctan2(P[:, 0], P[:, 2] - 1.0) * .45)
-        sd, su = nearest_seam(patch, body_seams(P, 0))
+        sd, su = nearest_seam(patch, body_seams(P))
         return dict(rgb=rgb, rough=.93, fuzz=1, seam=sd, seam_u=su)
     paint(body, fb)
     bz_ = zip_down(body, [1.2 - i * .016 for i in range(22)], rng)
@@ -498,7 +497,7 @@ def stage1():
         rgb = skin(P, 1, 5)
         e = np.sqrt((P[:, 0] / .46) ** 2 + ((P[:, 2] - .62) / .3) ** 2)
         rgb = mixc(rgb, mixc(BELLY, GREY, .3), sstep(1.0, .9, e) * (P[:, 1] < -.1) * .8)
-        sd, su = body_seams(P, 1)
+        sd, su = body_seams(P)
         return dict(rgb=rgb, rough=.9, fuzz=1, seam=sd, seam_u=su, blood=sstep(.3, .0, np.linalg.norm(P - np.array((-.2, -.5, .8)), axis=1)) * .7 * (.5 + runs(P, 9)))
     paint(body, fb)
 
@@ -662,14 +661,14 @@ def stage2():
     for i in range(5):                                                   # black strands across the mouth
         a = -.95 + i * .42
         roots = [lip(H, a + rng.uniform(0, .38), H['su'], inset=.02) + Vector((0, 0, .012)) for _ in range(4)]
-        sways.append((strands(f'sway_{i + 1}', roots, .85, 50 + i), 'head'))
+        sways.append(strands(f'sway_{i + 1}', roots, .85, 50 + i))
     for i in range(3):                                                   # and blood, thicker
         a = -.8 + i * .6
         roots = [lip(H, a + rng.uniform(0, .5), H['su'], inset=.03) + Vector((0, 0, .012)) for _ in range(3)]
-        sways.append((strands(f'sway_{i + 6}', roots, .6, 60 + i, col=BLOOD, r0=.008, blood=1), 'head'))
+        sways.append(strands(f'sway_{i + 6}', roots, .6, 60 + i, col=BLOOD, r0=.008, blood=1))
     for i, sx in enumerate((-1, 1)):                                     # off the tear, either side
         roots = [(sx * (.16 + .2 * k / 4) + rng.uniform(-.02, .02), .2 - math.sqrt(max(0, 1 - ((.16 + .2 * k / 4) / .42) ** 2)) * .21, 1.46) for k in range(5)]
-        sways.append((strands(f'sway_{i + 9}', roots, .6, 70 + i, col=BLOOD if i else HAIR, r0=.008, blood=i), 'head'))
+        sways.append(strands(f'sway_{i + 9}', roots, .6, 70 + i, col=BLOOD if i else HAIR, r0=.008, blood=i))
 
     # The rear came with it, but it has emptied out: a small shrivelled lump,
     # lopsided and torn open on one side, hanging from a stump of neck. It is
@@ -721,7 +720,7 @@ def stage2():
     for side, (eye, glint, c) in eyes.items():
         e = part(eye, 'eye_' + side, head, c)
         baked.append(e); glows.append((e, glint))
-    for (o, pivot), parent in sways: baked.append(part(o, o.name, head, pivot))
+    for o, pivot in sways: baked.append(part(o, o.name, head, pivot))
     parent = body
     for i, (o, pivot) in enumerate(zip(links, pivots)):
         parent = part(o, 'extra_1' if i == 0 else f'extra_1_{i + 1}', parent, pivot)
@@ -754,7 +753,7 @@ def finish(stage, S):
     bake(S['baked'], name)
     for eye, glint in S['glows']:
         join(eye, [glint])
-    export_glb(name, [S['root']], jpeg_quality=S.get('jpeg', 82))
+    export_glb(name, [S['root']], jpeg_quality=82)
     info = report(name)
     return dict(file=name + '.glb', height=round(info['max'][2], 2), radius=S['radius'], face=list(S['face']), floats=S['floats'],
                 nodes=info['nodes'], notes=S['notes'], _tris=info['tris'], _mb=info['mb'])
@@ -779,12 +778,12 @@ if __name__ == '__main__':
         try:
             entry = finish(i, STAGES[i]())
         except Exception:                      # report it and go on, so one run tells us about every stage
-            __import__('traceback').print_exc()
+            traceback.print_exc()
             failed = True
             continue
         print(f"[toad] stage {i}: {entry.pop('_tris')} tris, {entry.pop('_mb')} MB")
         doc['stages'][i] = entry
-        json.dump(doc, open(path, 'w'), indent=1)
+        with open(path, 'w') as f: json.dump(doc, f, indent=1)
         for views, kw in looks: preview(f'toad_{i}', views=views, res=600, samples=16, **kw)
         log('previews done')
     if failed: sys.exit(1)

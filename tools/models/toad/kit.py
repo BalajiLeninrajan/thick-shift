@@ -8,10 +8,10 @@
 #      vertex with numpy. The vertex grid is coarse (2 to 3 cm), so the one
 #      shared material adds everything finer: velour grain, stitches, the sharp
 #      edge of a blood stain.
-#   3. finish(): unwrap every part into one atlas, bake that material to
+#   3. bake(): unwrap every part into one atlas, bake that material to
 #      colour (with AO folded in), normal and roughness images, swap in a plain
-#      image material that glTF can carry, export.
-import bpy, bmesh, math, os, sys, tempfile
+#      image material that glTF can carry. build.py's finish() exports.
+import bpy, bmesh, math, os, sys, tempfile, time
 import numpy as np
 from mathutils import Vector, Matrix, Euler
 
@@ -19,12 +19,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import *
 
 
-_t0 = __import__('time').time()
+_t0 = time.time()
 
 
 def log(msg):
     """Progress with elapsed seconds, so a slow step is easy to find."""
-    print(f'[toad {__import__("time").time() - _t0:6.1f}s] {msg}', flush=True)
+    print(f'[toad {time.time() - _t0:6.1f}s] {msg}', flush=True)
 
 
 # ---------- colour ----------
@@ -118,9 +118,9 @@ def bm_obj(bm, name):
     return o
 
 
-def apply_mods(o, kind=None):
+def apply_mods(o):
     """Replace the mesh with its evaluated result. No operators, so no context trouble."""
-    kind = kind or o.modifiers[-1].type.lower()
+    kind = o.modifiers[-1].type.lower()
     dg = bpy.context.evaluated_depsgraph_get()
     me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
     old = o.data
@@ -319,8 +319,7 @@ def sculpt_material():
         return n
 
     def feed(sock, x):
-        if isinstance(x, (int, float)): sock.default_value = x
-        elif isinstance(x, tuple): sock.default_value = x
+        if isinstance(x, (int, float, tuple)): sock.default_value = x
         else: nt.links.new(x, sock)
 
     def math_(op, a, b=None, c=None):
@@ -445,7 +444,7 @@ def unwrap(objs):
 
 def bake(objs, name, size=2048, samples=5):
     """Bake the sculpt material on `objs` to three images and give the parts a
-    plain image material instead. Returns that material."""
+    plain image material instead."""
     unwrap(objs)
     mat, n = sculpt_material()
     for o in objs:
@@ -488,4 +487,3 @@ def bake(objs, name, size=2048, samples=5):
         o.data.materials.clear(); o.data.materials.append(out)
         for a in list(o.data.color_attributes): o.data.color_attributes.remove(a)
     bpy.data.materials.remove(mat)
-    return out, images
