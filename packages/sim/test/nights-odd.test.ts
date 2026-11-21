@@ -1,7 +1,7 @@
 // Nights that should go badly, and the frozen building, on fixed seeds, against snapshots (see nights-solo.test.ts).
 // They reach the doors, the lockers, the dock and the dev cheats more than an honest night does.
 import { describe, expect, it } from 'vitest';
-import { failures, play } from '../../../tools/balance/harness.ts';
+import { play } from '../../../tools/balance/harness.ts';
 import { playNight, scenario } from './nights.ts';
 
 const NIGHTS: [scenario: string, seed: number][] = [
@@ -33,7 +33,6 @@ describe('odd nights', () => {
 describe('the harness', () => {
   it('fails the night, rather than throwing, when a guard who is not playing is flattened', () => {
     const sc = scenario('empty building x2 n1');
-    failures.length = 0;
     let sent = false;
     const out = play(sc, 1, {
       onStep: S => {
@@ -43,7 +42,6 @@ describe('the harness', () => {
       },
     });
     expect(out.flats).toBe(0);
-    expect(failures).toEqual(['empty building x2 n1: seed 1: nobody, who is not playing, was flattened']);
-    failures.length = 0;
+    expect(out.failures).toEqual(['empty building x2 n1: seed 1: nobody, who is not playing, was flattened']);
   });
 });

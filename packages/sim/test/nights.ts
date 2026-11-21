@@ -2,7 +2,7 @@
 // seed, with the harness's fake clock and its scripted guards, boiled down to a summary small enough to read in a
 // snapshot diff. The digests change with any change to what happened in the night; the rest says roughly how.
 import { createHash } from 'node:crypto';
-import { failures, play, scenarios } from '../../../tools/balance/harness.ts';
+import { play, scenarios } from '../../../tools/balance/harness.ts';
 import { defined } from '../src/check.ts';
 import type { NightState, SimEvent } from '../src/types.ts';
 
@@ -52,7 +52,6 @@ export const scenario = (name: string) =>
 
 export function playNight(name: string, seed: number): NightSummary {
   const sc = scenario(name);
-  failures.length = 0;
   const events: SimEvent[] = [];
   let seen = 0,
     ticks = 0,
@@ -77,6 +76,6 @@ export function playNight(name: string, seed: number): NightSummary {
     events: countEvents(events),
     eventsDigest: digest(events),
     stateDigest: digest(S),
-    failures: [...failures],
+    failures: out.failures,
   };
 }

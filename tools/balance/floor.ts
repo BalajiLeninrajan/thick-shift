@@ -21,7 +21,7 @@ import { cpus } from 'node:os';
 import { parseArgs } from 'node:util';
 import { isMainThread, parentPort, Worker } from 'node:worker_threads';
 import { defined, MASCOTS } from '../../packages/sim/src/index.ts';
-import { checkBuilding, fail, failures, type Outcome, play, type Scenario, scenarios } from './harness.ts';
+import { checkBuilding, type Outcome, play, type Scenario, scenarios } from './harness.ts';
 
 function usage(why: string): never {
   console.error(`${why}
@@ -63,7 +63,7 @@ const SEEDS = whole('seeds', opts.seeds, 40, 1),
 if (TRACE === '') usage('--trace takes the name of a scenario, or part of one');
 
 const CHUNK = 4; // seeds a worker plays before it reports back
-// A worker's job: scenario i, seeds from to to. What it sends back: the nights and any failures.
+// A worker's job: scenario i, seeds from to to. What it sends back: the nights, each with its own failures.
 interface Job {
   i: number;
   from: number;
@@ -72,18 +72,16 @@ interface Job {
 interface Done {
   i: number;
   runs: Outcome[];
-  failures: string[];
 }
 
 if (!isMainThread) {
-  // A worker plays the scenarios it is handed and posts back the nights and any failures.
+  // A worker plays the scenarios it is handed and posts back the nights.
   const port = defined(parentPort, 'the parent port of a worker thread');
   port.on('message', ({ i, from, to }: Job) => {
-    failures.length = 0;
     const sc = defined(scenarios[i], `scenario ${i}`), // jobs name scenarios by index
       runs = [];
     for (let seed = from; seed <= to; seed++) runs.push(play(sc, seed));
-    port.postMessage({ i, runs, failures: [...failures] } satisfies Done);
+    port.postMessage({ i, runs } satisfies Done);
   });
 } else if (TRACE !== undefined) {
   const sc = scenarios.find(s => s.name.includes(TRACE));
@@ -92,7 +90,8 @@ if (!isMainThread) {
     process.exit(2);
   }
   console.log(sc.name, 'seed', SEED);
-  console.log(play(sc, SEED, { trace: opts.steps ? 2 : 1, brains: opts.brains }));
+  const { failures, ...out } = play(sc, SEED, { trace: opts.steps ? 2 : 1, brains: opts.brains });
+  console.log(out);
   console.log(failures.join('\n'));
 } else {
   // The scenarios to play, with the nights each has played so far. i: its place in scenarios, which jobs name it by.
@@ -124,7 +123,6 @@ if (!isMainThread) {
       w.on('message', (r: Done) => {
         live--;
         defined(byIndex.get(r.i), `scenario ${r.i}`).runs.push(...r.runs);
-        failures.push(...r.failures);
         give();
       });
       w.on('error', e => {
@@ -135,7 +133,9 @@ if (!isMainThread) {
     }
   });
 
-  checkBuilding();
+  // What went wrong, as "<scenario>: <what>": in the building, in a night, or in how a scenario's nights add up.
+  const failures = [...checkBuilding(), ...todo.flatMap(t => t.runs.flatMap(r => r.failures))];
+  const fail = (name: string, what: string) => failures.push(`${name}: ${what}`);
 
   const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : 0);
   const sum = (runs: Outcome[], f: (r: Outcome) => number) => runs.reduce((s, r) => s + f(r), 0);

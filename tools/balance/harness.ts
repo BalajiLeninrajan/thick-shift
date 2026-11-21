@@ -1185,12 +1185,6 @@ const DEGENERATE = {
 
 /* ---------- the things that must never happen ---------- */
 
-// What went wrong, as "<scenario>: <what>". The command line prints them; a worker sends its own back.
-export const failures: string[] = [];
-export const fail = (name: string, what: string) => {
-  if (failures.length < 60) failures.push(`${name}: ${what}`);
-};
-
 // The building's floor, in metres: x from 0 to EXTENT.x, z from 0 to EXTENT.z.
 const EXTENT = { x: 42, z: 44 };
 const inside = (x: number, z: number) => x >= 0 && z >= 0 && x < EXTENT.x && z < EXTENT.z;
@@ -1224,8 +1218,9 @@ function flood(ducts: boolean): { has: (x: number, z: number) => boolean } {
 }
 
 // Things about the building that hold before anyone plays.
-export function checkBuilding(): void {
-  const bad = (what: string) => fail('the building', what);
+export function checkBuilding(): string[] {
+  const failures: string[] = [];
+  const bad = (what: string) => failures.push(`the building: ${what}`);
   const start = M.spawnPoint(0),
     reach = F.REACH - 0.3;
   const reachable = (label: string, at: Point, stand: Point) => {
@@ -1273,12 +1268,15 @@ export function checkBuilding(): void {
       }
     }
   if (safe) bad(`${safe} standing spots no mascot can reach, first at ${where}`);
+  return failures;
 }
 
 /* ---------- one night ---------- */
 
-// What one night came to, for the table. Times are seconds; firstFlat is 1e9 if nobody was flattened.
+// What one night came to, for the table. Times are seconds; firstFlat is 1e9 if nobody was flattened. failures
+// says what went wrong in it, as "<scenario>: seed <n>: <what>": a softlock, or a night that broke its own rules.
 export interface Outcome {
+  failures: string[];
   win: boolean;
   t: number;
   flats: number;
@@ -1371,6 +1369,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     Object.assign(b, { x, z });
   }
   const out: Outcome = {
+    failures: [],
     win: false,
     t: 0,
     flats: 0,
@@ -1399,6 +1398,9 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     toys: 0,
     lured: 0,
   };
+  const fail = (what: string) => {
+    if (out.failures.length < 60) out.failures.push(`${sc.name}: seed ${seed}: ${what}`);
+  };
   const parked = S.m.map(m => ({ x: m.x, z: m.z, t: 0 }));
   let seenEv = 0,
     faultKey = '',
@@ -1417,7 +1419,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     for (const bot of team.bots) {
       tick(S, bot, team, tickNo);
       if (bot.still > 45) {
-        fail(sc.name, `seed ${seed}: guard ${bot.i} could not move at ${bot.x.toFixed(1)}, ${bot.z.toFixed(1)} for 45 s`);
+        fail(`guard ${bot.i} could not move at ${bot.x.toFixed(1)}, ${bot.z.toFixed(1)} for 45 s`);
         bot.still = 0;
       }
     }
@@ -1467,7 +1469,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
             gi = S.players.findIndex(p => p.id === e.x.id),
             bot = team.bots[gi];
           if (!bot) {
-            fail(sc.name, `seed ${seed}: ${e.x.id}, who is not playing, was flattened`);
+            fail(`${e.x.id}, who is not playing, was flattened`);
             continue;
           }
           const m = defined(S.m[by], `mascot ${by}`),
@@ -1494,26 +1496,26 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
 
     // Softlocks.
     if (S.players.every(p => p.flat) && S.phase === 'play') {
-      fail(sc.name, `seed ${seed}: everyone is flat and the night goes on`);
+      fail(`everyone is flat and the night goes on`);
       break;
     }
     if (S.t > 6 * F.HOUR + 1) {
-      fail(sc.name, `seed ${seed}: past 6 AM and still playing`);
+      fail(`past 6 AM and still playing`);
       break;
     }
     S.m.forEach((m, i) => {
       const p = defined(parked[i], `where mascot ${i} stood`); // one per mascot
-      if (!Number.isFinite(m.x + m.z + m.yaw)) fail(sc.name, `seed ${seed}: ${MASC[m.i].name} is nowhere`);
+      if (!Number.isFinite(m.x + m.z + m.yaw)) fail(`${MASC[m.i].name} is nowhere`);
       if (!['roam', 'search', 'hunt'].includes(m.st) || m.lit || dist(m, p) > 0.5) Object.assign(p, { x: m.x, z: m.z, t: S.t });
       else if (S.t - p.t > 30) {
-        fail(sc.name, `seed ${seed}: ${MASC[m.i].name} stood ${m.st}ing at ${m.x.toFixed(1)}, ${m.z.toFixed(1)} for 30 s`);
+        fail(`${MASC[m.i].name} stood ${m.st}ing at ${m.x.toFixed(1)}, ${m.z.toFixed(1)} for 30 s`);
         p.t = S.t;
       }
     });
   }
   if (calm >= 20) out.calms++;
   Object.assign(out, { win: S.phase === 'win' || S.phase === 'won', t: S.t, power: S.power, burnt: S.tally.burnt, fixed: S.tally.fixed });
-  if (S.phase === 'play') fail(sc.name, `seed ${seed}: the night did not end`);
+  if (S.phase === 'play') fail(`the night did not end`);
   return out;
 }
 
