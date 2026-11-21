@@ -10,6 +10,8 @@ import { unlockAudio } from '../audio';
 import { query } from '../dom';
 import { game } from '../state';
 import type { PlayerHandle } from '../types';
+import { icon } from './icons';
+import { myPlayer } from './player';
 
 const STICK_R = 48; // pixels the knob travels for full speed
 const STICK_ZONE = 0.45; // the left part of the screen where a touch starts the stick
@@ -22,14 +24,7 @@ interface Finger {
   y: number;
 }
 
-const TORCH =
-  '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><path d="M6 6h12M12 12v2"/></svg>';
-
-const PHONE =
-  '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="5" width="10" height="17" rx="2"/><path d="M14 5V2M9.5 8.5h5v4h-5zM10 16h.01M14 16h.01M12 19h.01"/></svg>';
-
-const PLUSH =
-  '<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="6.5" r="2.2"/><path d="M9.5 11v.01M14.5 11v.01M10 16.5h.01M14 16.5h.01"/></svg>';
+const POINTER_END = ['pointerup', 'pointercancel', 'lostpointercapture'] as const;
 
 export const canFullscreen: boolean = !!document.documentElement.requestFullscreen;
 // Phones that allow it are also turned to landscape, which is the only layout.
@@ -50,11 +45,11 @@ export function createTouch(root: HTMLElement, player: PlayerHandle) {
   layer.className = 'ts-t-layer';
   layer.innerHTML = `<div class="ts-t-stick"><i></i></div>
     <button class="ts-t-btn ts-t-run" aria-pressed="false">Run</button>
-    <button class="ts-t-btn ts-t-torch" aria-label="Torch" aria-pressed="false">${TORCH}</button>
+    <button class="ts-t-btn ts-t-torch" aria-label="Torch" aria-pressed="false">${icon('torch')}</button>
     <button class="ts-t-btn ts-t-use">Use</button>
-    <button class="ts-t-btn ts-t-phone" aria-label="Phone" aria-pressed="false">${PHONE}</button>
+    <button class="ts-t-btn ts-t-phone" aria-label="Phone" aria-pressed="false">${icon('phone')}</button>
     <button class="ts-t-btn ts-t-zoom" aria-label="Zoom the map" aria-pressed="false">Map</button>
-    <button class="ts-t-btn ts-t-toy" aria-label="Throw a Mini Biggs">${PLUSH}</button>`;
+    <button class="ts-t-btn ts-t-toy" aria-label="Throw a Mini Biggs">${icon('toy')}</button>`;
   root.append(layer);
   const stickEl = query(layer, '.ts-t-stick'),
     knob = query(stickEl, 'i'),
@@ -81,11 +76,18 @@ export function createTouch(root: HTMLElement, player: PlayerHandle) {
     true
   );
 
-  function release(): void {
-    stick = drag = null;
-    Object.assign(pad, { fwd: 0, strafe: 0, sprint: false, use: false });
+  // The thumb is off the stick, which ends running too.
+  function dropStick(): void {
+    stick = null;
+    pad.fwd = pad.strafe = 0;
+    pad.sprint = false;
     stickEl.classList.remove('is-held');
     stickEl.style.left = stickEl.style.top = knob.style.transform = '';
+  }
+  function release(): void {
+    dropStick();
+    drag = null;
+    pad.use = false;
     useBtn.classList.remove('is-held');
   }
 
@@ -118,15 +120,10 @@ export function createTouch(root: HTMLElement, player: PlayerHandle) {
     }
   });
   // lostpointercapture covers a finger the browser stopped reporting, so the guard never keeps walking on its own.
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const)
+  for (const type of POINTER_END)
     layer.addEventListener(type, e => {
-      if (stick?.id === e.pointerId) {
-        stick = null;
-        pad.fwd = pad.strafe = 0;
-        pad.sprint = false; // running ends when the thumb lifts
-        stickEl.classList.remove('is-held');
-        stickEl.style.left = stickEl.style.top = knob.style.transform = '';
-      } else if (drag?.id === e.pointerId) drag = null;
+      if (stick?.id === e.pointerId) dropStick();
+      else if (drag?.id === e.pointerId) drag = null;
     });
   // A long press must not open the browser's menu over the game.
   root.addEventListener('contextmenu', e => e.preventDefault());
@@ -139,7 +136,7 @@ export function createTouch(root: HTMLElement, player: PlayerHandle) {
       btn.setPointerCapture(e.pointerId);
       down();
     });
-    if (up) for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) btn.addEventListener(type, up);
+    if (up) for (const type of POINTER_END) btn.addEventListener(type, up);
   };
   press(
     useBtn,
@@ -180,7 +177,7 @@ export function createTouch(root: HTMLElement, player: PlayerHandle) {
       useBtn.classList.toggle('is-ready', !!me.target);
       layer.classList.toggle('is-busy', !!me.task);
       // Greyed out with empty hands, or while the battery has less than a throw costs.
-      const mine = game.S?.players.find(p => p.id === game.myId);
+      const mine = game.S && myPlayer(game.S);
       // Holding a toy means stepFloor has placed them, so isPlaced holds whenever toy is set.
       flag(toyBtn, 'aria-disabled', !mine?.toy || !isPlaced(mine) || mine.bat < TOY.cost);
     },

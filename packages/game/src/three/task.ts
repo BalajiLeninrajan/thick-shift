@@ -280,9 +280,6 @@ export function createTask(root: HTMLElement) {
   }
 
   return {
-    get active(): boolean {
-      return !!job;
-    },
     // i: the box; k: the kind. done: called once the job is finished; quit: when the guard lets go.
     open(i: number, k: number, done: () => void, quit_: () => void): void {
       job = defined([breaker, wires, valve][k], `fault kind ${k}`)();

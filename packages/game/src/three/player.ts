@@ -5,7 +5,7 @@
 // drives the same guard through pad, look(), toggleTorch(), togglePhone(), toggleZoom() and throwToy().
 
 import { F, TOY } from '@thick-shift/sim';
-import { assert, defined, isPlaced } from '@thick-shift/sim/check';
+import { assert, defined, isNight, isPlaced } from '@thick-shift/sim/check';
 import { DOORS } from '@thick-shift/sim/config';
 import { BATTERY_SPOTS, BOXES, CHARGER, EYE, GENERATOR, HIDES, PANELS, PLAYER_R, slide, walkable } from '@thick-shift/sim/map';
 import type { DoorKey, Guard, NightState, Player, State } from '@thick-shift/sim/types';
@@ -14,6 +14,7 @@ import { unlockAudio } from '../audio';
 import { send } from '../net';
 import { currentState, game } from '../state';
 import type { Me, Prefs, Target, Task } from '../types';
+import { wrap } from './actors/track';
 import { faultName } from './task';
 
 // What drives the guard besides the keys: touch.ts (pad) and the gamepad (gp, which also keeps the stick's last
@@ -35,6 +36,14 @@ const ARROW = { turn: 2.2, tilt: 1.4 },
 const GAME_KEYS = /^(Key[WASDEFQCRG]|Arrow|Shift|Space)/;
 // A standard-mapping gamepad: left stick walks, right stick looks.
 const GP = { use: 0, phone: 1, torch: 2, call: 3, sprint: 4, watch: 5, toss: 7, pause: 9, zoom: 12, dead: 0.18, look: 2.8 }; // look: radians per second at full tilt
+// The d-pad at a breaker box: its buttons (left, right, up, down), and the [dx, dy] each chooses by.
+const DPAD: [button: number, dir: [number, number]][] = [
+  [14, [-1, 0]],
+  [15, [1, 0]],
+  [12, [0, -1]],
+  [13, [0, 1]],
+];
+export const TORCH_FULL = 60; // the torch's intensity on a full battery
 
 // Look settings, kept between visits. sens multiplies SENS. outline: a gold edge round usable things (outline.ts).
 // third: a flat guard watches teammates from behind them, not through their eyes (app.ts spectate).
@@ -65,14 +74,11 @@ const DOOR_NAME: Record<DoorKey, string> = { L: 'left door', R: 'right door', V:
 // and how far in front of the locker's middle the eye is: just past the doors, so their insides are behind it.
 const LOCKER_LOOK = { yaw: 0.85, pitch: 0.5, eye: 0.34 };
 const THROW_MS = 1000; // a second throw is not sent before the room has had time to take the first
-const angDiff = (a: number, b: number): number => {
-  let d = (a - b) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-};
+// This guard as the room has them, or undefined before they have joined its state.
+export const myPlayer = (S: State): Player | undefined => S.players.find(p => p.id === game.myId);
 
-export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement) {
+// task: the minigame panel (task.ts).
+export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement, task: Task) {
   // Local view of this guard. yaw 0 faces south (+z); forward is (sin yaw, cos yaw).
   const me: Me = {
     x: 0,
@@ -89,17 +95,17 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     moving: 0,
     locked: false,
     flat: false,
-    paused: false, // the pause panel is up: nothing here moves the guard
-    touch: false, // a finger is driving (set by touch.ts), so there is no pointer to lock
-    watch: null, // id of the teammate a flat guard is watching through, or null
-    ph: false, // the phone is up, showing the minimap
-    task: null, // hands in a breaker box: { i } of the box, while the minigame panel (task.ts) is up
-    zoom: true, // the minimap shows the whole building, not what is round the guard. The phone starts on this.
-    threw: 0, // performance.now() of the last Mini Biggs thrown, of the last try without the battery for it (dry),
-    dry: 0, // and of the last try with empty hands (empty)
+    paused: false,
+    touch: false,
+    watch: null,
+    ph: false,
+    task: null,
+    zoom: true, // the phone starts on the whole building
+    threw: 0,
+    dry: 0,
     empty: 0,
     hid: -1,
-  }; // the locker (HIDES index) this guard is standing in, as the room has it, or -1
+  };
   const keys = new Set<string>();
   // Touch and gamepad code can drive the guard through these instead of keys.
   const pad: Pad = { fwd: 0, strafe: 0, sprint: false, use: false };
@@ -115,12 +121,16 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     gpWas: boolean[] = [];
   let keysLive = false,
     arrowHeld = 0; // keysLive: playing on the keyboard alone, so there is no pointer to lock
-  let task: Task | null = null; // the minigame panel (task.ts), handed over by app.ts once the HUD exists
   function letGo(): void {
     if (me.task) {
       me.task = null;
-      task?.close();
+      task.close();
     }
+  }
+  // Not running: after STAMINA.rest seconds the breath comes back.
+  function rest(dt: number): void {
+    sinceSprint += dt;
+    if (sinceSprint > STAMINA.rest) me.stam = Math.min(1, me.stam + STAMINA.gain * dt);
   }
 
   const torch = new THREE.SpotLight(0xfff0d0, 0, 26, 0.5, 0.55, 1.5);
@@ -141,7 +151,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     }
   }
   // The phone runs on the torch's battery, so a dead battery will not raise it.
-  const charged = (): boolean => (currentState().players.find(p => p.id === game.myId)?.bat ?? 1) > 0; // only after playing()
+  const charged = (): boolean => (myPlayer(currentState())?.bat ?? 1) > 0; // only after playing()
   function togglePhone(): void {
     if (playing() && !me.flat && !me.paused && (me.ph || charged())) me.ph = !me.ph;
   }
@@ -156,7 +166,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   function throwToy(): void {
     if (!playing() || me.flat || me.paused || me.hid >= 0 || me.task) return;
     const now = performance.now(),
-      mine = currentState().players.find(p => p.id === game.myId); // playing() checked game.S
+      mine = myPlayer(currentState()); // playing() checked game.S
     if (!mine?.toy) {
       me.empty = now;
       return;
@@ -172,13 +182,14 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     send({ t: 'throw', yaw: me.yaw, d });
   }
 
-  // Turn the view by a mouse's worth of pixels.
-  function look(dx: number, dy: number): void {
+  // Turn the view right and down by this many radians at sensitivity 1.
+  function turn(right: number, down: number): void {
     if (me.paused) return;
-    const k = SENS * prefs.sens;
-    me.yaw -= dx * k;
-    me.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, me.pitch - dy * k * (prefs.invert ? -1 : 1)));
+    me.yaw -= right * prefs.sens;
+    me.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, me.pitch - down * prefs.sens * (prefs.invert ? -1 : 1)));
   }
+  // The same by a mouse's worth of pixels.
+  const look = (dx: number, dy: number): void => turn(dx * SENS, dy * SENS);
   // Chrome refuses to lock again for a second after Esc. Then the click-to-play state is what shows.
   function resume(): void {
     me.paused = false;
@@ -258,15 +269,15 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
 
   // Arrow keys: left and right turn, up and down look up and down, easing in so a tap is a small nudge.
   function arrowLook(dt: number): void {
-    const turn = (keys.has('ArrowLeft') ? 1 : 0) - (keys.has('ArrowRight') ? 1 : 0),
-      tilt = (keys.has('ArrowUp') ? 1 : 0) - (keys.has('ArrowDown') ? 1 : 0);
-    if (!turn && !tilt) {
+    const right = (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0),
+      down = (keys.has('ArrowDown') ? 1 : 0) - (keys.has('ArrowUp') ? 1 : 0);
+    if (!right && !down) {
       arrowHeld = 0;
       return;
     }
     arrowHeld += dt;
-    const k = (Math.min(1, 0.3 + (0.7 * arrowHeld) / ARROW_RAMP) * dt) / SENS;
-    look(-turn * ARROW.turn * k, -tilt * ARROW.tilt * k);
+    const k = Math.min(1, 0.3 + (0.7 * arrowHeld) / ARROW_RAMP) * dt;
+    turn(right * ARROW.turn * k, down * ARROW.tilt * k);
   }
 
   function pollPad(dt: number): void {
@@ -288,30 +299,17 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     } else if (!me.paused && g.buttons.some((b, i) => b.pressed && !gpWas[i])) gpLive = true; // any button takes over from the mouse
     if (gpLive && !me.paused && me.task) {
       // Hands in a box: the stick and d-pad choose, A works it, B lets go.
-      const fresh = (i: number): boolean => hit(i),
-        sx = axis(0),
+      const sx = axis(0),
         sy = axis(1),
         was = gp.stick || [0, 0];
       const stick: [number, number] = [Math.abs(sx) > 0.6 ? Math.sign(sx) : 0, Math.abs(sy) > 0.6 ? Math.sign(sy) : 0];
-      const dir: [number, number] | null = fresh(14)
-        ? [-1, 0]
-        : fresh(15)
-          ? [1, 0]
-          : fresh(12)
-            ? [0, -1]
-            : fresh(13)
-              ? [0, 1]
-              : stick[0] !== was[0] && stick[0]
-                ? [stick[0], 0]
-                : stick[1] !== was[1] && stick[1]
-                  ? [0, stick[1]]
-                  : null;
+      const flick: [number, number] | null = stick[0] !== was[0] && stick[0] ? [stick[0], 0] : stick[1] !== was[1] && stick[1] ? [0, stick[1]] : null;
       gp.stick = stick;
-      look((axis(2) * GP.look * dt) / SENS, (axis(3) * GP.look * dt) / SENS);
-      task?.pad(dir, down(GP.use), !!gpWas[GP.use], fresh(GP.phone));
+      turn(axis(2) * GP.look * dt, axis(3) * GP.look * dt);
+      task.pad(DPAD.find(([b]) => hit(b))?.[1] ?? flick, down(GP.use), !!gpWas[GP.use], hit(GP.phone));
     } else if (gpLive && !me.paused) {
       Object.assign(gp, { fwd: -axis(1), strafe: axis(0), sprint: down(GP.sprint), use: down(GP.use) });
-      look((axis(2) * GP.look * dt) / SENS, (axis(3) * GP.look * dt) / SENS);
+      turn(axis(2) * GP.look * dt, axis(3) * GP.look * dt);
       if (hit(GP.torch)) toggleTorch();
       if (hit(GP.call)) call();
       if (hit(GP.watch)) watchNext();
@@ -325,6 +323,8 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   // The nearest thing in reach and roughly in front. { what, label, hold, ... }
   // hold: seconds to hold the use key, 0 for a tap, -1 for as long as you hold it.
   function findTarget(S: NightState, mine: Guard): Target | null {
+    // In a locker the one thing in reach is the way out.
+    if (mine.hid >= 0) return { what: 'hide', i: mine.hid, at: defined(HIDES[mine.hid], `locker ${mine.hid}`).at, label: 'Step out of the locker', hold: 0 };
     const list: Target[] = [];
     // S.faults has one entry per box.
     for (const [i, at] of BOXES.entries()) {
@@ -335,15 +335,13 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       for (const k of DOORS) list.push({ what: 'door', k, at: PANELS[k], label: `${S.doors[k] ? 'Open' : 'Shut'} the ${DOOR_NAME[k]}`, hold: 0 });
     // S.bats holds BATTERY_SPOTS indices.
     if (mine.bat < 1)
-      for (const i of S.bats || []) list.push({ what: 'bat', i, at: defined(BATTERY_SPOTS[i], `battery spot ${i}`), label: 'Take the battery', hold: 0 });
+      for (const i of S.bats) list.push({ what: 'bat', i, at: defined(BATTERY_SPOTS[i], `battery spot ${i}`), label: 'Take the battery', hold: 0 });
     for (const p of S.players)
       if (p.flat && p.id !== game.myId) list.push({ what: 'peel', id: p.id, at: p, label: `Peel ${p.name} off the floor`, hold: F.PEEL_HOLD });
     list.push({ what: 'crank', at: GENERATOR, label: S.power >= 100 ? 'The generator is full' : 'Crank the generator', hold: S.power >= 100 ? 0 : -1 });
     if (S.power > 0 && mine.bat < 1) list.push({ what: 'charge', at: CHARGER, label: 'Charge the torch', hold: -1 });
-    // In a locker the one thing in reach is the way out.
-    if (mine.hid >= 0) return { what: 'hide', i: mine.hid, at: defined(HIDES[mine.hid], `locker ${mine.hid}`).at, label: 'Step out of the locker', hold: 0 };
     // Any Mini Biggs on the floor, into empty hands.
-    if (!mine.toy) for (const t of S.toys || []) if (S.t >= t.land) list.push({ what: 'toy', id: t.id, at: t, label: 'Pick up the Mini Biggs', hold: 0 });
+    if (!mine.toy) for (const t of S.toys) if (S.t >= t.land) list.push({ what: 'toy', id: t.id, at: t, label: 'Pick up the Mini Biggs', hold: 0 });
     HIDES.forEach((h, i) => {
       if (!S.players.some(p => p.hid === i)) list.push({ what: 'hide', i, at: h.at, label: 'Hide in the locker', hold: F.HIDE_HOLD });
     });
@@ -361,13 +359,13 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     return best;
   }
 
-  function use(S: State, dt: number): void {
+  function use(S: NightState, dt: number): void {
     const t = me.target,
       held = keys.has('KeyE') || pad.use || gp.use;
     me.act = '';
     if (me.task) {
       // Hands in the box until the job is done or let go. Fixed by someone else, or out of reach: let go.
-      const f = S.faults?.[me.task.i],
+      const f = S.faults[me.task.i],
         box = defined(BOXES[me.task.i], `box ${me.task.i}`);
       if (!f || f.at !== me.task.at || Math.hypot(box.x - me.x, box.z - me.z) > F.REACH) letGo();
       else {
@@ -376,13 +374,13 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       }
     }
     if (!held) usedTap = false;
-    if (t?.what === 'fix' && held && !usedTap && task) {
+    if (t?.what === 'fix' && held && !usedTap) {
       // A fault is a minigame, not a hold: open the panel.
       usedTap = true;
       me.hold = 0;
       // findTarget built t this frame (with hands in a box it is stale, but then usedTap is still set from opening
       // the box and this branch is skipped), and it makes a fix target only from an open fault in S.faults.
-      const f = defined(S.faults?.[t.i], `fault ${t.i}`);
+      const f = defined(S.faults[t.i], `fault ${t.i}`);
       me.task = { i: t.i, at: f.at };
       task.open(
         t.i,
@@ -427,10 +425,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     if (me.sp) {
       me.stam = Math.max(0, me.stam - STAMINA.drain * dt);
       sinceSprint = 0;
-    } else {
-      sinceSprint += dt;
-      if (sinceSprint > STAMINA.rest) me.stam = Math.min(1, me.stam + STAMINA.gain * dt);
-    }
+    } else rest(dt);
     me.moving = 0;
     if (!len || me.act === 'crank' || me.task) return;
     const speed = ((me.sp ? F.SPRINT : F.WALK * (me.ph ? F.PHONE_WALK : 1)) * Math.min(1, len) * dt) / len;
@@ -445,10 +440,6 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     me,
     pad,
     torch,
-    letGo,
-    setTask(t: Task): void {
-      task = t;
-    },
     toggleTorch,
     togglePhone,
     toggleZoom,
@@ -477,7 +468,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       });
     },
     update(S: State, dt: number, now: number): void {
-      const mine = S.players.find(p => p.id === game.myId);
+      const mine = myPlayer(S);
       if (!mine || !isPlaced(mine)) return;
       // Peeled up: stand looking ahead, not at the ceiling the catch left the camera facing.
       if (me.flat && !mine.flat) me.pitch = 0;
@@ -497,7 +488,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       arrowLook(dt);
       if (locker) {
         // Looking out through the slats: only so far round, up or down.
-        me.yaw = locker.face + Math.max(-LOCKER_LOOK.yaw, Math.min(LOCKER_LOOK.yaw, angDiff(me.yaw, locker.face)));
+        me.yaw = locker.face + Math.max(-LOCKER_LOOK.yaw, Math.min(LOCKER_LOOK.yaw, wrap(me.yaw - locker.face)));
         me.pitch = Math.max(-LOCKER_LOOK.pitch, Math.min(LOCKER_LOOK.pitch, me.pitch));
       }
       // The screens between nights need the mouse back.
@@ -508,7 +499,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       }
       me.locked = (mouseLocked || me.touch || gpLive || keysLive) && !me.paused;
       if (!S.players.some(p => p.id === me.watch && !p.flat) || !me.flat) me.watch = null;
-      if (S.phase === 'play') {
+      if (S.phase === 'play' && isNight(S)) {
         if (me.flat || me.paused) {
           me.act = '';
           me.target = null;
@@ -525,7 +516,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
             me.x = mine.x;
             me.z = mine.z;
           }
-          if (!me.task) me.target = findTarget(S as NightState, mine);
+          if (!me.task) me.target = findTarget(S, mine);
           use(S, dt);
           if (locker) {
             // Standing still in the dark: the torch is off and the breath comes back.
@@ -534,10 +525,9 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
             me.moving = 0;
             me.x = locker.at.x;
             me.z = locker.at.z;
-            sinceSprint += dt;
-            if (sinceSprint > STAMINA.rest) me.stam = Math.min(1, me.stam + STAMINA.gain * dt);
+            rest(dt);
           } else walk(S, dt);
-          if (me.task) task?.tick(dt);
+          if (me.task) task.tick(dt);
           if (mine.bat <= 0) me.on = me.ph = false;
         }
         if (now - lastSend > SEND_MS) {
@@ -548,7 +538,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       // Low battery: the beam dims and stutters.
       const bat = mine.bat,
         weak = bat < 0.15 ? (Math.sin(now * 0.05) > -0.2 ? 0.5 : 0.1) : 1;
-      torch.intensity = me.on && bat > 0 ? 60 * weak * (0.55 + 0.45 * Math.min(1, bat * 3)) : 0;
+      torch.intensity = me.on && bat > 0 ? TORCH_FULL * weak * (0.55 + 0.45 * Math.min(1, bat * 3)) : 0;
       // With the phone up, or hands in a box, the torch hangs, lighting the floor a step ahead (and holding nothing: sim.ts beamOn).
       drop += ((me.ph || me.task ? 1 : 0) - drop) * Math.min(1, dt * 8);
       torch.target.position.set(0.05, -0.05 - 2.4 * drop, -3 + 1.2 * drop);
