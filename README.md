@@ -22,7 +22,7 @@ pnpm format              # reformat everything with Biome
 pnpm format:check        # fail if anything is not formatted
 ```
 
-The game, the simulation, the apps and the balance tools are TypeScript. Vite strips the types without checking them, and `pnpm typecheck` checks them. Every project is checked with `strict`, plus `noUncheckedIndexedAccess` (a read by index may be undefined), `exactOptionalPropertyTypes` (an optional property that is absent is kept apart from one set to `undefined`) and `noUnusedParameters` (a parameter that is never read starts with `_`). These settings live in `tsconfig.base.json`. The types carry what the code knows instead of `!`: per-mascot tables are four-entry tuples read by a `MascotIndex`, door tables are `Record<DoorKey, ...>`, and a value that is there by construction is read through `defined()` or `assert()` from `@thick-shift/sim/check`, or the game's `byId()` and `query()` for the page, which throw an Error naming what is missing. Biome fails on `!` (`noNonNullAssertion`), on an assignment inside a condition (`noAssignInExpressions`) and on a ternary clamp (`useMathMinMax`). `tools/roblox/gen-data.mjs` is still JavaScript, checked with `checkJs`. GitHub Actions runs the typecheck, the lint, the format check, the tests, both builds, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
+The game, the simulation, the apps and the balance tools are TypeScript. Vite strips the types without checking them, and `pnpm typecheck` checks them. The compiler options every project shares are in `tsconfig.base.json` and the lint rules in `biome.jsonc`, each with its reason beside it. `tools/roblox/gen-data.mjs` is still JavaScript, checked with `checkJs`. GitHub Actions runs the typecheck, the lint, the format check, the tests, both builds, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
 
 Rooms need the Worker. `vite dev` runs it, Durable Object and all, so starting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server that serves it at the root of a domain runs the game solo: with no room to reach, the page runs the night itself. The page loads its scripts from `/assets/`, so it does not work from a sub-path.
 
@@ -32,7 +32,7 @@ Add `?dev` to the URL for the dev menu (the backtick key, or the Dev button on t
 
 ```
 packages/game/          the game, shared by the web and Discord apps (@thick-shift/game)
-  package.json          what an app may import: the game itself, state, net, audio, ui, types, styles.css, worker and vite
+  package.json          what an app may import: the game itself, state, dom, net, audio, ui, types, styles.css, worker and vite
   vite.ts               game(), the game's part of each app's Vite config: public/ as the static files, served as-is
   worker/room.ts        the rooms (one Durable Object each, which runs the night), which each app's Worker exports
   public/               served as it is, never bundled
@@ -42,6 +42,7 @@ packages/game/          the game, shared by the web and Discord apps (@thick-shi
     styles.css          stage layout and the HUD; everything else comes from catppuccin-neu
     state.ts            the shared mutable objects: game (session), client (this browser) and platform (app hooks)
     types.ts            the client's shared types (exported as @thick-shift/game/types); types only
+    dom.ts              byId() and query(), which throw an Error naming the element that is missing
     net.ts              starting and joining rooms, and a night played solo when there is no room
     audio.ts            recorded and synthesised sound, and the ambience
     ui.ts               overlay screens: title, lobby, and the cards between nights
@@ -54,6 +55,9 @@ packages/sim/           the simulation as plain TypeScript, with no DOM and no t
   src/dressing.ts       where the furniture stands
   src/data.ts           the lamps and the stage, which the picture and the Roblox port share
   src/sim.ts            the night: newSim, startFloorNight, stepFloor, actFloor, adoptFloor
+  src/session.ts        joining, leaving and checking every command; what the room and a solo page run
+  src/check.ts          defined() and assert(), for a value that is there by construction
+  src/random.ts         the seeded random numbers
   src/types.ts          the state S and every message net.ts sends and receives
   test/                 the tests (pnpm test); __snapshots__ holds what seeded nights came to
 apps/
@@ -80,7 +84,7 @@ tsconfig.json           the solution file: every project, for tsc -b
 
 `packages/game`, `apps/web` and `apps/discord` each have three TypeScript projects: `tsconfig.json` for the browser code, `tsconfig.worker.json` for the Worker and `tsconfig.node.json` for the Vite config, which runs in Node.
 
-An app imports the game only by the names `packages/game/package.json` exports (`@thick-shift/game`, `@thick-shift/game/state` and so on), never by a path into `packages/`. The game imports the simulation the same way, as `@thick-shift/sim` and its subpaths. The Node tools are the exception: they import `packages/sim/src/` by path, since `tools/` is not a package. An app changes how the game starts and what its title screen and lobby offer through `platform` in `state.ts`, set by its own `src/boot.ts` before `start()`. `fixedRoom` means the room comes from outside, and everyone opens the same one: the first to arrive starts it and the rest join. `title` replaces the title screen, and `invite` replaces the room code and link in the lobby. The web game leaves all three alone.
+An app imports the game only by the names `packages/game/package.json` exports (`@thick-shift/game`, `@thick-shift/game/state` and so on), never by a path into `packages/`. The game imports the simulation the same way, as `@thick-shift/sim` and its subpaths. The Node tools are the exception: they import `packages/sim/src/` by path, since `tools/` is not a package. An app changes how the game starts and what its title screen and lobby offer through `platform` in `state.ts`, set before `start()` (the Discord app does it in `src/activity.ts`). `fixedRoom` means the room comes from outside, and everyone opens the same one: the first to arrive starts it and the rest join. `title` replaces the title screen, and `invite` replaces the room code and link in the lobby. The web game leaves all three alone.
 
 ## Discord Activity
 
