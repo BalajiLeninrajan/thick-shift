@@ -11,14 +11,11 @@ import { ROOMS3 } from '@thick-shift/sim/map';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { loadGLB } from '../assets';
+import { getOr, isMesh } from './geo';
 import type { Levels } from './light';
 import { lit } from './light';
 import { floorY } from './shell';
 import { roomData } from './sight';
-
-// A node of a kit model as traverse() hands it over: a mesh when isMesh is set, wearing the kit's own material or, once
-// dressed, the one dressMaterial gave it.
-type KitMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial | THREE.MeshBasicMaterial>;
 
 const KITS = ['props_a', 'props_b'];
 // Materials the kits mean to be lit from inside, and which of the building's light levels drives each.
@@ -42,7 +39,7 @@ const nodes: Promise<Map<string, THREE.Object3D>> = Promise.all(KITS.map(loadGLB
   for (const scene of scenes)
     for (const node of scene?.children || []) {
       node.traverse(o => {
-        if ((o as KitMesh).isMesh) rgb((o as KitMesh).geometry);
+        if (isMesh(o)) rgb(o.geometry);
       });
       byName.set(node.name, node);
     }
@@ -66,6 +63,9 @@ function dressMaterial(m: THREE.MeshStandardMaterial, dead?: boolean): THREE.Mes
   return mat;
 }
 
+// A glow is its own light and a see-through thing lets light past, so neither throws a shadow.
+const casts = (m: THREE.Material): boolean => !m.transparent && !(m instanceof THREE.MeshBasicMaterial);
+
 // A copy of one prop, standing at the origin, ready to add to the scene. Null if its kit has not been built.
 export async function prop(name: string): Promise<THREE.Object3D | null> {
   const node = (await nodes).get(name);
@@ -73,11 +73,11 @@ export async function prop(name: string): Promise<THREE.Object3D | null> {
   const copy = node.clone(true);
   copy.position.set(0, 0, 0);
   copy.traverse(o => {
-    if ((o as KitMesh).isMesh) {
-      (o as KitMesh).material = dressMaterial((o as KitMesh).material as THREE.MeshStandardMaterial);
-      o.castShadow = !(o as KitMesh).material.transparent && !((o as KitMesh).material as THREE.MeshBasicMaterial).isMeshBasicMaterial;
-      o.receiveShadow = true;
-    }
+    if (!isMesh(o)) return;
+    const mat = dressMaterial(o.material as THREE.MeshStandardMaterial);
+    o.material = mat;
+    o.castShadow = casts(mat);
+    o.receiveShadow = true;
   });
   return copy;
 }
@@ -144,18 +144,15 @@ export function createProps(scene: THREE.Scene) {
         copy.position.set(0, 0, 0);
         copy.updateMatrixWorld(true);
         copy.traverse(o => {
-          if (!(o as KitMesh).isMesh) return;
-          const mat = dressMaterial((o as KitMesh).material as THREE.MeshStandardMaterial, opt.dead);
-          const geo = (o as KitMesh).geometry.clone().applyMatrix4(m.clone().multiply(o.matrixWorld)),
-            list = buckets.get(mat);
-          if (list) list.push(geo);
-          else buckets.set(mat, [geo]);
+          if (!isMesh(o)) return;
+          const mat = dressMaterial(o.material as THREE.MeshStandardMaterial, opt.dead);
+          getOr(buckets, mat, () => []).push(o.geometry.clone().applyMatrix4(m.clone().multiply(o.matrixWorld)));
         });
       }
       for (const [mat, geos] of buckets) {
         const names = ['position', 'normal', 'uv', ...(geos.some(g => g.attributes.color) ? ['color'] : [])];
         const mesh = new THREE.Mesh(mergeGeometries(geos.map(g => plain(g, names))), mat);
-        mesh.castShadow = !mat.transparent && !(mat as THREE.MeshBasicMaterial).isMeshBasicMaterial;
+        mesh.castShadow = casts(mat);
         mesh.receiveShadow = true;
         group.add(mesh);
       }
