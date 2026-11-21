@@ -664,6 +664,13 @@ export function route(ax: number, az: number, bx: number, bz: number, opts: Rout
     for (let i = goal; i >= 0; i = prev[i] ?? NONE) ids.unshift(i);
     return { ids, via };
   };
+  // Skip the first waypoints if a later one is already in a straight clear line. Without this on a blocked route, a
+  // mascot just past a waypoint on its way to a shut door is sent back to it, then on again at the next ask, and
+  // paces there instead of reaching the door.
+  const skipPassed = (path: Point[]) => {
+    for (let next = path[1]; next && clear(ax, az, next.x, next.z, r, opts.doors); next = path[1]) path.shift();
+    return path;
+  };
   let found = search(true),
     blocked: DoorKey | undefined;
   if (!found) {
@@ -678,11 +685,9 @@ export function route(ax: number, az: number, bx: number, bz: number, opts: Rout
     // stop is found and above 0: search(true) failed, so this route crosses a shut door, and never at k = 0, where
     // via[from] is null.
     blocked = via[defined(ids[stop], 'the shut door on the way')]?.key;
-    return { path: ids.slice(0, stop).map(point), blocked };
+    return { path: skipPassed(ids.slice(0, stop).map(point)), blocked };
   }
   const path = found.ids.map(point);
   path.push({ x: bx, z: bz });
-  // Skip the first waypoints if a later one is already in a straight clear line.
-  for (let next = path[1]; next && clear(ax, az, next.x, next.z, r, opts.doors); next = path[1]) path.shift();
-  return { path };
+  return { path: skipPassed(path) };
 }

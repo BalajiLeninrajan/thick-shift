@@ -38,16 +38,16 @@ exports[`odd nights > x4 camp the charger n3, seed 1 1`] = `
 {
   "burnt": 2,
   "events": "burn 2, call 10, calm 1, fault 6, flat 4, hour 1, out 1, quit 4, scare 1, spot 10, stir 2",
-  "eventsDigest": "5f181f71d593d746",
+  "eventsDigest": "55f57b0ffb98380d",
   "failures": [],
   "fixed": 0,
   "flats": 4,
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "32b74e05ee600051",
-  "t": "113.900",
-  "ticks": 1139,
+  "stateDigest": "5679b005f8a2d3b2",
+  "t": "114.000",
+  "ticks": 1140,
 }
 `;
 
@@ -70,34 +70,34 @@ exports[`odd nights > x4 sit in the ducts n1, seed 3 1`] = `
 
 exports[`odd nights > x4 turtle, toys at the doors n1, seed 2 1`] = `
 {
-  "burnt": 4,
-  "events": "arrive 1, bang 3, burn 4, call 6, calm 1, door 3, fault 10, flat 4, hour 2, out 1, scare 1, spot 4, stir 2",
-  "eventsDigest": "c78effcf00153ef6",
+  "burnt": 5,
+  "events": "arrive 1, bang 3, burn 5, call 6, calm 1, door 3, fault 9, flat 4, hour 2, out 1, scare 1, spot 4, stir 2",
+  "eventsDigest": "a3469d7c43e143cd",
   "failures": [],
   "fixed": 0,
   "flats": 4,
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "7b601c9ea2bcf166",
-  "t": "141.200",
-  "ticks": 1412,
+  "stateDigest": "ed94d81a239dcca0",
+  "t": "149.300",
+  "ticks": 1493,
 }
 `;
 
 exports[`odd nights > x4 turtle: doors shut, nobody moves n3, seed 1 1`] = `
 {
-  "burnt": 5,
-  "events": "arrive 1, bang 4, burn 5, call 6, calm 1, door 3, fault 10, flat 4, hour 1, out 1, roar 1, scare 1, spot 5, stir 2",
-  "eventsDigest": "08ff6bd6e63ad7e5",
+  "burnt": 1,
+  "events": "arrive 3, bang 12, burn 1, call 5, calm 1, door 3, fault 12, flat 4, hour 1, out 1, roar 1, scare 1, spot 5, stir 2",
+  "eventsDigest": "a9738601c2ff9b53",
   "failures": [],
   "fixed": 0,
   "flats": 4,
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "f8e5e12538ffe496",
-  "t": "130.800",
-  "ticks": 1308,
+  "stateDigest": "b1a16e0ac7d6fe50",
+  "t": "92.200",
+  "ticks": 922,
 }
 `;

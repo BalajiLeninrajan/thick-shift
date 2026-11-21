@@ -602,6 +602,15 @@ function Map.route(ax: number, az: number, bx: number, bz: number, opts: RouteOp
 		end
 		return { ids = ids, via = via }
 	end
+	-- Skip the first waypoints if a later one is already in a straight clear line. Without this on a blocked route,
+	-- a mascot just past a waypoint on its way to a shut door is sent back to it, then on again at the next ask, and
+	-- paces there instead of reaching the door.
+	local function skipPassed(path)
+		while #path > 1 and clear(ax, az, path[2].x, path[2].z, r, o.doors) do
+			table.remove(path, 1)
+		end
+		return path
+	end
 	local found = search(true)
 	if not found then
 		local f = search(false)
@@ -623,18 +632,14 @@ function Map.route(ax: number, az: number, bx: number, bz: number, opts: RouteOp
 			local nd = nodes[f.ids[k]]
 			table.insert(path, { x = nd.x, z = nd.z })
 		end
-		return { path = path, blocked = blocked }
+		return { path = skipPassed(path), blocked = blocked }
 	end
 	local path = {}
 	for _, id in found.ids do
 		table.insert(path, { x = nodes[id].x, z = nodes[id].z })
 	end
 	table.insert(path, { x = bx, z = bz })
-	-- Skip the first waypoints if a later one is already in a straight clear line.
-	while #path > 1 and clear(ax, az, path[2].x, path[2].z, r, o.doors) do
-		table.remove(path, 1)
-	end
-	return { path = path }
+	return { path = skipPassed(path) }
 end
 
 return Map
