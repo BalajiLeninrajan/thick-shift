@@ -40,9 +40,10 @@ packages/game/          the game, shared by the web and Discord apps (@thick-shi
     models/             the mascots, the guard and the prop kits (built by tools/models/)
   src/
     styles.css          stage layout and the HUD; everything else comes from catppuccin-neu
-    state.ts            the shared mutable objects: game (session), client (this browser) and platform (app hooks)
+    state.ts            the shared mutable objects: game (session), client (this browser) and platform (app hooks), and myPlayer()
     types.ts            the client's shared types (exported as @thick-shift/game/types); types only
-    dom.ts              byId() and query(), which throw an Error naming the element that is missing
+    dom.ts              byId() and query(), which throw an Error naming the element that is missing, and typing() and errorText()
+    protocol.ts         what a page and a room agree on beside the messages: PROTOCOL, TICK_MS, the close codes, Mode
     net.ts              starting and joining rooms, and a night played solo when there is no room
     audio.ts            recorded and synthesised sound, and the ambience
     ui.ts               overlay screens: title, lobby, and the cards between nights

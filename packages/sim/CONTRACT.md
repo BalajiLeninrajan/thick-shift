@@ -9,8 +9,8 @@ How the night simulation is called, and the rules its callers and its Luau port 
 |---|---|---|
 | `@thick-shift/sim` | `src/index.ts` | everything below, the night and the session included |
 | `@thick-shift/sim/check` | `src/check.ts` | `assert`, `defined`, `isNonEmpty`, `isPlaced`, `isNight` |
-| `@thick-shift/sim/config` | `src/config.ts` | `FINAL_NIGHT`, `DOORS`, `MASC`, the mascots by name |
-| `@thick-shift/sim/map` | `src/map.ts` | rooms, doorways, fixtures, `walkable`, `slide`, `clear`, `sees`, `reaches`, `glimpses`, `roomAt`, `route`, `nav`, `walls`, `slabs`, ... |
+| `@thick-shift/sim/config` | `src/config.ts` | `FINAL_NIGHT`, `DOORS`, `STAMINA`, `DEFAULT_NAME`, `NAME_MAX`, `MASC`, the mascots by name |
+| `@thick-shift/sim/map` | `src/map.ts` | rooms, doorways, fixtures, the footprint (`SIZE_X`, `SIZE_Z`), `dist`, `angDiff`, `rectMid`, `doorwayOf`, `walkable`, `slide`, `clear`, `sees`, `reaches`, `glimpses`, `roomAt`, `route`, `nav`, `walls`, `slabs`, ... |
 | `@thick-shift/sim/dressing` | `src/dressing.ts` | `FOOT`, `GEN_BACK`, `DRESSING`, `obstacles` |
 | `@thick-shift/sim/data` | `src/data.ts` | `LAMPS`, `DEAD_TUBES`, `TUBE`, `GREEN`, `STAGE` |
 | `@thick-shift/sim/types` | `src/types.ts` | `State`, `NightState`, `Guard`, `Mascot`, `SimEvent`, `Brain`, `Action`, the wire messages (`Command`, `StateMessage`, `CloseCode`), `Rng` |
@@ -94,7 +94,7 @@ a change to both files:
   chance only when a guard is in the booth, and for the crank chance only when `S.crank`.
 - An expression with two draws takes them left to right.
 
-Distances come from `hypot` in `map.ts`, the plain `Math.sqrt(x * x + z * z)`. `Math.hypot` rounds differently in the
+Distances come from `hypot` in `map.ts`, the plain `Math.sqrt(x * x + z * z)`, and `dist(a, b)` beside it. `Math.hypot` rounds differently in the
 last bits and Luau has no such function, so the sim and the map never call it.
 
 The game passes `rng: Math.random`. Its other random numbers (a room's code, a guard's id, the sounds) are not part
@@ -123,7 +123,8 @@ Inside a night the sim narrows `State` to `NightState`. `Player` is a guard as `
 with the body's fields optional; `stepFloor` places one whose `x` is missing. `SimEvent` is a union keyed on `type`,
 with each event's `x` typed. The wire messages are `Command` (page to room: an `Action`, `{ t: 'go' }` or a
 `DevCommand`), `StateMessage` (`{ t: 's', s }`, room to every page) and `CloseCode` (1008 a bad id or mode, 4404 no
-such room, 4409 code taken, 4426 a page from an older build).
+such room, 4409 code taken, 4426 a page from an older build). The codes by name, `PROTOCOL`, `TICK_MS` and `Mode` are in
+`packages/game/src/protocol.ts`.
 
 ## The tools
 
