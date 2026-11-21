@@ -36,10 +36,10 @@ let now = 0;
 // Every random draw of a night, the guards' and the sim's, comes from this one stream, which seedRandom() seeds at
 // the start of each night. The sim reads it through a closure, so it draws from whatever stream is current.
 let random = Math.random;
-// Records the night for tools/roblox/diff when REC_OUT is set, and shuffles the battery spots the Roblox port's way.
+// Records the night for tools/roblox/diff when REC_OUT is set.
 const rec = process.env.REC_OUT ? await import('../roblox/diff/rec.ts') : null;
 // One sim per thread, made once: like the module state it replaces, it carries the last step's time between nights.
-export const sim = newSim({ rng: () => random(), now: 0, shuffle: rec ? 'fisher-yates' : 'sort' });
+export const sim = newSim({ rng: () => random(), now: 0 });
 const night: Night = { startFloorNight, stepFloor, actFloor };
 const api: Night = rec ? rec.wrapSim(night, sim) : night;
 

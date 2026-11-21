@@ -2,33 +2,33 @@
 
 exports[`solo nights > solo careless n3, seed 1 1`] = `
 {
-  "burnt": 1,
-  "events": "bat 3, burn 1, calm 4, fault 7, fix 7, flat 1, hour 4, quit 6, scare 1, spot 7, stir 5",
-  "eventsDigest": "809ef1bb06eb4f8d",
+  "burnt": 0,
+  "events": "bat 3, calm 3, fault 7, fix 5, flat 1, hour 3, quit 6, scare 1, spot 7, stir 4",
+  "eventsDigest": "79624754830269a6",
   "failures": [],
-  "fixed": 7,
+  "fixed": 5,
   "flats": 1,
   "outcome": "dead",
   "peels": 0,
-  "power": "68.922",
-  "stateDigest": "a98309008cd55a90",
-  "t": "303.900",
-  "ticks": 3039,
+  "power": "77.140",
+  "stateDigest": "24e693b3090484d7",
+  "t": "276.200",
+  "ticks": 2762,
 }
 `;
 
 exports[`solo nights > solo competent n1, seed 1 1`] = `
 {
-  "burnt": 2,
-  "events": "bat 3, burn 2, calm 6, door 6, fault 9, fix 9, grab 1, hour 6, quit 9, spot 11, stir 7, toy 2, win 1",
-  "eventsDigest": "b0a06b4e1b133719",
+  "burnt": 0,
+  "events": "bat 3, calm 6, door 2, fault 8, fix 8, grab 1, hour 6, quit 3, spot 3, stir 6, toy 1, win 1",
+  "eventsDigest": "3ba17a878912a830",
   "failures": [],
-  "fixed": 9,
+  "fixed": 8,
   "flats": 0,
   "outcome": "win",
   "peels": 0,
-  "power": "57.487",
-  "stateDigest": "ccccad42b753939a",
+  "power": "58.809",
+  "stateDigest": "df38d2a021991832",
   "t": "420.000",
   "ticks": 4200,
 }
@@ -36,68 +36,68 @@ exports[`solo nights > solo competent n1, seed 1 1`] = `
 
 exports[`solo nights > solo competent n3, seed 2 1`] = `
 {
-  "burnt": 3,
-  "events": "arrive 1, bang 4, burn 3, calm 6, crash 1, door 14, fault 11, fix 9, hour 6, quit 7, roar 1, spot 12, stir 6, toy 1, win 1",
-  "eventsDigest": "6e3400150fa1b49e",
+  "burnt": 0,
+  "events": "arrive 2, bang 8, calm 1, door 8, fault 4, fix 4, flat 1, hour 1, roar 1, scare 1, spot 2, stir 2",
+  "eventsDigest": "f433a11a0f5996eb",
   "failures": [],
-  "fixed": 9,
-  "flats": 0,
-  "outcome": "win",
+  "fixed": 4,
+  "flats": 1,
+  "outcome": "dead",
   "peels": 0,
-  "power": "18.224",
-  "stateDigest": "dc5431cc8f2b039b",
-  "t": "420.000",
-  "ticks": 4200,
+  "power": "57.175",
+  "stateDigest": "847fa26a7668a61f",
+  "t": "128.000",
+  "ticks": 1280,
 }
 `;
 
 exports[`solo nights > solo competent n5, seed 3 1`] = `
 {
-  "burnt": 1,
-  "events": "arrive 1, bang 4, bat 1, burn 1, calm 3, crash 1, door 12, fault 6, fix 4, flat 1, grab 1, hour 3, quit 3, roar 1, scare 1, spot 8, stir 3, toy 1",
-  "eventsDigest": "dd8e50307b374007",
+  "burnt": 3,
+  "events": "arrive 2, bang 8, bat 1, burn 3, calm 4, door 22, fault 9, fix 7, flat 1, grab 2, hour 3, out 1, quit 3, scare 1, spot 11, stir 5, toy 2",
+  "eventsDigest": "6924fc321e24d063",
   "failures": [],
-  "fixed": 4,
+  "fixed": 7,
   "flats": 1,
   "outcome": "dead",
   "peels": 0,
-  "power": "48.703",
-  "stateDigest": "ec6f26e9504a4b7e",
-  "t": "220.500",
-  "ticks": 2205,
+  "power": "0.000",
+  "stateDigest": "d919aa8201d7a501",
+  "t": "279.700",
+  "ticks": 2797,
 }
 `;
 
 exports[`solo nights > solo competent, hides n3, seed 5 1`] = `
 {
-  "burnt": 1,
-  "events": "bat 1, burn 1, calm 2, door 2, fault 4, fix 4, flat 1, hour 2, quit 3, scare 1, spot 5, stir 3",
-  "eventsDigest": "f9119d6a0ef2d8c2",
+  "burnt": 2,
+  "events": "arrive 1, bang 4, burn 2, calm 6, check 4, crash 1, door 8, fault 11, fix 10, hour 6, locker 6, quit 8, roar 1, spot 14, stir 6, win 1",
+  "eventsDigest": "aa2023d86d440613",
   "failures": [],
-  "fixed": 4,
-  "flats": 1,
-  "outcome": "dead",
+  "fixed": 10,
+  "flats": 0,
+  "outcome": "win",
   "peels": 0,
-  "power": "81.415",
-  "stateDigest": "bbc7db8afb38e6c2",
-  "t": "180.300",
-  "ticks": 1803,
+  "power": "15.877",
+  "stateDigest": "25e33a89de62951e",
+  "t": "420.000",
+  "ticks": 4200,
 }
 `;
 
 exports[`solo nights > solo expert n5, seed 2 1`] = `
 {
-  "burnt": 0,
-  "events": "calm 1, door 4, fault 2, flat 1, quit 1, scare 1, spot 2, stir 1, toy 1",
-  "eventsDigest": "4e42e95af14bced7",
+  "burnt": 4,
+  "events": "bat 2, burn 4, calm 5, check 1, crash 1, door 24, fault 11, fix 9, grab 1, hour 6, quit 5, roar 1, spot 15, stir 6, toy 1, win 1",
+  "eventsDigest": "8e397f0bee652366",
   "failures": [],
-  "fixed": 0,
-  "flats": 1,
-  "outcome": "dead",
+  "fixed": 9,
+  "flats": 0,
+  "outcome": "won",
   "peels": 0,
-  "power": "90.288",
-  "stateDigest": "62e5d982e093d314",
-  "t": "63.300",
-  "ticks": 633,
+  "power": "21.267",
+  "stateDigest": "48995fbbe9311deb",
+  "t": "420.000",
+  "ticks": 4200,
 }
 `;

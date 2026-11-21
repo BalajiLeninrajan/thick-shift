@@ -12,10 +12,6 @@ export interface Night {
   actFloor: typeof actFloor;
 }
 
-// Luau has no hypot; both sides use the plain formula so their arithmetic matches. Nothing calls Math.hypot before
-// the first night, and the sim and the map look it up when they call it, so replacing it here reaches them.
-Math.hypot = (a, b) => Math.sqrt(a * a + b * b);
-
 const out = defined(process.env.REC_OUT, 'REC_OUT'); // set, or the harness would not have loaded this
 writeFileSync(out, '');
 const REC: { on: boolean; rands: number[] } = { on: false, rands: [] };

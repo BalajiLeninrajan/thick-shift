@@ -371,8 +371,6 @@ function Sim:startNight(n: number)
 		placeGuard(p, i - 1)
 	end
 	S.players = all
-	-- The web game shuffles with sort(() => Math.random() - .5); this is a Fisher-Yates shuffle, which the
-	-- differential test patches the JS to use as well.
 	local spots = {}
 	for i = 1, #BATTERY_SPOTS do
 		spots[i] = i - 1

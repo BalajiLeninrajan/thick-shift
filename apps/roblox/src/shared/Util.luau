@@ -3,7 +3,7 @@
 
 local Util = {}
 
--- Math.hypot for two numbers. The differential test patches the JS side to the same formula.
+-- hypot in map.ts: the plain formula on both sides, so the two round alike.
 function Util.hypot(x: number, z: number): number
 	return math.sqrt(x * x + z * z)
 end

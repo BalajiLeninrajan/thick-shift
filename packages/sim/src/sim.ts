@@ -47,6 +47,7 @@ import {
   DUCTS,
   GENERATOR,
   HIDES,
+  hypot,
   MASCOT_R,
   PANELS,
   PLAYER_R,
@@ -198,8 +199,7 @@ const LOCKER_NOISE: [number, number] = [6, 0.5];
 export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3 };
 
 const OPEN = (): Doors => ({ L: false, V: false, R: false });
-// Math.hypot is looked up on every call: tools/roblox/diff/rec.ts swaps it for the plain formula Luau uses.
-const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
+const dist = (a: Point, b: Point) => hypot(a.x - b.x, a.z - b.z);
 const angDiff = (a: number, b: number) => {
   let d = (a - b) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
@@ -276,21 +276,15 @@ function emit<K extends EventType>(S: LobbyState, type: K, ...[x]: EventData[K] 
 
 /* ---------- the night ---------- */
 
-// How the night's battery spots are shuffled. 'sort' is the game's: a sort with a random comparator. 'fisher-yates'
-// is the Roblox port's, which the recorder for tools/roblox/diff asks for so the two draw alike.
-export type Shuffle = 'sort' | 'fisher-yates';
-
 export interface SimOptions {
   rng: Rng; // every random draw the night makes
   now: number; // milliseconds on the caller's clock, as performance.now() gives: the start of the first step
-  shuffle?: Shuffle; // 'sort' unless given
 }
 
 // What only whoever runs the night knows: the guards in the room and the mascots' thinking. The caller makes one with
 // newSim() and passes it, with S, to every call below. Nothing else in the package keeps state about a night.
 export interface Sim {
   rng: Rng; // the caller may swap it between calls
-  shuffle: Shuffle;
   players: Record<string, Player>; // guard id -> that guard's record, the same object as their entry in S.players
   // What each mascot is thinking, by MASC index. It is never sent. Browsers get the result (m.st, m.x, m.z, m.yaw).
   brains: Brain[];
@@ -301,7 +295,7 @@ export interface Sim {
 }
 
 export function newSim(opts: SimOptions): Sim {
-  return { rng: opts.rng, shuffle: opts.shuffle ?? 'sort', players: {}, brains: [], batTimers: [], crankNoise: 0, nextFault: 0, lastStep: opts.now };
+  return { rng: opts.rng, players: {}, brains: [], batTimers: [], crankNoise: 0, nextFault: 0, lastStep: opts.now };
 }
 
 // The balance harness reads what a mascot is after. Nothing in the game does.
@@ -410,18 +404,12 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
     placeGuard(p, i);
     return p;
   });
-  // The game sorts with a random comparator, so V8 decides how many draws that takes. The Roblox port shuffles them
-  // Fisher-Yates, and the recorder for tools/roblox/diff asks for that so the two draw alike.
+  // Fisher-Yates, drawing as the Roblox port does.
   const spots = BATTERY_SPOTS.map((_, i) => i);
-  if (sim.shuffle === 'sort') spots.sort(() => sim.rng() - 0.5);
-  else
-    for (let i = spots.length - 1; i > 0; i--) {
-      const j = (sim.rng() * (i + 1)) | 0;
-      const a = defined(spots[i], `spot ${i}`),
-        b = defined(spots[j], `spot ${j}`);
-      spots[i] = b;
-      spots[j] = a;
-    }
+  for (let i = spots.length - 1; i > 0; i--) {
+    const j = (sim.rng() * (i + 1)) | 0;
+    [spots[i], spots[j]] = [defined(spots[j], `spot ${j}`), defined(spots[i], `spot ${i}`)];
+  }
   S.batN = Math.min(spots.length, 3 + all.length); // the night's batteries, lying about or due back
   S.bats = spots.slice(0, S.batN);
   // The Mini Biggses thrown and not picked up again: { id, by, x0, z0: where it left the hand, x, z: where it lands,
@@ -654,7 +642,7 @@ function canSee(S: NightState, m: Mascot, p: Guard) {
 function noise(sim: Sim, S: NightState, x: number, z: number, radius: number, chance: number) {
   for (const [i, m] of S.m.entries()) {
     const b = brainOf(sim, i);
-    if (!['roam', 'search'].includes(m.st) || b.home || Math.hypot(m.x - x, m.z - z) > radius || sim.rng() > chance) continue;
+    if (!['roam', 'search'].includes(m.st) || b.home || hypot(m.x - x, m.z - z) > radius || sim.rng() > chance) continue;
     m.st = 'search';
     b.last = { x, z };
     b.timer = rnd(sim, 3, 6);
@@ -766,7 +754,7 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
   if (!next) return b.key ? 'blocked' : 'there';
   const dx = next.x - m.x,
     dz = next.z - m.z,
-    d = Math.hypot(dx, dz),
+    d = hypot(dx, dz),
     stepLen = Math.min(d, speed * dt);
   turn(m, Math.atan2(dx, dz), 7 * dt);
   // Getting nowhere is sliding along something without getting nearer, as well as not moving at all.

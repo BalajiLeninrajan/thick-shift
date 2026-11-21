@@ -31,6 +31,9 @@ export const PLAYER_R = 0.35,
   MASCOT_R = 0.7;
 export const EYE = 1.65,
   DOOR_H = 3;
+// The length of (x, z) by the plain formula. Math.hypot rounds differently in the last bits, and the Roblox port
+// (Util.hypot) has to come out the same.
+export const hypot = (x: number, z: number): number => Math.sqrt(x * x + z * z);
 
 // rects: [x0, z0, x1, z1]. A room with two overlaps them so you can walk from one into the other.
 // h: ceiling height.
@@ -304,7 +307,7 @@ export function walkable(x: number, z: number, r: number, doors?: Doors | null, 
 // Move a circle by (dx, dz), sliding along whatever it meets. Changes p.x and
 // p.z and returns how far it got as a fraction of what was asked.
 export function slide(p: Point, dx: number, dz: number, r: number, doors?: Doors | null): number {
-  const len = Math.hypot(dx, dz);
+  const len = hypot(dx, dz);
   if (!len) return 1;
   const steps = Math.ceil(len / (r * 0.5)),
     sx = dx / steps,
@@ -319,13 +322,13 @@ export function slide(p: Point, dx: number, dz: number, r: number, doors?: Doors
     else if (sz && walkable(p.x, p.z + sz, r, doors)) p.z += sz;
     else break;
   }
-  return Math.hypot(p.x - x0, p.z - z0) / len;
+  return hypot(p.x - x0, p.z - z0) / len;
 }
 
 // Is the straight line between two points clear for something of radius r?
 // With r near 0 this is line of sight: walls and shut doors block it.
 export function clear(ax: number, az: number, bx: number, bz: number, r: number, doors?: Doors | null, over?: boolean): boolean {
-  const len = Math.hypot(bx - ax, bz - az),
+  const len = hypot(bx - ax, bz - az),
     steps = Math.max(1, Math.ceil(len / 0.35));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -343,7 +346,7 @@ export const reaches = (ax: number, az: number, bx: number, bz: number, doors?: 
 const GLIMPSE = 0.25; // metres: closer gave no fewer misses in testing
 export function glimpses(ax: number, az: number, bx: number, bz: number, r: number, doors?: Doors | null): boolean {
   if (reaches(ax, az, bx, bz, doors)) return true;
-  const d = Math.hypot(bx - ax, bz - az) || 1,
+  const d = hypot(bx - ax, bz - az) || 1,
     ux = -(bz - az) / d,
     uz = (bx - ax) / d,
     n = Math.ceil(r / GLIMPSE);
@@ -538,7 +541,7 @@ function buildNav(): Nav {
   const join = (i: number, j: number, extra: { key?: DoorKey | undefined; duct: boolean }) => {
     const a = defined(nodes[i], `waypoint ${i}`),
       b = defined(nodes[j], `waypoint ${j}`),
-      d = Math.hypot(a.x - b.x, a.z - b.z);
+      d = hypot(a.x - b.x, a.z - b.z);
     defined(links[i], `waypoint ${i}'s links`).push({ to: j, d, ...extra });
     defined(links[j], `waypoint ${j}'s links`).push({ to: i, d, ...extra });
   };
@@ -594,7 +597,7 @@ function nearestNode(x: number, z: number, doors: Doors | undefined, ducts: bool
       bestNode: NavNode | undefined,
       bd = 1e9;
     for (const [i, n] of nodes.entries()) {
-      const d = Math.hypot(n.x - x, n.z - z);
+      const d = hypot(n.x - x, n.z - z);
       if (d < bd && (ducts || n.room !== DUCTS) && !tried.includes(i)) {
         bd = d;
         best = i;
