@@ -16,6 +16,9 @@ export const esc = (s: unknown): string => String(s).replace(/[&<>"']/g, ch => `
 
 export const card = (body: string, footer = '', cls = ''): string =>
   `<div class="panel ts-card ${cls}"><div class="panel-body cn-stack cn-gap-16">${body}</div>${footer && `<div class="panel-footer cn-cluster">${footer}</div>`}</div>`;
+// What net.ts has to say about the connection, on the cards and, during a night, over the game (syncOverlay).
+const netBanner = (): string => (game.netNote ? `<div class="banner cn-tone-warning">${esc(game.netNote)}</div>` : '');
+
 // Anyone in the room can start the next night. Whoever runs it acts on the first press (goFloor).
 const goButton = (label: string): string => `<button class="btn btn-primary" id="go">${label}</button>`;
 
@@ -144,7 +147,7 @@ function nightScreen(S: State): OverlayScreen {
         ${where}
         <div class="cn-cluster">${names.map(n => `<span class="chip">${esc(n)}</span>`).join('')}</div>
         <ul class="cn-meta cn-m-0 ts-rules">${RULES.map(r => `<li>${r}</li>`).join('')}</ul>
-        ${game.netNote ? `<div class="banner cn-tone-warning">${esc(game.netNote)}</div>` : ''}`,
+        ${netBanner()}`,
         goButton('Start night 1')
       ),
     };
@@ -161,7 +164,7 @@ function nightScreen(S: State): OverlayScreen {
       key,
       wire,
       html: card(
-        `<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(tally)}`,
+        `<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(tally)}${netBanner()}`,
         goButton(`Start night ${S.night + 1}`)
       ),
     };
@@ -176,7 +179,8 @@ function nightScreen(S: State): OverlayScreen {
       <p class="lede cn-m-0">You walked all ${FINAL_NIGHT} nights at the Mascot Depot.</p>
       <p class="cn-meta cn-m-0">The sun is up and the mascots are back on their stage. Guards: ${who}</p>
       ${floorStats(defined(S.total, "the run's tally"), true)}
-      <p class="cn-meta cn-m-0">${S.deaths ? `The whole crew went down ${S.deaths === 1 ? 'once' : `${S.deaths} times`} along the way.` : 'The whole crew never went down at once.'}</p>`,
+      <p class="cn-meta cn-m-0">${S.deaths ? `The whole crew went down ${S.deaths === 1 ? 'once' : `${S.deaths} times`} along the way.` : 'The whole crew never went down at once.'}</p>
+      ${netBanner()}`,
         goButton('Start over from night 1')
       ),
     };
@@ -185,7 +189,7 @@ function nightScreen(S: State): OverlayScreen {
       key,
       wire,
       html: card(
-        `<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(S.killer === -1 ? 'Something' : MASC[S.killer].name)} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(defined(S.tally, "the night's tally"))}`,
+        `<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(S.killer === -1 ? 'Something' : MASC[S.killer].name)} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(defined(S.tally, "the night's tally"))}${netBanner()}`,
         goButton(`Retry night ${S.night}`),
         'ts-card-slow'
       ),
@@ -200,8 +204,23 @@ function currentScreen(): OverlayScreen {
   return platform.title ? platform.title() : titleScreen();
 }
 
+// During a night the overlay is empty, so a note about the connection goes in a strip over the game instead.
+let strip: HTMLElement | null = null;
+function syncStrip(): void {
+  const text = game.S?.phase === 'play' ? game.netNote : '';
+  if (!strip) {
+    if (!text) return;
+    strip = document.createElement('div');
+    strip.className = 'banner cn-tone-warning ts-net';
+    document.body.append(strip);
+  }
+  strip.hidden = !text;
+  if (strip.textContent !== text) strip.textContent = text;
+}
+
 let shownKey: string | null = null;
 export function syncOverlay(): void {
+  syncStrip();
   const s = currentScreen();
   if (s.key === shownKey) return;
   shownKey = s.key;

@@ -9,6 +9,9 @@ import type { CloseCode, Player, State, StateMessage } from '@thick-shift/sim/ty
 const TICK_MS = 100;
 const SAVE_TICKS = 20; // how often a night in play is saved, in ticks: every 2 s
 const FORGET_MS = 5 * 60_000; // how long a room with nobody in it keeps its night, for guards who lost their connection
+// How long a guard whose connection dropped mid-night stays in it, still standing (or still flat) where they were,
+// before the room takes them out. Longer than a page spends reconnecting (RETRY_MS in src/net.ts).
+const GRACE_MS = 20_000;
 const MAX_MESSAGE = 2000; // characters. A guard's commands are tiny.
 // The room's half of the protocol with src/net.ts. A page from a build that speaks another is told to reload.
 const PROTOCOL = '2';
@@ -57,6 +60,8 @@ const parse = (text: string): unknown => {
     return null;
   }
 };
+// The ids net.ts makes up (newId): a g and lowercase letters and digits. Nothing that could name an Object property.
+const GUARD_ID = /^g[a-z0-9]{8,40}$/;
 const isPosition = (c: unknown): boolean => typeof c === 'object' && c !== null && 't' in c && c.t === 'p';
 
 // One instance per room code. Between nights nothing runs, so the object can sleep, and S is saved whenever it changes
@@ -64,7 +69,11 @@ const isPosition = (c: unknown): boolean => typeof c === 'object' && c !== null 
 // fresh instance (after a deploy, say) makes the mascots' thinking up from S (adoptFloor).
 export class Room extends DurableObject<RoomEnv> {
   night: { sim: Sim; S: State } | null = null;
-  // Guards a restored night had who have not come back yet, with their records, so they come back where they were.
+  // Guards whose connection dropped during this night, and when the room takes them out of it. Until then they are
+  // still in the night, so a flat guard who gets back first does not end it for a crew that is still reconnecting.
+  lost = new Map<string, number>();
+  // Guards out of this night, with their records, so one who comes back later is where they were and as flat as they
+  // were. Saved with S. A new night clears it, since startFloorNight places everyone afresh.
   away = new Map<string, Player>();
   loop: ReturnType<typeof setInterval> | null = null;
   ticks = 0;
@@ -72,20 +81,30 @@ export class Room extends DurableObject<RoomEnv> {
   constructor(ctx: DurableObjectState, env: RoomEnv) {
     super(ctx, env);
     void ctx.blockConcurrencyWhile(async () => {
-      const S = await ctx.storage.get<State>('S');
-      if (S) this.restore(S);
+      const saved = await ctx.storage.get<State | Player[]>(['S', 'away']),
+        S = saved.get('S') as State | undefined;
+      if (S) this.restore(S, (saved.get('away') as Player[] | undefined) ?? []);
     });
   }
 
   // The night as storage has it, with whoever is still connected (the object woke from sleep) or nobody yet (it was
-  // restarted, and the guards come back as their pages reconnect).
-  restore(S: State): void {
+  // restarted, and the guards come back as their pages reconnect). Mid-night, everyone the saved night had stays in it
+  // as lost until they are back or GRACE_MS runs out.
+  restore(S: State, away: Player[]): void {
     const now = Date.now(),
       sim = newSim({ rng: Math.random, now });
     this.night = { sim, S };
+    this.away = new Map(away.map(p => [p.id, p]));
+    this.lost.clear();
+    // Pages have seen events numbered past the last save, so number the new ones after anything they can have seen.
+    S.evId += 1000;
+    for (const p of S.players)
+      if (S.phase === 'play') {
+        sim.players[p.id] = p;
+        this.lost.set(p.id, now + GRACE_MS);
+      } else this.away.set(p.id, p);
+    S.players = Object.values(sim.players);
     if (S.phase === 'play') adoptFloor(sim, S, now);
-    this.away = new Map(S.players.map(p => [p.id, p]));
-    S.players = [];
     for (const ws of this.open()) this.enter(att(ws).id);
     if (this.open().length) this.run();
     else void this.ctx.storage.setAlarm(now + FORGET_MS);
@@ -97,8 +116,18 @@ export class Room extends DurableObject<RoomEnv> {
 
   enter(id: string): void {
     if (!this.night) return;
+    this.lost.delete(id);
     joinFloor(this.night.sim, this.night.S, id, this.away.get(id));
     this.away.delete(id);
+  }
+
+  // Take a guard out of the night, keeping their record for when they come back.
+  out(id: string): void {
+    if (!this.night) return;
+    const record = this.night.sim.players[id];
+    if (record) this.away.set(id, record);
+    this.lost.delete(id);
+    leaveFloor(this.night.sim, this.night.S, id);
   }
 
   fetch(req: Request): Response {
@@ -114,7 +143,7 @@ export class Room extends DurableObject<RoomEnv> {
       return new Response(null, { status: 101, webSocket: client });
     };
     if (q.get('v') !== PROTOCOL) return refuse(OUTDATED, 'reload for the new version');
-    if (!isMode(mode) || !/^[\w-]{1,40}$/.test(id)) return refuse(1008, 'bad id or mode');
+    if (!isMode(mode) || !GUARD_ID.test(id)) return refuse(1008, 'bad id or mode');
     const mine = this.open().filter(s => att(s).id === id),
       others = this.open().length - mine.length;
     if (mode === 'make' && others) return refuse(CODE_TAKEN, 'room code in use');
@@ -124,6 +153,7 @@ export class Room extends DurableObject<RoomEnv> {
       this.stop();
       this.night = { sim: newSim({ rng: Math.random, now: Date.now() }), S: newState(url.pathname.match(ROOM)?.[1] ?? '') };
       this.away.clear();
+      this.lost.clear();
     }
     // The same guard on an older socket the room has not seen close: the new one takes over, and they stay in the night.
     for (const old of mine) {
@@ -148,11 +178,15 @@ export class Room extends DurableObject<RoomEnv> {
     if (typeof msg !== 'string' || msg.length > MAX_MESSAGE || !this.night) return;
     const { sim, S } = this.night,
       c = parse(msg),
-      was = S.phase;
+      { phase, night, t } = S;
     commandFloor(sim, S, att(ws).id, c);
     // A night in play goes out on the next tick. Between nights, anything but a position goes out now.
     if (S.phase === 'play') {
-      if (was !== 'play') this.changed();
+      // A night started: from a card between nights ('go'), or a dev skip to another night or back to its start.
+      if (phase !== 'play' || S.night !== night || S.t < t) {
+        this.away.clear();
+        this.changed();
+      }
       this.run();
     } else if (!isPosition(c)) this.changed();
   }
@@ -174,7 +208,9 @@ export class Room extends DurableObject<RoomEnv> {
       /* already closed */
     }
     if (!this.night) return;
-    leaveFloor(this.night.sim, this.night.S, a.id);
+    // Mid-night they may only have lost their connection: give them a while to get back (lost). Between nights, out.
+    if (this.night.S.phase === 'play' && this.night.sim.players[a.id]) this.lost.set(a.id, Date.now() + GRACE_MS);
+    else this.out(a.id);
     if (this.open().length) {
       this.changed();
       return;
@@ -191,6 +227,7 @@ export class Room extends DurableObject<RoomEnv> {
     this.stop();
     this.night = null;
     this.away.clear();
+    this.lost.clear();
     await this.ctx.storage.deleteAll();
   }
 
@@ -210,9 +247,13 @@ export class Room extends DurableObject<RoomEnv> {
       this.stop();
       return;
     }
-    stepFloor(night.sim, night.S, Date.now());
+    const now = Date.now();
+    for (const [id, until] of this.lost) if (now > until) this.out(id);
+    stepFloor(night.sim, night.S, now);
     this.send();
     if (night.S.phase !== 'play') {
+      // The night is over, so anyone still lost is out of it.
+      for (const id of this.lost.keys()) this.out(id);
       this.stop();
       void this.save();
     } else if (++this.ticks % SAVE_TICKS === 0) void this.save();
@@ -239,6 +280,6 @@ export class Room extends DurableObject<RoomEnv> {
   // seconds of night, which is cheaper than holding every send behind the disk.
   save(): Promise<void> {
     if (!this.night) return Promise.resolve();
-    return this.ctx.storage.put('S', this.night.S, { allowUnconfirmed: true });
+    return this.ctx.storage.put({ S: this.night.S, away: [...this.away.values()] }, { allowUnconfirmed: true });
   }
 }

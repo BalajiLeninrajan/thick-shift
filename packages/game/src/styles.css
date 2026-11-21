@@ -66,6 +66,8 @@ body {
 
 /* Dev menu (?dev). Scrolls inside itself and stays narrow enough to play beside. */
 .ts-dev { width: min(380px, 92vw); z-index: 50; }
+.ts-net { position: fixed; top: 12px; left: 50%; z-index: 40; transform: translateX(-50%); max-width: 92vw; pointer-events: none; }
+.ts-net[hidden] { display: none; }
 .ts-dev-body { overflow-y: auto; touch-action: pan-y; }
 
 /* ---------- in the night ---------- */

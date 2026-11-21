@@ -9,6 +9,8 @@ import type { Command, State, StateMessage } from '@thick-shift/sim/types';
 import { game, platform } from './state';
 
 const TICK_MS = 100; // a solo night's step, as the room's
+const RETRY_MS = [500, 1000, 2000, 4000, 8000]; // waits between tries to get back into a room we lost, 15 s in all
+const QUIET_MS = 4000; // a night in play that has sent nothing for this long has lost its connection
 const PROTOCOL = 2; // worker/room.ts's PROTOCOL
 const NO_ROOM = 4404,
   CODE_TAKEN = 4409,
@@ -18,6 +20,8 @@ const NO_ROOM = 4404,
 type Mode = 'make' | 'join' | 'either';
 
 let ws: WebSocket | null = null;
+let retries = 0, // tries so far to get back into the room
+  heard = 0; // performance.now() of the last state
 // A night this page runs itself, with no room: the room's thinking and the timer that steps it.
 let solo: { sim: Sim; S: State; loop: ReturnType<typeof setInterval> } | null = null;
 
@@ -45,7 +49,8 @@ export function join(code: string): void {
   if (ROOM.test(code)) open(code, 'join');
 }
 
-function open(code: string, mode: Mode): void {
+// back: trying to get back into a room this page was in.
+function open(code: string, mode: Mode, back = false): void {
   game.code = code;
   game.joining = true;
   game.myId ||= newId();
@@ -54,6 +59,8 @@ function open(code: string, mode: Mode): void {
   let opened = false;
   sock.onopen = () => {
     opened = true;
+    retries = 0;
+    heard = performance.now();
     game.netNote = '';
     send({ t: 'name', n: game.myName });
   };
@@ -61,6 +68,7 @@ function open(code: string, mode: Mode): void {
   sock.onmessage = (e: MessageEvent<string>) => {
     const m = parse(e.data);
     if (!isState(m)) return;
+    heard = performance.now();
     game.S = m.s;
     game.joining = false;
   };
@@ -72,11 +80,39 @@ function open(code: string, mode: Mode): void {
     game.joining = false;
     if (e.code === OUTDATED) return fail('The game has been updated', 'Reload to play the new version.');
     if (e.code === NO_ROOM) return fail(`Could not join room ${code}`, 'Nobody is playing in a room with that code.');
-    if (mode === 'join' && !opened) return fail(`Could not join room ${code}`, 'The connection failed.');
-    // No room to reach, or the one we were in is gone: carry on alone, from where the night was.
-    playSolo(code, opened ? 'Lost the connection to the room. You are playing solo now.' : 'Multiplayer unavailable. You can still play solo.');
+    if (opened || back) return retry(code);
+    if (mode === 'join') return fail(`Could not join room ${code}`, 'The connection failed.');
+    // No room to reach: play alone.
+    playSolo(code, 'Multiplayer unavailable. You can still play solo.');
   };
 }
+
+// The room's connection dropped, or a deploy restarted it. Go back in as the same guard, which keeps their place in
+// the night (worker/room.ts), a few times before carrying on alone from where the night was.
+function retry(code: string): void {
+  const wait = RETRY_MS[retries++];
+  if (wait === undefined) {
+    const lost = 'Lost the connection to the room. You are playing solo now.';
+    playSolo(code, lost);
+    // Over the game this is news, not a state to keep showing.
+    setTimeout(() => {
+      if (game.netNote === lost) game.netNote = '';
+    }, 10_000);
+  } else {
+    game.netNote = 'Reconnecting to the room…';
+    setTimeout(() => open(code, 'either', true), wait);
+  }
+}
+
+// A connection can die without closing, and the page would wait on it for good. During a night the room sends ten
+// states a second, so a long silence means it has gone: drop it and go back in.
+setInterval(() => {
+  const sock = ws;
+  if (sock?.readyState !== WebSocket.OPEN || game.S?.phase !== 'play' || performance.now() - heard < QUIET_MS) return;
+  ws = null;
+  sock.close();
+  retry(game.code);
+}, 1000);
 
 function fail(title: string, detail: string): void {
   game.S = null;
