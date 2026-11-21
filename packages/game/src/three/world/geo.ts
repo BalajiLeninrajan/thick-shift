@@ -17,6 +17,16 @@ const ACROSS = [
   [2, 0],
   [0, 1],
 ] as const;
+// three.js marks its kinds of object with a flag rather than a class to test.
+export const isMesh = (o: THREE.Object3D): o is THREE.Mesh => 'isMesh' in o && o.isMesh === true;
+// The value kept under a key, made and kept the first time it is asked for.
+export const getOr = <K, V>(map: Map<K, V>, key: K, make: () => V): V => {
+  const known = map.get(key);
+  if (known !== undefined) return known;
+  const made = make();
+  map.set(key, made);
+  return made;
+};
 export const rgbOf = (hex: THREE.ColorRepresentation): RGB => {
   const c = new THREE.Color(hex);
   return [c.r, c.g, c.b];

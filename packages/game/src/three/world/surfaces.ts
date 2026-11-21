@@ -5,9 +5,10 @@
 
 import { defined } from '@thick-shift/sim/check';
 import * as THREE from 'three';
+import { getOr } from './geo';
 import { roomData } from './sight';
 import type { Look, Maps, Painter } from './tex';
-import { cycle, fbm, mixc, paint } from './tex';
+import { cycle, FIELD, fbm, mixc, paint } from './tex';
 
 // Which surfaces a room wears (LOOK): sheet metal all over, or a painter from FLOOR, WALL and CEIL for each. skirt and
 // frame are trim colours; dado: a corridor wall's lower colour.
@@ -31,12 +32,12 @@ export const SPAN = 4;
 const M = 512 / SPAN; // pixels per metre across
 
 // Noise fields shared by all the painters: broad, medium, patchy and fine.
-const BROAD = fbm(256, 3, 5, 11),
-  MID = fbm(256, 7, 4, 23),
-  PATCH = fbm(256, 2, 3, 37),
-  FINE = fbm(256, 110, 1, 51);
+const BROAD = fbm(FIELD, 3, 5, 11),
+  MID = fbm(FIELD, 7, 4, 23),
+  PATCH = fbm(FIELD, 2, 3, 37),
+  FINE = fbm(FIELD, 110, 1, 51);
 // Flaking: small chips that gather where the broad field is high, so wear comes in clusters and not evenly.
-const FLAKE = fbm(256, 16, 3, 71).map((v, i) => v * 0.55 + defined(BROAD[i], 'a noise texel') * 0.45);
+const FLAKE = fbm(FIELD, 16, 3, 71).map((v, i) => v * 0.55 + defined(BROAD[i], 'a noise texel') * 0.45);
 
 // The dirt every surface has: ground-in grime in patches and a fine speckle.
 function dirt(p: Painter, k = 1): void {
@@ -67,7 +68,7 @@ const scuffs = (p: Painter, n: number, col: string, len = 40): void => {
     );
   }
 };
-function cracks(p: Painter, n: number, col = '#07070a'): void {
+function cracks(p: Painter, n: number): void {
   for (let i = 0; i < n; i++) {
     let x = p.rnd() * p.s,
       y = p.rnd() * p.s,
@@ -79,7 +80,7 @@ function cracks(p: Painter, n: number, col = '#07070a'): void {
       y += Math.sin(a) * 16;
       pts.push([x, y]);
     }
-    p.line(pts, 1.4, col, 0.1, 0.95, 0.8);
+    p.line(pts, 1.4, '#07070a', 0.1, 0.95, 0.8);
   }
 }
 
@@ -369,7 +370,7 @@ function peel(p: Painter, lo = 0.62, under = '#8f887a'): void {
   p.wash(FLAKE, lo, lo + 0.015, under, 1, 0.3, 0.95);
   p.wash(FLAKE, lo - 0.02, lo, '#ffffff', 0.22, 0.62, null); // the lifted edge catches the light
 }
-// A band of colour from height a to b (metres), with a darker line where it meets the next.
+// A band of colour from height a to b (metres).
 const band = (p: Painter, Y: (m: number) => number, a: number, b: number, col: string, rough: number | null): void => {
   p.fill(0, Y(b), p.s, Y(a) - Y(b), col, null, rough);
 };
@@ -618,13 +619,7 @@ export function surfaces(): Materials {
   const std = (maps: Maps, metalness = 0): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial({ ...maps, roughness: 1, metalness });
   const sheet = std(metal(), 0.55),
     made = new Map<string, THREE.MeshStandardMaterial>();
-  const once = (key: string, make: () => THREE.MeshStandardMaterial): THREE.MeshStandardMaterial => {
-    const known = made.get(key);
-    if (known) return known;
-    const mat = make();
-    made.set(key, mat);
-    return mat;
-  };
+  const once = (key: string, make: () => THREE.MeshStandardMaterial): THREE.MeshStandardMaterial => getOr(made, key, make);
   // LOOK has one entry for each room
   const rooms = LOOK.map((look, i) => {
     const H = roomData(i).h;
