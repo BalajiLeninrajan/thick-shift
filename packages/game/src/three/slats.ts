@@ -7,6 +7,7 @@
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { Me } from '../types';
+import { SCREEN_VERT, screenTri } from './post';
 
 // Render orders, for the transparent pass: after everything else in the scene (guard.ts's name tags are 5, the rest
 // 0), and the hands after the slats. The slats are drawn without a depth test, so whatever comes after them is on top.
@@ -26,21 +27,17 @@ void main() {
 }`;
 
 export function createSlats(scene: THREE.Scene) {
-  // One triangle that covers the screen, as in post.ts.
-  const tri = new THREE.BufferGeometry();
-  tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
-  tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
   // Transparent, so it is drawn after the solid things, and its render order puts it after the glows (the wall
   // lights' halos, the batteries' pulse, the dust) too.
   const mat = new THREE.ShaderMaterial({
     uniforms: { uShow: { value: 0 } },
-    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4( position.xy, 0., 1. ); }',
+    vertexShader: SCREEN_VERT,
     fragmentShader: FRAG,
     transparent: true,
     depthTest: false,
     depthWrite: false,
   }) as THREE.ShaderMaterial & { uniforms: { uShow: THREE.IUniform<number> } };
-  const slats = new THREE.Mesh(tri, mat);
+  const slats = new THREE.Mesh(screenTri(), mat);
   slats.name = 'locker slats';
   slats.frustumCulled = false;
   slats.renderOrder = SLATS_ORDER;

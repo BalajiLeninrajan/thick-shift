@@ -29,8 +29,7 @@ const QUALITY: Record<QualityName, Quality> = {
 };
 // For ?q=, which is anything typed into the address bar, or null when it is not there.
 const isQuality = (name: string | null): name is QualityName => name !== null && Object.hasOwn(QUALITY, name);
-// three.js marks its kinds of object with a flag rather than a class to test.
-const isMesh = (o: THREE.Object3D): o is THREE.Mesh => 'isMesh' in o && o.isMesh === true;
+// three.js marks its lights with a flag rather than one class to test.
 const isLight = (o: THREE.Object3D): o is THREE.Light => 'isLight' in o && o.isLight === true;
 // Start on high and drop to low if frames come slower than this, measured
 // over SAMPLE frames once the first WARMUP (shader compiles) are out of the way.
@@ -39,6 +38,14 @@ const SLOW_MS = 26,
   SAMPLE = 60;
 const EXPOSURE = 1.5;
 const OUTLINE_LAYER = 7; // marked meshes are put on this layer for the mask pass
+// One triangle that covers the screen, and the vertex shader that draws it there with vUv 0 to 1 across the picture.
+export function screenTri(): THREE.BufferGeometry {
+  const tri = new THREE.BufferGeometry();
+  tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+  tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
+  return tri;
+}
+export const SCREEN_VERT = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4( position.xy, 0., 1. ); }';
 const MASK_VERT = `
 #include <common>
 #include <skinning_pars_vertex>
@@ -165,7 +172,7 @@ export function createPost(renderer: THREE.WebGLRenderer, torch: THREE.SpotLight
   function drawMask(scene: THREE.Scene, camera: THREE.PerspectiveCamera, marks: OutlineMark[]): boolean {
     for (const m of marks)
       m.obj.traverse(o => {
-        if (!isMesh(o) || o.layers.isEnabled(OUTLINE_LAYER)) return;
+        if (!(o instanceof THREE.Mesh) || o.layers.isEnabled(OUTLINE_LAYER)) return;
         const mm = maskMatOf(o);
         mm.uniforms.uCol.value.set(m.col[0], m.col[1], m.col[2], m.a);
         swapped.set(o, o.material);
@@ -217,16 +224,12 @@ export function createPost(renderer: THREE.WebGLRenderer, torch: THREE.SpotLight
       uOutline: { value: 0 },
       uTexel: { value: new THREE.Vector2() },
     },
-    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4( position.xy, 0., 1. ); }',
+    vertexShader: SCREEN_VERT,
     fragmentShader: FRAG,
     depthTest: false,
     depthWrite: false,
   }) as ScreenMaterial;
-  // one triangle that covers the screen
-  const tri = new THREE.BufferGeometry();
-  tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
-  tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
-  const screen = new THREE.Mesh(tri, mat),
+  const screen = new THREE.Mesh(screenTri(), mat),
     flat = new THREE.Camera();
   screen.frustumCulled = false;
   renderer.toneMapping = THREE.NoToneMapping;
