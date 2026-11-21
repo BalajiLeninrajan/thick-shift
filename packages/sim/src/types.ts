@@ -60,11 +60,11 @@ export interface Guard extends Joined {
 export type Player = Joined & Partial<Omit<Guard, keyof Joined>>;
 
 // What a mascot is doing. rest: standing on its mark, switched off. roam: walking somewhere. search: going to look at
-// something it heard or lost. hunt: after a guard. windup and charge: Tank's run. stun: Tank after hitting a wall.
+// something it heard or lost. hunt: after a guard. windup and charge: Stompy's run. stun: Stompy after hitting a wall.
 // feast: sitting on a guard it flattened. siege: banging on a shut booth door.
 export type MascotState = 'rest' | 'roam' | 'search' | 'hunt' | 'windup' | 'charge' | 'stun' | 'feast' | 'siege';
 
-// The cast, by their place in MASC (config.ts): Big Biggs, Madame Flan, Squish, Tank. Every table kept per mascot
+// The cast, by their place in MASC (config.ts): Big Biggs, Madame Flan, Squish, Stompy. Every table kept per mascot
 // is a PerMascot, so reading one by a MascotIndex always finds an entry.
 export type MascotIndex = 0 | 1 | 2 | 3;
 export type PerMascot<T> = readonly [T, T, T, T];

@@ -95,12 +95,12 @@ describe('adoptFloor', () => {
   function guestState() {
     const { S } = start(5, 2, 3);
     const T = JSON.parse(JSON.stringify(S)) as State;
-    const [biggs, flan, squish, tank] = T.m;
-    assert(biggs && flan && squish && tank, 'the night has all four mascots');
+    const [biggs, flan, squish, stompy] = T.m;
+    assert(biggs && flan && squish && stompy, 'the night has all four mascots');
     biggs.st = 'hunt';
     flan.st = 'charge';
     squish.st = 'feast';
-    tank.st = 'rest';
+    stompy.st = 'rest';
     delete T.batN;
     delete T.waveAt;
     delete T.toys;
@@ -128,7 +128,7 @@ describe('adoptFloor', () => {
     expect(sim.brains[1]).toMatchObject({ tgt: null, last: { x: REST[1].x, z: REST[1].z }, woke: true });
     expect(sim.brains[2]?.woke).toBe(true);
     expect(sim.brains[3]?.woke).toBe(false);
-    expect(sim.brains[3]?.cool).toBeGreaterThan(0); // Tank waits a full gap before it charges
+    expect(sim.brains[3]?.cool).toBeGreaterThan(0); // Stompy waits a full gap before it charges
     // Five batteries for two guards, one lying about: four due back, in 5 to 50 s, soonest first.
     expect(sim.batTimers).toHaveLength(4);
     expect([...sim.batTimers].sort((a, b) => a - b)).toEqual(sim.batTimers);
@@ -160,7 +160,7 @@ describe('adoptFloor', () => {
 
   it('gives each mascot the timers and wind a seeded stream says', () => {
     // The idle night below ends before most of these timers play out, so pin them here: the search timer for the
-    // lost charge, the feast timer, the rest timer, Tank's full charge gap (CHARGE_GAP, 10 s) and the hunt's wind.
+    // lost charge, the feast timer, the rest timer, Stompy's full charge gap (CHARGE_GAP, 10 s) and the hunt's wind.
     const { sim, T } = adopt(7);
     const r = (v: number) => Math.round(v * 1000) / 1000;
     expect(sim.brains[3]?.cool).toBe(10);

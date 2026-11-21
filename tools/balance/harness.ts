@@ -115,7 +115,7 @@ interface BotState extends DoorTimes {
   stirred?: boolean;
   stirAt?: number;
   chased?: number | null;
-  dodge?: { side: 1 | -1; at: number }; // the side stepped to out of Tank's way, and when
+  dodge?: { side: 1 | -1; at: number }; // the side stepped to out of Stompy's way, and when
   holed?: number;
   seenAt?: number;
   hideCool?: number;
@@ -223,7 +223,7 @@ const pick = <T>(list: readonly T[]): T => defined(list[(random() * list.length)
 const MOVING: MascotState[] = ['roam', 'search', 'hunt', 'charge'],
   COMING: MascotState[] = ['hunt', 'windup', 'charge'];
 const BOOTH_MID = { x: 21, z: 40.5 };
-// When Biggs, Flan and Squish can wake: once the night plus the guards is more than 1 plus this. Tank waits for night 2.
+// When Biggs, Flan and Squish can wake: once the night plus the guards is more than 1 plus this. Stompy waits for night 2.
 const WAKES_WITH: readonly [number, number, number] = [0, 0, 1];
 // How fast a mascot comes with a torch on it, as a share of its pace, by its rot.
 const LIT_PACE = [0.05, 0.3, 0.5];
@@ -825,17 +825,17 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   st.chased ??= S.t;
   const d = dist(bot, h),
     sight = M.sees(bot.x, bot.z, h.x, h.z, S.doors);
-  // Tank winding up or already coming: get out of its line.
+  // Stompy winding up or already coming: get out of its line.
   // Something wandering close that is not after anyone yet: a Mini Biggs thrown away from here may take it off.
   if (!COMING.includes(h.st)) lure(S, bot, objective?.use ? objective.use.stand || front(objective.use.at) : objective?.goal || bot);
-  const tank =
+  const stompy =
     sk.dodges &&
     known(S, bot, 1.5).find(
       k => k.i === 3 && (k.st === 'windup' || k.st === 'charge') && ((st.dodge && S.t - st.dodge.at < 3) || M.sees(bot.x, bot.z, k.x, k.z, S.doors))
     );
-  if (tank) {
+  if (stompy) {
     // Sideways, to whichever side has more room, and the same side until it has gone past.
-    const line = ang(tank, bot),
+    const line = ang(stompy, bot),
       room = (s: number) => {
         let d = 0;
         while (d < 4 && M.walkable(bot.x + Math.sin(line + s * 1.57) * (d + 0.5), bot.z + Math.cos(line + s * 1.57) * (d + 0.5), M.PLAYER_R, S.doors)) d += 0.5;

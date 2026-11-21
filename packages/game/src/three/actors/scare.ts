@@ -1,6 +1,6 @@
 // The catch, as the guard who was caught sees it. About a second and a half:
 // the camera is taken from them and dragged to the mascot's face (or, for
-// Tank at the end, the worm's mouth), the mascot plays its scare pose and
+// Stompy at the end, the worm's mouth), the mascot plays its scare pose and
 // lunges, then the camera is dropped to the floor and left looking up at it
 // as it sits down. After that player.ts has the camera back, where we left it.
 import type { MascotIndex, PerMascot } from '@thick-shift/sim/types';
@@ -16,8 +16,8 @@ import { wrap } from './track';
 const ORDER = ['grab', 'face', 'bite', 'drop', 'floor', 'end'] as const;
 export type Cue = (typeof ORDER)[number];
 export const CUES = { grab: 0, face: 0.12, bite: 0.62, drop: 1.05, floor: 1.3, end: 1.5 } satisfies Record<Cue, number>;
-// How close the camera is held to the face, by mascot (Big Biggs, Madame Flan, Squish, Tank) and stage: near enough
-// that the face (or the mouth) is all there is. Tank's worm mouth is small.
+// How close the camera is held to the face, by mascot (Big Biggs, Madame Flan, Squish, Stompy) and stage: near enough
+// that the face (or the mouth) is all there is. Stompy's worm mouth is small.
 const FILL: PerMascot<PerStage<number>> = [
   [0.95, 0.95, 0.8],
   [0.8, 0.8, 0.6],

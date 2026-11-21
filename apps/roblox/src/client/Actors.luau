@@ -21,7 +21,7 @@ local LOOK = {
 	{ body = { 2.0, 1.7, 1.6 }, head = 1.15, legs = 0.55, col = "#9a7fc4", snout = { 0.9, 0.5, 0.45 } }, -- Big Biggs, hippo
 	{ body = { 1.6, 1.9, 1.3 }, head = 0.95, legs = 0.5, col = "#b98a6e", snout = { 0.6, 0.35, 0.35 }, tusks = true }, -- Madame Flan, walrus
 	{ body = { 1.7, 1.0, 1.5 }, head = 1.0, legs = 0.35, col = "#5f8f66", snout = { 0.9, 0.25, 0.3 } }, -- Squish, toad
-	{ body = { 1.5, 1.5, 2.2 }, head = 0.9, legs = 0.6, col = "#7d8299", snout = { 0.45, 0.4, 0.5 }, horn = true }, -- Tank, rhino
+	{ body = { 1.5, 1.5, 2.2 }, head = 0.9, legs = 0.6, col = "#7d8299", snout = { 0.45, 0.4, 0.5 }, horn = true }, -- Stompy, rhino
 }
 local EYES = { Color3.fromRGB(240, 240, 230), Color3.fromRGB(255, 210, 60), Color3.fromRGB(255, 40, 30) } -- by rot
 
