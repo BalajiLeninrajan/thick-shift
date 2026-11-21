@@ -118,21 +118,18 @@ def make_materials():
 BUILDERS = []
 
 
-def prop(name, mount='floor', notes='', grime=.3):
+def prop(name, mount='floor', notes=''):
     """Register a function that builds one prop into the Prop it is handed."""
     def deco(fn):
-        BUILDERS.append((name, mount, notes, grime, fn))
+        BUILDERS.append((name, mount, notes, fn))
         return fn
     return deco
 
 
 class Prop:
-    registry = []
-
-    def __init__(self, name, mount='floor', notes='', parent=None, pivot=(0, 0, 0), grime=.3):
+    def __init__(self, name, mount='floor', notes='', parent=None, pivot=(0, 0, 0)):
         self.name, self.mount, self.notes, self.parent = name, mount, notes, parent
         self.pivot = Vector(pivot)
-        self.grime = grime
         self.bm = bmesh.new()
         self.l_uv = self.bm.loops.layers.uv.new('UVMap')
         self.l_col = self.bm.loops.layers.float_color.new('Color')
@@ -140,11 +137,10 @@ class Prop:
         self.stack = [Matrix.Identity(4)]
         self.kids = []
         self.rng = np.random.default_rng(abs(hash_name(name)))
-        if parent is None: Prop.registry.append(self)
-        else: parent.kids.append(self)
+        if parent is not None: parent.kids.append(self)
 
     def child(self, name, pivot):
-        return Prop(name, parent=self, pivot=pivot, grime=self.grime)
+        return Prop(name, parent=self, pivot=pivot)
 
     @property
     def M(self): return self.stack[-1]
@@ -215,7 +211,7 @@ class Prop:
         tmp.free()
         return self.add(vs, fs, M=xf(at, rot), **st)
 
-    def lathe(self, prof, at=(0, 0, 0), rot=(0, 0, 0), scale=1, segs=12, bump=None, arc=360, disc=False, wrap=False, **st):
+    def lathe(self, prof, at=(0, 0, 0), rot=(0, 0, 0), scale=1, segs=12, bump=None, disc=False, wrap=False, **st):
         """Spin a profile of (radius, z) points about z. bump: (metres, frequency)
         of lumpiness. disc: map art onto it looking down the axis (for eyes, dials).
         wrap: wind art once round it (for labels)."""
@@ -231,23 +227,22 @@ class Prop:
         for (r0, z0), (r1, z1) in zip(prof, prof[1:]): length.append(length[-1] + math.hypot((r1 - r0) * sr, (z1 - z0) * sz))
         for j, (r, z) in enumerate(prof):
             for i in range(segs + 1):
-                a = D(arc) * i / segs
+                a = math.tau * i / segs
                 p = Vector((math.cos(a) * r, math.sin(a) * r, z))
                 if bump and r > 0:
-                    q = Vector((math.cos(D(arc) * (i % segs) / segs) * r * sx, math.sin(D(arc) * (i % segs) / segs) * r * sy, z * sz))
-                    k = 1 + bump[0] * noise.noise(q * bump[1] + Vector((3.1, 7.7, 1.3) if len(bump) < 3 else bump[2])) / max(r * sr, 1e-3)
+                    q = Vector((math.cos(math.tau * (i % segs) / segs) * r * sx, math.sin(math.tau * (i % segs) / segs) * r * sy, z * sz))
+                    k = 1 + bump[0] * noise.noise(q * bump[1] + Vector((3.1, 7.7, 1.3))) / max(r * sr, 1e-3)
                     p.x *= k; p.y *= k
-                vs.append(p); uv.append((.5 + p.x / (2 * rmax), .5 + p.y / (2 * rmax)) if disc else (i / segs, length[j] / length[-1]) if wrap else (D(arc) * rmax * sr * i / segs, length[j]))
+                vs.append(p); uv.append((.5 + p.x / (2 * rmax), .5 + p.y / (2 * rmax)) if disc else (i / segs, length[j] / length[-1]) if wrap else (math.tau * rmax * sr * i / segs, length[j]))
         for j in range(len(prof) - 1):
             for i in range(segs):
                 a, b = j * (segs + 1) + i, (j + 1) * (segs + 1) + i
                 fs.append([a, a + 1, b + 1, b])
         return self.add(vs, fs, uv=uv, M=xf(at, rot, scale), **st)
 
-    def cyl(self, r, h, at=(0, 0, 0), rot=(0, 0, 0), segs=12, r2=None, caps=True, **st):
+    def cyl(self, r, h, at=(0, 0, 0), rot=(0, 0, 0), segs=12, r2=None, **st):
         r2 = r if r2 is None else r2
-        prof = [(0, 0), (r, 0), (r2, h), (0, h)] if caps else [(r, 0), (r2, h)]
-        return self.lathe(prof, at, rot, segs=segs, **st)
+        return self.lathe([(0, 0), (r, 0), (r2, h), (0, h)], at, rot, segs=segs, **st)
 
     def ball(self, r, at=(0, 0, 0), rot=(0, 0, 0), segs=12, rings=7, bump=None, **st):
         """An ellipsoid; r is a radius or (rx, ry, rz)."""
@@ -375,7 +370,7 @@ class Prop:
                     if MATS[f.material_index] not in GLOW:
                         w = q[0] + self.pivot
                         k = 1 + .14 * noise.noise(w * 2.3) + .08 * noise.noise(w * 9)   # blotchy, never one flat tone
-                        if self.mount == 'floor': k *= 1 - self.grime * max(0, 1 - w.z / .3) ** 2   # floor dirt wicks up
+                        if self.mount == 'floor': k *= 1 - .3 * max(0, 1 - w.z / .3) ** 2   # floor dirt wicks up
                         col = Vector((col[0] * k, col[1] * k, col[2] * k, 1))
                     lp[l_col] = col
         bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
@@ -395,7 +390,6 @@ class Prop:
         ob = bpy.data.objects.new(self.name, me)
         bpy.context.scene.collection.objects.link(ob)
         ob.location = self.pivot if self.parent is None else self.pivot - self.parent.pivot
-        self.obj = ob
         for k in self.kids:
             k.finish(mats).parent = ob
         return ob

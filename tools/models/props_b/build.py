@@ -93,9 +93,9 @@ def build():
     common.reset()
     mats = kit.make_materials()
     props, failed = [], []
-    for name, mount, notes, grime, fn in BUILDERS:
+    for name, mount, notes, fn in BUILDERS:
         if only and name not in only: continue
-        p = Prop(name, mount, notes, grime=grime)
+        p = Prop(name, mount, notes)
         try: fn(p)
         except Exception:   # keep going, so one run shows every broken prop
             traceback.print_exc(); failed.append(name); continue
@@ -129,7 +129,7 @@ def shots(names, azs, spots):
     """Render each named prop alone from each azimuth, plus the close-ups.
 
     common.preview() re-opens the GLB and denoises for every picture, which is
-    slow for 36 props. This calls it once with no views (so the floor, camera
+    slow for every prop. This calls it once with no views (so the floor, camera
     and lamp are set up as it does it), then hides every other prop and moves
     the camera, with the scene kept in memory and the denoiser off."""
     common.preview(OUT, views=(), res=args.res, samples=args.samples, light=args.light)
