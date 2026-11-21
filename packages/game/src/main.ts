@@ -3,24 +3,23 @@
 import { dreadF } from '@thick-shift/sim';
 import type { State } from '@thick-shift/sim/types';
 import { ambience, SFX } from './audio';
-import { client, game } from './state';
+import { CATCH_S, client, game, LINGER_S } from './state';
 import type { FloorModule } from './types';
 import { syncOverlay } from './ui';
 
 // window.ts, the ?debug handle for poking at the game from the console.
 const debugWindow = window as Window & { ts?: { game: object; client: object; floor?: object } };
-const FLOOR_HOLD_MS = 3000; // the catch is 1.5 s (CUES.end in three/actors/scare.ts); the rest is lying there
 
 // Every sound with a place is played there by three/sound.ts. The win jingle has none, so it plays here.
-// The catch takes 1.5 s, and then you lie looking up at it for a while before the end card comes. Timed in
-// milliseconds, since frames come at whatever rate the screen runs; three/app.ts pushes holdUntil on while
-// its catch is still playing.
+// The end card waits out the catch and the look up at it afterwards. three/app.ts pushes holdUntil on while its catch
+// is still playing, however long a slow machine takes over it.
+let lastEv = 0; // id of the last event we reacted to
 function reactToEvents(S: State): void {
   for (const e of S.evs) {
-    if (e.id <= client.lastEv) continue;
-    client.lastEv = e.id;
+    if (e.id <= lastEv) continue;
+    lastEv = e.id;
     if (e.type === 'win') SFX.win();
-    if (e.type === 'scare') client.holdUntil = performance.now() + FLOOR_HOLD_MS;
+    if (e.type === 'scare') client.holdUntil = performance.now() + (CATCH_S + LINGER_S) * 1000;
   }
 }
 

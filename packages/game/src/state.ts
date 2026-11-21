@@ -32,15 +32,18 @@ export function currentState(): State {
 }
 
 export interface Client {
-  lastEv: number;
   holdUntil: number;
 }
 
 // client: what this browser is looking at. Never sent over the network.
 export const client: Client = {
-  lastEv: 0, // id of the last event we reacted to
   holdUntil: 0, // performance.now() before which the end card waits, for the catch and a look at what sat on you
 };
+
+// A catch, in seconds: how long it plays, and how long the caught guard then lies looking up at what sat on them
+// before the night's end card.
+export const CATCH_S = 1.5,
+  LINGER_S = 1.5;
 
 export interface Platform {
   fixedRoom: boolean;
@@ -49,7 +52,7 @@ export interface Platform {
 }
 
 // platform: what changes when an app runs the game inside something else, such as a Discord Activity
-// (apps/discord). Set by that app's src/boot.ts before start(). The web game leaves it as it is.
+// (apps/discord/src/activity.ts). Set by the app before start(). The web game leaves it as it is.
 export const platform: Platform = {
   fixedRoom: false, // the room comes from outside, and everyone opens the same one (net.ts)
   title: null, // () => screen ({ key, html, wire }), shown in place of the title screen (ui.ts)
