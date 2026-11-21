@@ -629,12 +629,15 @@ export function createHud(stage: Element, player: PlayerHandle) {
 
   /* ---------- once a frame ---------- */
 
-  let lastT = 1e9,
-    was = { bat: 1, power: 100, dry: 0, empty: 0 },
+  let was = { bat: 1, power: 100, dry: 0, empty: 0 },
     calledAt = -1e9;
   return {
     root,
     say,
+    // A night began (app.ts): the warnings about the torch and the power can be given again.
+    reset(): void {
+      was = { bat: 1, power: 100, dry: player.me.dry, empty: player.me.empty };
+    },
     // Someone flat called out: their compass mark pulses for a few seconds.
     ping(id: string): void {
       if (id === game.myId) calledAt = performance.now();
@@ -648,8 +651,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
         bat = mine?.bat ?? 1;
       const mates: Guard[] = S.players.filter(isPlaced).filter(p => p.id !== game.myId);
       root.hidden = S.phase !== 'play' || !!scared;
-      if (S.t < lastT) was = { bat: 1, power: 100, dry: me.dry, empty: me.empty }; // a night began
-      lastT = S.t;
+
       for (const t of live) if (now > t.until) drop(t);
       live = live.filter(t => !(now > t.until));
       if (root.hidden) return;

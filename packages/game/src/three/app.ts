@@ -56,7 +56,7 @@ function create() {
   let last = performance.now(),
     lastT = 1e9,
     lastNight = 0,
-    lastEv = 0,
+    lastEv = -1,
     shown = false,
     seat: { x: number; z: number; yaw: number; pitch: number; back: number } | null = null;
 
@@ -190,11 +190,14 @@ function create() {
       if ((S.night !== lastNight || S.t < lastT - 3) && mine?.x != null) {
         player.reset(mine);
         actors.reset();
+        hud.reset();
       }
       if (mine?.x != null) {
         lastT = S.t;
         lastNight = S.night;
       }
+      // Created part way through a night: what has happened has happened (sound.ts does the same).
+      if (lastEv < 0) lastEv = S.evId;
       for (const e of S.evs)
         if (e.id > lastEv) {
           lastEv = e.id;
