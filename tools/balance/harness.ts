@@ -1315,6 +1315,45 @@ export interface PlayOptions {
   onStep?: (S: NightState) => void;
 }
 
+// One guard's tick: a flat one calls for help, the rest look, think and act.
+function tick(S: NightState, bot: Bot, team: Team, tickNo: number): void {
+  const me = guardOf(bot);
+  bot.bat = me.bat;
+  if (me.flat) {
+    if (!bot.flat) {
+      bot.flat = true;
+      bot.x = me.x;
+      bot.z = me.z;
+    }
+    if (S.t - (bot.called || -9) > F.CALL_GAP) {
+      bot.called = S.t;
+      api.actFloor(sim, S, bot.id, { t: 'call' });
+    }
+    return;
+  }
+  bot.flat = false;
+  if (me.hid >= 0) {
+    bot.x = me.x;
+    bot.z = me.z;
+  }
+  bot.want = { on: false };
+  if ((tickNo + bot.i) % 3 === 0) perceive(S, bot);
+  bot.policy.think(S, bot, team);
+  act(S, bot);
+}
+// The --steps line: the time, where each guard is and what they want, then each mascot (brains: and its brain).
+function traceLine(S: NightState, team: Team, brains: boolean): string {
+  const guards = team.bots.map(b => {
+    const doing = b.want.use?.key || (b.want.goal ? `go ${b.want.goal.x.toFixed(1)},${b.want.goal.z.toFixed(1)}` : '-');
+    return `${b.flat ? 'FLAT' : ''}(${b.x.toFixed(1)},${b.z.toFixed(1)}) bat ${b.bat.toFixed(2)}${b.on ? '*' : ''} ${doing}`;
+  });
+  const mascots = S.m.map(m => {
+    const brain = brains ? JSON.stringify({ ...brainOf(sim, m.i), path: brainOf(sim, m.i).path.length }) : '';
+    return `${m.st}${m.lit ? '*' : ''}(${m.x.toFixed(0)},${m.z.toFixed(0)})${brain}`;
+  });
+  return `${S.t.toFixed(0).padStart(6)}  ${guards.join(' ')}  |  ${mascots.join(' ')}${S.stir ? '  STIR' : ''}`;
+}
+
 export function play(sc: Scenario, seed: number, { trace = 0, brains = false, onStep }: PlayOptions = {}): Outcome {
   seedRandom(seed);
   const S = newState('TEST');
@@ -1376,29 +1415,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
       assignFaults(S, team);
     }
     for (const bot of team.bots) {
-      const me = guardOf(bot);
-      bot.bat = me.bat;
-      if (me.flat) {
-        if (!bot.flat) {
-          bot.flat = true;
-          bot.x = me.x;
-          bot.z = me.z;
-        }
-        if (S.t - (bot.called || -9) > F.CALL_GAP) {
-          bot.called = S.t;
-          api.actFloor(sim, S, bot.id, { t: 'call' });
-        }
-        continue;
-      }
-      bot.flat = false;
-      if (me.hid >= 0) {
-        bot.x = me.x;
-        bot.z = me.z;
-      }
-      bot.want = { on: false };
-      if ((tickNo + bot.i) % 3 === 0) perceive(S, bot);
-      bot.policy.think(S, bot, team);
-      act(S, bot);
+      tick(S, bot, team, tickNo);
       if (bot.still > 45) {
         fail(sc.name, `seed ${seed}: guard ${bot.i} could not move at ${bot.x.toFixed(1)}, ${bot.z.toFixed(1)} for 45 s`);
         bot.still = 0;
@@ -1406,24 +1423,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     }
     api.stepFloor(sim, S, now);
     onStep?.(S);
-    if (trace === 2 && tickNo % 10 === 0)
-      console.log(
-        `${S.t.toFixed(0).padStart(6)}  ` +
-          team.bots
-            .map(
-              b =>
-                `${b.flat ? 'FLAT' : ''}(${b.x.toFixed(1)},${b.z.toFixed(1)}) bat ${b.bat.toFixed(2)}${b.on ? '*' : ''} ${b.want.use?.key || (b.want.goal ? `go ${b.want.goal.x.toFixed(1)},${b.want.goal.z.toFixed(1)}` : '-')}`
-            )
-            .join(' ') +
-          '  |  ' +
-          S.m
-            .map(
-              m =>
-                `${m.st}${m.lit ? '*' : ''}(${m.x.toFixed(0)},${m.z.toFixed(0)})${brains ? JSON.stringify({ ...brainOf(sim, m.i), path: brainOf(sim, m.i).path.length }) : ''}`
-            )
-            .join(' ') +
-          (S.stir ? '  STIR' : '')
-      );
+    if (trace === 2 && tickNo % 10 === 0) console.log(traceLine(S, team, brains));
 
     // Measure.
     let anyHunted = false;
