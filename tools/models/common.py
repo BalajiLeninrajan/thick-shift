@@ -129,7 +129,7 @@ def report(name):
 VIEWS = {'front': (0, .55, 1), 'three_quarter': (35, .6, 1), 'side': (90, .55, 1), 'back': (180, .55, 1), 'low': (15, .12, .8)}
 
 
-def preview(name, views=('front', 'three_quarter', 'side', 'back'), res=640, samples=24, light='flashlight', focus=None, tag=''):
+def preview(name, views=('front', 'three_quarter', 'side', 'back'), res=640, samples=24, light='flashlight', focus=None, tag='', pose=None):
     """Render packages/game/public/models/<name>.glb as the game will load it, to
     tools/models/previews/<name>_<view><tag>.png. Always look at the result.
 
@@ -138,9 +138,15 @@ def preview(name, views=('front', 'three_quarter', 'side', 'back'), res=640, sam
            checking shape and texture.
     focus: (x, y, z) in Blender axes and a radius, e.g. ((0, -.4, 2.1), .6),
            to frame a detail such as the face. Default frames the whole model.
+    pose:  a function given the loaded objects, to turn joints before the
+           model is framed, so a seam that opens when the game moves a joint
+           shows up.
     """
     path = os.path.join(MODELS, name + '.glb')
     objs = load_glb(path)
+    if pose:
+        pose(objs)
+        bpy.context.view_layer.update()
     lo, hi = bounds(objs)
     centre, radius = ((lo + hi) / 2, max((hi - lo).length / 2, .2)) if focus is None else (Vector(focus[0]), focus[1])
     sc = bpy.context.scene

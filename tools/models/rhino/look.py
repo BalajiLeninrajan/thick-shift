@@ -22,14 +22,10 @@ if 'focus' in opt:
     kw['focus'] = (tuple(f[:3]), f[3])
 if 'pose' in opt:
     pose = {k: [math.radians(float(v)) for v in rot.split(',')] for k, rot in (p.split(':') for p in opt['pose'].split(';'))}
-    load = common.load_glb
-    def posed(path):
-        objs = load(path)
+    def posed(objs):
         for o in objs:
             if o.name in pose:
                 o.rotation_mode = 'XYZ'
                 o.rotation_euler = Euler(pose[o.name])
-        common.bpy.context.view_layer.update()
-        return objs
-    common.load_glb = posed
+    kw['pose'] = posed
 common.preview(name, **kw)
