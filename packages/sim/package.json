@@ -9,10 +9,7 @@
     "./map": "./src/map.ts",
     "./dressing": "./src/dressing.ts",
     "./data": "./src/data.ts",
-    "./random": "./src/random.ts",
-    "./types": "./src/types.ts",
-    "./session": "./src/session.ts",
-    "./sim": "./src/sim.ts"
+    "./types": "./src/types.ts"
   },
   "scripts": {
     "test": "vitest run"

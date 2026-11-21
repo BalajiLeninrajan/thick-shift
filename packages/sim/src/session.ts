@@ -25,7 +25,7 @@ export function leaveFloor(sim: Sim, S: State, id: string): void {
 
 // The next night, from the card between nights: night 1 from the lobby, the next one after a win, the same one again
 // after everyone went flat, and night 1 of a new run after the last.
-export function goFloor(sim: Sim, S: State): void {
+function goFloor(sim: Sim, S: State): void {
   if (S.phase === 'lobby') startFloorNight(sim, S, 1);
   else if (S.phase === 'win') startFloorNight(sim, S, S.night + 1);
   else if (S.phase === 'dead') startFloorNight(sim, S, S.night);
@@ -69,7 +69,7 @@ const flag = (v: unknown, was: boolean): boolean => (typeof v === 'boolean' ? v 
 const within = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && v >= lo && v <= hi;
 
 // A dev cheat from pid's browser. Switches apply whenever there is a room; the rest only during a night.
-export function devFloor(sim: Sim, S: State, pid: string, d: DevCommand): void {
+function devFloor(sim: Sim, S: State, pid: string, d: DevCommand): void {
   if ('set' in d) {
     const set: Partial<Record<keyof Dev, unknown>> = typeof d.set === 'object' && d.set ? d.set : {},
       dev: Dev = { ...DEV_OFF, ...S.dev };
