@@ -13,16 +13,14 @@
       "!pnpm-lock.yaml"
     ]
   },
-  // Set close to the code as it was written, so the first reformat stays small. Measured on the whole repo: lineWidth
-  // 120, 140, 160 and 200 changed 13.5k, 12.9k, 12.5k and 12.2k lines; most of the change is one-line blocks being
-  // split, which no setting avoids.
+  // Close to how the code was written. Most of what a narrower width changes is one-line blocks being split.
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 160 },
   "javascript": {
     "formatter": { "quoteStyle": "single", "semicolons": "always", "arrowParentheses": "asNeeded", "bracketSpacing": true, "trailingCommas": "es5" }
   },
   "json": { "formatter": { "trailingCommas": "none" } },
-  // styles.css keeps one rule to a line on purpose. Formatting it would grow it five-fold (1,550 changed lines) for
-  // no gain, so it is linted but not formatted.
+  // styles.css keeps one rule to a line on purpose. Formatting it would grow it five-fold, so it is linted but not
+  // formatted.
   "css": { "formatter": { "enabled": false } },
   "html": { "formatter": { "enabled": false } },
   "markdown": { "formatter": { "enabled": false } },
