@@ -414,22 +414,22 @@ class Mesh:
                 uvs = [(u0 + (u1 - u0) * x, v0 + (v1 - v0) * y) for x, y in ((a, e), (b, e), (b, g), (a, g))]
                 self._f([self._v(p) for p in pts], uvs, mat, tint)
 
-    def disc(self, name, c, r, n=(0, -1, 0), up=(0, 0, 1), segs=24, off=.0015):
+    def disc(self, name, c, r, n=(0, -1, 0), segs=24, off=.0015):
         """Round artwork (a dial, a gauge): the circle inscribed in the picture."""
         u0, v0, u1, v1 = atlas()['decals'][name]
-        n = Vector(n).normalized(); up = Vector(up).normalized()
-        right = (-n).cross(up).normalized(); up = right.cross(-n)
+        n = Vector(n).normalized()
+        right = (-n).cross(Vector((0, 0, 1))).normalized(); up = right.cross(-n)
         c = Vector(c) + n * off
         A = [i * math.tau / segs for i in range(segs)]
         self._f([self._v(c + (right * math.cos(a) + up * math.sin(a)) * r) for a in A],
                 [((u0 + u1) / 2 + math.cos(a) * (u1 - u0) / 2, (v0 + v1) / 2 + math.sin(a) * (v1 - v0) / 2) for a in A], 'decal', None)
 
-    def shape(self, name, c, w, h, outline, n=(0, -1, 0), up=(0, 0, 1), off=.0015):
+    def shape(self, name, c, w, h, outline, n=(0, -1, 0), off=.0015):
         """Artwork cut to an outline [(x, y), ...] given in 0..1 of the picture
         (a shield badge, a rounded patch)."""
         u0, v0, u1, v1 = atlas()['decals'][name]
-        n = Vector(n).normalized(); up = Vector(up).normalized()
-        right = (-n).cross(up).normalized(); up = right.cross(-n)
+        n = Vector(n).normalized()
+        right = (-n).cross(Vector((0, 0, 1))).normalized(); up = right.cross(-n)
         c = Vector(c) + n * off
         self._f([self._v(c + right * w * (x - .5) + up * h * (y - .5)) for x, y in outline],
                 [(u0 + (u1 - u0) * x, v0 + (v1 - v0) * y) for x, y in outline], 'decal', None)
@@ -444,14 +444,14 @@ class Mesh:
         p = Vector(p); n = Vector(n).normalized()
         self.cyl(p - n * .002, p + n * r * .6, r, 'steel', tint, n=6)
 
-    def wrap(self, name, r, z0, z1, a0, a1, at=(0, 0, 0), n=10, cut=False, off=.0012):
+    def wrap(self, name, r, z0, z1, a0, a1, n=10, cut=False, off=.0012):
         """Artwork wrapped round a cylinder about local Z, from angle a0 to a1
         (degrees, counter-clockwise from +X seen from above; -90 is the front)."""
         u0, v0, u1, v1 = atlas()['cutouts' if cut else 'decals'][name]
-        at = Vector(at); r += off; mat = 'cutout' if cut else 'decal'
+        r += off; mat = 'cutout' if cut else 'decal'
         for i in range(n):
             A = [math.radians(a0 + (a1 - a0) * k / n) for k in (i, i + 1)]
-            pts = [at + Vector((math.cos(A[x]) * r, math.sin(A[x]) * r, z)) for x, z in ((0, z0), (1, z0), (1, z1), (0, z1))]
+            pts = [Vector((math.cos(A[x]) * r, math.sin(A[x]) * r, z)) for x, z in ((0, z0), (1, z0), (1, z1), (0, z1))]
             ua, ub = u0 + (u1 - u0) * i / n, u0 + (u1 - u0) * (i + 1) / n
             self._f([self._v(p) for p in pts], [(ua, v0), (ub, v0), (ub, v1), (ua, v1)], mat, None, True)
 
