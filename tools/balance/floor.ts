@@ -146,7 +146,7 @@ if (!isMainThread) {
     'end',
     'flat/g',
     'peel',
-    'B F S T %',
+    'B F S St %',
     'warn s',
     '<1.5s',
     'hunted',
@@ -276,7 +276,7 @@ if (!isMainThread) {
   console.log(`
 win%    nights survived to 6 AM            end     mean second the night ended (420 is 6 AM)
 flat/g  flattenings per guard per night    peel    share of flattened guards who were peeled up
-B F S T share of flattenings by Biggs, Flan, Squish, Tank
+B F S St share of flattenings by Biggs, Flan, Squish, Stompy
 warn s  median seconds between a mascot being there to see or hear and it catching the guard; <1.5s is the share with less
 hunted  share of standing time with something after you    calms   stretches of 20 s or more with nothing after anyone, per night
 torch   share of standing time with the torch on           low, dead   share with it under a quarter, and flat; dry/g is how often it ran out per guard

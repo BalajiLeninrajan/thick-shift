@@ -137,7 +137,7 @@ const BANG_BOX: Record<DoorKey, number> = { L: 5, R: 7, V: 6 };
 // Metres per second. Hunt speed is per mascot, by MASC index. Biggs is slower
 // than a walking guard and never stops coming. Flan crawls while a guard is
 // looking at her and runs when nobody is. Squish is quick, quicker in the
-// ducts. Tank walks until it has a straight run, then charges. With the power
+// ducts. Stompy walks until it has a straight run, then charges. With the power
 // out every one of them moves `out` times as fast, which outruns a sprinting
 // guard: the crank is the only way out. (Untuned against the harness.)
 const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6] satisfies PerMascot<number>, unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15, out: 2 };
@@ -156,8 +156,8 @@ const FLAT_BAT = 0.5; // what is left of a torch its guard was flattened on top 
 const FEAST = 3.5;
 const GRAB_TIME = 1.2; // seconds a mascot stuck behind furniture takes to reach over it
 const STARE = 5; // seconds one waiting its turn stands and stares before it goes back to what it was doing
-const CHARGE_GAP = 10; // seconds before Tank can charge again
-const WINDUP = { time: 1.5, commit: 0.5 }; // Tank's wind-up before a charge, and how much of it at the end is spent not turning
+const CHARGE_GAP = 10; // seconds before Stompy can charge again
+const WINDUP = { time: 1.5, commit: 0.5 }; // Stompy's wind-up before a charge, and how much of it at the end is spent not turning
 const SEARCH_MAX = 14; // seconds one spends looking for what it heard or lost before it gives that up
 const NOTICE = 0.7; // seconds a mascot stands and stares after spotting a guard, before it moves
 // How long a mascot keeps after a guard before it gives up and goes home: seconds on night 1, and more each night after.
@@ -252,7 +252,7 @@ const roster = (S: NightState) => (S.out ? 4 : 2 + Math.floor(heat(S) * 3.3 + (S
 const COMING: MascotState[] = ['hunt', 'windup', 'charge'];
 const inDucts = (p: Guard) => !p.flat && roomAt(p.x, p.z) === DUCTS;
 // When each mascot first comes out, by MASC index: hours of the run (six to a night), and how many hours sooner
-// for each guard past the first. Alone, Squish turns up at 3 AM on night 1. Tank turns up on night 2 for every
+// for each guard past the first. Alone, Squish turns up at 3 AM on night 1. Stompy turns up on night 2 for every
 // crew: at 4 AM alone, 2:24 for three, midnight for six. When it waited for night 3 or 4, night 2 played like
 // night 1 and the night it woke was a cliff. With the power out they are all up, and Squish is up for anyone in
 // its ducts.
@@ -433,7 +433,7 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
 // A guest taking over from a host who left has S but none of the host's thinking, so make it up from S.
 // Each mascot keeps its place and state, except the ones that need what the old host knew (a charge's
 // heading, a besieged door): those look round where they stand. One on a hunt goes after the nearest guard.
-// What is lost errs toward the crew: Tank waits out a full gap before it charges, and one standing where it
+// What is lost errs toward the crew: Stompy waits out a full gap before it charges, and one standing where it
 // stands stays put as long as one that has given up would. now: as for stepFloor.
 export function adoptFloor(sim: Sim, state: State, now: number): void {
   const S = state as NightState,
@@ -950,8 +950,8 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     return;
   }
   if (m.st === 'charge') {
-    // Tank does not steer and does not stop for a torch.
-    const dir = defined(b.dir, "Tank's heading");
+    // Stompy does not steer and does not stop for a torch.
+    const dir = defined(b.dir, "Stompy's heading");
     const got = slide(m, dir.x * SPEED.charge * dt, dir.z * SPEED.charge * dt, MASCOT_R, S.doors);
     if (catchGuards(S, m, b)) return;
     b.timer -= dt;
@@ -1085,7 +1085,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       turn(m, Math.atan2(goal.x - m.x, goal.z - m.z), 5 * dt);
       speed = 0;
     }
-    // Tank: with a clear run at you, it winds up and charges.
+    // Stompy: with a clear run at you, it winds up and charges.
     else if (m.i === 3 && seen && b.cool <= 0 && near > 6 && near < 16 && clear(m.x, m.z, seen.x, seen.z, MASCOT_R, S.doors)) {
       m.st = 'windup';
       b.timer = WINDUP.time;

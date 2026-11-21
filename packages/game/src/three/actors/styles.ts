@@ -277,7 +277,7 @@ const FIT: Record<MascotKey, PerStage<(rig: Rig, info?: StageInfo | null) => Fit
       chains: { 1: spine },
     }),
   ],
-  // Tank.
+  // Stompy.
   rhino: [
     () => ({
       gait: { max: 0.44, knee: 0.25, hipRoll: 0.065, hipYaw: 0.2, arm: 0.35 },
@@ -428,7 +428,7 @@ function spine(a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number): void
   }
 }
 
-// Tank's worm. A slow travelling sway and a swallowing pulse; the upper links
+// Stompy's worm. A slow travelling sway and a swallowing pulse; the upper links
 // turn the mouth to whoever it is looking at; `rear` curls it back before a
 // charge (and at a door), and below zero throws it forward, mouth first.
 function worm(a: Mascot, links: NonEmpty<Part>, ch: Channels, _dt: number): void {

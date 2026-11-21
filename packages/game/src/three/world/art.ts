@@ -50,7 +50,7 @@ export const ART = {
 } satisfies Record<string, Px>;
 // Each mascot's poster: its background and its line.
 const POSTER_BG: PerMascot<string> = ['#e8c832', '#2ec4c6', '#e86a2a', '#d4418e'];
-const POSTER_LINE: PerMascot<string> = ['THERE IS ALWAYS ROOM\nFOR ONE MORE', 'HUGS ARE FREE', 'HE FITS ANYWHERE', 'NO RUNNING\n(EXCEPT TANK)'];
+const POSTER_LINE: PerMascot<string> = ['THERE IS ALWAYS ROOM\nFOR ONE MORE', 'HUGS ARE FREE', 'HE FITS ANYWHERE', 'NO RUNNING\n(EXCEPT STOMPY)'];
 // The party hat each mascot wears in the venue's drawings.
 const HAT: PerMascot<string> = ['#e8c832', '#d4418e', '#2ec4c6', '#e86a2a'];
 // The paler patch on each mascot's front, and the walrus's muzzle.

@@ -42,7 +42,7 @@ node ../../tools/roblox/gen-data.mjs                        # after changing the
 
 ## How close it is
 
-- The sim matches the web sim tick for tick. Across 20 recorded balance-harness nights, 19 match to 1e-6 all night. The only drift is `atan2` rounding differently in the last bit between V8 and the C library; in one crew-of-4 night that compounds until Tank's charge clips a table 99 s in. The tuning in the web game's balance harness holds for this sim.
+- The sim matches the web sim tick for tick. Across 20 recorded balance-harness nights, 19 match to 1e-6 all night. The only drift is `atan2` rounding differently in the last bit between V8 and the C library; in one crew-of-4 night that compounds until Stompy's charge clips a table 99 s in. The tuning in the web game's balance harness holds for this sim.
 - The world, the mascots and the props are stand-ins: blocks in the right places at the right sizes, the same lamps in the same places. The web game's Blender models (`packages/game/public/models`) still need uploading as Roblox meshes.
 - Not ported yet: sound (the recordings in `packages/game/public/sfx` need uploading), the phone minimap, the post-processing look (film grain, the torch's beam pattern), gamepad and touch controls, the dev menu. The Mini Biggs is in `Sim.luau` (throwing, the battery it costs, landing, the noise, picking it up), but the client cannot throw or pick one up yet, and draws and plays nothing for it.
 - Nothing has been played in Studio yet.

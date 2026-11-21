@@ -23,7 +23,7 @@ return {
 		},
 		{
 			k = "rhino",
-			name = "Tank",
+			name = "Stompy",
 			col = "#7d8299",
 		},
 	},
