@@ -87,9 +87,10 @@ local STIR, CALM = { 28, 42 }, { 24, 38 }
 local SPENT = { 18, 30 }
 local RAMP = { 0, 1, 2, 3.15, 4.3 }
 local SNIFF = { near = 1.6, time = 3 }
-local ESCAPE = { head = 0.6, barred = 8 }
+local ESCAPE = { head = 0.6, shaky = 8 }
 local CHECK = { near = 8, chance = 0.5, most = 2 }
 local LOCKER_NOISE = { 6, 0.5 }
+local LOCKER_DIN = { 24, 1 }
 -- Mini Biggs, the plush that sings on the torch's battery: see TOY in sim.ts.
 local TOY = {
 	cost = 0.2,
@@ -236,7 +237,8 @@ local function placeGuard(p, i: number)
 	p.pitch, p.on, p.ph, p.bat, p.flat, p.flatBy, p.sp, p.act, p.safe, p.callAt, p.hid =
 		0, false, false, 1, false, -1, false, "", 0, 0, -1
 	p.toy = true
-	p.barred = 0
+	p.shaky = 0
+	p.inAt = 0
 end
 
 local function newBrain(timer: number)
@@ -814,10 +816,15 @@ function Sim:openLockers(m, b, dt: number): boolean
 	self:emit("found", { i = m.i, id = p.id, h = p.hid, x = h.x, z = h.z })
 	b.knows = -1
 	b.sniff = 0
+	-- They banged their way in, shaking: no start on it this time.
+	if (p.inAt or 0) < (p.shaky or 0) then
+		self:flatten(p, m, b)
+		return true
+	end
 	-- Out on the floor in front of the doors, with a split second's start on it.
 	p.hid = -1
 	p.safe = math.max(p.safe, S.t + ESCAPE.head)
-	p.barred = S.t + ESCAPE.barred
+	p.shaky = S.t + ESCAPE.shaky
 	b.tgt = p.id
 	b.last = { x = p.x, z = p.z }
 	b.lost = 0
@@ -1452,20 +1459,17 @@ function Sim:act(pid: string, a: any)
 		local h = HIDES[i + 1]
 		if p.hid == i then
 			p.hid = -1
-			self:emit("locker", { i = i, id = p.id, ["in"] = false, x = h.x, z = h.z })
+			self:emit("locker", { i = i, id = p.id, ["in"] = false, loud = false, x = h.x, z = h.z })
 			self:noise(h.at.x, h.at.z, LOCKER_NOISE[1], LOCKER_NOISE[2])
-		elseif
-			not hidden(p)
-			and near(h.at)
-			and S.t >= (p.barred or 0)
-			and not some(S.players, function(q)
-				return q.hid == i
-			end)
-		then
-			p.hid, p.x, p.z, p.on, p.sp, p.act = i, h.at.x, h.at.z, false, false, ""
-			self:emit("locker", { i = i, id = p.id, ["in"] = true, x = h.x, z = h.z })
+		elseif not hidden(p) and near(h.at) and not some(S.players, function(q)
+			return q.hid == i
+		end) then
+			local loud = S.t < (p.shaky or 0)
+			p.hid, p.x, p.z, p.on, p.sp, p.act, p.inAt = i, h.at.x, h.at.z, false, false, "", S.t
+			self:emit("locker", { i = i, id = p.id, ["in"] = true, loud = loud, x = h.x, z = h.z })
 			self:seenHiding(p)
-			self:noise(h.at.x, h.at.z, LOCKER_NOISE[1], LOCKER_NOISE[2])
+			local n = if loud then LOCKER_DIN else LOCKER_NOISE
+			self:noise(h.at.x, h.at.z, n[1], n[2])
 		end
 	elseif a.what == "peel" then
 		local other = find(S.players, function(q)

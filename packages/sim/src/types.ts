@@ -54,7 +54,8 @@ export interface Guard extends Joined {
   safe: number; // S.t before which no mascot can see or flatten them: just after a peel, or a mascot opening their locker
   callAt: number; // S.t before which their next call for help is ignored
   hid: number; // the locker (HIDES index) they are in, or -1
-  barred: number; // S.t before which they cannot get into a locker: just after a mascot pulled them out of one
+  shaky: number; // S.t before which getting into a locker is loud: just after a mascot pulled them out of one
+  inAt: number; // S.t they got into the locker they are in
   toy: boolean; // holding their Mini Biggs
 }
 // A guard in S.players at any time: a guard who joined after the night began has only their id and name until the
@@ -154,7 +155,7 @@ export interface EventData {
   door: boolean; // the door is now shut
   bat: { by: string };
   grab: { by: string; x: number; z: number };
-  locker: { i: number; id: string; in: boolean; x: number; z: number };
+  locker: { i: number; id: string; in: boolean; loud: boolean; x: number; z: number }; // loud: banged shut by shaking hands
   peel: { id: string; by: string; x: number; z: number };
 }
 export type EventType = keyof EventData;

@@ -181,16 +181,19 @@ const RAMP = [0, 1, 2, 3.15, 4.3] as const;
 // there. Any other that stands within SNIFF.near of an occupied locker for SNIFF.time seconds opens it anyway, so
 // a locker is for getting out of sight, not for waiting out the night. The doors are heard: LOCKER_NOISE is
 // [metres, chance], as for noise(). A guard it pulls out is not caught there: it stands for ESCAPE.head seconds, and
-// nothing can touch them in that time, so they have a moment to run. They cannot get into a locker again for
-// ESCAPE.barred seconds, or stepping straight back in would start the same moment over. Not tuned: the balance harness's `hides`
+// nothing can touch them in that time, so they have a moment to run. For ESCAPE.shaky seconds after that their hands
+// shake: getting into a locker bangs its doors (LOCKER_DIN, heard across most of the building), and whatever opens
+// that locker has them at once, or stepping straight back in would start the same moment over. Nothing tells the
+// guard this. Not tuned: the balance harness's `hides`
 // scenarios only show that a guard who uses lockers does about as well as one who does not, and sitting in one loses.
 const SNIFF = { near: 1.6, time: 3 };
-const ESCAPE = { head: 0.6, barred: 8 };
+const ESCAPE = { head: 0.6, shaky: 8 };
 // One that loses the guard it was hunting checks the lockers near where it last knew they were: each within
 // CHECK.near metres of that spot, nearest first, with CHECK.chance, at most CHECK.most of them. It walks to the
 // doors and opens them, empty or not. The way to beat it is to get further than that.
 const CHECK = { near: 8, chance: 0.5, most: 2 };
-const LOCKER_NOISE: [number, number] = [6, 0.5];
+const LOCKER_NOISE: [number, number] = [6, 0.5],
+  LOCKER_DIN: [number, number] = [24, 1];
 // Mini Biggs: a palm-sized plush of Big Biggs on a keyring, from the gift shop, with a voice box that sings "Happy
 // Birthday from Big Biggs!". Each guard clocks in holding one (p.toy) and holds one at most. Its own cell died years
 // ago, so a guard tops it up from the torch: a throw costs `cost` of the battery (one of the five bars on the HUD)
@@ -367,7 +370,8 @@ function placeGuard(p: Player, i: number): asserts p is Guard {
     safe: 0,
     callAt: 0,
     hid: -1,
-    barred: 0,
+    shaky: 0,
+    inAt: 0,
     toy: true,
   });
 }
@@ -812,10 +816,15 @@ function openLockers(S: NightState, m: Mascot, b: Brain, dt: number) {
   emit(S, 'found', { i: m.i, id: p.id, h: p.hid, x: h.x, z: h.z });
   b.knows = -1;
   b.sniff = 0;
+  // They banged their way in, shaking: no start on it this time.
+  if ((p.inAt || 0) < (p.shaky || 0)) {
+    flatten(S, p, m, b);
+    return true;
+  }
   // Out on the floor in front of the doors, with a split second's start on it.
   p.hid = -1;
   p.safe = Math.max(p.safe, S.t + ESCAPE.head);
-  p.barred = S.t + ESCAPE.barred;
+  p.shaky = S.t + ESCAPE.shaky;
   Object.assign(b, { tgt: p.id, last: { x: p.x, z: p.z }, lost: 0, near: Infinity, notice: ESCAPE.head, home: false, repath: 0, path: [] });
   m.st = 'hunt';
   return true;
@@ -1320,13 +1329,14 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
       if (i === undefined || !h) return;
       if (p.hid === i) {
         p.hid = -1;
-        emit(S, 'locker', { i, id: p.id, in: false, x: h.x, z: h.z });
+        emit(S, 'locker', { i, id: p.id, in: false, loud: false, x: h.x, z: h.z });
         noise(sim, S, h.at.x, h.at.z, ...LOCKER_NOISE);
-      } else if (!hidden(p) && near(h.at) && S.t >= (p.barred || 0) && !S.players.some(q => q.hid === i)) {
-        Object.assign(p, { hid: i, x: h.at.x, z: h.at.z, on: false, sp: false, act: '' });
-        emit(S, 'locker', { i, id: p.id, in: true, x: h.x, z: h.z });
+      } else if (!hidden(p) && near(h.at) && !S.players.some(q => q.hid === i)) {
+        const loud = S.t < (p.shaky || 0);
+        Object.assign(p, { hid: i, x: h.at.x, z: h.at.z, on: false, sp: false, act: '', inAt: S.t });
+        emit(S, 'locker', { i, id: p.id, in: true, loud, x: h.x, z: h.z });
         seenHiding(sim, S, p);
-        noise(sim, S, h.at.x, h.at.z, ...LOCKER_NOISE);
+        noise(sim, S, h.at.x, h.at.z, ...(loud ? LOCKER_DIN : LOCKER_NOISE));
       }
       return;
     }

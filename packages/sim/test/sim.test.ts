@@ -304,7 +304,8 @@ describe('a hunt', () => {
     expect(p.flat).toBe(false);
   });
 
-  it('pulls a guard out of a locker and gives them a split second before it can touch them', () => {
+  // A guard hidden in locker 0, and Madame Flan right outside its doors, close enough to touch them, knowing they are in.
+  function hiding() {
     const { sim, S } = start(1, 1, 1);
     S.stir = false;
     S.waveAt = 1e9;
@@ -316,15 +317,30 @@ describe('a hunt', () => {
     // Right outside the doors, close enough to touch them, and it saw them get in.
     Object.assign(m, { x: h.at.x + Math.sin(h.face) * 0.6, z: h.at.z + Math.cos(h.face) * 0.6, st: 'search' });
     Object.assign(b, { woke: true, knows: 0, last: { ...h.at }, timer: 5, since: 0, was: 'search' });
+    return { sim, S, p, m };
+  }
+
+  it('pulls a guard out of a locker and gives them a split second before it can touch them', () => {
+    const { sim, S, p, m } = hiding();
     stepFloor(sim, S, 100);
     expect(S.evs.some(e => e.type === 'found')).toBe(true);
     expect(p).toMatchObject({ hid: -1, flat: false });
     expect(m.st).toBe('hunt');
-    actFloor(sim, S, 'g0', { t: 'use', what: 'hide', i: 0 }); // straight back in: not allowed
-    expect(p.hid).toBe(-1);
     for (let k = 2; k <= 6; k++) stepFloor(sim, S, k * 100);
     expect(p.flat).toBe(false); // 0.6 s on, standing still within reach
     for (let k = 7; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
     expect(p.flat).toBe(true); // and then it has them
+  });
+
+  it('hears a guard bang straight back into a locker, and has them at once when it opens it', () => {
+    const { sim, S, p } = hiding();
+    stepFloor(sim, S, 100);
+    expect(p.hid).toBe(-1);
+    actFloor(sim, S, 'g0', { t: 'use', what: 'hide', i: 0 });
+    expect(p.hid).toBe(0);
+    expect(S.evs.at(-1)).toMatchObject({ type: 'locker', x: { in: true, loud: true } });
+    for (let k = 2; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(true);
+    expect(S.t).toBeLessThan(1.5); // as soon as it may touch them, not after another start
   });
 });
