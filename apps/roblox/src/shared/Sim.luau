@@ -83,6 +83,7 @@ local SEARCH_MAX = 14
 local NOTICE = 0.7
 local WIND = { 8, 0.75 }
 local RELENT = 8
+local NEAREST = 3
 local STIR, CALM = { 28, 42 }, { 24, 38 }
 local SPENT = { 18, 30 }
 local RAMP = { 0, 1, 2, 3.15, 4.3 }
@@ -265,6 +266,8 @@ local function newBrain(timer: number)
 		was = nil,
 		since = 0,
 		noShort = nil,
+		near = nil,
+		nearAt = nil,
 	}
 end
 
@@ -795,6 +798,7 @@ function Sim:spot(m, b, p)
 	b.tgt = p.id
 	b.last = { x = p.x, z = p.z }
 	b.lost = 0
+	b.near = nil
 end
 
 function Sim:openLockers(m, b, dt: number): boolean
@@ -1098,8 +1102,14 @@ function Sim:runMascot(m, b, dt: number)
 			b.lost = 0
 		elseif tp and not tp.flat and not hidden(tp) and b.lost < keeps then
 			b.last = { x = tp.x, z = tp.z }
+			b.near = nil
 		end
-		if not tp or tp.flat or b.lost > keeps + 3 then
+		local d = dist(m, b.last)
+		if b.near == nil or d < b.near - 0.3 then
+			b.near = d
+			b.nearAt = S.t
+		end
+		if not tp or tp.flat or S.t - (b.nearAt or S.t) > NEAREST then
 			m.st = "search"
 			b.timer = self:rnd(4, 7)
 		end

@@ -239,6 +239,8 @@ export interface Brain {
   since?: number;
   was?: MascotState;
   noShort?: number;
+  near?: number | undefined; // how close it has come to where it last saw its guard since it lost them
+  nearAt?: number; // and when it last got closer
 }
 
 /* ---------- the wire ---------- */

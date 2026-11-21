@@ -2,35 +2,35 @@
 
 exports[`crew nights > crew of 2 competent n2, seed 1 1`] = `
 {
-  "burnt": 6,
-  "events": "bat 4, burn 6, call 25, calm 6, check 1, crash 2, door 15, fault 17, fix 12, flat 3, grab 2, hour 5, out 1, peel 1, quit 10, roar 3, scare 1, spot 24, stir 7, toy 4",
-  "eventsDigest": "da2b7b5b6d2414cd",
+  "burnt": 4,
+  "events": "bat 8, burn 4, call 27, calm 6, check 1, door 18, fault 17, fix 17, flat 1, grab 2, hour 6, peel 1, quit 13, roar 1, spot 20, stir 6, toy 3, win 1",
+  "eventsDigest": "3d58323cbd9182d8",
   "failures": [],
-  "fixed": 12,
-  "flats": 3,
-  "outcome": "dead",
+  "fixed": 17,
+  "flats": 1,
+  "outcome": "win",
   "peels": 1,
-  "power": "0.000",
-  "stateDigest": "1856996c2f9feb9f",
-  "t": "419.000",
-  "ticks": 4190,
+  "power": "58.969",
+  "stateDigest": "250b352305fc2994",
+  "t": "420.000",
+  "ticks": 4200,
 }
 `;
 
 exports[`crew nights > crew of 3 competent n4, seed 1 1`] = `
 {
-  "burnt": 7,
-  "events": "arrive 4, bang 16, bat 3, burn 7, call 69, calm 5, check 3, crash 5, door 34, fault 29, fix 20, flat 4, grab 2, hour 5, out 1, peel 1, quit 12, roar 6, scare 1, spot 29, stir 6, toy 4",
-  "eventsDigest": "a7f951a0082054d9",
+  "burnt": 4,
+  "events": "arrive 5, bang 20, bat 1, burn 4, call 32, calm 4, check 1, crash 1, door 51, fault 30, fix 23, flat 3, grab 1, hour 5, out 1, quit 8, roar 1, scare 1, spot 18, stir 5, toy 2",
+  "eventsDigest": "01602d2cc837278d",
   "failures": [],
-  "fixed": 20,
-  "flats": 4,
+  "fixed": 23,
+  "flats": 3,
   "outcome": "dead",
-  "peels": 1,
+  "peels": 0,
   "power": "0.000",
-  "stateDigest": "0294fe3ff5a8a1f6",
-  "t": "409.900",
-  "ticks": 4099,
+  "stateDigest": "3afd6e14696fab67",
+  "t": "365.900",
+  "ticks": 3659,
 }
 `;
 
@@ -53,33 +53,33 @@ exports[`crew nights > crew of 4 careless n1, seed 1 1`] = `
 
 exports[`crew nights > crew of 4 competent n5, seed 2 1`] = `
 {
-  "burnt": 9,
-  "events": "arrive 2, bang 8, bat 1, burn 9, call 49, calm 3, check 3, crash 1, door 20, fault 22, fix 12, flat 4, fumble 2, grab 1, hour 3, quit 5, roar 2, scare 1, spot 22, stir 4, toy 4",
-  "eventsDigest": "a1d3437fa165ebcc",
+  "burnt": 5,
+  "events": "arrive 2, bang 8, bat 8, burn 5, call 64, calm 6, check 1, crash 2, door 33, fault 37, fix 30, flat 5, fumble 4, grab 1, hour 6, peel 3, quit 15, roar 4, spot 31, stir 6, toy 3, win 1",
+  "eventsDigest": "aea3dd816187f1c6",
   "failures": [],
-  "fixed": 12,
-  "flats": 4,
-  "outcome": "dead",
-  "peels": 0,
-  "power": "10.759",
-  "stateDigest": "0551f814bf1c9d00",
-  "t": "238.600",
-  "ticks": 2386,
+  "fixed": 30,
+  "flats": 5,
+  "outcome": "won",
+  "peels": 3,
+  "power": "49.769",
+  "stateDigest": "1a84714b72154fa9",
+  "t": "420.000",
+  "ticks": 4200,
 }
 `;
 
 exports[`crew nights > crew of 6 competent n1, seed 3 1`] = `
 {
   "burnt": 2,
-  "events": "arrive 1, bang 3, bat 14, burn 2, calm 5, door 46, fault 44, fix 42, fumble 2, grab 9, hour 6, quit 16, spot 21, stir 6, toy 10, win 1",
-  "eventsDigest": "fa0461f759e6ce57",
+  "events": "bat 19, burn 2, call 9, calm 5, door 44, fault 41, fix 37, flat 1, grab 8, hour 6, peel 1, quit 16, spot 16, stir 6, toy 10, win 1",
+  "eventsDigest": "9184e50b030ab949",
   "failures": [],
-  "fixed": 42,
-  "flats": 0,
+  "fixed": 37,
+  "flats": 1,
   "outcome": "win",
-  "peels": 0,
-  "power": "66.571",
-  "stateDigest": "9b44a0055c013c13",
+  "peels": 1,
+  "power": "60.735",
+  "stateDigest": "c25ce76755dd8c27",
   "t": "420.000",
   "ticks": 4200,
 }
