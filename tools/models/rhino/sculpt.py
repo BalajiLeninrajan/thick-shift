@@ -327,7 +327,7 @@ def revolve(profile, n=48, name='lathe', mod=None):
     for i, (y, r) in enumerate(profile):
         dy, dr = mod(i, ang) if mod else (0, 0)
         rr = r + dr
-        verts.append(np.stack([rr * np.cos(ang), y + dy + ang * 0, rr * np.sin(ang)], 1))
+        verts.append(np.stack([rr * np.cos(ang), np.full_like(ang, y + dy), rr * np.sin(ang)], 1))
     verts = np.concatenate(verts)
     faces = []
     for i in range(m - 1):

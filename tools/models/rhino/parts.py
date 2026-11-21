@@ -114,7 +114,7 @@ def head(rig, M, stage, T, parent, rng, tris):
     L = [.42, .6, .72][stage]
     t = np.linspace(0, 1, 15)
     base = np.array([0, -.565, .31])
-    hp = base + np.stack([t * 0 + (stage and .02 * np.sin(t * 5)), -.07 * t + .13 * t * t, L * t], 1)
+    hp = base + np.stack([.02 * np.sin(t * 5) if stage else np.zeros_like(t), -.07 * t + .13 * t * t, L * t], 1)
     n = 16
     hr = np.repeat((.108 * (1 - t) ** .75 + .008)[:, None], n, 1)
     if stage:
@@ -359,7 +359,8 @@ def worm(rig, M, ctrl, links, rng, r0=.2, r1=.135):
         d1 = (path[-1] - path[-2]) / np.linalg.norm(path[-1] - path[-2])
         us = np.array(us)
         pts = np.array([path[0] + d0 * u if u < 0 else at(u) if u <= total else path[-1] + d1 * (u - total) for u in us])
-        lump = fbm(np.stack([np.cos(ang)[None, :] * 3 + i * 9.1 + 0 * us[:, None], np.sin(ang)[None, :] * 3 + 0 * us[:, None], us[:, None] * 9 + 0 * ang[None, :]], -1).reshape(-1, 3), 3, seed=i).reshape(len(us), n)
+        U, A = np.meshgrid(us, ang, indexing='ij')
+        lump = fbm(np.stack([np.cos(A) * 3 + i * 9.1, np.sin(A) * 3, U * 9], -1).reshape(-1, 3), 3, seed=i).reshape(len(us), n)
         sag = 1 + .06 * np.cos(ang - math.pi)[None, :]             # heavier underneath
         rad = np.array(rs)[:, None] * (1 + .1 * lump) * sag
         seg = tube_rest(pts, rad, n=n, name='seg', origin=(0, 0, i * 1.7))
