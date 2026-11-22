@@ -8,7 +8,7 @@ import { lightsF } from '@thick-shift/sim';
 import { isPlaced } from '@thick-shift/sim/check';
 import type { MascotKind } from '@thick-shift/sim/config';
 import { MASC } from '@thick-shift/sim/config';
-import { angDiff, dist, EYE, glimpses, MASCOT_R } from '@thick-shift/sim/map';
+import { angDiff, dist, EYE, glimpses, MASCOT_R, walkable } from '@thick-shift/sim/map';
 import type { MascotIndex, MascotState, Mascot as SimMascot, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { View } from '../actors';
@@ -16,8 +16,8 @@ import type { ModelStage } from '../assets';
 import { EYE_PALE, instance, loadActor, loadJSON } from '../assets';
 import type { Part, Rig } from './rig';
 import { bounds, buildRig, eachMesh, glowTexture, lag } from './rig';
-import type { PerStage, Stage, Style } from './styles';
-import { CH, hash, isLitState, isStage, RATE, standIn, styleOf, ZERO } from './styles';
+import type { Gait, PerStage, Stage, Style } from './styles';
+import { BOUNCE, CH, hash, isLitState, isStage, RATE, standIn, styleOf, ZERO } from './styles';
 import { nightClock, TAU, Track } from './track';
 
 const { clamp } = THREE.MathUtils,
@@ -27,6 +27,75 @@ const bump = (u: number, up: number, down: number): number => smooth(u / up) * s
 // Where a foot is through the walk cycle, from -1 (as far ahead as it lands) to 1 (as far behind as it lifts): the
 // first half on the ground going back at a steady rate, which is ground speed, the second half swinging forward.
 const footAt = (q: number): number => (q < 0.5 ? q * 4 - 1 : Math.cos(Math.PI * (q * 2 - 1)));
+
+// The scuttle, Stompy's bridge on hands and feet. rate: gait cycles a second at a standstill, more for each metre a
+// second, and the most it manages (two steps a cycle, so a charge is some 14 steps a second). splay: how far a limb
+// in the air swings out. jerk: the spasm through every limb as it goes, and the tremble when it stands. buckle: the
+// share of steps on which a planted limb gives way under it.
+// How far it is from (x, z) to a wall or shut door straight ahead, to the nearest ROOM_STEP and short of it, or
+// Infinity if there is none within max. Furniture does not count: what reaches over it is above it.
+const ROOM_STEP = 0.05;
+function clearAhead(x: number, z: number, yaw: number, max: number, doors: State['doors']): number {
+  const sx = Math.sin(yaw),
+    sz = Math.cos(yaw);
+  for (let d = ROOM_STEP; d <= max; d += ROOM_STEP) if (!walkable(x + sx * d, z + sz * d, 0.02, doors, true)) return d - ROOM_STEP;
+  return Infinity;
+}
+const SCUTTLE = { rate: [1.6, 1.2, 7], splay: 0.3, jerk: [0.12, 0.025], buckle: 0.22 } as const;
+// Diagonal pairs, arm_L with leg_R, then arm_R with leg_L: the pair in the air swings forward and out while the
+// planted pair shoves back. No two steps are the same size, everything spasms, now and then a limb buckles and drops
+// it onto that side, and the broken head is flung about on its neck. It is not in control of any of it.
+function scuttle(a: Mascot, rig: Rig, g: Gait, wk: number, dt: number): void {
+  const n = a.steps * 5 + a.i * 31,
+    q = (a.phase * 2) % 1, // through this step
+    env = Math.sin(Math.PI * q), // 0 at each footfall, so nothing below pops between steps
+    first = a.phase < 0.5, // arm_L and leg_R are the pair in the air
+    amp = g.max * (0.6 + 0.9 * hash(n)) * wk,
+    air = amp * Math.cos(Math.PI * q), // from back (+) to front (-)
+    lift = env * wk * (0.7 + 0.6 * hash(n + 1)),
+    out = SCUTTLE.splay * lift;
+  const [aL, aR] = first ? [air, -air] : [-air, air], // arm_L with leg_R, arm_R with leg_L
+    [upA, upB] = first ? [lift, 0] : [0, lift];
+  rig.arm_L.rx += aL;
+  rig.leg_R.rx += aL;
+  rig.arm_R.rx += aR;
+  rig.leg_L.rx += aR;
+  rig.arm_L.rz += out * (first ? 1 : 0);
+  rig.leg_R.rz -= out * (first ? 1 : 0);
+  rig.arm_R.rz -= out * (first ? 0 : 1);
+  rig.leg_L.rz += out * (first ? 0 : 1);
+  rig.forearm_L.rx -= 0.45 * upA;
+  rig.forearm_R.rx -= 0.45 * upB;
+  rig.shin_R.rx += 0.45 * upA;
+  rig.shin_L.rx += 0.45 * upB;
+  // The body is thrown onto the planted pair, bobs, and lurches a different way every step.
+  const body = rig.body;
+  body.rz += 0.12 * Math.sin(TAU * a.phase) * wk * (0.6 + 0.8 * hash(n + 2));
+  body.ry += (hash(n + 3) - 0.5) * 0.35 * env * wk;
+  body.rx += (hash(n + 4) - 0.5) * 0.12 * env * wk;
+  body.py += 0.05 * lift;
+  // A planted limb gives way: its forearm or shin folds and the arch drops onto that side, then it scrambles up.
+  if (hash(n + 5) < SCUTTLE.buckle * wk) {
+    const left = hash(n + 6) < 0.5,
+      give = env * wk;
+    if (hash(n + 7) < 0.5) (left ? rig.forearm_L : rig.forearm_R).rx += 0.7 * give;
+    else (left ? rig.shin_L : rig.shin_R).rx += 0.7 * give;
+    body.rz += (left ? -0.16 : 0.16) * give;
+    body.py -= 0.09 * give;
+  }
+  // The spasm, stepped like the shudder; standing, it only trembles, as if the arms might give.
+  const tick = Math.floor(a.t * 18) + a.i * 50,
+    jerk = SCUTTLE.jerk[0] * wk + SCUTTLE.jerk[1];
+  for (const [j, l] of [rig.arm_L, rig.arm_R, rig.forearm_L, rig.forearm_R, rig.leg_L, rig.leg_R, rig.shin_L, rig.shin_R].entries()) {
+    l.rx += (hash(tick * 1.3 + j * 7) - 0.5) * jerk;
+    l.rz += (hash(tick * 1.7 + j * 11) - 0.5) * jerk * 0.5;
+  }
+  body.py += Math.sin(a.t * 1.7) * 0.012 * (1 - wk);
+  // The head on its snapped neck: each step flings it somewhere new, and a loose spring overshoots getting there.
+  const fling = 0.9 * wk;
+  lag(rig.neck, (hash(n + 8) - 0.5) * fling * 0.5 + Math.sin(a.t * 1.1) * 0.05, (hash(n + 9) - 0.5) * fling * 0.5, dt, 70, 3, 0.35);
+  lag(rig.head, (hash(n + 10) - 0.5) * fling + Math.sin(a.t * 1.3) * 0.08, (hash(n + 11) - 0.5) * fling, dt, 90, 3.5, 0.6);
+}
 
 const SEEN_RANGE = 46; // metres: past this the fog has it anyway
 const LOOK_EVERY = 0.2; // seconds between checks of whether the camera can see it
@@ -82,10 +151,15 @@ export class Mascot {
   t: number;
   gt: number;
   phase: number;
+  steps = 0; // half-cycles of the gait so far, to seed what changes step to step
   walk = 0;
   live = 1;
   hop = 0;
   st: MascotState = 'rest';
+  stT = 0; // seconds in st, since this client saw it change
+  slump = 0; // Stompy's worm folded over after a crash, 0 to 1 (styles.ts's worm keeps it)
+  knock = { x: 0, z: 0, far: 0, d: 0 }; // bounced back off a wall, see BOUNCE: which way, how far it goes, how far it is now
+  room = Infinity; // metres clear in front of it, out to style.ahead (Infinity past that), so the worm keeps out of walls
   lit = false;
   seen = true;
   lookT: number;
@@ -226,6 +300,8 @@ export class Mascot {
     this.scareOn = false;
     this.scareW = 0;
     this.scareBite = 0;
+    this.slump = 0;
+    this.knock.d = 0;
     Object.assign(this.ch, ZERO);
     Object.assign(this.cv, ZERO);
   }
@@ -273,8 +349,16 @@ export class Mascot {
       if (st === 'feast') this.kLand = 1;
       else if (this.st === 'feast') this.seat.on = false;
       if (st === 'charge') this.kLunge = 1;
+      if (st === 'stun' && this.st === 'charge' && this.cur.style.ahead) {
+        const k = this.knock,
+          behind = clearAhead(tr.x, tr.z, tr.yaw + Math.PI, BOUNCE.back + MASCOT_R, S.doors);
+        k.x = -Math.sin(tr.yaw);
+        k.z = -Math.cos(tr.yaw);
+        k.far = Math.max(0, Math.min(BOUNCE.back, behind - MASCOT_R));
+      }
       this.st = st;
-    }
+      this.stT = 0;
+    } else this.stT += dt;
     this.lit = lit;
     const decay = Math.exp(-dt * 5);
     this.kLunge *= Math.exp(-dt * 3);
@@ -325,15 +409,28 @@ export class Mascot {
       A = g.min + (g.max - g.min) * pace,
       twistMax = g.mode === 'walk' ? g.hipYaw * (0.75 + 0.5 * pace) : 0;
     const reach = h * Math.sin(A) + rig.hipX * Math.sin(twistMax); // how far ahead of the body a foot lands, and how far behind it lifts
-    this.phase = (this.phase + (tr.moved * Math.sign(tr.vf || 1)) / (4 * reach) + 1) % 1;
+    const was = this.phase;
+    if (g.mode === 'scuttle') {
+      // Its limbs run on their own clock, faster than the ground goes by, and no two steps take as long: it scrabbles.
+      const rate = clamp(SCUTTLE.rate[0] + SCUTTLE.rate[1] * tr.speed, 0, SCUTTLE.rate[2]) * (0.6 + 0.8 * hash(this.steps * 3 + this.i));
+      this.phase = (this.phase + dt * rate * this.walk) % 1;
+    } else this.phase = (this.phase + (tr.moved * Math.sign(tr.vf || 1)) / (4 * reach) + 1) % 1;
+    if (Math.floor(this.phase * 2) !== Math.floor(was * 2)) this.steps++;
 
-    const x = tr.x + (seat.x - tr.x) * seat.w,
-      z = tr.z + (seat.z - tr.z) * seat.w,
+    const k = this.knock;
+    if (st === 'stun' && k.far) k.d = k.far * (1 - (1 - Math.min(1, this.stT / BOUNCE.time)) ** 2);
+    else {
+      k.far = 0;
+      k.d = Math.max(0, k.d - tr.moved * BOUNCE.settle);
+    }
+    const x = tr.x + (seat.x - tr.x) * seat.w + k.x * k.d,
+      z = tr.z + (seat.z - tr.z) * seat.w + k.z * k.d,
       yaw = tr.yaw + angDiff(seat.yaw, tr.yaw) * seat.turn;
     this.group.position.set(x, 0, z);
     this.group.rotation.y = yaw;
     this.group.visible = this.seen;
     if (!this.seen) return;
+    this.room = style.ahead ? clearAhead(x, z, yaw, style.ahead, S.doors) : Infinity;
 
     /* gait */
     const p = this.phase,
@@ -398,7 +495,7 @@ export class Mascot {
       rig.leg_R.rx -= 0.25 * pull;
       rig.shin_L.rx += 0.4 * pull;
       rig.shin_R.rx += 0.4 * pull;
-    }
+    } else if (g.mode === 'scuttle') scuttle(this, rig, g, wk, dt);
 
     /* idle: breath and shifting weight */
     const alive = this.live,
@@ -590,7 +687,7 @@ export class Mascot {
       );
 
     /* feet planted: the legs take back whatever the body did above them */
-    if (rig.has.leg_L && g.mode !== 'crawl' && g.mode !== 'hop') {
+    if (rig.has.leg_L && g.mode !== 'crawl' && g.mode !== 'hop' && g.mode !== 'scuttle') {
       const legsOut = sit * 1.35,
         lean = body.rx,
         tilt = body.rz + body.px / h,

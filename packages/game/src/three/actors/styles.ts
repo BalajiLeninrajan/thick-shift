@@ -3,6 +3,7 @@
 // machinery; this file is the tuning, written from the notes each model
 // carries in packages/game/public/models/<key>.json.
 
+import { WINDUP } from '@thick-shift/sim';
 import type { MascotKey, MascotKind } from '@thick-shift/sim/config';
 import type { MascotState, NonEmpty } from '@thick-shift/sim/types';
 import * as THREE from 'three';
@@ -36,6 +37,8 @@ export const CH = [
   'reach',
   'slack',
   'legs',
+  'coil',
+  'lance',
 ] as const;
 type Channel = (typeof CH)[number];
 // One number per channel: a mascot's ch, RATE, a pose.
@@ -73,6 +76,8 @@ export const RATE: Channels = {
   reach: 6,
   slack: 5,
   legs: 6,
+  coil: 5,
+  lance: 9,
 };
 
 const BASE: PoseLayer = { breath: 1, sway: 1, legs: 1 };
@@ -113,13 +118,16 @@ const STAGE: PerStage<Partial<Record<PoseName | 'lit', PoseLayer>>> = [
     lit: { track: 1, lean: 0.44, shake: 1, jaw: 1, armL: -1.4, armR: -1.4, fore: -0.6, drop: 0.1, reach: 1 },
   },
 ];
+// For something whose hands and feet never leave the floor: no lean, crouch, sit or arm pose, whatever the state.
+const PLANTED: PoseLayer = { lean: 0, drop: 0, sit: 0, armL: 0, armR: 0, fore: 0, out: 0, slack: 0 };
 
-// How it gets about. mode: walk, float (nothing to stand on), crawl (on all fours), hop, or glide (nothing steps).
+// How it gets about. mode: walk, float (nothing to stand on), crawl (on all fours), hop, glide (nothing steps), or
+// scuttle (on hands and feet, belly up, in a panic; max is its stride).
 // min, max: how far a leg swings, in radians, from standing to fast (metres a second). knee: how far a knee bends as
 // the foot comes forward. hipYaw, hipRoll, shift: the hips turning, rolling onto the standing leg, and moving over
 // it. arm: the arm swing.
-interface Gait {
-  mode: 'walk' | 'float' | 'crawl' | 'hop' | 'glide';
+export interface Gait {
+  mode: 'walk' | 'float' | 'crawl' | 'hop' | 'glide' | 'scuttle';
   min: number;
   max: number;
   fast: number;
@@ -165,12 +173,26 @@ interface Tuning {
   states?: Partial<Record<PoseName | 'lit', PoseLayer>>;
   chains?: Record<string, ChainRun>;
   hook?: Hook;
+  ahead?: number;
 }
 
 const GAIT: Gait = { mode: 'walk', min: 0.14, max: 0.5, fast: 4, knee: 0.6, hipYaw: 0.2, hipRoll: 0.07, shift: 0.05, arm: 0.3 };
 const HEAD: Head = { yaw: 0.6, pitch: 0.3, rate: 4, step: 0, eye: 0.5, twitch: 0, neck: 0.35 };
 // How far a joint may turn before the mesh opens, from each model's notes. The poses ask for what they want and are held to this.
 const LIMIT: Limit = { arm: 2.6, out: 1, fore: 1.3 };
+
+// How far in front of the body the worm gets (metres, the furthest of its links and lips), by the pivots worm() is fitted to: at
+// rest, at lance and slump 0, 0.2, ... 1 (slump's is the most it has reached on the way down, so it only grows), and
+// how much less per unit of coil. With a wall closer than that it is crushed back, lance and slump giving way first
+// and coil taking up the rest, so as Stompy runs out of room the worm folds back off the wall instead of into it.
+const REACH = {
+  rest: 0.82,
+  lance: [0.82, 1.07, 1.31, 1.52, 1.69, 1.81],
+  slump: [0.82, 1.12, 1.31, 1.38, 1.38, 1.38],
+  coil: 0.8,
+  gap: 0.12, // between the mouth and the wall
+  far: 1.81 + 0.12 + 0.1, // where it stops looking
+} as const;
 
 /* ---------- the four ---------- */
 // What differs from the defaults at each stage. `states` are laid over the
@@ -292,25 +314,30 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       },
     },
     {
-      // A puppet hung from the worm in its belly. The worm does the looking.
-      gait: { min: 0.1, max: 0.26, knee: 0.17, hipRoll: 0.03, hipYaw: 0.08, arm: 0, shift: 0.02 },
-      head: { yaw: 0.3, pitch: 0.2, rate: 3, neck: 0 },
-      sit: 0.4,
+      // Bent over backwards into a bridge, hands and feet on the floor, with the worm standing out of its belly. It
+      // scuttles (mascot.ts) and the worm does the looking. Its hands and feet stay on the floor, so every pose here
+      // takes back what the shared ones do to the lean, the crouch and the arms.
+      gait: { mode: 'scuttle', max: 0.42, fast: 2.6 },
+      head: { yaw: 0.1, pitch: 0.1, rate: 3, neck: 0 },
+      limit: { arm: 0.7, out: 0.5, fore: 0.78 },
+      sit: 0,
       looker: 1,
-      slackArms: true,
       swayMax: 0.5,
       states: {
-        roam: { slack: 1 },
-        search: { slack: 1, sweep: 1, lean: -0.04 },
-        hunt: { slack: 1, lean: -0.1, track: 1, armL: 0, armR: 0, fore: 0, reach: 1 },
-        lit: { slack: 1, lean: -0.16, shake: 1, armL: 0, armR: 0, fore: 0, track: 1, drop: 0 },
-        siege: { slack: 1, lean: -0.15, armL: 0, armR: 0, fore: 0, rear: 1 },
-        windup: { slack: 1, lean: -0.22, drop: 0, armL: 0, armR: 0, rear: 1, headX: 0 },
-        charge: { slack: 1, lean: -0.3, armL: 0, armR: 0, rear: -1, headX: 0 },
-        feast: { slack: 1, armL: 0, armR: 0 },
-        scare: { slack: 1, lean: -0.15, armL: 0, armR: 0, fore: 0, rear: -1, jaw: 1 },
+        roam: { ...PLANTED },
+        search: { ...PLANTED, sweep: 1 },
+        hunt: { ...PLANTED, track: 1, reach: 1 },
+        lit: { ...PLANTED, shake: 1, track: 1 },
+        siege: { ...PLANTED, rear: 1 },
+        // It goes still and coils, then runs at you flat out: the scuttle at its most frantic, the worm out in front.
+        windup: { ...PLANTED, rear: 0, coil: 1, headX: 0, legs: 0 },
+        charge: { ...PLANTED, rear: 0, lance: 1, headX: 0, track: 0, legs: 1 },
+        stun: { ...PLANTED, track: 0, sway: 1, legs: 0 },
+        feast: { ...PLANTED },
+        scare: { ...PLANTED, rear: -1, jaw: 1 },
       },
       chains: { 1: worm, 2: ring(1.6), 3: ring(-2.3), 4: ring(3.1), 5: gullet },
+      ahead: REACH.far,
     },
   ],
   // Big Biggs.
@@ -405,36 +432,101 @@ function spine(a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number): void
 }
 
 // Stompy's worm. A slow travelling sway and a swallowing pulse; the upper links
-// turn the mouth to whoever it is looking at; `rear` curls it back before a
-// charge (and at a door), and below zero throws it forward, mouth first.
-function worm(a: Mascot, links: NonEmpty<Part>, ch: Channels, _dt: number): void {
+// turn the mouth to whoever it is looking at. Three shapes lay over that, each
+// one angle per link from the belly (extra_1) to the mouth (extra_1_13), fitted
+// to rhino_2's rest pivots (the worm stands up out of the arch and hooks over)
+// so the mouth ends up where each one wants it:
+//   COIL (the wind-up, `coil`): reared back 0.8 m over the arch and 0.15 m
+//     higher, mouth level, like a cobra, swaying, then still and quivering for
+//     the last of it, once the sim has stopped it turning (WINDUP.commit).
+//   LANCE (the charge, `lance`): out 1 m in front, mouth level at 2 m, the way
+//     the costume ran horn first.
+//   SLUMP (a crash): it bounces back off the wall (BOUNCE) and folds forward,
+//     the mouth hanging 0.7 m off the floor, and takes the rest of the stun to
+//     lift itself back up.
+// `rear` curls it back at a door, and below zero throws it at the camera for the scare.
+// None of them may put the mouth through a wall: see REACH.
+const COIL = [-0.15, -0.14, -0.13, -0.13, -0.13, -0.13, -0.1, -0.06, 0.01, 0.1, 0.2, 0.29, 0.34] as const,
+  LANCE = [0.26, 0.42, 0.42, 0.4, 0.1, -0.17, -0.32, -0.39, -0.41, -0.4, -0.23, 0.04, 0.37] as const,
+  SLUMP = [0.26, 0.42, 0.42, 0.42, 0.42, 0.26, -0.06, -0.29, -0.39, -0.39, -0.23, 0.02, 0.31] as const;
+const along = (t: readonly number[], w: number): number => {
+  const f = Math.min(1, Math.max(0, w)) * (t.length - 1),
+    i = Math.min(t.length - 2, Math.floor(f));
+  return (t[i] ?? 0) + ((t[i + 1] ?? 0) - (t[i] ?? 0)) * (f - i);
+};
+// A crash throws the body back off the wall: this far (or as far as there is room behind it) over `time` seconds. Only
+// the picture moves, the sim leaves Stompy where it hit, so once it moves off it closes the gap by `settle` of every
+// metre it goes, which never has it going backwards. mascot.ts does this.
+export const BOUNCE = { back: 0.9, time: 0.2, settle: 0.5 };
+// Seconds into a stun that it folds (once it has bounced) and that it starts back up, and how fast it goes down and comes up.
+const FOLD = { snap: BOUNCE.time, end: 1.3, down: 10, up: 0.9 };
+function worm(a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number): void {
   const n = links.length,
     rear = ch.rear,
     tk = ch.track,
-    lunge = a.kLunge + a.scareBite;
+    lunge = a.kLunge + a.scareBite,
+    coil = ch.coil,
+    lance = ch.lance;
+  const down = a.st === 'stun' && a.stT > FOLD.snap && a.stT < FOLD.end ? 1 : 0;
+  a.slump += (down - a.slump) * Math.min(1, dt * (down > a.slump ? FOLD.down : FOLD.up));
+  const slump = a.slump;
+  // Room in front: scale lance and slump back together until the worm fits, then rear it back for whatever is left.
+  const room = a.room - REACH.gap,
+    front = (s: number): number => along(REACH.lance, lance * s) + along(REACH.slump, slump * s) - REACH.rest - REACH.coil * coil;
+  let fit = 1;
+  while (fit > 0 && front(fit) > room) fit = Math.max(0, fit - 0.05);
+  const lanceW = lance * fit,
+    slumpW = slump * fit,
+    brace = Math.min(1 - coil, Math.max(0, front(fit) - room) / REACH.coil);
+  const // Committed. It ramps in over a tenth of a second so the sway does not stop dead mid-swing.
+    held = a.st === 'windup' ? Math.min(1, Math.max(0, (a.stT - (WINDUP.time - WINDUP.commit)) / 0.1)) : 0,
+    calm = Math.max(0, 1 - coil * 0.7 - lance - slump), // what is left of the idle sway and pulse
+    hood = coil * (1 - held),
+    tick = Math.floor(a.t * 30),
+    run = a.cur.style.gait.mode === 'scuttle' ? a.walk * ch.legs : 0,
+    lurch = Math.sin(Math.PI * 2 * a.phase);
   for (const [k, l] of links.entries()) {
     const u = k / (n - 1),
       upper = Math.max(0, u - 0.45) / 0.55;
-    l.rx += Math.sin(a.t * 0.8 - k * 0.55) * 0.07 + ch.shake * (hash(Math.floor(a.t * 14) + k) - 0.5) * 0.12;
-    l.rz += Math.cos(a.t * 0.6 - k * 0.5) * 0.07;
-    l.s *= 1 + 0.08 * Math.max(0, Math.sin(a.t * 3.5 - k * 0.8));
+    l.rx += (Math.sin(a.t * 0.8 - k * 0.55) * 0.07 + ch.shake * (hash(Math.floor(a.t * 14) + k) - 0.5) * 0.12) * calm;
+    l.rz += Math.cos(a.t * 0.6 - k * 0.5) * 0.07 * calm;
+    l.s *= 1 + 0.08 * calm * Math.max(0, Math.sin(a.t * 3.5 - k * 0.8));
     // The mouth: share the turn toward the target along the upper links.
     l.ry += (a.aimY * tk * upper * 2.4) / n;
     l.rx += ((a.aimP * tk * 2.4) / n + 0.05 * tk) * upper;
-    l.rx += -rear * 0.17 * upper + lunge * 0.16 * upper;
+    l.rx += -rear * 0.17 * upper + lunge * 0.16 * upper - a.kRecoil * 0.3 * upper;
+    l.rx += (COIL[k] ?? 0) * (coil + brace) + (LANCE[k] ?? 0) * lanceW + (SLUMP[k] ?? 0) * slumpW;
+    // The hood sways side to side from the middle, and the top links take it back out so the mouth stays on you.
+    l.rz += hood * Math.sin(a.t * 2.4 - k * 0.3) * (k >= 3 && k <= 8 ? 0.06 : k >= 10 ? -0.12 : 0);
+    // Held: a fine quiver through all of it at once.
+    l.rx += held * (hash(tick + k * 7) - 0.5) * 0.05;
+    l.rz += held * (hash(tick + k * 11 + 3) - 0.5) * 0.05;
+    // Folded: over to one side, and now and then a twitch runs through it.
+    if (k >= 3 && k <= 8) l.rz += slump * 0.12 * a.side;
+    if (slump > 0.3 && hash(Math.floor(a.t * 5) + a.i * 17) > 0.75) l.rx += (hash(tick + k * 5) - 0.5) * 0.12 * slump;
+    // Scuttling under it: the lower links lean back into the run and the whole thing is thrown about by each step.
+    if (run > 0.01) {
+      if (k < 6) l.rx -= run * 0.05;
+      l.rz += run * lurch * (k < 8 ? 0.05 : -0.04);
+      l.rx += run * (hash(a.steps * 7 + k) - 0.5) * 0.06 * Math.sin(Math.PI * ((a.phase * 2) % 1));
+    }
   }
 }
-// The tooth rings turn against each other, faster when it has someone.
+// The tooth rings turn against each other, faster when it has someone. They
+// spin up through the wind-up into the charge, and a crash stops them.
 function ring(rate: number): ChainRun {
   return (a, links, ch, dt) => {
-    const [l] = links;
-    l.rzSpin += rate * dt * (0.4 + ch.track + a.scareW * 4);
+    const [l] = links,
+      spin = 0.4 + ch.track + ch.coil * 1.5 + ch.lance * 3 + a.scareW * 4;
+    l.rzSpin += rate * dt * spin * (1 - a.slump);
     l.rz += l.rzSpin;
   };
 }
-// The second mouth, down the throat: it comes up when the worm has you.
+// The second mouth, down the throat: it comes up when the worm has you, and
+// all the way out on a charge.
 function gullet(a: Mascot, links: NonEmpty<Part>, ch: Channels): void {
-  links[0].pz += 0.22 * Math.max(0, Math.min(1, 0.5 * ch.reach * (0.5 + 0.5 * Math.sin(a.t * 2.3)) + a.scareBite));
+  const out = 0.5 * ch.reach * (0.5 + 0.5 * Math.sin(a.t * 2.3)) + 0.7 * ch.lance;
+  links[0].pz += 0.22 * Math.max(0, Math.min(1, out + a.scareBite));
 }
 
 // The small pale face in Biggs's mouth. It leans out to look at you, and
@@ -468,6 +560,7 @@ export interface Style {
   slackArms: boolean;
   stage: Stage;
   chains: { links: NonEmpty<Part>; run: ChainRun }[];
+  ahead: number; // metres in front mascot.ts looks for a wall each frame (Mascot.room), 0 for none
   poses: Record<PoseName, Channels> & { lit: Record<LitState, Channels> };
 }
 
@@ -490,6 +583,7 @@ export function styleOf(key: MascotKey, stage: Stage, rig: Rig): Style {
     slackArms: !!tuning.slackArms,
     stage,
     chains: Object.entries(rig.chains).map(([n, links]) => ({ links, run: tuning.chains?.[n] || dangle })),
+    ahead: tuning.ahead ?? 0,
     poses: {
       rest: pose('rest'),
       roam: pose('roam'),
