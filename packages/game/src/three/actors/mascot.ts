@@ -28,10 +28,6 @@ const bump = (u: number, up: number, down: number): number => smooth(u / up) * s
 // first half on the ground going back at a steady rate, which is ground speed, the second half swinging forward.
 const footAt = (q: number): number => (q < 0.5 ? q * 4 - 1 : Math.cos(Math.PI * (q * 2 - 1)));
 
-// The scuttle, Stompy's bridge on hands and feet. rate: gait cycles a second at a standstill, more for each metre a
-// second, and the most it manages (two steps a cycle, so a charge is some 14 steps a second). splay: how far a limb
-// in the air swings out. jerk: the spasm through every limb as it goes, and the tremble when it stands. buckle: the
-// share of steps on which a planted limb gives way under it.
 // How far it is from (x, z) to a wall or shut door straight ahead, to the nearest ROOM_STEP and short of it, or
 // Infinity if there is none within max. Furniture does not count: what reaches over it is above it.
 const ROOM_STEP = 0.05;
@@ -41,6 +37,11 @@ function clearAhead(x: number, z: number, yaw: number, max: number, doors: State
   for (let d = ROOM_STEP; d <= max; d += ROOM_STEP) if (!walkable(x + sx * d, z + sz * d, 0.02, doors, true)) return d - ROOM_STEP;
   return Infinity;
 }
+
+// The scuttle, Stompy's bridge on hands and feet. rate: gait cycles a second at a standstill, more for each metre a
+// second, and the most it manages (two steps a cycle, so a charge is some 14 steps a second). splay: how far a limb
+// in the air swings out. jerk: the spasm through every limb as it goes, and the tremble when it stands. buckle: the
+// share of steps on which a planted limb gives way under it.
 const SCUTTLE = { rate: [1.6, 1.2, 7], splay: 0.3, jerk: [0.12, 0.025], buckle: 0.22 } as const;
 // Diagonal pairs, arm_L with leg_R, then arm_R with leg_L: the pair in the air swings forward and out while the
 // planted pair shoves back. No two steps are the same size, everything spasms, now and then a limb buckles and drops
@@ -52,18 +53,17 @@ function scuttle(a: Mascot, rig: Rig, g: Gait, wk: number, dt: number): void {
     first = a.phase < 0.5, // arm_L and leg_R are the pair in the air
     amp = g.max * (0.6 + 0.9 * hash(n)) * wk,
     air = amp * Math.cos(Math.PI * q), // from back (+) to front (-)
-    lift = env * wk * (0.7 + 0.6 * hash(n + 1)),
-    out = SCUTTLE.splay * lift;
+    lift = env * wk * (0.7 + 0.6 * hash(n + 1));
   const [aL, aR] = first ? [air, -air] : [-air, air], // arm_L with leg_R, arm_R with leg_L
     [upA, upB] = first ? [lift, 0] : [0, lift];
   rig.arm_L.rx += aL;
   rig.leg_R.rx += aL;
   rig.arm_R.rx += aR;
   rig.leg_L.rx += aR;
-  rig.arm_L.rz += out * (first ? 1 : 0);
-  rig.leg_R.rz -= out * (first ? 1 : 0);
-  rig.arm_R.rz -= out * (first ? 0 : 1);
-  rig.leg_L.rz += out * (first ? 0 : 1);
+  rig.arm_L.rz += SCUTTLE.splay * upA;
+  rig.leg_R.rz -= SCUTTLE.splay * upA;
+  rig.arm_R.rz -= SCUTTLE.splay * upB;
+  rig.leg_L.rz += SCUTTLE.splay * upB;
   rig.forearm_L.rx -= 0.45 * upA;
   rig.forearm_R.rx -= 0.45 * upB;
   rig.shin_R.rx += 0.45 * upA;
@@ -355,7 +355,7 @@ export class Mascot {
           behind = clearAhead(tr.x, tr.z, tr.yaw + Math.PI, BOUNCE.back + MASCOT_R, S.doors);
         k.x = -Math.sin(tr.yaw);
         k.z = -Math.cos(tr.yaw);
-        k.far = Math.max(0, Math.min(BOUNCE.back, behind - MASCOT_R));
+        k.far = clamp(behind - MASCOT_R, 0, BOUNCE.back);
       }
       this.st = st;
       this.stT = 0;
@@ -550,7 +550,7 @@ export class Mascot {
       // Hung, not standing: the head lolls and the arms swing a beat late.
       rig.head.rz += slack * 0.12 * Math.sin(this.t * 1.3);
       rig.head.rx += slack * 0.08 * Math.sin(this.t * 0.9 + 1);
-      if (style.slackArms || st === 'stun') {
+      if (st === 'stun') {
         lag(rig.arm_L, tr.vf * 0.12 + Math.sin(this.t * 1.1) * 0.04, -tr.spin * 0.08, dt, 18, 2.5, 0.7);
         lag(rig.arm_R, tr.vf * 0.12 + Math.sin(this.t * 1.1 + 2) * 0.04, -tr.spin * 0.08, dt, 16, 2.5, 0.7);
       }

@@ -11,6 +11,9 @@ import { EYE_PALE } from '../assets';
 import type { Mascot } from './mascot';
 import type { Part, Rig } from './rig';
 import { lag } from './rig';
+import { TAU } from './track';
+
+const { clamp } = THREE.MathUtils;
 
 /* ---------- pose channels ---------- */
 // A pose is one number per channel. Every state has a pose, and a mascot's
@@ -171,7 +174,6 @@ interface Tuning {
   sit?: number;
   swayMax?: number;
   looker?: number;
-  slackArms?: boolean;
   states?: Partial<Record<PoseName | 'lit', PoseLayer>>;
   chains?: Record<string, ChainRun>;
   hook?: Hook;
@@ -183,18 +185,20 @@ const HEAD: Head = { yaw: 0.6, pitch: 0.3, rate: 4, step: 0, eye: 0.5, twitch: 0
 // How far a joint may turn before the mesh opens, from each model's notes. The poses ask for what they want and are held to this.
 const LIMIT: Limit = { arm: 2.6, out: 1, fore: 1.3 };
 
-// How far in front of the body the worm gets (metres, the furthest of its links and lips), by the pivots worm() is fitted to: at
-// rest, at lance and slump 0, 0.2, ... 1 (slump's is the most it has reached on the way down, so it only grows), and
-// how much less per unit of coil. With a wall closer than that it is crushed back, lance and slump giving way first
-// and coil taking up the rest, so as Stompy runs out of room the worm folds back off the wall instead of into it.
+// How far in front of the body Stompy's worm gets (metres, the furthest of its links and lips), by the pivots worm()
+// is fitted to: at rest, at lance and slump 0, 0.2, ... 1 (slump's is the most it has reached on the way down, so it
+// only grows), and how much less per unit of coil. With a wall closer than that it is crushed back, lance and slump
+// giving way first and coil taking up the rest, so as Stompy runs out of room the worm folds back off the wall
+// instead of into it.
 const REACH = {
   rest: 0.82,
   lance: [0.82, 1.07, 1.31, 1.52, 1.69, 1.81],
   slump: [0.82, 1.12, 1.31, 1.38, 1.38, 1.38],
   coil: 0.8,
   gap: 0.12, // between the mouth and the wall
-  far: 1.81 + 0.12 + 0.1, // where it stops looking
 } as const;
+// Where it stops looking for a wall: a little past the furthest the worm gets.
+const AHEAD = Math.max(...REACH.lance, ...REACH.slump) + REACH.gap + 0.1;
 
 /* ---------- the four ---------- */
 // What differs from the defaults at each stage. `states` are laid over the
@@ -339,7 +343,7 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
         scare: { ...PLANTED, rear: -1, jaw: 1 },
       },
       chains: { 1: worm, 2: ring(1.6), 3: ring(-2.3), 4: ring(3.1), 5: gullet },
-      ahead: REACH.far,
+      ahead: AHEAD,
     },
   ],
   // Big Biggs.
@@ -452,7 +456,7 @@ const COIL = [-0.15, -0.14, -0.13, -0.13, -0.13, -0.13, -0.1, -0.06, 0.01, 0.1, 
   LANCE = [0.26, 0.42, 0.42, 0.4, 0.1, -0.17, -0.32, -0.39, -0.41, -0.4, -0.23, 0.04, 0.37] as const,
   SLUMP = [0.26, 0.42, 0.42, 0.42, 0.42, 0.26, -0.06, -0.29, -0.39, -0.39, -0.23, 0.02, 0.31] as const;
 const along = (t: readonly number[], w: number): number => {
-  const f = Math.min(1, Math.max(0, w)) * (t.length - 1),
+  const f = clamp(w, 0, 1) * (t.length - 1),
     i = Math.min(t.length - 2, Math.floor(f));
   return (t[i] ?? 0) + ((t[i + 1] ?? 0) - (t[i] ?? 0)) * (f - i);
 };
@@ -483,13 +487,13 @@ function worm(a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number): void 
   const lanceW = lance * fit,
     slumpW = slump * fit,
     brace = Math.min(1 - coil, Math.max(0, front(fit) - room) / REACH.coil);
-  const // Committed. It ramps in over a tenth of a second so the sway does not stop dead mid-swing.
-    held = a.st === 'windup' ? Math.min(1, Math.max(0, (a.stT - (WINDUP.time - WINDUP.commit)) / 0.1)) : 0,
+  // Committed. It ramps in over a tenth of a second so the sway does not stop dead mid-swing.
+  const held = a.st === 'windup' ? clamp((a.stT - (WINDUP.time - WINDUP.commit)) / 0.1, 0, 1) : 0,
     calm = Math.max(0, 1 - coil * 0.7 - lance - slump), // what is left of the idle sway and pulse
     hood = coil * (1 - held),
     tick = Math.floor(a.t * 30),
     run = a.cur.style.gait.mode === 'scuttle' ? a.walk * ch.legs : 0,
-    lurch = Math.sin(Math.PI * 2 * a.phase);
+    lurch = Math.sin(TAU * a.phase);
   const sw = ch.swivel,
     look = a.look;
   if (sw > 0.01) {
@@ -554,7 +558,7 @@ function ring(rate: number): ChainRun {
 // all the way out on a charge.
 function gullet(a: Mascot, links: NonEmpty<Part>, ch: Channels): void {
   const out = 0.5 * ch.reach * (0.5 + 0.5 * Math.sin(a.t * 2.3)) + 0.7 * ch.lance;
-  links[0].pz += 0.22 * Math.max(0, Math.min(1, out + a.scareBite));
+  links[0].pz += 0.22 * clamp(out + a.scareBite, 0, 1);
 }
 
 // The small pale face in Biggs's mouth. It leans out to look at you, and
@@ -585,7 +589,6 @@ export interface Style {
   hook: Hook | null;
   limit: Limit;
   looker: number;
-  slackArms: boolean;
   stage: Stage;
   chains: { links: NonEmpty<Part>; run: ChainRun }[];
   ahead: number; // metres in front mascot.ts looks for a wall each frame (Mascot.room), 0 for none
@@ -608,7 +611,6 @@ export function styleOf(key: MascotKey, stage: Stage, rig: Rig): Style {
     hook: tuning.hook || null,
     limit: { ...LIMIT, ...tuning.limit },
     looker: tuning.looker ?? 0,
-    slackArms: !!tuning.slackArms,
     stage,
     chains: Object.entries(rig.chains).map(([n, links]) => ({ links, run: tuning.chains?.[n] || dangle })),
     ahead: tuning.ahead ?? 0,
