@@ -18,14 +18,14 @@
 # Files here: textures.py draws the textures (run automatically when ./tex is
 # missing), kit.py is the mesh and material toolkit, gameplay.py, booth.py
 # and service.py hold the props, guard.py the guard.
-import json, math, os, subprocess, sys
+import json, os, subprocess, sys
 
 import bpy
 from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE)); sys.path.insert(0, HERE)
-from common import MODELS, bounds, export_glb, part, preview, report, reset, script_args, shot, tris
+from common import MODELS, bounds, export_glb, part, preview, report, reset, script_args, shot, tris, turned
 import kit
 
 ARGS = script_args()
@@ -69,8 +69,7 @@ def shots(name, spots, pose=None):
     common.shot). `pose` = {node: (x, y, z) degrees} turns parts first, for
     checking joints."""
     preview(name, views=(), res=400, samples=12, light=LIGHT)
-    for node, r in (pose or {}).items():
-        o = bpy.data.objects[node]; o.rotation_mode = 'XYZ'; o.rotation_euler = [math.radians(v) for v in r]
+    if pose: turned(pose)(bpy.data.objects)
     for key, (c, r, az) in spots.items(): shot(f'{name}_{key}', c, r, az)
 
 

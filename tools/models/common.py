@@ -154,6 +154,17 @@ def report(name, folder=MODELS):
     return info
 
 
+def turned(pose):
+    """A `pose` for preview(): turns each node named in {node: (x, y, z)
+    degrees} about its own axes, the way the game moves joints."""
+    def apply(objs):
+        for o in objs:
+            if o.name in pose:
+                o.rotation_mode = 'XYZ'
+                o.rotation_euler = [math.radians(a) for a in pose[o.name]]
+    return apply
+
+
 # Camera stations for preview(): name -> (azimuth in degrees, 0 = from the front; height factor; distance factor)
 VIEWS = {'front': (0, .55, 1), 'three_quarter': (35, .6, 1), 'side': (90, .55, 1), 'back': (180, .55, 1), 'low': (15, .12, .8)}
 
@@ -169,7 +180,7 @@ def preview(name, views=('front', 'three_quarter', 'side', 'back'), res=640, sam
            to frame a detail such as the face. Default frames the whole model.
     pose:  a function given the loaded objects, to turn joints before the
            model is framed, so a seam that opens when the game moves a joint
-           shows up.
+           shows up. turned() makes one from a table of angles.
     """
     objs = load_glb(os.path.join(folder, name + '.glb'))
     if pose:

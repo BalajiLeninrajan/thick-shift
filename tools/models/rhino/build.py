@@ -13,7 +13,7 @@
 #
 # sculpt.py makes the meshes, shade.py the materials and the bake, parts.py
 # the head, hands, feet and worm. This file lays each stage out and exports.
-# look.py renders previews of the result.
+# ../look.py renders previews of the result.
 import sys, os, math, time, traceback
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

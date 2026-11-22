@@ -7,9 +7,8 @@
 # view is one from common.VIEWS, light is flashlight or studio, and focus is
 # a key of the stage's FOCUS table below (face, hips, ...). `--only` skips
 # the build and renders the GLB already on disk; with `--json` as well it also
-# rewrites this stage's entry in walrus.json from that GLB. `--pose` writes a second,
-# throwaway GLB with the joints turned, to check that no seam opens, and
-# deletes it once the previews are rendered.
+# rewrites this stage's entry in walrus.json from that GLB. `--pose` turns the
+# joints in the previews, to check that no seam opens.
 #
 # Stage 0 is the costume as built, 1 is the costume going wrong, 2 is what is
 # underneath. Stages 0 and 1 stand on enormous hips, the rear wider than tall,
@@ -726,7 +725,7 @@ FOCUS = {'face': ((HEAD_C.x, HEAD_C.y - .25 * HEAD_S, HEAD_C.z - .03), .55 * HEA
          'leg': ((1.0, -.3, 1.2), 1.1), 'chest': ((0, -.4, 1.6), .6), 'neck': ((0, -.1, 2.3), .7)}
 
 
-def assemble(name, pose=None):
+def assemble(name):
     fibre = fibre_material()
     glow = glow_material((.85, .82, .7) if ST < 2 else (1, .93, .8))
     tex = {}
@@ -752,9 +751,6 @@ def assemble(name, pose=None):
             o.data.color_attributes.active_color = o.data.color_attributes['Col']
             o.data.color_attributes.render_color_index = o.data.color_attributes.find('Col')
         objs[k] = part(o, k, objs[p['parent']], p['pivot'])
-    if pose:
-        for k, rot in pose.items():
-            if k in objs: objs[k].rotation_euler = [math.radians(a) for a in rot]
     export_glb(name, [root]); lap('export')
 
 
@@ -812,19 +808,14 @@ if __name__ == '__main__':
             parts['body']['tex'] = [join(parts['body']['tex'])]
             collide = bvh(parts['body']['tex'][0])   # body and drape as one, for the hair to lie on
         make_head(collide); lap('head')
-        if '--pose' in ARGS:
-            name += '_pose'
-            assemble(name, POSE)
-        else:
-            assemble(name)
-            write_json(report(name))
+        assemble(name)
+        write_json(report(name))
     elif '--json' in ARGS:
         write_json(report(name))
-    try:
-        for spec in ARGS[1:]:
-            if spec.startswith('--'): continue
-            v, light, focus = (spec.split(':') + ['', ''])[:3]
-            light = light or 'flashlight'
-            preview(name, views=(v,), res=560, samples=20, light=light, focus=FOCUS.get(focus), tag=('_' + focus if focus else '') + ('_studio' if light == 'studio' else '') + ('_pose' if '--pose' in ARGS else ''))
-    finally:
-        if name.endswith('_pose'): os.remove(os.path.join(MODELS, name + '.glb'))
+    posed = '--pose' in ARGS
+    for spec in ARGS[1:]:
+        if spec.startswith('--'): continue
+        v, light, focus = (spec.split(':') + ['', ''])[:3]
+        light = light or 'flashlight'
+        preview(name, views=(v,), res=560, samples=20, light=light, focus=FOCUS.get(focus), pose=turned(POSE) if posed else None,
+                tag=('_' + focus if focus else '') + ('_studio' if light == 'studio' else '') + ('_pose' if posed else ''))

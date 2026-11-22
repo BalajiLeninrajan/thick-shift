@@ -10,7 +10,7 @@
 # With none named, all of them are rendered.
 #
 # Writes packages/game/public/models/hippo_<stage>.glb. meta.py writes hippo.json
-# afterwards. look.py renders other previews and a posed check.
+# afterwards. ../look.py renders other previews and a posed check.
 #
 # Coordinates are Blender's: +x is the model's left, the front is -y, z is up,
 # metres. The 2D source was COSTUME.hippo, HEAD.hippo and GORE.hippo in
