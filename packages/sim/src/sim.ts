@@ -162,7 +162,7 @@ const FEAST = 3.5;
 const GRAB_TIME = 1.2; // seconds a mascot stuck behind furniture takes to reach over it
 const STARE = 5; // seconds one waiting its turn stands and stares before it goes back to what it was doing
 const CHARGE_GAP = 10; // seconds before Stompy can charge again
-const WINDUP = { time: 1.5, commit: 0.5 }; // Stompy's wind-up before a charge, and how much of it at the end is spent not turning
+export const WINDUP = { time: 1.5, commit: 0.5 }; // Stompy's wind-up before a charge, and how much of it at the end is spent not turning
 const SEARCH_MAX = 14; // seconds one spends looking for what it heard or lost before it gives that up
 const NOTICE = 0.7; // seconds a mascot stands and stares after spotting a guard, before it moves
 // Seconds a mascot keeps knowing where its guard is after losing sight of them: Biggs, and the rest.

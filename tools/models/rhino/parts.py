@@ -321,7 +321,7 @@ def tail(rig, body, M, z, stage, rng, parent='body'):
 
 # ---------- the worm ----------
 
-def worm(rig, M, ctrl, links, rng, r0=.2, r1=.135):
+def worm(rig, M, ctrl, links, rng, r0, r1):
     """A chain of rigid beads along the spline through ctrl. Each link's
     origin is its joint with the one before. Neighbours end in matching
     half-spheres centred on the shared joint, so a joint can bend about 25
