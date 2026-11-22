@@ -3,8 +3,8 @@
 #   tools/models/bl tools/models/hippo/meta.py
 #
 # Height, footprint and node names are measured from the GLBs. The face
-# centres and the notes for the animator are written here by hand and must be
-# kept in step with build.py. Angles in the notes are degrees about the part's
+# centres and the notes for the animator are written here by hand, so change
+# them when build.py moves the head or a joint. Angles in the notes are degrees about the part's
 # own axes in three.js terms: x pitches (positive tips a forward-pointing part
 # down and swings a hanging part back), y yaws, z rolls.
 import sys, os, json
@@ -12,6 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import *
 
 # Face centres in Blender axes (x, y with the front at -y, z), converted below.
+# This is the point the game aims the jumpscare at. FACE in build.py is a
+# different thing, the sphere its face previews frame, and need not match.
 # Stage 1's is stage 0's carried through the head's built-in loll (HEAD_R, HEAD_T in build.py).
 FACE = [(0, -.62, 1.90), (-.035, -.76, 1.98), (0, -.96, 2.30)]
 
