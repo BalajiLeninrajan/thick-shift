@@ -197,6 +197,7 @@ export interface NightState extends LobbyState {
   bats: number[]; // the BATTERY_SPOTS that have one lying there
   toys: Toy[];
   toyId: number;
+  toyBox: number; // Mini Biggses left in the booth's carton (TOY_BOX)
 }
 // S as it is sent and received: a lobby state, or a night's.
 export type State = LobbyState & Partial<Omit<NightState, keyof LobbyState>>;
@@ -246,7 +247,7 @@ export interface Brain {
 // A guard's action, sent by their own browser (packages/game/src/three/player.ts) to the room, or in a night played
 // solo handed straight to commandFloor. It comes off the wire as JSON from someone else's browser, so actFloor checks
 // every field.
-export type UseWhat = 'fix' | 'door' | 'bat' | 'toy' | 'hide' | 'peel';
+export type UseWhat = 'fix' | 'door' | 'bat' | 'toy' | 'carton' | 'hide' | 'peel';
 export type Action =
   | { t: 'name'; n: string }
   // Where the guard's own browser has moved them, and what they are doing.

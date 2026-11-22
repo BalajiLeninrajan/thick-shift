@@ -283,6 +283,12 @@ return {
 		z = 43.95,
 		face = 3.141592653589793,
 	},
+	TOY_BOX = {
+		room = 9,
+		x = 25.6,
+		z = 43.45,
+		face = 3.141592653589793,
+	},
 	WALL_MAP = {
 		room = 9,
 		x = 18.5,
@@ -1227,7 +1233,6 @@ return {
 			{ "locker", 15.6, 36.85, 0 },
 			{ "locker", 16.55, 36.85, 0 },
 			{ "coat_rack", 26.4, 43.4, 200 },
-			{ "cardboard_box", 25.7, 43.5, 15 },
 			{
 				"fire_extinguisher",
 				24.9,

@@ -62,6 +62,7 @@ import {
   sees,
   slide,
   spawnPoint,
+  TOY_BOX,
   walkable,
 } from './map.ts';
 import type {
@@ -204,7 +205,9 @@ const LOCKER_NOISE: [number, number] = [6, 0.5],
 // until a guard with empty hands picks it up, which means walking to where the mascots were sent. The cost was set
 // against the harness, whose competent and expert guards throw theirs at a wanderer in their way while they have the
 // battery to spare and go back for it once things are quiet. Light spent on a song is light not holding a mascot off.
-export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3 };
+// A carton of them from the gift shop sits in the booth (TOY_BOX in map.ts) with `box` in it at clock-in, shared by
+// the crew and not restocked until the next night (S.toyBox), so a throw need not mean the walk back for it.
+export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3, box: 6 };
 
 const OPEN = (): Doors => ({ L: false, V: false, R: false });
 // The night's random numbers, all drawn from sim.rng. The Roblox port draws in the same order (CONTRACT.md).
@@ -426,6 +429,7 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
   S.bats = spots.slice(0, S.batN);
   S.toys = [];
   S.toyId = 0;
+  S.toyBox = TOY.box;
   sim.batTimers = [];
   sim.crankNoise = 0;
 }
@@ -1322,6 +1326,14 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
       S.toys = S.toys.filter(o => o !== t);
       p.toy = true;
       emit(S, 'grab', { by: p.id, x: t.x, z: t.z });
+      return;
+    }
+    case 'carton': {
+      // A fresh one out of the booth's carton, into empty hands, while there are any left.
+      if (p.toy || hidden(p) || S.toyBox <= 0 || !near(TOY_BOX)) return;
+      S.toyBox--;
+      p.toy = true;
+      emit(S, 'grab', { by: p.id, x: TOY_BOX.x, z: TOY_BOX.z });
       return;
     }
     case 'hide': {

@@ -274,7 +274,6 @@ export const DRESSING: Placed[][] = [
     ['locker', 15.6, 36.85, 0],
     ['locker', 16.55, 36.85, 0],
     ['coat_rack', 26.4, 43.4, 200],
-    ['cardboard_box', 25.7, 43.5, 15],
     ['fire_extinguisher', 24.9, 44, 180, wall(1.2)],
     ['fuse_box', 22.6, 44, 180, wall(1.5)],
   ],

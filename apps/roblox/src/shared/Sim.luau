@@ -11,8 +11,8 @@ local Map = if script then require(script.Parent.Map) else (require :: any)("./M
 local Util = if script then require(script.Parent.Util) else (require :: any)("./Util")
 
 local MASC, FINAL_NIGHT, DOORS = Data.MASC, Data.FINAL_NIGHT, Data.DOORS
-local BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, REST =
-	Map.BOXES, Map.GENERATOR, Map.CHARGER, Map.PANELS, Map.BATTERY_SPOTS, Map.HIDES, Map.REST
+local BOXES, GENERATOR, CHARGER, PANELS, BATTERY_SPOTS, HIDES, REST, TOY_BOX =
+	Map.BOXES, Map.GENERATOR, Map.CHARGER, Map.PANELS, Map.BATTERY_SPOTS, Map.HIDES, Map.REST, Map.TOY_BOX
 local BOOTH, DUCTS, MASCOT_R, PLAYER_R, DOORWAYS, ROOMS3 =
 	Map.BOOTH, Map.DUCTS, Map.MASCOT_R, Map.PLAYER_R, Map.DOORWAYS, Map.ROOMS3
 local walkable, slide, clear, sees, reaches, roomAt, roomCentre, route, spawnPoint =
@@ -99,6 +99,7 @@ local TOY = {
 	hear = 12,
 	chance = 0.9,
 	sing = 3,
+	box = 6,
 }
 local DREAD_SPAN, DREAD_FULL = 45, 7
 local COMING = { "hunt", "windup", "charge" }
@@ -380,6 +381,7 @@ function Sim:startNight(n: number)
 	-- The Mini Biggses thrown, newest last (see sim.ts).
 	S.toys = {}
 	S.toyId = 0
+	S.toyBox = TOY.box
 	self.batTimers = {}
 	self.crankNoise = 0
 end
@@ -1455,6 +1457,11 @@ function Sim:act(pid: string, a: any)
 		table.remove(S.toys, k)
 		p.toy = true
 		self:emit("grab", { by = p.id, x = t.x, z = t.z })
+	elseif a.what == "carton" and not p.toy and not hidden(p) and S.toyBox > 0 and near(TOY_BOX) then
+		-- A fresh one out of the booth's carton.
+		S.toyBox -= 1
+		p.toy = true
+		self:emit("grab", { by = p.id, x = TOY_BOX.x, z = TOY_BOX.z })
 	elseif a.what == "hide" and HIDES[i + 1] then
 		local h = HIDES[i + 1]
 		if p.hid == i then

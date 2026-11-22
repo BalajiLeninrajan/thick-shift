@@ -3,10 +3,10 @@
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
 import { FLAN } from '../src/config.ts';
-import { BATTERY_SPOTS, BOXES, dist, HIDES, PANELS, REST, spawnPoint } from '../src/map.ts';
+import { BATTERY_SPOTS, BOXES, dist, HIDES, PANELS, REST, spawnPoint, TOY_BOX } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
 import { DEV_OFF } from '../src/session.ts';
-import { actFloor, adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor } from '../src/sim.ts';
+import { actFloor, adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor, TOY } from '../src/sim.ts';
 import type { Guard, NightState, SimEvent, State } from '../src/types.ts';
 import { countEvents, digest, eventsSince } from './nights.ts';
 
@@ -267,6 +267,30 @@ describe('actFloor', () => {
       }
     });
   }
+
+  it('hands out the booth carton one at a time, to empty hands in reach, until it is empty', () => {
+    const { sim, S } = start(1, 2, 1);
+    const [p, q] = [defined(S.players[0], 'g0'), defined(S.players[1], 'g1')];
+    const take = (g: Guard) => actFloor(sim, S, g.id, { t: 'use', what: 'carton' });
+    expect(S.toyBox).toBe(TOY.box);
+    Object.assign(p, { x: TOY_BOX.x, z: TOY_BOX.z - 0.9 });
+    take(p);
+    expect(S.toyBox).toBe(TOY.box); // their own still in hand
+    p.toy = false;
+    Object.assign(q, { x: TOY_BOX.x - 3, z: TOY_BOX.z - 3, toy: false });
+    take(q);
+    expect([S.toyBox, q.toy]).toEqual([TOY.box, false]); // out of reach
+    for (let k = 1; k <= TOY.box; k++) {
+      take(p);
+      expect([S.toyBox, p.toy]).toEqual([TOY.box - k, true]);
+      expect(S.evs.at(-1)).toMatchObject({ type: 'grab', x: { by: p.id, x: TOY_BOX.x, z: TOY_BOX.z } });
+      p.toy = false;
+    }
+    take(p);
+    expect([S.toyBox, p.toy]).toEqual([0, false]);
+    restartFloor(sim, S);
+    expect(S.toyBox).toBe(TOY.box);
+  });
 
   it('steps into a locker named by a number, and keeps p.hid a number', () => {
     const hide = defined(
