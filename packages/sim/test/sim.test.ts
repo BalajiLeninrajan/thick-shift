@@ -2,7 +2,8 @@
 // night up from S alone (adoptFloor), starting the run again (restartFloor) and a guard's actions (actFloor).
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
-import { BATTERY_SPOTS, BOXES, HIDES, PANELS, REST, spawnPoint } from '../src/map.ts';
+import { FLAN } from '../src/config.ts';
+import { BATTERY_SPOTS, BOXES, dist, HIDES, PANELS, REST, spawnPoint } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
 import { DEV_OFF } from '../src/session.ts';
 import { actFloor, adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor } from '../src/sim.ts';
@@ -283,12 +284,12 @@ describe('a hunt', () => {
   // marks, rot held at stage 0 so a torch stops her dead.
   function chase() {
     const { sim, S } = start(1, 1, 1);
-    S.dev = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: 0, dread: -1 };
+    S.dev = { ...DEV_OFF, rot: 0 };
     S.stir = false;
     S.waveAt = 1e9;
     const p = defined(S.players[0], 'g0'),
-      m = defined(S.m[1], 'Madame Flan'),
-      b = brainOf(sim, 1);
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
     Object.assign(p, { x: 19.5, z: 18, yaw: 0, pitch: 0, on: true });
     Object.assign(m, { x: 19.5, z: 24, yaw: Math.PI, st: 'hunt' });
     Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z } });
@@ -300,7 +301,7 @@ describe('a hunt', () => {
     for (let k = 1; k <= 400; k++) stepFloor(sim, S, k * 100);
     expect(S.t).toBeCloseTo(40, 6);
     expect(m.st).toBe('hunt');
-    expect(Math.hypot(m.x - 19.5, m.z - 24)).toBeLessThan(0.5); // held where it stood
+    expect(dist(m, { x: 19.5, z: 24 })).toBeLessThan(0.5); // held where it stood
     expect(p.flat).toBe(false);
   });
 
@@ -311,8 +312,8 @@ describe('a hunt', () => {
     S.waveAt = 1e9;
     const h = defined(HIDES[0], 'locker 0'),
       p = defined(S.players[0], 'g0'),
-      m = defined(S.m[1], 'Madame Flan'),
-      b = brainOf(sim, 1);
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
     Object.assign(p, { hid: 0, x: h.at.x, z: h.at.z, on: false });
     // Right outside the doors, close enough to touch them, and it saw them get in.
     Object.assign(m, { x: h.at.x + Math.sin(h.face) * 0.6, z: h.at.z + Math.cos(h.face) * 0.6, st: 'search' });

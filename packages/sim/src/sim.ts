@@ -817,7 +817,7 @@ function openLockers(S: NightState, m: Mascot, b: Brain, dt: number) {
   b.knows = -1;
   b.sniff = 0;
   // They banged their way in, shaking: no start on it this time.
-  if ((p.inAt || 0) < (p.shaky || 0)) {
+  if (p.inAt < p.shaky) {
     flatten(S, p, m, b);
     return true;
   }
@@ -1332,7 +1332,7 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
         emit(S, 'locker', { i, id: p.id, in: false, loud: false, x: h.x, z: h.z });
         noise(sim, S, h.at.x, h.at.z, ...LOCKER_NOISE);
       } else if (!hidden(p) && near(h.at) && !S.players.some(q => q.hid === i)) {
-        const loud = S.t < (p.shaky || 0);
+        const loud = S.t < p.shaky;
         Object.assign(p, { hid: i, x: h.at.x, z: h.at.z, on: false, sp: false, act: '', inAt: S.t });
         emit(S, 'locker', { i, id: p.id, in: true, loud, x: h.x, z: h.z });
         seenHiding(sim, S, p);

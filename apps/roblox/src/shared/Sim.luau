@@ -817,7 +817,7 @@ function Sim:openLockers(m, b, dt: number): boolean
 	b.knows = -1
 	b.sniff = 0
 	-- They banged their way in, shaking: no start on it this time.
-	if (p.inAt or 0) < (p.shaky or 0) then
+	if p.inAt < p.shaky then
 		self:flatten(p, m, b)
 		return true
 	end
@@ -1464,7 +1464,7 @@ function Sim:act(pid: string, a: any)
 		elseif not hidden(p) and near(h.at) and not some(S.players, function(q)
 			return q.hid == i
 		end) then
-			local loud = S.t < (p.shaky or 0)
+			local loud = S.t < p.shaky
 			p.hid, p.x, p.z, p.on, p.sp, p.act, p.inAt = i, h.at.x, h.at.z, false, false, "", S.t
 			self:emit("locker", { i = i, id = p.id, ["in"] = true, loud = loud, x = h.x, z = h.z })
 			self:seenHiding(p)
