@@ -5,11 +5,13 @@
 #   tools/models/bl tools/models/rhino/build.py -- 2 fast  skip the preview renders
 #
 # Stage 0 is the costume as built. Stage 1 is the same costume on something
-# starved, folded into a crouch. Stage 2 stands again because a worm that
-# came out of its belly is holding it up. The hips and rear are enormous at
-# stages 0 and 1, wider than tall, a shelf. At stage 2 they are emptied out
-# (the owner's call): a starved pelvis narrower than the shoulders, so the
-# worm is the biggest thing on it.
+# starved, folded into a crouch. Stage 2 is bent over backwards into a
+# bridge, belly to the ceiling, hands and feet flat on the floor, with the
+# worm standing straight up out of the belly and the head hanging off a
+# snapped neck underneath. The hips and rear are enormous at stages 0 and 1,
+# wider than tall, a shelf. At stage 2 they are emptied out (the owner's
+# call): a starved pelvis narrower than the shoulders, so the worm is the
+# biggest thing on it.
 #
 # sculpt.py makes the meshes, shade.py the materials and the bake, parts.py
 # the head, hands, feet and worm. This file lays each stage out and exports.
@@ -18,6 +20,7 @@ import sys, os, math, time, traceback
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
+from mathutils import Matrix, Vector
 from common import *
 from sculpt import *
 from parts import *
@@ -71,46 +74,39 @@ def rear(c, y, z, hips_y=None):
         c.ell((sx * .66, y + .02, z - .05), (.44, .48, .40), sub=4)  # the shelf over each leg
 
 
-def starved_rear(c, y, z):
-    """Stage 2 only: the rear has been emptied out. A pelvis with the plush
-    sagging on the bone, hip bones pushing through, narrower than the
-    shoulders, so the worm is the biggest thing on it."""
-    c.ell((0, y, z), (.33, .23, .21), e=2.2, sub=4)
-    for sx in (-1, 1):
-        c.ell((sx * .15, y + .12, z - .08), (.16, .14, .18), sub=3)           # what is left of each buttock
-        c.ell((sx * .29, y - .05, z + .1), (.075, .09, .06))                  # hip bone through the cloth
-
-
-def rear_detail(body, z, w=1.0):
-    """The crack and the fold under each cheek. w scales them to the rear."""
+def rear_detail(body, z):
+    """The crack and the fold under each cheek."""
     surf = Surface(body)
-    crack = surf.drape([(0, 2.0, zz) for zz in np.linspace(z + .24 * w, z - .5 * w, 14)], (0, -1, 0))
-    groove(body, crack, .05 * w, .07 * w)
+    crack = surf.drape([(0, 2.0, zz) for zz in np.linspace(z + .24, z - .5, 14)], (0, -1, 0))
+    groove(body, crack, .05, .07)
     for sx in (-1, 1):   # the fold under each cheek
-        fold = surf.drape([(sx * xx * w, 2.0, z - (.36 + .08 * (xx - .45) ** 2) * w) for xx in np.linspace(.12, .8, 9)], (0, -.6, 1))
-        groove(body, fold, .04 * w, .02 * w)
+        fold = surf.drape([(sx * xx, 2.0, z - (.36 + .08 * (xx - .45) ** 2)) for xx in np.linspace(.12, .8, 9)], (0, -.6, 1))
+        groove(body, fold, .04, .02)
 
 
-def ribs(body, centre, radii, pitch, depth=.016, spacing=.085):
+def ribs(body, centre, radii, frame, depth=.016, spacing=.085):
     """Press ribs into the chest: chevrons that drop toward the breastbone,
-    a gutter down the breastbone and another down the spine."""
-    cen, rad = np.asarray(centre, float), np.asarray(radii, float)
-    cs, sn = math.cos(pitch), math.sin(pitch)
+    a gutter down the breastbone and another down the spine. frame is the
+    ribcage's own axes as world vectors, columns (x, y, z), with -y the
+    breastbone side and +z toward the neck."""
+    cen, rad, F = np.asarray(centre, float), np.asarray(radii, float), np.asarray(frame, float)
 
     def fn(p, n):
-        q = p - cen
-        y = q[:, 1] * cs + q[:, 2] * sn          # undo the lean of the ribcage
-        z = -q[:, 1] * sn + q[:, 2] * cs
-        x = q[:, 0]
-        inside = np.clip(1.25 - np.sqrt((x / rad[0]) ** 2 + (y / rad[1]) ** 2 + (z / rad[2]) ** 2), 0, 1) * 2
-        inside = np.clip(inside, 0, 1)
-        front = y < 0
-        slope = np.where(front, .5, -.25)
+        q = (p - cen) @ F                                           # into the ribcage's own axes
+        x, y, z = q[:, 0], q[:, 1], q[:, 2]
+        inside = np.clip((1.25 - np.sqrt((x / rad[0]) ** 2 + (y / rad[1]) ** 2 + (z / rad[2]) ** 2)) * 2, 0, 1)
+        slope = np.where(y < 0, .5, -.25)
         wave = np.cos((z + slope * np.abs(x)) / spacing * math.tau)
         gutter = np.exp(-(x / .035) ** 2)
         return inside * (depth * wave * (1 - gutter) - gutter * depth * 1.2) - inside * .01
 
     displace(body, fn)
+
+
+def leaning(pitch):
+    """A frame for ribs(): an upright ribcage tipped forward by `pitch`."""
+    cs, sn = math.cos(pitch), math.sin(pitch)
+    return np.array([[1, 0, 0], [0, cs, -sn], [0, sn, cs]])
 
 
 def floor_clamp(ob):
@@ -205,7 +201,7 @@ def stage1(rig, rng):
     c.limb([(0, .02, 1.1), (0, -.06, 1.22)], [.13, .12])
     body = c.build('body', .014, 5)
     rear_detail(body, PZ)
-    ribs(body, rc, rr, lean)
+    ribs(body, rc, rr, leaning(lean))
     surf = Surface(body)
     for z in np.linspace(.84, 1.2, 7):                              # spine showing through the back
         hit, _ = surf.ray((0, 2, z), (0, -1, 0))
@@ -251,113 +247,214 @@ def stage1(rig, rng):
 
 # ---------- stage 2 ----------
 
-def stage2(rig, rng):
-    LINKS = 12
-    PY, PZ = .06, 1.04
+def unit(v):
+    v = np.asarray(v, float)
+    return v / np.linalg.norm(v)
+
+
+def rot_between(a, b):
+    return Vector(unit(a)).rotation_difference(Vector(unit(b))).to_matrix().to_4x4()
+
+
+def about(c, m4):
+    """Matrix m4 applied about the point c."""
+    return Matrix.Translation(Vector(c)) @ m4 @ Matrix.Translation(-Vector(c))
+
+
+def flat_foot(c, ankle, M, toes, size=.85):
+    """parts.foot(), turned to point its toes along `toes` (a direction on
+    the floor). In a bridge the toes point away from the head, toward +y."""
+    d = unit((toes[0], toes[1], 0)); s = np.array([d[1], -d[0], 0])
+    ang = math.atan2(-d[0], d[1])                                   # turns the pad's long axis (+y) onto d
+    ax, ay, az = ankle
+    cen = np.array([ax, ay, 0]) + d * .1 * size + np.array([0, 0, .095 * size])
+    c.ell(cen, (.24 * size, .34 * size, .095 * size), rot=(0, 0, ang), e=3.0, sub=3)
+    c.limb([ankle, cen - d * .08 + (0, 0, .02)], [.15 * size, .17 * size])
+    out = []
+    for k in (-1, 0, 1):
+        p = cen + d * (.3 * size - abs(k) * .035) + s * k * .14 * size + np.array([0, 0, -.005])
+        out.append(mat(solid(p, (.062 * size, .045 * size, .06 * size), rot=(0, 0, ang), e=2.6, name='toenail'), M['nail']))
+    return out
+
+
+def shin_and_foot(M, rng, knee, ankle, toes, tris=1800):
+    """A starved shin with the costume foot on the end, planted flat."""
     c = Clay()
-    starved_rear(c, PY, PZ)
-    c.limb([(0, PY, 1.12), (0, PY, 1.3), (0, .14, 1.52)], [.2, .23, .23])
-    c.ell((0, -.1, 1.31), (.3, .26, .25))                           # the belly it came out of
-    rc, rr, lean = (0, .17, 1.74), (.37, .29, .38), -.12
-    c.ell(rc, rr, rot=(lean, 0, 0), sub=4)
-    c.ell((.0, .22, 2.0), (.47, .15, .1), rot=(0, .1, 0))           # shoulders, one dropped
-    for sx in (-1, 1): c.limb([(sx * .05, .06, 1.98), (sx * .42, .16, 2.0 - sx * .04)], [.035, .04])
-    c.ell((0, .2, 2.04), (.14, .13, .09))
-    body = c.build('body', .014, 5)
-    rear_detail(body, PZ, .45)
-    ribs(body, rc, rr, lean)
+    c.limb([knee, ankle], [.088, .07])
+    c.ell(knee, (.1, .1, .1))
+    nails = flat_foot(c, ankle, M, toes)
+    ob = c.build('shin', .01, 3)
+    roughen(ob, .004, 14, seed=int(rng.integers(99)))
+    tf = tufts(ob, 20, .06, rng, lambda p, n: p[:, 2] > .25, width=.013, droop=1.0)
+    decimate(ob, tris)
+    return mat([ob, tf], M['limb']) + nails
+
+
+def zipper_under(body, M, y0, y1):
+    """parts.zipper() for a back that faces the floor: the zip runs along
+    the underside of the arch, from the neck end toward the rear."""
     surf = Surface(body)
-    for z in np.linspace(1.36, 2.0, 10):
-        hit, _ = surf.ray((0, 2, z), (0, -1, 0))
-        dent(body, hit, .032, -.028)
+    ys = np.linspace(y0, y1, 26)
+    line = surf.drape([(0, y, -1.0) for y in ys], (0, 0, 1), lift=.004)
+    line[:, 0] += np.sin(ys * 23) * .006
+    tape = mat(tube(line, .03, n=6, name='tape', squash=.16), M['tape'])
+    teeth = mat(tube(line + (0, 0, -.004), .0095, n=6, name='zipteeth', squash=.6), M['zip'])
+    top = line[0] + np.array([0, 0, -.01])
+    tab = mat(solid(top + (0, -.004, -.03), (.014, .03, .005), e=3, name='tab'), M['zip'])
+    slider = mat(solid(top, (.017, .017, .009), e=3, name='slider'), M['zip'])
+    return [tape, teeth, tab, slider]
+
+
+def stage2(rig, rng):
+    # The head end of the bridge is at the front (-y), where the worm's mouth and the hanging head face.
+    LINKS = 12
+    PY, PZ = .42, .92                                               # the pelvis, the body's pivot
+    TILT = .75                                                      # the ribcage dips toward the head end
+    KINK = np.array([-.02, -.74, .95])                              # where the neck broke
+    c = Clay()
+    # The pelvis, emptied out as at the old stage 2, but lying on its back:
+    # what is left of the rear hangs underneath, the hip bones push up.
+    c.ell((0, PY, PZ), (.31, .22, .2), e=2.2, sub=4)
+    for sx in (-1, 1):
+        c.ell((sx * .15, PY + .07, PZ - .1), (.15, .16, .13), sub=3)        # what is left of each buttock, sagging
+        c.ell((sx * .28, PY - .08, PZ + .09), (.075, .06, .09))             # hip bone through the cloth
+    c.limb([(0, PY - .04, PZ + .08), (0, .24, 1.3), (0, -.02, 1.42)], [.2, .22, .23])   # the arched waist
+    c.ell((0, .1, 1.4), (.29, .27, .25))                          # the belly it came out of, the top of the arch
+    # ribcage, its breastbone to the ceiling, its neck end tipped down
+    h = np.array([0, -math.cos(TILT), -math.sin(TILT)])             # toward the neck
+    f = np.array([0, -math.sin(TILT), math.cos(TILT)])              # out of the breastbone
+    frame = np.stack([np.cross(-f, h), -f, h], 1)                    # columns: the ribcage's own x, y, z
+    rc, rr = np.array([0, -.26, 1.18]), (.36, .28, .36)
+    c.ell(rc, rr, rot=(-math.pi / 2 - TILT, 0, 0), sub=4)
+    c.ell((0, -.52, .94), (.47, .11, .15), rot=(.6, .12, 0))        # shoulder girdle, one side dropped
+    for sx in (-1, 1): c.limb([(sx * .05, -.62, 1.02), (sx * .42, -.54, .96 + sx * .03)], [.035, .04])   # collarbones
+    c.ell((0, -.62, .9), (.14, .12, .1))
+    body = c.build('body', .014, 5)
+    ribs(body, rc, rr, frame)
+    surf = Surface(body)
+    for y in np.linspace(-.5, .4, 12):                              # the spine, along the underside of the arch
+        hit, _ = surf.ray((0, y, -1), (0, 0, 1))
+        if hit is not None: dent(body, hit, .032, -.028)
     roughen(body, .007, 8, seed=6)
-    wound, _ = surf.ray((0, -2, 1.3), (0, 1, 0))
-    dent(body, wound, .19, .13)                                     # the hole
-    wc = wound + np.array([0, .08, 0])
-    # The blood is old and sparse: a few brown-black stains, and a dried
-    # run down the face from under each eye.
-    M = materials(2, body=dict(pale=[((0, -.2, 1.7), (.24, .3, .34))], blood=[((-.2, -.22, 1.0), .1), (tuple(wound + (0, 0, -.28)), .16)],
-                               meat=[(tuple(wc), (.23, .2, .29))]),
-                  limb=dict(blood=[((.24, -.1, .38), .12)]),
+    wound, _ = Surface(body).ray((0, .08, 3), (0, 0, -1))
+    dent(body, wound, .19, .13)                                     # the hole, open to the ceiling
+    wc = wound + np.array([0, 0, -.08])
+    M = materials(2,
+                  body=dict(pale=[((0, -.2, 1.45), (.25, .42, .3))],
+                                  blood=[(tuple(wound + (.2, .05, -.06)), .12), (tuple(wound + (-.16, -.2, -.04)), .1), ((.1, -.42, 1.08), .09)],
+                                  meat=[(tuple(wc), (.23, .29, .2))]),
+                  limb=dict(blood=[((-.5, -.62, .4), .1), ((.42, .6, .7), .12), (KINK, .08)], meat=[(KINK, (.07, .06, .08))]),
                   head=dict(pale=[((0, -.46, .17), (.34, .32, .22))], blood=[((.05, -.62, .1), .07)],
-                            tears=[((sx * EYE_X + sx * .01, -.42, EYE_Z - .08), .3 if sx > 0 else .38) for sx in (1, -1)],
-                            sockets=[((sx * EYE_X, -.45, EYE_Z), .15) for sx in (1, -1)]),
+                                  tears=[((sx * EYE_X + sx * .01, -.42, EYE_Z - .08), .3 if sx > 0 else .38) for sx in (1, -1)],
+                                  sockets=[((sx * EYE_X, -.45, EYE_Z), .15) for sx in (1, -1)]),
                   links=LINKS, rng=rng)
-    fit = zipper(body, M, 1.98, 1.3, 2)
-    tail(rig, body, M, PZ + .22, 2, rng)
-    tf = tufts(body, 250, .085, rng, lambda p, n: ~((p[:, 1] < -.1) & (np.abs(p[:, 0]) < .35) & (p[:, 2] > 1.0) & (p[:, 2] < 1.65)), width=.017, droop=1.0)
-    decimate(body, 9500)
+    fit = zipper_under(body, M, -.48, .4)
+    tail(rig, body, M, PZ - .08, 2, rng)
+    keep_bare = lambda p, n: ~((np.abs(p[:, 0]) < .34) & (p[:, 2] > 1.25) & (p[:, 1] > -.45) & (p[:, 1] < .45))
+    tf = tufts(body, 200, .085, rng, keep_bare, width=.017, droop=1.0)
+    decimate(body, 8500)
     pieces = mat([body, tf], M['body']) + fit
 
-    # The plush that used to hold the big hips, emptied and hanging off the
-    # pelvis in slack folds. Each fold is built facing -y and turned to face
-    # out, so its flat side lies against the body.
+    # The plush that held the big hips, emptied and hanging off the pelvis in
+    # slack folds toward the floor. Each fold is built facing -y and turned to
+    # face out, so its flat side lies against the body.
     hs = Surface(body)
-    for k, (ox, oy) in enumerate(((1, -.15), (.8, .6), (.25, 1), (-.3, 1), (-.75, .65), (-1, -.2))):
-        out = np.array([ox, oy, 0.0]); out /= np.linalg.norm(out)
-        top, _ = hs.ray(np.array([0, PY, PZ + .07]) + out * 1.5, -out)
+    for k, (ox, oy) in enumerate(((1, -.2), (.9, .5), (.35, 1), (-.35, 1), (-.9, .45), (-1, -.15))):
+        out = unit((ox, oy, 0))
+        top, _ = hs.ray(np.array([0, PY, PZ - .04]) + out * 1.5, -out)
         if top is None: continue
-        L = rng.uniform(.26, .4)
+        L = rng.uniform(.26, .42)
         fl = tube([(0, .03, .03), (0, -.03, -.05), (0, -.05, -L * .55), (0, -.03, -L)], [.075, .085, .07, .03], n=10, name='sag', squash=.22)
         roughen(fl, .008, 18, seed=20 + k)
         fl.data.transform(place(at=top, rot=(0, 0, math.atan2(out[0], -out[1]))))
         pieces.append(mat(fl, M['body']))
 
-    # torn edges round the wound: meat and costume, curling outward
+    # torn edges round the wound, meat and costume, peeled back and lying on the belly
     bsurf = Surface(body)
-    hanging = []
-    for i in range(11):
-        a = i / 11 * math.tau + rng.uniform(-.15, .15)
-        out = np.array([math.cos(a), 0, math.sin(a)])
-        rim, _ = bsurf.ray(wound + out * np.array([.2, 0, .26]) + (0, -1, 0), (0, 1, 0))
-        if rim is None: rim, _ = bsurf.near(wound + out * np.array([.2, 0, .26]))
-        Lf = rng.uniform(.07, .14) * (1.6 if out[2] < -.5 else 1)
-        droop = np.array([0, 0, -1.0]) * Lf * (.9 if out[2] < .3 else .3)
-        pts = [rim + (0, .02, 0) - out * .02, rim + out * Lf * .4 + (0, -.05, 0), rim + out * Lf * .7 + (0, -.07, 0) + droop * .5, rim + out * Lf * .8 + (0, -.06, 0) + droop]
-        fl = tube(pts, [rng.uniform(.04, .065), .045, .03, .004], n=7, name='flap', squash=.22, phase=a)
+    for i in range(12):
+        a = i / 12 * math.tau + rng.uniform(-.15, .15)
+        out = np.array([math.cos(a), math.sin(a), 0])
+        rim, _ = bsurf.ray(wound + out * np.array([.21, .27, 0]) + (0, 0, 1), (0, 0, -1))
+        if rim is None: rim, _ = bsurf.near(wound + out * np.array([.21, .27, 0]))
+        Lf = rng.uniform(.12, .22)
+        # laid over the curve of the belly: each point dropped onto the
+        # surface from above, then lifted off it, most where it curls at the rim
+        pts = [rim - out * .03 - (0, 0, .02)]
+        for t, lift in ((.3, .05), (.6, .035), (.85, .02), (1, .008)):
+            q, _ = bsurf.ray(rim + out * Lf * t + (0, 0, 1), (0, 0, -1))
+            pts.append((q if q is not None else rim + out * Lf * t) + (0, 0, lift))
+        fl = tube(pts, [rng.uniform(.05, .08), .065, .05, .03, .004], n=7, name='flap', squash=.22, phase=a + math.pi / 2)
         roughen(fl, .006, 30, seed=i)
-        mat(fl, M['meat'] if i % 3 else M['limb'])
-        (hanging if out[2] < -.5 else pieces).append(fl)
+        pieces.append(mat(fl, M['meat'] if i % 3 else M['limb']))
     rig.add('body', 'root', (0, PY, PZ), pieces)
-    drips = []
-    for i in range(7):
-        top, _ = bsurf.ray(wound + ((i - 3) * .05 + rng.uniform(-.02, .02), -1, -.22 - rng.uniform(0, .05)), (0, 1, 0))
-        if top is None: top = wound + ((i - 3) * .05, 0, -.24)
-        drips.append(mat(strand(top + (0, -.01, .02), rng.uniform(.2, .75), rng.uniform(.006, .011), rng, wave=.02, blob=.013), M['crust']))
-    rig.sway('body', wound + (0, 0, -.24), hanging + drips, 'torn flaps of belly and ropes of dried blood hanging from the bottom of the wound, under the worm')
 
+    # Old blood ran down the sides of the belly and dried in ropes that hang
+    # off the underside of the arch, where a player at its feet sees them.
+    drips, tops = [], []
+    for i in range(8):
+        x = (i - 3.5) * .085 + rng.uniform(-.02, .02)
+        top, _ = bsurf.ray((x, -.05 + rng.uniform(-.12, .12), -1), (0, 0, 1))
+        if top is None: continue
+        tops.append(top)
+        drips.append(mat(strand(top + (0, 0, -.01), rng.uniform(.25, .7), rng.uniform(.006, .011), rng, wave=.02, blob=.013), M['crust']))
+    rig.sway('body', np.mean(tops, axis=0), drips, 'ropes of dried blood hanging from the underside of the arch, under the wound')
+
+    # ---------- limbs ----------
+    # Hands by the head end, fingers pointing back toward the feet, as in a
+    # wheel pose. The left elbow sticks out to the side; the right one has
+    # gone the wrong way, bent forward against the joint.
     for side, sx in (('L', 1), ('R', -1)):
-        hip = np.array([sx * .21, PY, .96])
-        knee = np.array([.17, -.06, .5]) if sx > 0 else np.array([-.3, -.01, .52])     # knock-kneed, uneven
-        ankle = np.array([sx * .27, .12, .14])
+        sh = np.array([sx * .44, -.52, .96 + sx * .03])
+        el = np.array([.84, -.44, .58]) if sx > 0 else np.array([-.62, -.92, .52])
+        wr = np.array([sx * .74, -.55, .1])
+        rig.add('arm_' + side, 'body', sh, thin_limb(M, rng, [sh, el], [.085, .06], [(sh, .1), (el, .072)], 800, 'upper', tuft=22))
+        hand_at = (wr, (sx * .3, 1, .25), (-sx, 0, .1), dict(size=1.15, curl=(0, 0, -.55), spread=.22))
+        rig.add('forearm_' + side, 'arm_' + side, el,
+                thin_limb(M, rng, [el, wr], [.062, .046], [(el, .068), (wr, .05)], 2000, 'fore', hand_at=hand_at, tuft=14, voxel=.006))
+        # Legs: thighs drop from the pelvis to knees a little lower and further
+        # back, shins stand on the feet. Knock-kneed and uneven, one foot
+        # turned right out.
+        hip = np.array([sx * .2, PY + .06, PZ - .05])
+        knee = np.array([.56, .74, .74]) if sx > 0 else np.array([-.46, .8, .8])
+        ankle = np.array([sx * .6, .76, .14])
+        toes = (.6, 1) if sx > 0 else (-1, .3)
         rig.add('leg_' + side, 'body', hip, thin_limb(M, rng, [hip, hip + (knee - hip) * .4, knee], [.15, .11, .085], [(knee, .1)], 1000, 'thigh', tuft=24))
-        rig.add('shin_' + side, 'leg_' + side, knee, thin_limb(M, rng, [knee, ankle], [.088, .07], [(knee, .1)], 2100, 'shin', foot_at=(ankle, sx, .9), tuft=20, voxel=.01))
-        sh = np.array([sx * .46, .22, 1.98 - sx * .04])
-        el = np.array([.58, .2, 1.36]) if sx > 0 else np.array([-.56, .1, 1.4])
-        wr = np.array([.6, .1, .8]) if sx > 0 else np.array([-.5, -.1, .86])
-        rig.add('arm_' + side, 'body', sh, thin_limb(M, rng, [sh, el], [.085, .058], [(sh, .1), (el, .07)], 800, 'upper', tuft=22))
-        hand_at = (wr, (0, -.2, -1), (0, -1, .1), dict(size=1.15, curl=(-sx * .5, .2, 0), spread=.12))
-        rig.add('forearm_' + side, 'arm_' + side, el, thin_limb(M, rng, [el, wr], [.062, .046], [(el, .068), (wr, .05)], 2400, 'fore', hand_at=hand_at, tuft=14, voxel=.006))
+        rig.add('shin_' + side, 'leg_' + side, knee, shin_and_foot(M, rng, knee, ankle, toes))
 
-    # the broken neck, and the head hanging off it
-    nb = np.array([0, .2, 2.02])
-    hp = np.array([-.13, .13, 2.17])
+    # ---------- the snapped neck and the head ----------
+    # The neck carries on past the chest, then folds back under it on
+    # itself. The head hangs off the end upside down between the hands,
+    # crown nearly on the floor, lolled over to one side and twisted a little,
+    # so the face is upside down and looking at you.
+    nb = np.array([0, -.62, .92])
+    hp = np.array([-.04, -.46, .94])
     c = Clay()
-    c.limb([nb, (-.01, .18, 2.13), hp], [.12, .1, .12])
-    c.ell((.06, .2, 2.14), (.05, .05, .05))                         # the vertebra that went the wrong way
+    c.limb([nb, (-.02, -.74, .92), (-.05, -.64, .88), hp], [.12, .1, .095, .11])
+    c.ell((.04, -.75, .97), (.05, .05, .05))                       # the vertebra that went the wrong way
+    c.ell((-.07, -.7, .86), (.045, .04, .04))
     neck = c.build('neck', .009, 3)
     roughen(neck, .005, 16, seed=8)
-    rig.add('neck', 'body', nb, mat([decimate(neck, 700)], M['limb']))
-    Th = place(at=hp, rot=(.22, -.72, .12))
-    head(rig, M, 2, Th, 'neck', rng, 7100)
+    # where it snapped the cloth has split, and a broken end of bone sticks out
+    bone = tube([KINK + (.01, .03, -.02), KINK + (.04, -.04, .03), KINK + (.07, -.07, .09)], [.022, .016, .004], n=6, name='bone')
+    rig.add('neck', 'body', nb, mat([decimate(neck, 700)], M['limb']) + [mat(bone, M['nail'])])
+    YAW, ROLL, PITCH = .3, .6, -.3
+    Th = (Matrix.Translation(Vector(hp)) @ Matrix.Rotation(YAW, 4, 'Z') @ Matrix.Rotation(PITCH, 4, 'X')
+          @ Matrix.Rotation(math.pi + ROLL, 4, 'Y'))
+    n0 = len(rig.parts)
+    head(rig, M, 2, Th, 'neck', rng, 6500)
+    aim_eyes(rig, Th, n0)
+    for p in rig.parts[n0:]:   # head() writes these for a head the right way up
+        if p['name'].startswith('sway_'):
+            rig.notes[p['name']] = 'black strands hanging off the upside-down face toward the floor, some clotted with blood'
 
-    # the worm: out of the belly, down, forward, up past the head, mouth to the front
-    tip = np.array([.28, -.64, 2.62])
-    ctrl = [wound + (0, .22, 0), wound + (.01, -.12, -.14), (.05, -.7, .9), (.12, -.81, 1.22), (.2, -.76, 1.66), (.27, -.56, 2.1), (.29, -.45, 2.4), tip + (0, .1, -.045), tip, tip + (0, -.3, 0)]
-    segs = worm(rig, M, ctrl[:-1], LINKS, rng)
-    last = segs[-1]
-    worm_mouth(rig, M, f'extra_1_{LINKS + 1}', last[0], tip, .8 * last[3], rng)
-    for idx, count in ((3, 4), (6, 3), (9, 3)):                     # slime off the underside
+    # ---------- the worm ----------
+    # Straight up out of the belly, a little back, then over in a hook so the
+    # mouth comes to face forward at a standing player's head height.
+    tip = np.array([.02, -.46, 2.55])
+    ctrl = [wound - (0, 0, .22), wound + (0, 0, .1), (-.05, .15, 1.9), (-.03, .24, 2.2), (.02, .17, 2.48), (.03, -.04, 2.66), (.03, -.27, 2.64), tip, tip + (0, -.3, 0)]
+    segs = worm(rig, M, ctrl[:-1], LINKS, rng, r0=.23, r1=.15)
+    worm_mouth(rig, M, f'extra_1_{LINKS + 1}', segs[-1][0], tip, .8 * segs[-1][3], rng)
+    for idx, count in ((7, 3), (9, 3), (11, 3)):                    # slime off the underside of the hook
         nm, a, b, R, pts, rad, N, B = segs[idx]
         ss, tops = [], []
         for j in range(count):
@@ -374,30 +471,70 @@ def stage2(rig, rng):
         tops.append(top)
         ss.append(mat(strand(top, rng.uniform(.15, .5), rng.uniform(.006, .011), rng, wave=.012, blob=rng.uniform(.011, .018), segs=9), M['slime']))
     rig.sway(f'extra_1_{LINKS + 1}', np.mean(tops, axis=0), ss, 'drool hanging from the lower lip of the worm mouth')
+
     return dict(
         face=tuple(tip + np.array([0, -.36, 0])),
         eyes=tuple(pt(Th, (0, -.45, EYE_Z))),
         boost={'head': 1.25, 'eye_L': 3.5, 'eye_R': 3.5, f'extra_1_{LINKS + 1}': 2.2, 'extra_2': 2.0, 'extra_3': 2.0, 'extra_4': 2.0, 'extra_5': 2.0},
-        notes='It stands, slack, hung from the worm that came out of its belly; the costume is a puppet now. The big rear of the '
-              'earlier stages is gone: the hips are emptied out, narrower than the shoulders, with the empty plush hanging off them in '
-              'folds (part of body), so the worm is the biggest thing on it. The head lolls on a broken neck '
-              '(the 40 degree tilt is baked into neck and head) and should only swing loosely, never look at anything. The eyes are '
-              'what is alive in it: two big pale wet eyeballs bulging from the sockets, lidless, never blinking, that do not match. '
-              'eye_R has a pinprick pupil and should hold on the player; eye_L is all pupil, aimed off to the side, and should arrive '
-              'late or not at all. Each carries one small catchlight of eye_glow. Eyes: up to 35 degrees any axis before the iris '
-              f'turns under the socket. The worm is the chain extra_1 (at the belly) to extra_1_{LINKS} with its head, the mouth, '
-              f'as extra_1_{LINKS + 1}; each link turns about its joint with the one before. Idle: a slow travelling sway, 4 to 8 degrees per '
-              'link about x and z with a phase lag down the chain, and a swallowing pulse (scale links 1.0 to 1.08 in sequence). The mouth '
-              'faces forward and holds its gaze on the player while the body under it drifts. extra_2, extra_3, extra_4 are the three '
-              'tooth rings (outer to inner): spin each about its local z, alternate directions. extra_5 is the second mouth down the '
-              'throat: slide it out along +z by up to 0.22 m and back. Walk: the worm leads and the body is dragged: lean the first links '
-              'forward, then let the legs catch up in short stiff steps (leg 15 degrees, shin 10), feet scraping, arms swinging dead from '
-              'the shoulders a beat late. Attack: the worm rears back (links 8 to 12 pitch back 10 degrees each) then whips forward. '
-              'Jumpscare: straighten the upper links toward the camera so the mouth fills the view, spin the rings fast, push extra_5 out. '
-              'The inside of the mouth is modelled and textured to hold at close range. Limits: 25 degrees per worm link on any axis '
-              'before the joints open; link 1 (extra_1) 15 degrees, it sits in the wound. Leg 30, shin 35, arm 50, forearm 45, neck 20, '
-              'head 30.',
+        notes='Bent over backwards into a bridge, the yoga wheel: belly to the ceiling, hands and feet flat on the floor. The hands are at the '
+              'front with the fingers pointing back toward the feet; the feet are behind, toes pointing away. The worm stands straight up out of '
+              'a hole in the top of the arch, leans back a little, then hooks over so the mouth faces forward at 2.55 m. The head hangs upside '
+              'down off a snapped neck, under the chest between the hands: crown nearly on the floor, horn pointing down at it, rolled 35 '
+              'degrees onto one side and turned 17, so the face is upside down and looking at you. A broken end of bone sticks out of the '
+              'split in the neck. The pelvis is the starved one of the old stage 2, lying on its back, with the emptied plush hanging off it '
+              'toward the floor. Sides: arm_L, forearm_L, leg_L and shin_L are on +x, the side they are on as it walks (the costume, lying on '
+              'its back, would call that its right). eye_L and eye_R keep the head\'s own sides, so with the head upside down eye_L is on -x. '
+              'The rest pose is the idle: it holds the bridge and trembles, a fast jitter of 1 to 2 degrees on the arms and legs, and the body '
+              'sinks and lifts 2 to 3 cm as if the arms might give. The head swings loose on the neck (neck 10 degrees, head 15, lagging the '
+              'body) and never aims at anything. The eyes are what is alive in the head: eye_R, the pinprick, holds on the player (at rest it '
+              'is already turned up toward a standing player in front, as far as the socket lets it); eye_L, all pupil, aims off to the side and arrives late or not '
+              'at all. Each carries one catchlight of eye_glow. Eyes: 25 degrees any axis from rest before the iris turns under the socket. '
+              f'The worm is the chain extra_1 (in the wound) to extra_1_{LINKS}, with the mouth as extra_1_{LINKS + 1}; each link turns about '
+              'its joint with the one before. Links 1 to 8 rise out of the belly, 9 to 12 curl over into the hook. A positive turn about x '
+              'leans the upright links forward and pitches the hook down. Idle: a slow travelling sway, 4 to 8 degrees per link about x and z '
+              'with a phase lag up the chain, and a swallowing pulse (scale links 1.0 to 1.08 in sequence). The mouth holds on the player while '
+              'the body under it drifts. extra_2, extra_3, extra_4 are the three tooth rings (outer to inner): spin each about its local z, '
+              'alternate directions. extra_5 is the second mouth down the throat: slide it out along +z by up to 0.22 m and back. Walk: a '
+              'scuttling crab walk, head end first. Move the limbs in diagonal pairs (arm_L with leg_R, then arm_R with leg_L), quick, 3 to 4 '
+              'steps a second, with a dead stop every few steps. The pair in the air swings forward and out: arm about x by -20 to -25, about '
+              'z by 10 outward (arm_L positive, arm_R negative), forearm by -15 more so the hand lifts; leg about x by -20 and 10 outward about z, shin +15. The '
+              'pair on the floor sweeps back by as much. The body rolls 4 degrees about z toward the planted pair and bobs 3 cm. To turn, sweep '
+              'both arms the same way about y by up to 20. The worm lags the body: links 1 to 6 lean back 3 degrees each as it speeds up, while '
+              'the mouth keeps facing where it is going. Attack: it drops (root down 0.12 m, elbows and knees bending 20 degrees) as the worm '
+              'rears back (links 7 to 12 by -10 each about x, which lifts the hook and tips the mouth up), then whips forward (links 1 to 6 by '
+              '+8 each, 7 to 12 by +12) so the mouth comes down to chest height in front of it, while the limbs straighten and the root lunges '
+              'forward. Jumpscare: straighten the upper links toward the camera so the mouth fills the view, spin the rings fast, push extra_5 '
+              'out. Under it the upside-down face swings up into the bottom of the frame on the broken neck (neck by -20 about x, head by -25), '
+              'eye_R on the camera. The inside of the mouth is modelled and textured to hold at close range. Limits: 25 degrees per worm link on '
+              'any axis before the joints open; link 1 (extra_1) 15, it sits in the wound. Arm 40 any axis, forearm 45, leg 35, shin 40, '
+              'neck 20, head 35.',
     )
+
+
+# Where a standing player's eyes are, in front of it: what the pinprick eye
+# looks at in the rest pose.
+PLAYER = np.array([0, -3.0, 1.6])
+
+
+def aim_eyes(rig, Th, n0):
+    """parts.head() aims the stage 2 eyes along fixed world directions that
+    suit a head on its neck: the right one down at the player, the left off to
+    the side. Upside down under the chest, the right one would stare at the
+    floor. Turn each ball about its centre: the right one up toward the
+    player, as far as its socket lets it (30 degrees off the socket's axis),
+    the left one out past the socket's axis, away from the player."""
+    old = {'L': (.55, -1, .3), 'R': (.02, -1, -.38)}                # parts.head()'s stage 2 gazes
+    axis = unit(np.array(Th.to_3x3() @ Vector((0, -1, 0))))         # straight out of the sockets
+    for p in rig.parts[n0:]:
+        if p['name'] not in ('eye_L', 'eye_R'): continue
+        side, c = p['name'][-1], np.array(p['pivot'])
+        want = unit(PLAYER - c) if side == 'R' else unit(axis + np.array([0, 0, -.5]) + np.cross(axis, (0, 0, 1)) * .6)
+        # no more than 30 degrees off the socket's axis
+        ang = math.acos(max(-1, min(1, want @ axis)))
+        if ang > math.radians(30):
+            want = unit(np.array(Vector(axis).slerp(Vector(want), math.radians(30) / ang)))
+        m = about(c, rot_between(old[side], want))
+        for ob in p['pieces'] + p['glow']: xform(ob, m)
 
 
 STAGES = [stage0, stage1, stage2]
