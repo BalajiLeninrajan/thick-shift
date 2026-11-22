@@ -39,6 +39,7 @@ export const CH = [
   'legs',
   'coil',
   'lance',
+  'swivel',
 ] as const;
 type Channel = (typeof CH)[number];
 // One number per channel: a mascot's ch, RATE, a pose.
@@ -78,6 +79,7 @@ export const RATE: Channels = {
   legs: 6,
   coil: 5,
   lance: 9,
+  swivel: 4,
 };
 
 const BASE: PoseLayer = { breath: 1, sway: 1, legs: 1 };
@@ -326,7 +328,7 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       states: {
         roam: { ...PLANTED },
         search: { ...PLANTED, sweep: 1 },
-        hunt: { ...PLANTED, track: 1, reach: 1 },
+        hunt: { ...PLANTED, track: 1, reach: 1, swivel: 1 },
         lit: { ...PLANTED, shake: 1, track: 1 },
         siege: { ...PLANTED, rear: 1 },
         // It goes still and coils, then runs at you flat out: the scuttle at its most frantic, the worm out in front.
@@ -458,6 +460,9 @@ const along = (t: readonly number[], w: number): number => {
 // the picture moves, the sim leaves Stompy where it hit, so once it moves off it closes the gap by `settle` of every
 // metre it goes, which never has it going backwards. mascot.ts does this.
 export const BOUNCE = { back: 0.9, time: 0.2, settle: 0.5 };
+// The worm looking about on a hunt (`swivel`): how long it holds a look (seconds), how far it turns (radians, either
+// way), pitches and cocks the mouth over, the odds a look is back on the guard, and how fast it snaps between them.
+const SWIVEL = { hold: [0.25, 0.9], yaw: [0.5, 1.3], pitch: 0.3, roll: 0.5, back: 0.35, rate: 14 } as const;
 // Seconds into a stun that it folds (once it has bounced) and that it starts back up, and how fast it goes down and comes up.
 const FOLD = { snap: BOUNCE.time, end: 1.3, down: 10, up: 0.9 };
 function worm(a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number): void {
@@ -485,6 +490,24 @@ function worm(a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number): void 
     tick = Math.floor(a.t * 30),
     run = a.cur.style.gait.mode === 'scuttle' ? a.walk * ch.legs : 0,
     lurch = Math.sin(Math.PI * 2 * a.phase);
+  const sw = ch.swivel,
+    look = a.look;
+  if (sw > 0.01) {
+    // Hunting, the worm looks about: it snaps to a new direction, holds it, and every so often snaps back to the guard.
+    look.left -= dt;
+    if (look.left <= 0) {
+      const seed = ++look.n * 13 + a.i * 7,
+        back = hash(seed) < SWIVEL.back;
+      look.left = SWIVEL.hold[0] + (SWIVEL.hold[1] - SWIVEL.hold[0]) * hash(seed + 1);
+      look.ty = back ? 0 : (hash(seed + 2) < 0.5 ? -1 : 1) * (SWIVEL.yaw[0] + (SWIVEL.yaw[1] - SWIVEL.yaw[0]) * hash(seed + 3));
+      look.tp = back ? 0 : SWIVEL.pitch * (hash(seed + 4) * 2 - 1);
+      look.tr = SWIVEL.roll * (hash(seed + 5) * 2 - 1);
+    }
+  }
+  const snap = Math.min(1, dt * SWIVEL.rate);
+  look.y += (look.ty * sw - look.y) * snap;
+  look.p += (look.tp * sw - look.p) * snap;
+  look.r += (look.tr * sw - look.r) * snap;
   for (const [k, l] of links.entries()) {
     const u = k / (n - 1),
       upper = Math.max(0, u - 0.45) / 0.55;
@@ -495,6 +518,11 @@ function worm(a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number): void 
     l.ry += (a.aimY * tk * upper * 2.4) / n;
     l.rx += ((a.aimP * tk * 2.4) / n + 0.05 * tk) * upper;
     l.rx += -rear * 0.17 * upper + lunge * 0.16 * upper - a.kRecoil * 0.3 * upper;
+    // The look: the upright links turn about themselves like a periscope and swing the hook round, the hook pitches,
+    // and the last links cock the mouth over.
+    if (k >= 2 && k <= 8) l.ry += look.y / 7;
+    l.rx += look.p * upper * 0.5;
+    if (k >= n - 3) l.rz += look.r / 3;
     l.rx += (COIL[k] ?? 0) * (coil + brace) + (LANCE[k] ?? 0) * lanceW + (SLUMP[k] ?? 0) * slumpW;
     // The hood sways side to side from the middle, and the top links take it back out so the mouth stays on you.
     l.rz += hood * Math.sin(a.t * 2.4 - k * 0.3) * (k >= 3 && k <= 8 ? 0.06 : k >= 10 ? -0.12 : 0);

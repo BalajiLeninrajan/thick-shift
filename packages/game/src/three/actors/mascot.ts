@@ -159,6 +159,7 @@ export class Mascot {
   stT = 0; // seconds in st, since this client saw it change
   slump = 0; // Stompy's worm folded over after a crash, 0 to 1 (styles.ts's worm keeps it)
   knock = { x: 0, z: 0, far: 0, d: 0 }; // bounced back off a wall, see BOUNCE: which way, how far it goes, how far it is now
+  look = { y: 0, p: 0, r: 0, ty: 0, tp: 0, tr: 0, left: 0, n: 0 }; // the worm looking about on a hunt (styles.ts)
   room = Infinity; // metres clear in front of it, out to style.ahead (Infinity past that), so the worm keeps out of walls
   lit = false;
   seen = true;
