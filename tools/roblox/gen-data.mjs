@@ -55,6 +55,7 @@ const data = {
   BOXES: map.BOXES,
   GENERATOR: map.GENERATOR,
   CHARGER: map.CHARGER,
+  TOY_BOX: map.TOY_BOX,
   WALL_MAP: map.WALL_MAP,
   PANELS: map.PANELS,
   BATTERY_SPOTS: map.BATTERY_SPOTS,

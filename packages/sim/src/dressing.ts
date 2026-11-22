@@ -91,6 +91,7 @@ export const DRESSING: Placed[][] = [
     ['trunk', 22.4, 10.4, 180],
     ['balloons', 24.6, 6.2, 0],
     ['chair_fallen', 16.8, 9.4, 40],
+    ['locker', 12.4, 10.65, 180], // by the breaker box at the door
   ],
   // 1 Backstage. The costume store: racks of empty suits, the shelf of spare
   // heads facing the kitchen door, a dress form by the mirror, and the generator.
@@ -164,6 +165,8 @@ export const DRESSING: Placed[][] = [
     ['banner', 19.5, 21.8, 0, { y: 4.3 }],
     ['banner', 14, 18.3, 90, { y: 4.3 }],
     ['banner', 25, 18.3, 90, { y: 4.3 }],
+    ['locker', 14.4, 11.85, 0], // the hall's two: by the Arcade and Stage doors, and by the Snack Bar door and the breaker box
+    ['locker', 26.65, 22.4, 270],
   ],
   // 4 Kitchen. Range and sinks on the north wall under the extract duct, two
   // prep counters down the middle, the fridge standing open, something hanging from the rail.
@@ -187,6 +190,7 @@ export const DRESSING: Placed[][] = [
     ['wall_fan', 42, 13.6, 270, wall(2.8)],
     ['fire_extinguisher', 27.5, 20.4, 90, wall(1.2)],
     ['cardboard_box', 36.4, 24.5, 10],
+    ['locker', 41.65, 23.2, 270], // by the breaker box and the East Hall door
   ],
   // 5 West Hall. Service corridor: things left against the walls, a lane down the middle.
   [
@@ -203,6 +207,7 @@ export const DRESSING: Placed[][] = [
     ['mop_bucket', 2.5, 27.2, 0],
     ['trash_bag', 5.4, 41.9, 0],
     ['trash_bag', 2.5, 41.8, 200],
+    ['locker', 10.6, 42.15, 180], // a few steps from the booth's left door
     ['fire_extinguisher', 6, 34, 270, wall(1.2)],
     ['vent_cover', 2, 35.2, 90, wall(0.5)],
     ['fuse_box', 6, 37.6, 270, wall(1.5)],
@@ -231,6 +236,7 @@ export const DRESSING: Placed[][] = [
     ['high_chair', 20.4, 32.2, 170],
     ['trash_bag', 30.4, 32.4, 0],
     ['balloons', 13.6, 32.3, 0],
+    ['locker', 28.4, 32.65, 180], // by the breaker box
   ],
   // 7 East Hall. The delivery side: crates, drums, and a coat left on a stand at the corner.
   [
@@ -248,6 +254,7 @@ export const DRESSING: Placed[][] = [
     ['wet_floor_sign', 36.9, 37.2, 100],
     ['trash_bag', 36.4, 41.9, 0],
     ['trash_bag', 37.1, 42.1, 90],
+    ['locker', 31.4, 42.15, 180], // a few steps from the booth's right door
     ['fire_extinguisher', 36, 33.5, 90, wall(1.2)],
     ['vent_cover', 40, 35.2, 270, wall(0.5)],
     ...[27, 29].map((z): Placed => ['pipe_run', 36.45, z, 0, HANG]),
@@ -267,7 +274,6 @@ export const DRESSING: Placed[][] = [
     ['locker', 15.6, 36.85, 0],
     ['locker', 16.55, 36.85, 0],
     ['coat_rack', 26.4, 43.4, 200],
-    ['cardboard_box', 25.7, 43.5, 15],
     ['fire_extinguisher', 24.9, 44, 180, wall(1.2)],
     ['fuse_box', 22.6, 44, 180, wall(1.5)],
   ],

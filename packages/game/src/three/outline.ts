@@ -15,7 +15,7 @@
 import { faultLeft } from '@thick-shift/sim';
 import { defined, isNight } from '@thick-shift/sim/check';
 import { DOORS } from '@thick-shift/sim/config';
-import { BATTERY_SPOTS, CHARGER, dist, GENERATOR, PANELS } from '@thick-shift/sim/map';
+import { BATTERY_SPOTS, CHARGER, dist, GENERATOR, PANELS, TOY_BOX } from '@thick-shift/sim/map';
 import type { Point, State } from '@thick-shift/sim/types';
 import type { Object3D } from 'three';
 import { game, myPlayer } from '../state';
@@ -50,6 +50,8 @@ export function createOutlines(parts: WorldParts, actors: Actors) {
         return actors.guards.get(aim.id)?.group;
       case 'toy':
         return actors.plush.group(aim.id);
+      case 'carton':
+        return actors.plush.carton;
       case 'hide':
         return null;
     }
@@ -79,7 +81,10 @@ export function createOutlines(parts: WorldParts, actors: Actors) {
       };
       for (const i of S.bats || []) faint(parts.bats[i], defined(BATTERY_SPOTS[i], `battery spot ${i}`));
       faint(parts.gen, GENERATOR);
-      if (!myPlayer(S)?.toy) for (const toy of S.toys || []) if (S.t >= toy.land) faint(actors.plush.group(toy.id), toy);
+      if (!myPlayer(S)?.toy) {
+        for (const toy of S.toys || []) if (S.t >= toy.land) faint(actors.plush.group(toy.id), toy);
+        if ((S.toyBox ?? 0) > 0) faint(actors.plush.carton, TOY_BOX);
+      }
       if (S.power > 0) {
         faint(parts.dock, CHARGER);
         for (const k of DOORS) faint(parts.panels[k], PANELS[k]);

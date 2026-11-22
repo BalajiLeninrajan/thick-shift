@@ -3,10 +3,11 @@
 // gone out of it until somebody picks it up. A palm-sized plush of Big Biggs in his friendly days, purple,
 // with a party hat and a keyring loop, and a red light in its tummy that
 // blinks with the voice box. Built here from a few shapes; there is no model for it.
+// Also the gift shop's carton of them in the booth (TOY_BOX), open, with one sat in it for each S.toyBox left.
 
 import { TOY } from '@thick-shift/sim';
 import { MASC } from '@thick-shift/sim/config';
-import { dist } from '@thick-shift/sim/map';
+import { dist, TOY_BOX } from '@thick-shift/sim/map';
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -26,6 +27,18 @@ const FUR = new THREE.Color(MASC[0].col), // MASC[0] is Big Biggs; the Mini Bigg
   EYE = 0x141018,
   HAT = 0xe8a030,
   RING = 0xc8c8c8;
+// The carton: [width, depth, height] in metres, and where each one in it sits from its middle, [x, z, yaw], the
+// first taken first. Six to a box, as TOY.box.
+const CARTON = [0.56, 0.4, 0.2] as const,
+  CARD = 0xb59a6e,
+  SEATS: [number, number, number][] = [
+    [0.17, 0.09, 0.3],
+    [-0.17, -0.09, -0.2],
+    [0, 0.09, 0.1],
+    [0.17, -0.09, -0.4],
+    [-0.17, 0.09, 0.25],
+    [0, -0.09, -0.1],
+  ];
 
 // One part: a geometry with its colour painted into its vertices, so the whole plush is one mesh.
 function paint(geo: THREE.BufferGeometry, col: THREE.ColorRepresentation): THREE.BufferGeometry {
@@ -72,6 +85,33 @@ export function createPlush(scene: THREE.Scene) {
     lampOn = new THREE.MeshBasicMaterial({ color: 0xff3020, fog: false }),
     lampOff = new THREE.MeshBasicMaterial({ color: 0x2a0a08 });
   const toys = new Map<number, ReturnType<typeof make>>(); // by the toy's id in S.toys
+  // The carton: four sides and a floor, no lid, the flaps folded out, and its plushes looking out over the front.
+  const carton = new THREE.Group(),
+    card = new THREE.MeshStandardMaterial({ color: CARD, roughness: 1 }),
+    [w, d, h] = CARTON,
+    side = (sx: number, sy: number, sz: number, x: number, y: number, z: number, tilt = 0, axis: 'x' | 'z' = 'x') => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), card);
+      m.position.set(x, y, z);
+      m.rotation[axis] = tilt;
+      carton.add(m);
+    };
+  side(w, 0.01, d, 0, 0.005, 0);
+  for (const s of [-1, 1]) {
+    side(w, h, 0.01, 0, h / 2, (s * d) / 2);
+    side(0.01, h, d, (s * w) / 2, h / 2, 0);
+    side(w, 0.12, 0.005, 0, h + 0.05, s * (d / 2 + 0.03), s * 0.6); // the long flaps, folded out and sagging
+  }
+  const seated = SEATS.map(([x, z, yaw]) => {
+    const g = new THREE.Mesh(geo, mat);
+    g.position.set(x, 0.01, z);
+    g.rotation.y = yaw;
+    carton.add(g);
+    return g;
+  });
+  carton.position.set(TOY_BOX.x, floorY(TOY_BOX.x, TOY_BOX.z), TOY_BOX.z);
+  carton.rotation.y = TOY_BOX.face;
+  carton.name = 'mini biggs carton';
+  scene.add(carton);
   function make() {
     const g = new THREE.Group(),
       body = new THREE.Mesh(geo, mat),
@@ -85,12 +125,18 @@ export function createPlush(scene: THREE.Scene) {
   return {
     // The group drawn for a toy in S.toys, for the outline (outline.ts).
     group: (id: number): THREE.Group | undefined => toys.get(id)?.g,
+    carton,
     // A night began: the floor is swept.
     reset(): void {
       for (const s of toys.values()) scene.remove(s.g);
       toys.clear();
     },
     sync(S: State, view: View): void {
+      // The ones the crew has taken are gone from it, front ones first. A lobby has a full box.
+      const left = S.toyBox ?? TOY.box;
+      seated.forEach((g, i) => {
+        g.visible = i >= SEATS.length - left;
+      });
       const now = nightClock.now,
         list = S.toys || [],
         here = new Set<number>();

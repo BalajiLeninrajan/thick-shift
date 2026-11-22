@@ -52,7 +52,7 @@ export type Target = { at: Point; label: string; hold: number } & (
   | { what: 'door'; k: DoorKey; i?: never; id?: never }
   | { what: 'toy'; id: number; i?: never; k?: never }
   | { what: 'peel'; id: string; i?: never; k?: never }
-  | { what: 'crank' | 'charge'; i?: never; k?: never; id?: never }
+  | { what: 'crank' | 'charge' | 'carton'; i?: never; k?: never; id?: never }
 );
 
 // This guard as their own browser has them (player.me), ahead of what the room sends back. yaw 0 faces south (+z).

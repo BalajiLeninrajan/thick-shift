@@ -2,10 +2,11 @@
 // night up from S alone (adoptFloor), starting the run again (restartFloor) and a guard's actions (actFloor).
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
-import { BATTERY_SPOTS, BOXES, HIDES, PANELS, REST, spawnPoint } from '../src/map.ts';
+import { FLAN } from '../src/config.ts';
+import { BATTERY_SPOTS, BOXES, dist, HIDES, PANELS, REST, spawnPoint, TOY_BOX } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
 import { DEV_OFF } from '../src/session.ts';
-import { actFloor, adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor } from '../src/sim.ts';
+import { actFloor, adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor, TOY } from '../src/sim.ts';
 import type { Guard, NightState, SimEvent, State } from '../src/types.ts';
 import { countEvents, digest, eventsSince } from './nights.ts';
 
@@ -135,23 +136,13 @@ describe('adoptFloor', () => {
     expect(sim.crankNoise).toBe(0);
   });
 
-  it('gives a hunting Biggs half as much wind again as any other hunter', () => {
-    const T = savedState();
-    defined(T.m[1], 'Madame Flan').st = 'hunt';
-    const [biggs, other] = adopt(7, T).sim.brains;
-    assert(biggs && other, 'Biggs and Flan have brains');
-    expect(other.wind).toBeGreaterThan(0);
-    expect(biggs.wind).toBeCloseTo(1.5 * other.wind, 9);
-    expect(other.wind).toMatchSnapshot();
-  });
-
-  it('gives each mascot the timers and wind a seeded stream says', () => {
+  it('gives each mascot the timers a seeded stream says', () => {
     // The idle night below ends before most of these timers play out, so pin them here: the search timer for the
-    // lost charge, the feast timer, the rest timer, Stompy's full charge gap (CHARGE_GAP, 10 s) and the hunt's wind.
+    // lost charge, the feast timer, the rest timer and Stompy's full charge gap (CHARGE_GAP, 10 s).
     const { sim, T } = adopt(7);
     const r = (v: number) => Math.round(v * 1000) / 1000;
     expect(sim.brains[3]?.cool).toBe(10);
-    expect(sim.brains.map((b, i) => ({ st: T.m[i]?.st, tgt: b.tgt, timer: r(b.timer), cool: b.cool, wind: r(b.wind) }))).toMatchSnapshot();
+    expect(sim.brains.map((b, i) => ({ st: T.m[i]?.st, tgt: b.tgt, timer: r(b.timer), cool: b.cool }))).toMatchSnapshot();
     expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault) }).toMatchSnapshot();
   });
 
@@ -277,6 +268,30 @@ describe('actFloor', () => {
     });
   }
 
+  it('hands out the booth carton one at a time, to empty hands in reach, until it is empty', () => {
+    const { sim, S } = start(1, 2, 1);
+    const [p, q] = [defined(S.players[0], 'g0'), defined(S.players[1], 'g1')];
+    const take = (g: Guard) => actFloor(sim, S, g.id, { t: 'use', what: 'carton' });
+    expect(S.toyBox).toBe(TOY.box);
+    Object.assign(p, { x: TOY_BOX.x, z: TOY_BOX.z - 0.9 });
+    take(p);
+    expect(S.toyBox).toBe(TOY.box); // their own still in hand
+    p.toy = false;
+    Object.assign(q, { x: TOY_BOX.x - 3, z: TOY_BOX.z - 3, toy: false });
+    take(q);
+    expect([S.toyBox, q.toy]).toEqual([TOY.box, false]); // out of reach
+    for (let k = 1; k <= TOY.box; k++) {
+      take(p);
+      expect([S.toyBox, p.toy]).toEqual([TOY.box - k, true]);
+      expect(S.evs.at(-1)).toMatchObject({ type: 'grab', x: { by: p.id, x: TOY_BOX.x, z: TOY_BOX.z } });
+      p.toy = false;
+    }
+    take(p);
+    expect([S.toyBox, p.toy]).toEqual([0, false]);
+    restartFloor(sim, S);
+    expect(S.toyBox).toBe(TOY.box);
+  });
+
   it('steps into a locker named by a number, and keeps p.hid a number', () => {
     const hide = defined(
       USES.find(u => u.what === 'hide'),
@@ -285,5 +300,72 @@ describe('actFloor', () => {
     const { S } = use('hide', hide.set, '"i":0').after;
     expect(S.players[0]?.hid).toBe(0);
     expect(S.evs.at(-1)).toMatchObject({ type: 'locker', x: { i: 0, in: true } });
+  });
+});
+
+describe('a hunt', () => {
+  // A night-1 guard in the Main Hall and Madame Flan coming for them from six metres south, the rest kept on their
+  // marks, rot held at stage 0 so a torch stops her dead.
+  function chase() {
+    const { sim, S } = start(1, 1, 1);
+    S.dev = { ...DEV_OFF, rot: 0 };
+    S.stir = false;
+    S.waveAt = 1e9;
+    const p = defined(S.players[0], 'g0'),
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
+    Object.assign(p, { x: 19.5, z: 18, yaw: 0, pitch: 0, on: true });
+    Object.assign(m, { x: 19.5, z: 24, yaw: Math.PI, st: 'hunt' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z } });
+    return { sim, S, p, m };
+  }
+
+  it('does not give up on a guard it can see, however long a torch holds it', () => {
+    const { sim, S, p, m } = chase();
+    for (let k = 1; k <= 400; k++) stepFloor(sim, S, k * 100);
+    expect(S.t).toBeCloseTo(40, 6);
+    expect(m.st).toBe('hunt');
+    expect(dist(m, { x: 19.5, z: 24 })).toBeLessThan(0.5); // held where it stood
+    expect(p.flat).toBe(false);
+  });
+
+  // A guard hidden in locker 0, and Madame Flan right outside its doors, close enough to touch them, knowing they are in.
+  function hiding() {
+    const { sim, S } = start(1, 1, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    const h = defined(HIDES[0], 'locker 0'),
+      p = defined(S.players[0], 'g0'),
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
+    Object.assign(p, { hid: 0, x: h.at.x, z: h.at.z, on: false });
+    // Right outside the doors, close enough to touch them, and it saw them get in.
+    Object.assign(m, { x: h.at.x + Math.sin(h.face) * 0.6, z: h.at.z + Math.cos(h.face) * 0.6, st: 'search' });
+    Object.assign(b, { woke: true, knows: 0, last: { ...h.at }, timer: 5, since: 0, was: 'search' });
+    return { sim, S, p, m };
+  }
+
+  it('pulls a guard out of a locker and gives them a split second before it can touch them', () => {
+    const { sim, S, p, m } = hiding();
+    stepFloor(sim, S, 100);
+    expect(S.evs.some(e => e.type === 'found')).toBe(true);
+    expect(p).toMatchObject({ hid: -1, flat: false });
+    expect(m.st).toBe('hunt');
+    for (let k = 2; k <= 6; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(false); // 0.6 s on, standing still within reach
+    for (let k = 7; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(true); // and then it has them
+  });
+
+  it('hears a guard bang straight back into a locker, and has them at once when it opens it', () => {
+    const { sim, S, p } = hiding();
+    stepFloor(sim, S, 100);
+    expect(p.hid).toBe(-1);
+    actFloor(sim, S, 'g0', { t: 'use', what: 'hide', i: 0 });
+    expect(p.hid).toBe(0);
+    expect(S.evs.at(-1)).toMatchObject({ type: 'locker', x: { in: true, loud: true } });
+    for (let k = 2; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(true);
+    expect(S.t).toBeLessThan(1.5); // as soon as it may touch them, not after another start
   });
 });

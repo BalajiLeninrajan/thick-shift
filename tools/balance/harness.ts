@@ -244,6 +244,8 @@ const standOf = (u: Use) => u.stand ?? front(u.at);
 const targetOf = (o: Objective) => (o.use ? standOf(o.use) : o.goal);
 const CHARGE: Use = { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' };
 const CRANK: Use = { what: 'crank', at: M.GENERATOR, hold: -1, key: 'crank' };
+// The booth's carton of Mini Biggses, a tap from in front of it.
+const CARTON: Use = { what: 'carton', at: M.TOY_BOX, hold: 0.2, key: 'carton' };
 const hideUse = (i: number, at: Point): Use => ({ what: 'hide', i, at, stand: at, hold: F.HIDE_HOLD, key: `hide${i}` });
 // Breaker box i: S.faults, team.fault and the 'fix' uses all name boxes by their place in M.BOXES.
 const box = (i: number) => defined(M.BOXES[i], `box ${i}`);
@@ -948,6 +950,8 @@ function objectiveOf(S: NightState, bot: Bot, team: Team): Objective {
     const left = S.toys.filter(t => S.t > t.land + 6 && !known(S, bot, 4).some(h => MOVING.includes(h.st) && dist(h, t) < 8));
     const t = nearest(bot, left);
     if (t) return { use: { what: 'toy', id: t.id, at: t, stand: t, hold: 0.2, key: `toy${t.id}` } };
+    // None worth the walk: a fresh one from the booth's carton, while it has any.
+    if (S.toyBox > 0) return { use: CARTON };
   }
   // 5. Nothing to do: the booth, and the charger if the torch wants it. A careless guard wanders.
   if (!sk.plans && pol.stays !== true && !(bot.bat < 0.05 && lightsF(S)) && !st.topUp) return st.drift && st.drift.until > S.t ? { goal: st.drift.to } : {};
@@ -1073,7 +1077,13 @@ const DEGENERATE = {
     think(S, bot) {
       const w = bot.want;
       w.on = !lightsF(S);
-      if (toys) lure(S, bot, BOOTH_MID);
+      if (toys) {
+        lure(S, bot, BOOTH_MID);
+        if (!guardOf(bot).toy && S.toyBox > 0) {
+          w.use = CARTON;
+          return;
+        }
+      }
       for (const [j, k] of DOORS.entries()) if (((bot.i + j) % 3 === 0 || S.t > 4) && setDoor(S, bot, k, true)) return;
       const h = nearest(bot, known(S, bot));
       if (h && dist(bot, h) < 12) {
@@ -1221,6 +1231,7 @@ export function checkBuilding(): string[] {
   });
   reachable('generator', M.GENERATOR, front(M.GENERATOR));
   reachable('charger', M.CHARGER, front(M.CHARGER));
+  reachable('Mini Biggs carton', M.TOY_BOX, front(M.TOY_BOX));
   M.BATTERY_SPOTS.forEach((b, i) => {
     reachable(`battery ${i}`, b, b);
   });

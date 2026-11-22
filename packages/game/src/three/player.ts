@@ -7,7 +7,7 @@
 import { F, TOY } from '@thick-shift/sim';
 import { assert, defined, isNight, isPlaced } from '@thick-shift/sim/check';
 import { DOORS, STAMINA } from '@thick-shift/sim/config';
-import { angDiff, BATTERY_SPOTS, BOXES, CHARGER, dist, EYE, GENERATOR, HIDES, PANELS, PLAYER_R, slide, walkable } from '@thick-shift/sim/map';
+import { angDiff, BATTERY_SPOTS, BOXES, CHARGER, dist, EYE, GENERATOR, HIDES, PANELS, PLAYER_R, slide, TOY_BOX, walkable } from '@thick-shift/sim/map';
 import type { DoorKey, Guard, NightState, Player, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { unlockAudio } from '../audio';
@@ -338,6 +338,8 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     if (S.power > 0 && mine.bat < 1) list.push({ what: 'charge', at: CHARGER, label: 'Charge the torch', hold: -1 });
     // Any Mini Biggs on the floor, into empty hands.
     if (!mine.toy) for (const t of S.toys) if (S.t >= t.land) list.push({ what: 'toy', id: t.id, at: t, label: 'Pick up the Mini Biggs', hold: 0 });
+    // The booth's carton, while it has any left.
+    if (!mine.toy && S.toyBox > 0) list.push({ what: 'carton', at: TOY_BOX, label: `Take a Mini Biggs from the box (${S.toyBox} left)`, hold: 0 });
     HIDES.forEach((h, i) => {
       if (!S.players.some(p => p.hid === i)) list.push({ what: 'hide', i, at: h.at, label: 'Hide in the locker', hold: F.HIDE_HOLD });
     });

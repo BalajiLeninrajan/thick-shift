@@ -200,6 +200,8 @@ export const BOXES: Fixture[] = [
 // The generator is the point a guard cranks it from; the machine stands behind that, in the booth's south-west corner beside the charger.
 export const GENERATOR: Fixture = { room: 9, x: 16, z: 42.4, face: Math.PI };
 export const CHARGER: Fixture = { room: 9, x: 21, z: 43.95, face: Math.PI };
+// The gift shop's carton of Mini Biggses (TOY.box in sim.ts), on the floor in the corner by the coat rack.
+export const TOY_BOX: Fixture = { room: 9, x: 25.6, z: 43.45, face: Math.PI };
 export const WALL_MAP: Fixture = { room: 9, x: 18.5, z: 36.55, face: 0 };
 // The button for each booth door, on the wall inside the booth beside it.
 export const PANELS: Record<DoorKey, Point & { face: number }> = {

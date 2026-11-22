@@ -553,15 +553,12 @@ export function createSound() {
     calm(_x: EventData['calm'], _S: State, r: Rig): void {
       into(r.room, () => sample(pick('creak1', 'creak2'), { rate: 0.5, gain: 0.5 }));
     },
-    // It has run out of wind and given up the chase: a long breath out.
-    quit(x: EventData['quit'], _S: State, r: Rig): void {
-      into(r.mascots[x.i].e.in, () => noise(0.8, 1.2, { band: BREATH[x.i].hz * 2, band2: BREATH[x.i].hz, q: 1, attack: 0.12 }));
-    },
-    // A locker door: a sheet-metal clank and the latch. Pulled open, it is wrenched.
+    // A locker door: a sheet-metal clank and the latch. Pulled open, it is wrenched. Banged shut by shaking hands, it slams.
     locker(x: EventData['locker'], S: State, r: Rig): void {
       const clank = () => {
-        sample('sheet3', { rate: x.in ? 1.7 : 1.5, gain: 0.45 }) || noise(0.18, 0.35, { band: 2400, q: 3 });
+        sample('sheet3', { rate: x.in ? 1.7 : 1.5, gain: x.loud ? 0.9 : 0.45 }) || noise(0.18, 0.35, { band: 2400, q: 3 });
         tone(x.in ? 1400 : 1200, 0.03, 'square', 0.05, { at: 0.12 });
+        if (x.loud) sample('slam2', { rate: 1.2, gain: 0.9 }) || noise(0.3, 0.6, { band: 1500 });
       };
       if (mine(x.id)) clank();
       else at(r, S, x, clank);

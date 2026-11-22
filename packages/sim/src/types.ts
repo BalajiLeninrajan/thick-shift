@@ -51,9 +51,11 @@ export interface Guard extends Joined {
   flatBy: MascotIndex | -1; // the mascot that flattened them, or -1
   sp: boolean; // sprinting
   act: GuardAct;
-  safe: number; // S.t before which no mascot can flatten them (after a peel)
+  safe: number; // S.t before which no mascot can see or flatten them: just after a peel, or a mascot opening their locker
   callAt: number; // S.t before which their next call for help is ignored
   hid: number; // the locker (HIDES index) they are in, or -1
+  shaky: number; // S.t before which getting into a locker is loud: just after a mascot pulled them out of one
+  inAt: number; // S.t they got into the locker they are in
   toy: boolean; // holding their Mini Biggs
 }
 // A guard in S.players at any time: a guard who joined after the night began has only their id and name until the
@@ -146,7 +148,6 @@ export interface EventData {
   crash: { x: number; z: number };
   bang: DoorKey;
   arrive: DoorKey;
-  quit: { i: MascotIndex; x: number; z: number };
   roar: { i: MascotIndex; x: number; z: number };
   call: { id: string; x: number; z: number };
   fix: { i: number; by: string; x: number; z: number };
@@ -154,7 +155,7 @@ export interface EventData {
   door: boolean; // the door is now shut
   bat: { by: string };
   grab: { by: string; x: number; z: number };
-  locker: { i: number; id: string; in: boolean; x: number; z: number };
+  locker: { i: number; id: string; in: boolean; loud: boolean; x: number; z: number }; // loud: banged shut by shaking hands
   peel: { id: string; by: string; x: number; z: number };
 }
 export type EventType = keyof EventData;
@@ -196,6 +197,7 @@ export interface NightState extends LobbyState {
   bats: number[]; // the BATTERY_SPOTS that have one lying there
   toys: Toy[];
   toyId: number;
+  toyBox: number; // Mini Biggses left in the booth's carton (TOY_BOX)
 }
 // S as it is sent and received: a lobby state, or a night's.
 export type State = LobbyState & Partial<Omit<NightState, keyof LobbyState>>;
@@ -228,7 +230,6 @@ export interface Brain {
   spent: boolean;
   woke: boolean;
   notice: number;
-  wind: number;
   stared: number;
   reach: Reach | null;
   knows: number; // the locker it saw a guard step into, or -1
@@ -246,7 +247,7 @@ export interface Brain {
 // A guard's action, sent by their own browser (packages/game/src/three/player.ts) to the room, or in a night played
 // solo handed straight to commandFloor. It comes off the wire as JSON from someone else's browser, so actFloor checks
 // every field.
-export type UseWhat = 'fix' | 'door' | 'bat' | 'toy' | 'hide' | 'peel';
+export type UseWhat = 'fix' | 'door' | 'bat' | 'toy' | 'carton' | 'hide' | 'peel';
 export type Action =
   | { t: 'name'; n: string }
   // Where the guard's own browser has moved them, and what they are doing.
