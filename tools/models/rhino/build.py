@@ -14,7 +14,7 @@
 # sculpt.py makes the meshes, shade.py the materials and the bake, parts.py
 # the head, hands, feet and worm. This file lays each stage out and exports.
 # look.py renders previews of the result.
-import sys, os, json, math, time, traceback
+import sys, os, math, time, traceback
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
@@ -412,7 +412,7 @@ def finalize(rig, stage, info):
         ob = join(p['pieces'], p['name'])
         floor_clamp(ob)
         obs[p['name']] = ob
-    print('[tris]', {k: ntris(o) for k, o in obs.items()}, 'total', sum(ntris(o) for o in obs.values()))
+    print('[tris]', {k: tris([o]) for k, o in obs.items()}, 'total', tris(obs.values()))
     ext = {k: (co(o).min(0), co(o).max(0)) for k, o in obs.items()}   # which parts set the box, for the size limits
     for ax, nm in ((0, 'x'), (1, 'y'), (2, 'z')):
         lo = min(ext, key=lambda k: ext[k][0][ax]); hi = max(ext, key=lambda k: ext[k][1][ax])
@@ -463,10 +463,8 @@ def looks(stage, info):
 
 
 def main():
-    args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+    args = script_args()
     which = [int(a) for a in args if a.isdigit()] or [0, 1, 2]
-    path = os.path.join(MODELS, KEY + '.json')
-    doc = json.load(open(path)) if os.path.exists(path) else dict(key=KEY, stages=[None, None, None])
     failed = []
     for stage in which:
         try:   # one stage failing should not cost the others their turn in the Blender queue
@@ -476,8 +474,7 @@ def main():
             info = STAGES[stage](rig, np.random.default_rng(100 + stage))
             clock('sculpted')
             finalize(rig, stage, info)
-            doc['stages'][stage] = describe(rig, stage, info)
-            with open(path, 'w') as f: json.dump(doc, f, indent=1)
+            write_stage(KEY, stage, describe(rig, stage, info))
             if 'fast' not in args: looks(stage, info)
             clock('previews')
         except Exception:

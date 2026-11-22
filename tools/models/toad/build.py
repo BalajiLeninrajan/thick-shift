@@ -6,7 +6,7 @@
 # Blender axes while building: x is the model's left, -y is its front, z is up.
 # Stage 0 is the costume, stage 1 has lost its torso, stage 2 is a head, a
 # rear and a spine hanging in the air. See stage0(), stage1(), stage2().
-import bpy, bmesh, json, math, os, random, sys, traceback
+import bpy, bmesh, math, os, random, sys, traceback
 import numpy as np
 from mathutils import Vector
 
@@ -766,12 +766,10 @@ STAGES = {0: stage0, 1: stage1, 2: stage2}
 LOOKS = [(('front', 'low'), {}), (('three_quarter', 'back'), dict(light='studio', tag='_studio'))]
 
 if __name__ == '__main__':
-    args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else ['0', '1', '2']
+    args = script_args(['0', '1', '2'])
     looks = [] if '--no-preview' in args else LOOKS
     args = [a for a in args if not a.startswith('--')]
     failed = False
-    path = os.path.join(MODELS, 'toad.json')
-    doc = json.load(open(path)) if os.path.exists(path) else dict(key='toad', stages=[None, None, None])
     for a in args:
         i = int(a)
         reset()
@@ -782,8 +780,7 @@ if __name__ == '__main__':
             failed = True
             continue
         print(f"[toad] stage {i}: {entry.pop('_tris')} tris, {entry.pop('_mb')} MB")
-        doc['stages'][i] = entry
-        with open(path, 'w') as f: json.dump(doc, f, indent=1)
+        write_stage('toad', i, entry)
         for views, kw in looks: preview(f'toad_{i}', views=views, res=600, samples=16, **kw)
         log('previews done')
     if failed: sys.exit(1)

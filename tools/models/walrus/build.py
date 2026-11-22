@@ -16,7 +16,7 @@
 # which is the joke of the game. Stage 2 drops the joke on purpose: a starved
 # frame with small hips under a narrow drape, so the long neck and the four
 # harvestman legs make the silhouette.
-import bpy, bmesh, sys, os, json, math
+import bpy, bmesh, sys, os, math
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE); sys.path.insert(0, os.path.dirname(HERE))
 from common import *
@@ -24,7 +24,7 @@ from lib import *
 import numpy as np
 from mathutils import Vector
 
-ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else ['0']
+ARGS = script_args(['0'])
 ST = int(ARGS[0])
 V = Vector
 
@@ -780,8 +780,6 @@ def notes(height, foot):
 
 
 def write_json(info):
-    path = os.path.join(MODELS, 'walrus.json')
-    data = json.load(open(path)) if os.path.exists(path) else {'key': 'walrus', 'stages': [None, None, None]}
     lo, hi = info['min'], info['max']
     # footprint, three.js axes (x across, z front to back): `body` is what
     # stands on the floor and blocks (hips, or the drape at stage 2), `reach`
@@ -790,12 +788,11 @@ def write_json(info):
     blo, bhi = bounds([b])
     foot = {'body': [round(bhi.x - blo.x, 2), round(bhi.y - blo.y, 2)],
             'reach': [round(hi[0] - lo[0], 2), round(hi[1] - lo[1], 2)]}
-    data['stages'][ST] = {
+    write_stage('walrus', ST, {
         'file': info['file'], 'height': round(hi[2], 2),
         'radius': round(max(abs(lo[0]), abs(hi[0]), abs(lo[1]), abs(hi[1])), 2),
         'face': [0, round(HEAD_C.z - .03, 2), round(-(HEAD_C.y - .33 * HEAD_S), 2)],   # three.js axes
-        'floats': False, 'footprint': foot, 'nodes': info['nodes'], 'notes': notes(round(hi[2], 2), foot)}
-    with open(path, 'w') as f: json.dump(data, f, indent=1)
+        'floats': False, 'footprint': foot, 'nodes': info['nodes'], 'notes': notes(round(hi[2], 2), foot)})
 
 
 POSE = {'head': (25, 30, 10), 'neck': (20, 0, 15), 'jaw': ([0, 40, 75][ST], 0, 0), 'arm_L': (-40, 0, 0), 'arm_R': (35, 0, 30), 'forearm_L': (-40, 0, 0),

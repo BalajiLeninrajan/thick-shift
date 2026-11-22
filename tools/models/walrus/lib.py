@@ -5,6 +5,7 @@ import bpy, bmesh, math, time
 import numpy as np
 from mathutils import Vector, Matrix, Euler
 from mathutils.bvhtree import BVHTree
+from common import select, smooth_shade, tris
 
 
 _t = [time.time()]
@@ -99,12 +100,6 @@ def curve_pts(ctrl, n):
     return out
 
 
-def select(objs):
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in objs: o.select_set(True)
-    bpy.context.view_layer.objects.active = objs[0]
-
-
 def join(objs):
     objs = [o for o in objs if o is not None]
     if len(objs) > 1:
@@ -121,11 +116,6 @@ def mod(o, kind, **kw):
     return o
 
 
-def smooth_shade(o):
-    o.data.polygons.foreach_set('use_smooth', [True] * len(o.data.polygons))
-    o.data.update()
-
-
 def coords(me):
     a = np.empty(len(me.vertices) * 3)
     me.vertices.foreach_get('co', a)
@@ -136,10 +126,6 @@ def normals(me):
     a = np.empty(len(me.vertices) * 3)
     me.vertex_normals.foreach_get('vector', a)
     return a.reshape(-1, 3)
-
-
-def tri_count(o):
-    return sum(len(p.vertices) - 2 for p in o.data.polygons)
 
 
 # ---------------------------------------------------------------- noise
@@ -198,7 +184,7 @@ def sculpt(forms, voxel=.02, smooth=6, lumps=(), seed=0):
 
 
 def decimate(o, target):
-    n = tri_count(o)
+    n = tris([o])
     if n > target: mod(o, 'DECIMATE', ratio=target / n)
     smooth_shade(o)
     return o

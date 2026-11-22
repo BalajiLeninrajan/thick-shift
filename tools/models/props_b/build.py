@@ -14,7 +14,7 @@
 # The props themselves are in stage.py, arcade.py, party.py, kitchen.py and
 # snack.py; the primitives are in kit.py and the two shared textures are
 # painted in atlas.py.
-import argparse, json, math, os, sys
+import argparse, json, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE); sys.path.insert(0, os.path.dirname(HERE))
 import bpy, bmesh, traceback
@@ -34,9 +34,9 @@ ap.add_argument('--samples', type=int, default=16)
 ap.add_argument('--spot', action='append', default=[])
 ap.add_argument('--shots', action='store_true')
 ap.add_argument('--sheet', action='store_true')
-args = ap.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
+args = ap.parse_args(common.script_args())
 only = [s for s in args.only.split(',') if s]
-OUT = 'props_b' if not only else os.path.relpath(os.path.join(common.PREVIEWS, 'props_b_wip'), common.MODELS)
+OUT, FOLDER = ('props_b_wip', common.PREVIEWS) if only else ('props_b', common.MODELS)
 NAMES = [b[0] for b in BUILDERS]
 
 # The contact sheet the kit is laid out on. The game ignores where each prop
@@ -111,11 +111,11 @@ def build():
                             children=[k.name for k in p.kids], notes=p.notes)
         ob.location = ((i % COLS) * SPACING, (i // COLS) * SPACING, max(0, -lo.z))
     bake_ao(everything)
-    common.export_glb(OUT, objs=tops)
+    common.export_glb(OUT, objs=tops, folder=FOLDER)
     if not only:
         with open(os.path.join(common.MODELS, 'props_b.json'), 'w') as f:
             json.dump(dict(props=meta), f, indent=1)
-    common.report(OUT)
+    common.report(OUT, folder=FOLDER)
     total = 0
     for o in sorted(bpy.context.scene.objects, key=lambda o: o.name):
         if o.parent is None:
@@ -125,19 +125,12 @@ def build():
     return failed
 
 
-def shots(names, azs, spots):
-    """Render each named prop alone from each azimuth, plus the close-ups.
-
-    common.preview() re-opens the GLB and denoises for every picture, which is
-    slow for every prop. This calls it once with no views (so the floor, camera
-    and lamp are set up as it does it), then hides every other prop and moves
-    the camera, with the scene kept in memory and the denoiser off."""
-    common.preview(OUT, views=(), res=args.res, samples=args.samples, light=args.light)
+def shots(names, azs, spots, light):
+    """Render each named prop alone from each azimuth, plus the close-ups, the
+    fast way (see common.shot), hiding every other prop for each picture.
+    Returns the files grouped by azimuth, with the close-ups under 'close'."""
+    common.preview(OUT, views=(), res=args.res, samples=args.samples, light=light, folder=FOLDER)
     sc = bpy.context.scene
-    sc.render.use_persistent_data = True
-    sc.cycles.use_denoising = False
-    cam = sc.camera
-    lamp = next(o for o in sc.objects if o.type == 'LIGHT')
     tops = {o.name: o for o in sc.objects if o.parent is None and o.name in NAMES}
     for o in sc.objects:   # a hung prop stands on the floor here, whatever file it came from
         if o.type == 'MESH' and o.name not in tops and o.parent is None:
@@ -146,36 +139,21 @@ def shots(names, azs, spots):
         lo, hi = common.bounds([o, *o.children_recursive])
         if lo.z < -.01: o.location.z -= lo.z
     bpy.context.view_layer.update()
-    tag ='_s' if args.light == 'studio' else ''
+    tag = '_s' if light == 'studio' else ''
     jobs = []
     for n in names:
         if n not in tops: continue
         lo, hi = common.bounds([tops[n], *tops[n].children_recursive])
-        for az in azs: jobs.append((n, f'{n}_{az}{tag}', (lo + hi) / 2, max((hi - lo).length / 2, .25), az))
+        for az in azs: jobs.append((n, f'{n}_{az}{tag}', (lo + hi) / 2, max((hi - lo).length / 2, .25), az, az))
     for k, s in enumerate(spots):
         n, v = s.split(':')
         x, y, z, r, az = map(float, v.split(','))
-        jobs.append((n, f'{n}_close{k}{tag}', tops[n].location + Vector((x, y, z)), r, az))
+        jobs.append((n, f'{n}_close{k}{tag}', tops[n].location + Vector((x, y, z)), r, az, 'close'))
     out = {}
-    for n, key, c, r, az in jobs:
+    for n, key, c, r, az, group in jobs:
         for name, o in tops.items():
             for q in (o, *o.children_recursive): q.hide_render = name != n
-        a = math.radians(az)
-        eye = Vector((c.x + math.sin(a) * r * 2.6, c.y - math.cos(a) * r * 2.6, c.z + r * .5))
-        cam.location = eye
-        cam.rotation_euler = (c - eye).to_track_quat('-Z', 'Y').to_euler()
-        if lamp.data.type == 'SPOT':
-            lamp.data.energy = 180 * max(1, r) ** 2
-            k = min(1, r * 2)   # the torch closer in for small things, and above the floor
-            lamp.location = eye + Vector((math.cos(a), math.sin(a), 0)) * .35 * k + Vector((0, 0, -.3 * k))
-            lamp.location.z = max(lamp.location.z, .05)
-            lamp.rotation_euler = (c - lamp.location).to_track_quat('-Z', 'Y').to_euler()
-        else:
-            lamp.rotation_euler = (math.radians(50), 0, a + math.radians(30))
-        sc.render.filepath = os.path.join(common.PREVIEWS, f'props_b_{key}.png')
-        bpy.ops.render.render(write_still=True)
-        print('[preview]', sc.render.filepath)
-        out.setdefault(az if not key.count('_close') else 'close', []).append(sc.render.filepath)
+        out.setdefault(group, []).append(common.shot(f'props_b_{key}', c, r, az))
     return out
 
 
@@ -199,8 +177,7 @@ failed = [] if args.shots else build()
 want = [] if not args.prev else (only or NAMES) if args.prev == 'all' else args.prev.split(',')
 for light in args.light.split(','):   # e.g. --light flashlight,studio for both passes
     if not (want or args.spot): break
-    args.light = light
-    done = shots(want, [float(a) if '.' in a else int(a) for a in args.az.split(',')], args.spot)
+    done = shots(want, [float(a) if '.' in a else int(a) for a in args.az.split(',')], args.spot, light)
     if args.sheet:
         for az, paths in done.items(): sheet(paths, f'{az}_{light}')
 if failed: sys.exit('[failed] ' + ', '.join(failed))

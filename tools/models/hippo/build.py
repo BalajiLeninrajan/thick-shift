@@ -22,7 +22,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import *
 
-ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+ARGS = script_args()
 STAGES = [int(a) for a in ARGS if a.isdigit()] or [0, 1, 2]
 QUICK = 'quick' in ARGS
 SHOTS = [a for a in ARGS if a in ('sf', 'sq', 'ss', 'sb', 'df', 'dl', 'face', 'sface')] or ['sf', 'sq', 'ss', 'sb', 'df', 'dl', 'face', 'sface']

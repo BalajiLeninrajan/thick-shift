@@ -11,6 +11,7 @@ import bpy, bmesh, math
 import numpy as np
 from mathutils import Vector, Matrix, Euler
 from mathutils.bvhtree import BVHTree
+from common import select, smooth_shade, tris
 
 
 # ---------- noise (numpy, deterministic, no dependence on Blender's) ----------
@@ -55,13 +56,8 @@ def mesh_obj(name, verts, faces):
     me.update()
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
-    shade_smooth(ob)
+    smooth_shade(ob)
     return ob
-
-
-def shade_smooth(ob):
-    ob.data.polygons.foreach_set('use_smooth', [True] * len(ob.data.polygons))
-    ob.data.update()
 
 
 def co(ob):
@@ -81,29 +77,19 @@ def normals(ob):
     return a.reshape(-1, 3)
 
 
-def ntris(ob):
-    return sum(len(p.vertices) - 2 for p in ob.data.polygons)
-
-
-def activate(ob):
-    bpy.ops.object.select_all(action='DESELECT')
-    ob.select_set(True)
-    bpy.context.view_layer.objects.active = ob
-
-
 def modifier(ob, kind, **props):
     """Add a modifier, set its properties, apply it."""
     m = ob.modifiers.new(kind, kind)
     for k, v in props.items(): setattr(m, k, v)
-    activate(ob)
+    select([ob])
     bpy.ops.object.modifier_apply(modifier=m.name)
     return ob
 
 
-def decimate(ob, tris):
-    n = ntris(ob)
-    if n > tris: modifier(ob, 'DECIMATE', ratio=tris / n)
-    shade_smooth(ob)
+def decimate(ob, target):
+    n = tris([ob])
+    if n > target: modifier(ob, 'DECIMATE', ratio=target / n)
+    smooth_shade(ob)
     return ob
 
 
@@ -140,9 +126,7 @@ def join(objs, name):
     the attribute survives the join."""
     objs = [o for o in objs if o is not None]
     for o in objs: stamp_rest(o)
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in objs: o.select_set(True)
-    bpy.context.view_layer.objects.active = objs[0]
+    select(objs)
     if len(objs) > 1: bpy.ops.object.join()
     ob = bpy.context.view_layer.objects.active
     ob.name = name
@@ -205,7 +189,7 @@ class Clay:
         ob = mesh_obj(name, np.concatenate(self.v), np.concatenate(self.f))
         modifier(ob, 'REMESH', mode='VOXEL', voxel_size=voxel, adaptivity=0)
         if smooth: modifier(ob, 'SMOOTH', factor=.5, iterations=smooth)
-        shade_smooth(ob)
+        smooth_shade(ob)
         return ob
 
 

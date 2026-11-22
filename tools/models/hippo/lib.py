@@ -168,12 +168,6 @@ def box(c, size, rot=(0, 0, 0), cls=TOOTH, bevel=.3, segs=2):
     return setcls(ob, cls)
 
 
-def select(objs, active=None):
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in objs: o.select_set(True)
-    bpy.context.view_layer.objects.active = active or objs[0]
-
-
 def join(objs, name='joined'):
     objs = [o for o in objs if o is not None]
     if len(objs) > 1:
@@ -235,11 +229,6 @@ def vnormals(ob):
     a = np.empty(len(ob.data.vertices) * 3, dtype=np.float32)
     ob.data.vertices.foreach_get('normal', a)
     return a.reshape(-1, 3)
-
-
-def smooth_shade(ob):
-    ob.data.polygons.foreach_set('use_smooth', np.ones(len(ob.data.polygons), dtype=bool))
-    ob.data.update()
 
 
 def sstep(a, b, x):
