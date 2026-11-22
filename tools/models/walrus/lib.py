@@ -53,6 +53,8 @@ def ell(c, r, rot=None, seg=20):
     if not hasattr(r, '__len__'): r = (r, r, r)
     bm = bmesh.new()
     bmesh.ops.create_uvsphere(bm, u_segments=seg, v_segments=max(6, seg // 2), radius=1)
+    # create_uvsphere lists its faces in a different order on every run, and everything built on it would differ too
+    bm.faces.sort(key=lambda f: sum(i * 4096 ** k for k, i in enumerate(sorted(v.index for v in f.verts))))
     M = Matrix.Translation(Vector(c))
     if rot: M = M @ Euler([math.radians(a) for a in rot]).to_matrix().to_4x4()
     bm.transform(M @ Matrix.Diagonal((*r, 1)))
