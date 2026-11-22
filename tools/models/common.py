@@ -7,17 +7,34 @@
 # named parts (no armature); the game animates the parts in code. See
 # README.md here for the naming contract.
 import bpy, json, math, os, sys
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MODELS = os.path.join(ROOT, 'packages', 'game', 'public', 'models')
 PREVIEWS = os.path.join(ROOT, 'tools', 'models', 'previews')
 
 
+def script_args(default=()):
+    """The words after `--` on Blender's command line, or `default` when there is no `--`."""
+    return sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else list(default)
+
+
 def reset():
     """Empty scene, metric units."""
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.scene.unit_settings.system = 'METRIC'
+
+
+def select(objs, active=None):
+    """Select only `objs` and make `active` (default: the first) the active object, for operators."""
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs: o.select_set(True)
+    bpy.context.view_layer.objects.active = active or objs[0]
+
+
+def smooth_shade(obj):
+    obj.data.polygons.foreach_set('use_smooth', [True] * len(obj.data.polygons))
+    obj.data.update()
 
 
 def part(obj, name, parent=None, pivot=None):
@@ -33,7 +50,7 @@ def part(obj, name, parent=None, pivot=None):
         obj.matrix_world.identity()
         if pivot is not None:
             p = Vector(pivot)
-            obj.data.transform(__import__('mathutils').Matrix.Translation(-p))
+            obj.data.transform(Matrix.Translation(-p))
             obj.location = p
     elif pivot is not None:
         obj.location = Vector(pivot)
@@ -48,12 +65,10 @@ def part(obj, name, parent=None, pivot=None):
     return obj
 
 
-def empty(name, parent=None, at=(0, 0, 0)):
+def empty(name):
     e = bpy.data.objects.new(name, None)
     bpy.context.scene.collection.objects.link(e)
-    e.location = at
     bpy.context.view_layer.update()
-    if parent is not None: part(e, name, parent)
     return e
 
 
@@ -68,12 +83,24 @@ def tris(objs=None):
     return n
 
 
-def export_glb(name, objs=None, draco=True, jpeg_quality=88):
+def write_stage(key, stage, entry):
+    """Put one rot stage's entry into packages/game/public/models/<key>.json and leave the other stages as they are."""
+    path = os.path.join(MODELS, key + '.json')
+    doc = dict(key=key, stages=[None, None, None])
+    if os.path.exists(path):
+        with open(path) as f: doc = json.load(f)
+    doc['stages'][stage] = entry
+    with open(path, 'w') as f: json.dump(doc, f, indent=1)
+
+
+def export_glb(name, objs=None, draco=True, jpeg_quality=88, folder=MODELS):
     """Write packages/game/public/models/<name>.glb. `objs`: the root objects to export
     (with their children); default is the whole scene. Blender's -Y is the
-    model's front; it comes out facing +Z in three.js, with +Y up."""
-    os.makedirs(MODELS, exist_ok=True)
-    path = os.path.join(MODELS, name + '.glb')
+    model's front; it comes out facing +Z in three.js, with +Y up. `folder`
+    is for a work-in-progress file the game should not see; report() and
+    preview() take it too."""
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, name + '.glb')
     bpy.ops.object.select_all(action='DESELECT')
     if objs:
         def walk(o):
@@ -107,10 +134,10 @@ def bounds(objs):
     return lo, hi
 
 
-def report(name):
+def report(name, folder=MODELS):
     """Re-open packages/game/public/models/<name>.glb and print what the game will see:
     the node tree, triangle count, size and bounding box. Returns a dict."""
-    path = os.path.join(MODELS, name + '.glb')
+    path = os.path.join(folder, name + '.glb')
     objs = load_glb(path)
     lo, hi = bounds(objs)
     def tree(o, d=0):
@@ -127,11 +154,22 @@ def report(name):
     return info
 
 
+def turned(pose):
+    """A `pose` for preview(): turns each node named in {node: (x, y, z)
+    degrees} about its own axes, the way the game moves joints."""
+    def apply(objs):
+        for o in objs:
+            if o.name in pose:
+                o.rotation_mode = 'XYZ'
+                o.rotation_euler = [math.radians(a) for a in pose[o.name]]
+    return apply
+
+
 # Camera stations for preview(): name -> (azimuth in degrees, 0 = from the front; height factor; distance factor)
 VIEWS = {'front': (0, .55, 1), 'three_quarter': (35, .6, 1), 'side': (90, .55, 1), 'back': (180, .55, 1), 'low': (15, .12, .8)}
 
 
-def preview(name, views=('front', 'three_quarter', 'side', 'back'), res=640, samples=24, light='flashlight', focus=None, tag=''):
+def preview(name, views=('front', 'three_quarter', 'side', 'back'), res=640, samples=24, light='flashlight', focus=None, tag='', pose=None, folder=MODELS):
     """Render packages/game/public/models/<name>.glb as the game will load it, to
     tools/models/previews/<name>_<view><tag>.png. Always look at the result.
 
@@ -140,9 +178,14 @@ def preview(name, views=('front', 'three_quarter', 'side', 'back'), res=640, sam
            checking shape and texture.
     focus: (x, y, z) in Blender axes and a radius, e.g. ((0, -.4, 2.1), .6),
            to frame a detail such as the face. Default frames the whole model.
+    pose:  a function given the loaded objects, to turn joints before the
+           model is framed, so a seam that opens when the game moves a joint
+           shows up. turned() makes one from a table of angles.
     """
-    path = os.path.join(MODELS, name + '.glb')
-    objs = load_glb(path)
+    objs = load_glb(os.path.join(folder, name + '.glb'))
+    if pose:
+        pose(objs)
+        bpy.context.view_layer.update()
     lo, hi = bounds(objs)
     centre, radius = ((lo + hi) / 2, max((hi - lo).length / 2, .2)) if focus is None else (Vector(focus[0]), focus[1])
     sc = bpy.context.scene
@@ -192,3 +235,34 @@ def preview(name, views=('front', 'three_quarter', 'side', 'back'), res=640, sam
         out.append(sc.render.filepath)
         print('[preview]', sc.render.filepath)
     return out
+
+
+def shot(file, centre, radius, az):
+    """One more picture of the scene preview() left behind, to tools/models/previews/<file>.png.
+
+    preview() re-opens the GLB and denoises for every picture, which takes
+    minutes per frame when the machine is short of memory. For many pictures
+    of one file, call preview(name, views=()) once, so the scene, floor,
+    camera and lamp are set up exactly as it does it, then this for each
+    picture. It keeps the scene in memory, leaves the denoiser off and frames
+    the sphere at `centre` (Blender axes) from `az` degrees round, 0 being the front."""
+    sc = bpy.context.scene
+    sc.render.use_persistent_data = True
+    sc.cycles.use_denoising = False
+    cam = sc.camera; lamp = next(o for o in sc.objects if o.type == 'LIGHT')
+    a = math.radians(az); c = Vector(centre)
+    eye = Vector((c.x + math.sin(a) * radius * 2.6, c.y - math.cos(a) * radius * 2.6, c.z + radius * .5))
+    cam.location = eye
+    cam.rotation_euler = (c - eye).to_track_quat('-Z', 'Y').to_euler()
+    if lamp.data.type == 'SPOT':
+        lamp.data.energy = 180 * max(1, radius) ** 2
+        k = min(1, radius * 2)   # hold the torch closer in for small things, and above the floor
+        lamp.location = eye + Vector((math.cos(a), math.sin(a), 0)) * .35 * k + Vector((0, 0, -.3 * k))
+        lamp.location.z = max(lamp.location.z, .05)
+        lamp.rotation_euler = (c - lamp.location).to_track_quat('-Z', 'Y').to_euler()
+    else:
+        lamp.rotation_euler = (math.radians(50), 0, a + math.radians(30))
+    sc.render.filepath = os.path.join(PREVIEWS, file + '.png')
+    bpy.ops.render.render(write_still=True)
+    print('[preview]', sc.render.filepath)
+    return sc.render.filepath

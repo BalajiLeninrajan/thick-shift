@@ -18,8 +18,6 @@ export interface Look {
 export interface Painter {
   s: number;
   c: CanvasRenderingContext2D;
-  h: CanvasRenderingContext2D;
-  r: CanvasRenderingContext2D;
   rnd: () => number;
   fill(x: number, y: number, w: number, hh: number, col: string | null, hv: number | null, rv: number | null): void;
   line(pts: [number, number][], w: number, col: string | null, hv: number | null, rv: number | null, alpha?: number): void;
@@ -34,7 +32,8 @@ export interface Maps {
   roughnessMap: THREE.CanvasTexture;
 }
 
-// A seeded random number generator, so the building looks the same every night.
+// A seeded random number generator, so the building looks the same every night. It is mulberry32, as the sim's
+// seeded() is, but takes the seed as it comes: seeded() spreads it first, and switching would repaint every surface.
 export const rand = (seed: number) => (): number => {
   seed = (seed + 0x6d2b79f5) | 0;
   let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -47,10 +46,6 @@ const rgb = (hex: string): [number, number, number] => {
 };
 // Entry i of a list that repeats: list[i % list.length].
 export const cycle = <T>(list: readonly T[], i: number): T => defined(list[i % list.length], 'an entry of an empty list');
-export const grey = (v: number): string => {
-  const g = Math.round(Math.max(0, Math.min(1, v)) * 255);
-  return `rgb(${g},${g},${g})`;
-};
 export const mixc = (a: string, b: string, t: number): string => {
   const [r0, g0, b0] = rgb(a),
     [r1, g1, b1] = rgb(b),
@@ -127,7 +122,8 @@ function wash(ctx: CanvasRenderingContext2D, field: Float32Array, lo: number, hi
   ctx.drawImage(scratch.canvas, 0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
 }
-const hexGrey = (v: number): string => {
+// A grey from 0 to 1 as #rrggbb, the one form wash() and blob's alpha suffix both take.
+const grey = (v: number): string => {
   const g = Math.round(Math.max(0, Math.min(1, v)) * 255)
     .toString(16)
     .padStart(2, '0');
@@ -167,11 +163,8 @@ function normalFrom(h: CanvasRenderingContext2D, strength: number, wrapT: THREE.
   return texOf(out, false, wrapT);
 }
 
-// Paint a surface. look: { col, rough, bump (normal strength), seed, tall }.
-// tall: a wall texture, which repeats along the wall but not up it.
-// draw gets p: { s, c, h, r, rnd } and the helpers below. Heights and
-// roughness are 0 to 1; a height of .5 is the untouched surface.
-// Returns the maps as MeshStandardMaterial parameters.
+// Paint a surface. tall: a wall texture, which repeats along the wall but not up it.
+// Heights and roughness are 0 to 1; a height of .5 is the untouched surface.
 export function paint(look: Look, draw: (p: Painter) => void): Maps {
   const s = 512,
     c = canvas(s),
@@ -185,24 +178,25 @@ export function paint(look: Look, draw: (p: Painter) => void): Maps {
   r.fillStyle = grey(look.rough);
   for (const ctx of [c, h, r]) ctx.fillRect(0, 0, s, s);
   const roll = (look.seed * 7919) % (FIELD * FIELD);
+  // The canvases a helper paints, each with what to paint it: the colour as given, the height and roughness as greys.
+  const targets = (col: string | null, hv: number | null, rv: number | null): [CanvasRenderingContext2D, string][] =>
+    (
+      [
+        [c, col],
+        [h, hv],
+        [r, rv],
+      ] as const
+    ).flatMap(([ctx, v]): [CanvasRenderingContext2D, string][] => (v == null ? [] : [[ctx, typeof v === 'number' ? grey(v) : v]]));
   const on = (col: string | null, hv: number | null, rv: number | null, fn: (ctx: CanvasRenderingContext2D) => void): void => {
-    for (const [ctx, v] of [
-      [c, col],
-      [h, hv == null ? null : grey(hv)],
-      [r, rv == null ? null : grey(rv)],
-    ] satisfies [CanvasRenderingContext2D, string | null][])
-      if (v != null) {
-        ctx.fillStyle = ctx.strokeStyle = v;
-        fn(ctx);
-      }
+    for (const [ctx, v] of targets(col, hv, rv)) {
+      ctx.fillStyle = ctx.strokeStyle = v;
+      fn(ctx);
+    }
   };
   const p: Painter = {
     s,
     c,
-    h,
-    r,
     rnd: rand(look.seed),
-    // Each helper takes a colour, a height and a roughness; pass null to leave that canvas alone.
     fill(x, y, w, hh, col, hv, rv) {
       on(col, hv, rv, ctx => ctx.fillRect(x, y, w, hh));
     },
@@ -223,28 +217,21 @@ export function paint(look: Look, draw: (p: Painter) => void): Maps {
     },
     // A soft round mark, repeated across the edges so the texture still tiles.
     blob(x, y, rad, col, alpha, hv, rv) {
-      for (const [ctx, v] of [
-        [c, col],
-        [h, hv == null ? null : hexGrey(hv)],
-        [r, rv == null ? null : hexGrey(rv)],
-      ] satisfies [CanvasRenderingContext2D, string | null][])
-        if (v != null)
-          for (const ox of [-s, 0, s])
-            for (const oy of look.tall ? [0] : [-s, 0, s]) {
-              if (x + ox + rad < 0 || x + ox - rad > s || y + oy + rad < 0 || y + oy - rad > s) continue;
-              const g = ctx.createRadialGradient(x + ox, y + oy, rad * 0.15, x + ox, y + oy, rad);
-              g.addColorStop(0, v);
-              g.addColorStop(1, `${v}00`);
-              ctx.globalAlpha = alpha;
-              ctx.fillStyle = g;
-              ctx.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
-              ctx.globalAlpha = 1;
-            }
+      for (const [ctx, v] of targets(col, hv, rv))
+        for (const ox of [-s, 0, s])
+          for (const oy of look.tall ? [0] : [-s, 0, s]) {
+            if (x + ox + rad < 0 || x + ox - rad > s || y + oy + rad < 0 || y + oy - rad > s) continue;
+            const g = ctx.createRadialGradient(x + ox, y + oy, rad * 0.15, x + ox, y + oy, rad);
+            g.addColorStop(0, v);
+            g.addColorStop(1, `${v}00`);
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = g;
+            ctx.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
+            ctx.globalAlpha = 1;
+          }
     },
     wash(field, lo, hi, col, alpha, hv, rv) {
-      if (col != null) wash(c, field, lo, hi, col, alpha, roll);
-      if (hv != null) wash(h, field, lo, hi, hexGrey(hv), alpha, roll);
-      if (rv != null) wash(r, field, lo, hi, hexGrey(rv), alpha, roll);
+      for (const [ctx, v] of targets(col, hv, rv)) wash(ctx, field, lo, hi, v, alpha, roll);
     },
     // Small flecks of the given colours.
     speck(n, cols, size, alpha) {

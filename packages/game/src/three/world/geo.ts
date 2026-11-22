@@ -17,6 +17,14 @@ const ACROSS = [
   [2, 0],
   [0, 1],
 ] as const;
+// The value kept under a key, made and kept the first time it is asked for.
+export const getOr = <K, V>(map: Map<K, V>, key: K, make: () => V): V => {
+  const known = map.get(key);
+  if (known !== undefined) return known;
+  const made = make();
+  map.set(key, made);
+  return made;
+};
 export const rgbOf = (hex: THREE.ColorRepresentation): RGB => {
   const c = new THREE.Color(hex);
   return [c.r, c.g, c.b];

@@ -5,6 +5,7 @@ import bpy, bmesh, math, time
 import numpy as np
 from mathutils import Vector, Matrix, Euler
 from mathutils.bvhtree import BVHTree
+from common import select, smooth_shade, tris
 
 
 _t = [time.time()]
@@ -31,6 +32,14 @@ def mesh_obj(name, verts, faces):
     return o
 
 
+def fix_normals(o):
+    """Turn every face of a closed mesh to point outward."""
+    bm = bmesh.new(); bm.from_mesh(o.data)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(o.data); bm.free()
+    return o
+
+
 def from_bm(bm, name='m'):
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     me = bpy.data.meshes.new(name)
@@ -45,6 +54,8 @@ def ell(c, r, rot=None, seg=20):
     if not hasattr(r, '__len__'): r = (r, r, r)
     bm = bmesh.new()
     bmesh.ops.create_uvsphere(bm, u_segments=seg, v_segments=max(6, seg // 2), radius=1)
+    # create_uvsphere lists its faces in a different order on every run, and everything built on it would differ too
+    bm.faces.sort(key=lambda f: sum(i * 4096 ** k for k, i in enumerate(sorted(v.index for v in f.verts))))
     M = Matrix.Translation(Vector(c))
     if rot: M = M @ Euler([math.radians(a) for a in rot]).to_matrix().to_4x4()
     bm.transform(M @ Matrix.Diagonal((*r, 1)))
@@ -72,11 +83,7 @@ def tube(pts, radii, sides=8, flat=1.0):
             faces.append((a, b2, b2 + sides, a + sides))
     faces.append(tuple(range(sides))[::-1])
     faces.append(tuple(range((len(pts) - 1) * sides, len(pts) * sides)))
-    o = mesh_obj('tube', verts, faces)
-    bm = bmesh.new(); bm.from_mesh(o.data)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    bm.to_mesh(o.data); bm.free()
-    return o
+    return fix_normals(mesh_obj('tube', verts, faces))
 
 
 def curve_pts(ctrl, n):
@@ -91,12 +98,6 @@ def curve_pts(ctrl, n):
                              + (-c[i - 1] + 3 * c[i] - 3 * c[i + 1] + c[i + 2]) * u ** 3))
     out.append(c[-2])
     return out
-
-
-def select(objs):
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in objs: o.select_set(True)
-    bpy.context.view_layer.objects.active = objs[0]
 
 
 def join(objs):
@@ -115,11 +116,6 @@ def mod(o, kind, **kw):
     return o
 
 
-def smooth_shade(o):
-    o.data.polygons.foreach_set('use_smooth', [True] * len(o.data.polygons))
-    o.data.update()
-
-
 def coords(me):
     a = np.empty(len(me.vertices) * 3)
     me.vertices.foreach_get('co', a)
@@ -130,10 +126,6 @@ def normals(me):
     a = np.empty(len(me.vertices) * 3)
     me.vertex_normals.foreach_get('vector', a)
     return a.reshape(-1, 3)
-
-
-def tri_count(o):
-    return sum(len(p.vertices) - 2 for p in o.data.polygons)
 
 
 # ---------------------------------------------------------------- noise
@@ -192,7 +184,7 @@ def sculpt(forms, voxel=.02, smooth=6, lumps=(), seed=0):
 
 
 def decimate(o, target):
-    n = tri_count(o)
+    n = tris([o])
     if n > target: mod(o, 'DECIMATE', ratio=target / n)
     smooth_shade(o)
     return o
@@ -273,7 +265,7 @@ def paint(o, fn):
 
 # ---------------------------------------------------------------- fur geometry
 
-def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shade=1.0, lift=.35, min_fur=.8, tip=1.12):
+def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shade=1.0, lift=.35, tip=1.12):
     """Locks of fur as real geometry, so the outline is shaggy under a
     flashlight. Each lock is a flat two-sided leaf of three triangles that
     leaves the skin along the normal and bends over to hang. tip: colour of
@@ -287,7 +279,7 @@ def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shad
     me.loop_triangles.foreach_get('vertices', T); T = T.reshape(-1, 3)
     A = np.empty(len(me.loop_triangles)); me.loop_triangles.foreach_get('area', A)
     mid = P[T].mean(axis=1)
-    w = A * (prm[T][:, :, 0].mean(axis=1) > min_fur)
+    w = A * (prm[T][:, :, 0].mean(axis=1) > .8)
     if where is not None: w = w * where(mid)
     if w.sum() <= 0 or n <= 0: return None
     rng = np.random.RandomState(seed)
@@ -302,7 +294,6 @@ def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shad
         L = rng.uniform(*length); wd = width * rng.uniform(.7, 1.3)
         out = nn * lift + down * droop + rng.normal(0, .25, 3); out /= np.linalg.norm(out)
         side = np.cross(out, nn + rng.normal(0, .3, 3)); side /= np.linalg.norm(side) + 1e-9
-        up = np.cross(side, out)
         p0 = p - nn * .012
         p1 = p0 + out * L * .55 + nn * L * .12
         p2 = p1 + (out * .5 + down * .5) * L * .45
@@ -318,13 +309,11 @@ def tufts(src, n, seed, length=(.04, .08), width=.02, droop=.7, where=None, shad
     return o
 
 
-def strand(pts, r0, r1, col, sides=3, tipcol=None):
+def strand(pts, r0, r1, col, sides=3):
     """One hair, whisker or thread: a thin tapering tube for the fibre material."""
     n = len(pts)
     o = tube(pts, [r0 + (r1 - r0) * (i / (n - 1)) for i in range(n)], sides=sides)
-    c = np.repeat(np.linspace(0, 1, n), sides)[:, None]
-    tipcol = col if tipcol is None else tipcol
-    set_attr(o.data, 'Col', np.asarray(col)[None, :] * (1 - c) + np.asarray(tipcol)[None, :] * c)
+    set_attr(o.data, 'Col', col)
     smooth_shade(o)
     return o
 

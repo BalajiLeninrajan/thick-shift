@@ -18,14 +18,17 @@
 # Files here: textures.py draws the textures (run automatically when ./tex is
 # missing), kit.py is the mesh and material toolkit, gameplay.py, booth.py
 # and service.py hold the props, guard.py the guard.
-import os, subprocess, sys
+import json, os, subprocess, sys
+
+import bpy
+from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE)); sys.path.insert(0, HERE)
-from common import *
+from common import MODELS, bounds, export_glb, part, preview, report, reset, script_args, shot, tris, turned
 import kit
 
-ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+ARGS = script_args()
 ONLY = next((a[5:].split(',') for a in ARGS if a.startswith('only=')), None)
 PREV = next((a[5:].split(',') for a in ARGS if a.startswith('prev=')), None)
 SPOTS = [a[5:].split(':') for a in ARGS if a.startswith('spot=')]
@@ -60,38 +63,14 @@ def assemble(name, spec, at):
     return ob, lo - Vector(at), hi - Vector(at), sorted(kids)
 
 
-def shots(name, spots, res=400, samples=12, pose=None):
+def shots(name, spots, pose=None):
     """Render tools/models/previews/<name>_<key>.png for each entry of
-    spots = {key: (centre, radius, azimuth in degrees)}.
-
-    common.preview() re-opens the GLB and denoises for every picture, which
-    takes minutes per frame when the machine is short of memory. This calls
-    it once with no views (so the scene, floor, camera and lamp are set up
-    exactly as it does it), then moves the camera from spot to spot with the
-    scene kept in memory and the denoiser off. `pose` = {node: (x, y, z)
-    degrees} turns parts first, for checking joints."""
-    preview(name, views=(), res=res, samples=samples, light=LIGHT)
-    sc = bpy.context.scene
-    sc.render.use_persistent_data = True
-    sc.cycles.use_denoising = False
-    for node, r in (pose or {}).items():
-        o = bpy.data.objects[node]; o.rotation_mode = 'XYZ'; o.rotation_euler = [math.radians(v) for v in r]
-    cam = sc.camera; lamp = next(o for o in sc.objects if o.type == 'LIGHT')
-    for key, (c, r, az) in spots.items():
-        a = math.radians(az); c = Vector(c)
-        eye = Vector((c.x + math.sin(a) * r * 2.6, c.y - math.cos(a) * r * 2.6, c.z + r * .5))
-        cam.location = eye; cam.rotation_euler = (c - eye).to_track_quat('-Z', 'Y').to_euler()
-        if lamp.data.type == 'SPOT':
-            lamp.data.energy = 180 * max(1, r) ** 2
-            k = min(1, r * 2)                                         # hold the torch closer in for small things, and above the floor
-            lamp.location = eye + Vector((math.cos(a), math.sin(a), 0)) * .35 * k + Vector((0, 0, -.3 * k))
-            lamp.location.z = max(lamp.location.z, .05)
-            lamp.rotation_euler = (c - lamp.location).to_track_quat('-Z', 'Y').to_euler()
-        else:
-            lamp.rotation_euler = (math.radians(50), 0, a + math.radians(30))
-        sc.render.filepath = os.path.join(PREVIEWS, f'{name}_{key}.png')
-        bpy.ops.render.render(write_still=True)
-        print('[preview]', sc.render.filepath)
+    spots = {key: (centre, radius, azimuth in degrees)}, the fast way (see
+    common.shot). `pose` = {node: (x, y, z) degrees} turns parts first, for
+    checking joints."""
+    preview(name, views=(), res=400, samples=12, light=LIGHT)
+    if pose: turned(pose)(bpy.data.objects)
+    for key, (c, r, az) in spots.items(): shot(f'{name}_{key}', c, r, az)
 
 
 def build_props():

@@ -6,8 +6,8 @@
 #   list of calls.
 # - Surfaces use tiling textures drawn by textures.py. Props are seen from
 #   arm's length by flashlight, and a tiling texture keeps about 1000 px per
-#   metre on a 3 m door as well as on a mug. A baked atlas shared by 33 props
-#   could not.
+#   metre on a 3 m door as well as on a mug. A baked atlas shared by every
+#   prop could not.
 # - What a tiling texture cannot do (one colour per object, shadow in the
 #   corners, dirt near the floor) goes into vertex colour, which glTF
 #   multiplies into the base colour. Mesh.grime() bakes it with ray casts.
@@ -17,6 +17,8 @@ import bpy, bmesh, json, math, os, random
 from contextlib import contextmanager
 from mathutils import Vector, Matrix, Euler, noise
 from mathutils.bvhtree import BVHTree
+
+noise.seed_set(1)   # noise_vector's table is otherwise seeded from the clock, and crumple() would differ on every build
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEX = os.path.join(HERE, 'tex')
@@ -56,8 +58,7 @@ PLAIN = {'flat': (.7, 0, '#ffffff'), 'skin': (.62, 0, '#d9a688'), 'glass': (.08,
          'map': (.8, 0, '#c9c2a4')}
 # Drawn emissive by the game: name -> (base colour, emissive colour, decal-atlas picture?)
 GLOW = {'lamp_glow': ('#fff2d0', '#ffe9b8', False), 'status_glow': ('#ff7a1a', '#ff5a10', False),
-        'exit_glow': ('#ffffff', '#ffffff', True), 'screen_glow': ('#ffffff', '#ffffff', True),
-        'eye_glow': ('#ffffff', '#ffffff', False)}
+        'exit_glow': ('#ffffff', '#ffffff', True), 'screen_glow': ('#ffffff', '#ffffff', True)}
 
 _images = {}
 
@@ -216,7 +217,7 @@ class Mesh:
         t = self._tile(mat)
         return [(p[ua] / t + off[0], p[va] / t + off[1]) for p in P]
 
-    def poly(self, pts, mat, tint=None, out=None, grain=None, smooth=False, uvs=None):
+    def poly(self, pts, mat, tint=None, out=None, smooth=False, uvs=None):
         """A flat polygon. `out`: a point the face must look away from, used to
         fix the winding (handy when it is easier than thinking about order)."""
         P = [Vector(p) for p in pts]
@@ -226,7 +227,7 @@ class Mesh:
             if n.dot(sum(P, Vector()) / len(P) - Vector(out)) < 0:
                 P.reverse()
                 if uvs: uvs = uvs[::-1]
-        return self._f([self._v(p) for p in P], uvs or self._planar(P, mat, grain=grain, off=self._off), mat, tint, smooth)
+        return self._f([self._v(p) for p in P], uvs or self._planar(P, mat, off=self._off), mat, tint, smooth)
 
     @property
     def _off(self):
@@ -280,7 +281,7 @@ class Mesh:
                         w = [c + p for p in pts]
                         self._f([self._v(p) for p in w], self._planar(w, mat, off=off), mat, tint)
 
-    def skin(self, rings, mat, tint=None, caps=(True, True), smooth=True, closed=True, vscale=1):
+    def skin(self, rings, mat, tint=None, caps=(True, True), smooth=True, closed=True):
         """Join rings of points into a tube. Rings run counter-clockwise seen
         from the far end looking back. U wraps around, V runs along."""
         n = len(rings[0]); t = self._tile(mat)
@@ -290,7 +291,7 @@ class Mesh:
         u0, v0 = self._off
         vs = [v0]
         for i in range(1, len(R)):
-            vs.append(vs[-1] + sum((R[i][j] - R[i - 1][j]).length for j in range(n)) / n / t * vscale)
+            vs.append(vs[-1] + sum((R[i][j] - R[i - 1][j]).length for j in range(n)) / n / t)
         V = [[self._v(p) for p in r] for r in R]
         cols = n if closed else n - 1
         for i in range(len(R) - 1):
@@ -317,17 +318,17 @@ class Mesh:
         a.normalize()
         return a, t.cross(a)
 
-    def cyl(self, p0, p1, r, mat, tint=None, n=16, r1=None, caps=(True, True), bevel=0):
-        """A cylinder or cone between two points."""
-        p0, p1 = Vector(p0), Vector(p1); r1 = r if r1 is None else r1
+    def cyl(self, p0, p1, r, mat, tint=None, n=16, caps=(True, True), bevel=0):
+        """A cylinder between two points."""
+        p0, p1 = Vector(p0), Vector(p1)
         a, b = self._frame(p1 - p0); ax = (p1 - p0).normalized()
         ring = lambda p, rr: [p + (a * math.cos(i * math.tau / n) + b * math.sin(i * math.tau / n)) * rr for i in range(n)]
-        rings = [ring(p0, r), ring(p1, r1)]
+        rings = [ring(p0, r), ring(p1, r)]
         if bevel:
-            rings = [ring(p0, r - bevel), ring(p0 + ax * bevel, r), ring(p1 - ax * bevel, r1), ring(p1, r1 - bevel)]
+            rings = [ring(p0, r - bevel), ring(p0 + ax * bevel, r), ring(p1 - ax * bevel, r), ring(p1, r - bevel)]
         return self.skin(rings, mat, tint, caps)
 
-    def lathe(self, profile, mat, tint=None, n=20, at=(0, 0, 0), caps=(True, True), arc=None, vscale=1):
+    def lathe(self, profile, mat, tint=None, n=20, at=(0, 0, 0), caps=(True, True), arc=None):
         """Spin a profile [(radius, z), ...] about local Z. `arc` = (from, to)
         in degrees for a partial sweep (an open shell)."""
         at = Vector(at)
@@ -337,7 +338,7 @@ class Mesh:
         else:
             angs = [i * math.tau / n for i in range(n)]
         rings = [[at + Vector((math.cos(a) * max(r, 1e-4), math.sin(a) * max(r, 1e-4), z)) for a in angs] for r, z in profile]
-        return self.skin(rings, mat, tint, caps, closed=not arc, vscale=vscale)
+        return self.skin(rings, mat, tint, caps, closed=not arc)
 
     def ball(self, c, r, mat, tint=None, n=16, m=9, zrange=(-1, 1)):
         """A sphere or ellipsoid (r may be three radii). zrange trims it, e.g.
@@ -350,7 +351,7 @@ class Mesh:
             rings.append([c + Vector((math.cos(j * math.tau / n) * rr * r[0], math.sin(j * math.tau / n) * rr * r[1], math.sin(ph) * r[2])) for j in range(n)])
         return self.skin(rings, mat, tint)
 
-    def loft(self, sections, mat, tint=None, n=14, steps=3, ends=(True, True), hint=None, power=2, caps=(True, True), vscale=1, bulge=1):
+    def loft(self, sections, mat, tint=None, n=14, steps=3, ends=(True, True), hint=None, power=2, caps=(True, True), bulge=1):
         """A smooth organic tube through sections [(centre, rx, ry), ...]:
         limbs, torsos, cables with changing girth. `ends` rounds off each end
         instead of leaving a flat cap; `bulge` < 1 flattens that rounding (a
@@ -385,11 +386,11 @@ class Mesh:
             for ph in (28, 55, 80):
                 k = math.cos(math.radians(ph)); d = math.sin(math.radians(ph)) * min(rx, ry) * bulge
                 R.append(ring(c + t * d, a, b, rx * k, ry * k))
-        return self.skin(R, mat, tint, caps, vscale=vscale)
+        return self.skin(R, mat, tint, caps)
 
-    def tube(self, pts, r, mat, tint=None, n=8, steps=4, caps=(True, True)):
+    def tube(self, pts, r, mat, tint=None, n=8, steps=4):
         """A pipe, cable or cord of constant radius along a path."""
-        return self.loft([(p, r, r) for p in pts], mat, tint, n=n, steps=steps, ends=(False, False), caps=caps)
+        return self.loft([(p, r, r) for p in pts], mat, tint, n=n, steps=steps, ends=(False, False))
 
     def decal(self, name, c, w, h, n=(0, -1, 0), up=(0, 0, 1), cut=False, off=.0015, tint=None, urep=None, usub=None, mat=None, spin=0, seg=(1, 1)):
         """A rectangle of artwork from an atlas, centred at c, facing n. `cut`
@@ -415,44 +416,44 @@ class Mesh:
                 uvs = [(u0 + (u1 - u0) * x, v0 + (v1 - v0) * y) for x, y in ((a, e), (b, e), (b, g), (a, g))]
                 self._f([self._v(p) for p in pts], uvs, mat, tint)
 
-    def disc(self, name, c, r, n=(0, -1, 0), up=(0, 0, 1), segs=24, off=.0015, mat=None):
+    def disc(self, name, c, r, n=(0, -1, 0), segs=24, off=.0015):
         """Round artwork (a dial, a gauge): the circle inscribed in the picture."""
         u0, v0, u1, v1 = atlas()['decals'][name]
-        n = Vector(n).normalized(); up = Vector(up).normalized()
-        right = (-n).cross(up).normalized(); up = right.cross(-n)
+        n = Vector(n).normalized()
+        right = (-n).cross(Vector((0, 0, 1))).normalized(); up = right.cross(-n)
         c = Vector(c) + n * off
         A = [i * math.tau / segs for i in range(segs)]
         self._f([self._v(c + (right * math.cos(a) + up * math.sin(a)) * r) for a in A],
-                [((u0 + u1) / 2 + math.cos(a) * (u1 - u0) / 2, (v0 + v1) / 2 + math.sin(a) * (v1 - v0) / 2) for a in A], mat or 'decal', None)
+                [((u0 + u1) / 2 + math.cos(a) * (u1 - u0) / 2, (v0 + v1) / 2 + math.sin(a) * (v1 - v0) / 2) for a in A], 'decal', None)
 
-    def shape(self, name, c, w, h, outline, n=(0, -1, 0), up=(0, 0, 1), off=.0015):
+    def shape(self, name, c, w, h, outline, n=(0, -1, 0), off=.0015):
         """Artwork cut to an outline [(x, y), ...] given in 0..1 of the picture
         (a shield badge, a rounded patch)."""
         u0, v0, u1, v1 = atlas()['decals'][name]
-        n = Vector(n).normalized(); up = Vector(up).normalized()
-        right = (-n).cross(up).normalized(); up = right.cross(-n)
+        n = Vector(n).normalized()
+        right = (-n).cross(Vector((0, 0, 1))).normalized(); up = right.cross(-n)
         c = Vector(c) + n * off
         self._f([self._v(c + right * w * (x - .5) + up * h * (y - .5)) for x, y in outline],
                 [(u0 + (u1 - u0) * x, v0 + (v1 - v0) * y) for x, y in outline], 'decal', None)
 
-    def torus(self, R, r, mat, tint=None, n=24, m=8, at=(0, 0, 0)):
+    def torus(self, R, r, mat, tint=None, n=24, m=8):
         """A ring about local Z."""
         prof = [(R + r * math.cos(a), r * math.sin(a)) for a in [-math.pi / 2 + i * math.tau / m for i in range(m + 1)]]
-        self.lathe(prof, mat, tint, n=n, at=at, caps=(False, False))
+        self.lathe(prof, mat, tint, n=n, caps=(False, False))
 
     def screw(self, p, n=(0, -1, 0), r=.006, tint='#8d8d88'):
         """A screw or bolt head."""
         p = Vector(p); n = Vector(n).normalized()
         self.cyl(p - n * .002, p + n * r * .6, r, 'steel', tint, n=6)
 
-    def wrap(self, name, r, z0, z1, a0, a1, at=(0, 0, 0), n=10, cut=False, off=.0012, mat=None):
+    def wrap(self, name, r, z0, z1, a0, a1, n=10, cut=False, off=.0012):
         """Artwork wrapped round a cylinder about local Z, from angle a0 to a1
         (degrees, counter-clockwise from +X seen from above; -90 is the front)."""
         u0, v0, u1, v1 = atlas()['cutouts' if cut else 'decals'][name]
-        at = Vector(at); r += off; mat = mat or ('cutout' if cut else 'decal')
+        r += off; mat = 'cutout' if cut else 'decal'
         for i in range(n):
             A = [math.radians(a0 + (a1 - a0) * k / n) for k in (i, i + 1)]
-            pts = [at + Vector((math.cos(A[x]) * r, math.sin(A[x]) * r, z)) for x, z in ((0, z0), (1, z0), (1, z1), (0, z1))]
+            pts = [Vector((math.cos(A[x]) * r, math.sin(A[x]) * r, z)) for x, z in ((0, z0), (1, z0), (1, z1), (0, z1))]
             ua, ub = u0 + (u1 - u0) * i / n, u0 + (u1 - u0) * (i + 1) / n
             self._f([self._v(p) for p in pts], [(ua, v0), (ub, v0), (ub, v1), (ua, v1)], mat, None, True)
 
@@ -473,7 +474,7 @@ class Mesh:
 
     # ---- finishing
 
-    def grime(self, ao=.62, dist=.22, dirt=.22, ground=0, floor_z=None):
+    def grime(self, ao=.62, dist=.22, dirt=.22, ground=0):
         """Bake shadow and dirt into the vertex colours. For each face corner,
         rays over the hemisphere measure how boxed-in it is; boxed-in corners
         go dark and brown. Blotchy noise breaks up flat tints, and `ground`
@@ -482,7 +483,7 @@ class Mesh:
         bm.normal_update()
         bvh = BVHTree.FromBMesh(bm)
         zs = [v.co.z for v in bm.verts] or [0]
-        z0 = min(zs) if floor_z is None else floor_z
+        z0 = min(zs)
         skip = {i for i, m in enumerate(self.mats) if m in GLOW or m == 'cutout'}
         cache = {}
         for f in bm.faces:

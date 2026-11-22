@@ -4,11 +4,11 @@
 // kit when that arrives; if it never does, the stand-ins are the game.
 
 import { lightsF } from '@thick-shift/sim';
-import { isPlaced } from '@thick-shift/sim/check';
+import { isNight, isPlaced } from '@thick-shift/sim/check';
 import { DOORS, MASC } from '@thick-shift/sim/config';
 import { GEN_BACK } from '@thick-shift/sim/dressing';
-import { BATTERY_SPOTS, BOOTH, BOXES, CHARGER, DOOR_H, DOORWAYS, GENERATOR, PANELS, ROOMS3, roomAt, WALL_MAP } from '@thick-shift/sim/map';
-import type { DoorKey, Point, State } from '@thick-shift/sim/types';
+import { BATTERY_SPOTS, BOOTH, BOXES, CHARGER, DOOR_H, DOORWAYS, doorwayOf, GENERATOR, PANELS, ROOMS3, roomAt, WALL_MAP } from '@thick-shift/sim/map';
+import type { DoorKey, NightState, Point, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { WorldParts } from '../../types';
 import { prop } from './props';
@@ -25,16 +25,13 @@ const AMBER = 0xffb040,
   DEAD = 0x222222;
 const FAULT_LIGHTS = 3; // real lights for open faults: the nearest three to the guard get one each, flickering like a short
 
-// A mesh in a kit model as traverse() hands it over, once isMesh has said it is one.
-type KitMesh<M extends THREE.Material = THREE.Material> = THREE.Mesh<THREE.BufferGeometry, M>;
-
 function box(w: number, h: number, d: number, color: THREE.ColorRepresentation): THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial> {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color, roughness: 0.7 }));
   m.castShadow = m.receiveShadow = true;
   return m;
 }
 const lampMat = (): THREE.MeshBasicMaterial => new THREE.MeshBasicMaterial({ color: OFF });
-const placed: THREE.Group[] = []; // every usable's group
+const placed: { g: THREE.Group; room: number }[] = []; // every wall-mounted usable's group, and the room it is in
 // A door button: its group, its lamp, and the model's button with where it rests, once the model is in.
 interface Panel {
   g: THREE.Group;
@@ -54,11 +51,10 @@ interface Shutter {
 function mount(scene: THREE.Scene, name: string, at: Point & { face: number; room?: number }, y: number): THREE.Group {
   const g = new THREE.Group();
   g.name = name;
-  g.userData.room = at.room ?? roomAt(at.x + Math.sin(at.face) * 0.3, at.z + Math.cos(at.face) * 0.3);
   g.position.set(at.x, y, at.z);
   g.rotation.y = at.face;
   scene.add(g);
-  placed.push(g);
+  placed.push({ g, room: at.room ?? roomAt(at.x + Math.sin(at.face) * 0.3, at.z + Math.cos(at.face) * 0.3) });
   return g;
 }
 // Swap a stand-in for a kit model. Meshes in `status_glow` get the given unlit material.
@@ -74,8 +70,8 @@ async function upgrade(group: THREE.Object3D, name: string, lamp?: THREE.Materia
     }); // a small thing's shadow is not worth a second draw
   if (lamp)
     model.traverse(o => {
-      if ((o as KitMesh).isMesh && (o as KitMesh).material.name === 'status_glow') {
-        (o as KitMesh).material = lamp;
+      if (o instanceof THREE.Mesh && !Array.isArray(o.material) && o.material.name === 'status_glow') {
+        o.material = lamp;
         o.castShadow = false;
       }
     });
@@ -84,7 +80,7 @@ async function upgrade(group: THREE.Object3D, name: string, lamp?: THREE.Materia
 
 // The floor plan on the booth wall: a dot for every guard and every mascot
 // on the move, a red lamp for every open fault. It needs the power.
-function wallMap(scene: THREE.Scene): (S: State, t: number) => void {
+function wallMap(scene: THREE.Scene): (S: NightState, t: number) => void {
   const W = 820,
     H = 380,
     k = 8.2,
@@ -104,7 +100,7 @@ function wallMap(scene: THREE.Scene): (S: State, t: number) => void {
   g.add(plain);
   upgrade(g, 'wall_map').then(model =>
     model?.traverse(o => {
-      if ((o as KitMesh).isMesh && (o as KitMesh).material.name === 'map') (o as KitMesh).material = glbFace;
+      if (o instanceof THREE.Mesh && !Array.isArray(o.material) && o.material.name === 'map') o.material = glbFace;
     })
   );
   let next = 0;
@@ -129,9 +125,9 @@ function wallMap(scene: THREE.Scene): (S: State, t: number) => void {
         c.fillRect(d.rect[0] * k - 1, d.rect[1] * k - 1, (d.rect[2] - d.rect[0]) * k + 2, (d.rect[3] - d.rect[1]) * k + 2);
       }
       BOXES.forEach((cl, i) => {
-        c.fillStyle = S.faults?.[i] ? (t % 1 < 0.5 ? '#f38ba8' : '#f9e2af') : '#3d7a4c';
+        c.fillStyle = S.faults[i] ? (t % 1 < 0.5 ? '#f38ba8' : '#f9e2af') : '#3d7a4c';
         c.beginPath();
-        c.arc(cl.x * k, cl.z * k, S.faults?.[i] ? 7 : 4, 0, 7);
+        c.arc(cl.x * k, cl.z * k, S.faults[i] ? 7 : 4, 0, 7);
         c.fill();
       });
       for (const m of S.m)
@@ -151,7 +147,7 @@ function wallMap(scene: THREE.Scene): (S: State, t: number) => void {
       c.restore();
       // the legend, in the space the plan leaves
       const out = S.m.filter(m => m.st !== 'rest').length,
-        due = BOXES.filter((_, i) => S.faults?.[i]);
+        due = BOXES.filter((_, i) => S.faults[i]);
       c.fillStyle = '#3d7a4c';
       c.font = 'bold 30px monospace';
       c.fillText('MASCOT DEPOT', 400, 44);
@@ -175,7 +171,8 @@ export function createUsables(scene: THREE.Scene): {
 } {
   // Breaker boxes: a grey cabinet with a status lamp on top and its door hanging open while it has a fault, sparks
   // spitting out of it. Seen from down a corridor by the light it throws.
-  const sparkMat = new THREE.SpriteMaterial({ color: SPARK, blending: THREE.AdditiveBlending, depthWrite: false, map: haloTexture() });
+  const dot = haloTexture(),
+    sparkMat = new THREE.SpriteMaterial({ color: SPARK, blending: THREE.AdditiveBlending, depthWrite: false, map: dot });
   const boxes = BOXES.map((cl, i) => {
     const g = mount(scene, 'breaker box', cl, 1.3),
       lamp = lampMat(),
@@ -246,7 +243,7 @@ export function createUsables(scene: THREE.Scene): {
   upgrade(dock, 'charger_dock', dockLamp);
 
   // Batteries have to be found in the dark, so each sits in a faint pulse of its own label's yellow.
-  const halo = new THREE.SpriteMaterial({ color: 0xf9e2af, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5, map: haloTexture() });
+  const halo = new THREE.SpriteMaterial({ color: 0xf9e2af, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5, map: dot });
   const bats = BATTERY_SPOTS.map(s => {
     const g = new THREE.Group(),
       body = box(0.12, 0.16, 0.12, 0xf9e2af),
@@ -264,11 +261,11 @@ export function createUsables(scene: THREE.Scene): {
     scene.add(g);
     upgrade(spin, 'battery').then(model =>
       model?.traverse(o => {
-        if ((o as KitMesh<THREE.MeshStandardMaterial>).isMesh) {
-          (o as KitMesh<THREE.MeshStandardMaterial>).material = (o as KitMesh<THREE.MeshStandardMaterial>).material.clone();
-          (o as KitMesh<THREE.MeshStandardMaterial>).material.emissive.setHex(0x3a3010);
-          (o as KitMesh<THREE.MeshStandardMaterial>).material.emissiveMap = (o as KitMesh<THREE.MeshStandardMaterial>).material.map;
-        }
+        if (!(o instanceof THREE.Mesh)) return;
+        const m = (o.material as THREE.MeshStandardMaterial).clone();
+        m.emissive.setHex(0x3a3010);
+        m.emissiveMap = m.map;
+        o.material = m;
       })
     );
     return { g, spin, room: roomAt(s.x, s.z), base: floorY(s.x, s.z) + 0.2 };
@@ -276,9 +273,8 @@ export function createUsables(scene: THREE.Scene): {
 
   // The booth's doors: shutters that drop from above the doorway.
   const shutter = (k: DoorKey): Shutter => {
-    const d = DOORWAYS.find(w => w.key === k);
-    if (!d) throw new Error(`door ${k} has no doorway`);
-    const [x0, z0, x1, z1] = d.rect,
+    const d = doorwayOf(k),
+      [x0, z0, x1, z1] = d.rect,
       h = d.h || DOOR_H,
       wide = d.axis === 'x' ? z1 - z0 : x1 - x0;
     const g = new THREE.Group(),
@@ -311,13 +307,14 @@ export function createUsables(scene: THREE.Scene): {
     },
     // inView: the rooms that might be seen from the camera (sight.ts).
     update(S: State, t: number, dt: number, camera: THREE.Camera, inView: Set<number>): void {
+      if (!isNight(S)) return; // the lobby has no faults or batteries to show
       updateMap(S, t);
-      for (const g of placed) g.visible = inView.has(g.userData.room);
+      for (const { g, room } of placed) g.visible = inView.has(room);
       const pulse = 0.6 + 0.4 * Math.sin(t * 6);
       // A short: bursts of light at random, never steady.
       const crackle = (i: number): number => (Math.sin(t * 37 + i * 9.1) * Math.sin(t * 23.7 + i * 3.3) > 0.2 ? 1 : 0.15) * (0.7 + 0.3 * Math.sin(t * 90 + i));
       boxes.forEach((c, i) => {
-        const f = S.faults?.[i];
+        const f = S.faults[i];
         c.lamp.color.setHex(f ? (pulse > 0.6 ? 0xff2020 : AMBER) : S.power > 0 ? DONE : OFF);
         c.door.rotation.y += ((f ? -1.6 : 0) - c.door.rotation.y) * Math.min(1, dt * 8);
         c.sparks.forEach((s, k) => {
@@ -326,7 +323,7 @@ export function createUsables(scene: THREE.Scene): {
         });
       });
       order.sort((a, b) => a.at.distanceToSquared(camera.position) - b.at.distanceToSquared(camera.position));
-      const open = order.filter(b => S.faults?.[b.i]);
+      const open = order.filter(b => S.faults[b.i]);
       faultLights.forEach((l, k) => {
         const b = open[k];
         l.intensity = b ? 2.2 * crackle(b.i) : 0;
@@ -345,7 +342,7 @@ export function createUsables(scene: THREE.Scene): {
       dockLamp.color.setHex(S.power > 0 ? OPEN : DEAD);
       halo.opacity = 0.35 + 0.25 * Math.sin(t * 3);
       bats.forEach((b, i) => {
-        b.g.visible = inView.has(b.room) && !!S.bats?.includes(i);
+        b.g.visible = inView.has(b.room) && S.bats.includes(i);
         b.spin.rotation.y = t * 1.5;
         b.g.position.y = b.base + Math.sin(t * 2 + i) * 0.04;
       });

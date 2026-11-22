@@ -2,13 +2,14 @@
 // page fetch the SDK and play as an Activity. Opened anywhere else, it plays as the web game does.
 import '@thick-shift/game/styles.css';
 import { start } from '@thick-shift/game';
+import { errorText } from '@thick-shift/game/dom';
 import { game } from '@thick-shift/game/state';
 
 if (new URLSearchParams(location.search).has('frame_id')) {
   try {
     await import('./activity');
   } catch (err) {
-    game.error = { title: 'Could not reach Discord', detail: err instanceof Error && err.message ? err.message : String(err) };
+    game.error = { title: 'Could not reach Discord', detail: errorText(err) };
   }
 }
 start();

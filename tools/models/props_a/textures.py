@@ -285,9 +285,9 @@ def text(d, xy, s, kind='bold', size=20, fill=(0, 0, 0), anchor='mm', maxw=None)
 
 
 def age(im, seed, dirt=.35, yellow=.25, edge=.35, scr=14):
-    dirt *= .6
     """Make a clean drawing look handled: blotches, yellowing, grime that
     gathers at the border, a few scratches."""
+    dirt *= .6
     w, h = im.size
     n = 1 << (max(w, h) - 1).bit_length()
     a = np.asarray(im.convert('RGB'), float) / 255
@@ -345,7 +345,7 @@ def d_battery(w, h):
         ox = k * w / 2
         text(d, (ox + w * .25, h * .1), 'VOLTZ', 'bold', int(h * .15), (255, 240, 200))
         bolt = [(.3, .26), (.2, .52), (.26, .52), (.2, .78), (.33, .46), (.27, .46)]
-        d.polygon([(ox + x * w * .5 + w * .0, y * h) for x, y in bolt], fill=(20, 20, 22))
+        d.polygon([(ox + x * w * .5, y * h) for x, y in bolt], fill=(20, 20, 22))
         text(d, (ox + w * .31, h * .4), 'HEAVY', 'cond', int(h * .15), (20, 20, 22))
         text(d, (ox + w * .31, h * .56), 'DUTY', 'cond', int(h * .15), (20, 20, 22))
         text(d, (ox + w * .31, h * .71), '6V LANTERN', 'cond', int(h * .075), (150, 20, 20))
@@ -573,8 +573,7 @@ def d_mug(w, h):
     text(d, (w * .5, h * .52), 'OKAYEST', 'bold', int(h * .22), (30, 30, 30))
     text(d, (w * .5, h * .76), 'GUARD', 'cond', int(h * .2), (150, 30, 30))
     a = np.asarray(im, float) / 255
-    yy = np.mgrid[0:h, 0:w][0]
-    a = mix(a, a * col(.62, .45, .3), (step(fnoise(256, 2.0, 290, (4, 1))[:h, :w], .5, .8) * step(yy / h, .0, .5) * .0 + step(fnoise(256, 2.2, 291, (5, 1))[:h, :w], .55, .8) * .55))
+    a = mix(a, a * col(.62, .45, .3), step(fnoise(256, 2.2, 291, (5, 1))[:h, :w], .55, .8) * .55)
     return age(Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8)), 292, .25, .2, .2, 6)
 
 
@@ -612,7 +611,7 @@ def d_calendar(w, h):
         x, y = w * (.1 + (i % 7) * .135), h * (.3 + (i // 7) * .14)
         text(d, (x, y), str(i + 1), 'cond', int(h * .07), (40, 40, 40))
         if i < 22: d.line([x - 7, y - 7, x + 7, y + 7], fill=(170, 30, 30), width=2)
-    d.ellipse([w * .1 + 1 * .135 * w - 13, h * .3 + 3 * .14 * h - 12, w * .1 + 1 * .135 * w + 13, h * .3 + 3 * .14 * h + 12], outline=(170, 30, 30), width=3)
+    d.ellipse([w * .1 + .135 * w - 13, h * .3 + 3 * .14 * h - 12, w * .1 + .135 * w + 13, h * .3 + 3 * .14 * h + 12], outline=(170, 30, 30), width=3)
     return age(im, 320, .3, .35, .3, 3)
 
 

@@ -29,6 +29,14 @@ describe('rooms', () => {
     expect(M.ROOMS3[M.DUCTS]?.name).toBe('Ducts');
   });
 
+  it('keeps every room and doorway inside the footprint, and reaches each edge of it', () => {
+    const rects = [...M.ROOMS3.flatMap(r => r.rects), ...M.DOORWAYS.map(d => d.rect)];
+    expect(Math.min(...rects.map(r => r[0]))).toBeGreaterThanOrEqual(0);
+    expect(Math.min(...rects.map(r => r[1]))).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...rects.map(r => r[2]))).toBe(M.SIZE_X);
+    expect(Math.max(...rects.map(r => r[3]))).toBe(M.SIZE_Z);
+  });
+
   it('finds the room a point is in', () => {
     expect(M.roomAt(21, 40.5)).toBe(M.BOOTH);
     expect(M.roomAt(5, 15)).toBe(2); // Arcade
@@ -75,9 +83,10 @@ describe('walkable', () => {
   });
 
   it('keeps bodies out of furniture unless asked to ignore it', () => {
-    const inRoom = M.OBSTACLES.find(([x0, z0, x1, z1]) => M.roomAt((x0 + x1) / 2, (z0 + z1) / 2) >= 0);
-    if (!inRoom) throw new Error('no obstacle stands in a room');
-    const [x0, z0, x1, z1] = inRoom,
+    const [x0, z0, x1, z1] = defined(
+        M.OBSTACLES.find(([x0, z0, x1, z1]) => M.roomAt((x0 + x1) / 2, (z0 + z1) / 2) >= 0),
+        'an obstacle standing in a room'
+      ),
       x = (x0 + x1) / 2,
       z = (z0 + z1) / 2;
     expect(M.walkable(x, z, 0.1)).toBe(false);
@@ -106,12 +115,13 @@ describe('sight lines', () => {
 
   it('is cut by furniture for the eye but not for an arm', () => {
     // A line through the middle of an obstacle, from clear floor on one side to clear floor on the other.
-    const across = M.OBSTACLES.map(([x0, z0, x1, z1]) => {
-      const z = (z0 + z1) / 2;
-      return [x0 - 0.3, z, x1 + 0.3, z] as const;
-    }).find(([ax, z, bx]) => M.roomAt(ax, z) >= 0 && M.roomAt(ax, z) === M.roomAt(bx, z) && M.walkable(ax, z, 0.1) && M.walkable(bx, z, 0.1));
-    if (!across) throw new Error('no obstacle has clear floor either side');
-    const [ax, z, bx] = across;
+    const [ax, z, bx] = defined(
+      M.OBSTACLES.map(([x0, z0, x1, z1]) => {
+        const z = (z0 + z1) / 2;
+        return [x0 - 0.3, z, x1 + 0.3, z] as const;
+      }).find(([ax, z, bx]) => M.roomAt(ax, z) >= 0 && M.roomAt(ax, z) === M.roomAt(bx, z) && M.walkable(ax, z, 0.1) && M.walkable(bx, z, 0.1)),
+      'an obstacle with clear floor either side'
+    );
     expect(M.sees(ax, z, bx, z)).toBe(false);
     expect(M.reaches(ax, z, bx, z)).toBe(true);
     expect(M.glimpses(ax, z, bx, z, M.MASCOT_R)).toBe(true);

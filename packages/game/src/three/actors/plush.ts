@@ -6,12 +6,13 @@
 
 import { TOY } from '@thick-shift/sim';
 import { MASC } from '@thick-shift/sim/config';
+import { dist } from '@thick-shift/sim/map';
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { View } from '../actors';
 import { floorY } from '../world/shell';
-import { hostClock } from './track';
+import { nightClock } from './track';
 
 const SIZE = 1.4; // a big keyring, so it shows across a room in a torch beam
 const HAND = 1.3; // metres off the floor it leaves the hand
@@ -78,9 +79,6 @@ export function createPlush(scene: THREE.Scene) {
     lamp.position.set(0, 0.045 * SIZE, 0.042 * SIZE);
     g.add(body, lamp);
     g.name = 'mini biggs';
-    g.traverse(o => {
-      o.castShadow = false;
-    });
     scene.add(g);
     return { g, lamp, wobble: Math.random() * 6 };
   }
@@ -93,7 +91,7 @@ export function createPlush(scene: THREE.Scene) {
       toys.clear();
     },
     sync(S: State, view: View): void {
-      const now = hostClock.now,
+      const now = nightClock.now,
         list = S.toys || [],
         here = new Set<number>();
       for (const t of list) {
@@ -104,7 +102,7 @@ export function createPlush(scene: THREE.Scene) {
           toys.set(t.id, s);
         }
         const { g, lamp } = s;
-        g.visible = Math.hypot(t.x - view.x, t.z - view.z) < SHOW;
+        g.visible = dist(t, view) < SHOW;
         if (!g.visible) continue;
         const run = Math.hypot(t.x - t.x0, t.z - t.z0),
           heading = Math.atan2(t.x - t.x0, t.z - t.z0),

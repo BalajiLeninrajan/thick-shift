@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
 import { BATTERY_SPOTS, BOXES, HIDES, PANELS, REST, spawnPoint } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
+import { DEV_OFF } from '../src/session.ts';
 import { actFloor, adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor } from '../src/sim.ts';
 import type { Guard, NightState, SimEvent, State } from '../src/types.ts';
 import { countEvents, digest, eventsSince } from './nights.ts';
@@ -20,7 +21,7 @@ function start(seed: number, n: number, night: number, now = 0): { sim: Sim; S: 
 // Step a night on with nobody doing anything, a tenth of a second at a time from `now`, and sum it up.
 function idle(sim: Sim, S: NightState, now: number, ticks: number) {
   const events: SimEvent[] = [];
-  let seen = Math.max(0, ...S.evs.map(e => e.id));
+  let seen = S.evId;
   for (let k = 1; k <= ticks && S.phase === 'play'; k++) {
     stepFloor(sim, S, now + k * 100);
     seen = eventsSince(S, seen, events);
@@ -40,7 +41,7 @@ describe('seeded', () => {
       expect(x).toBeGreaterThanOrEqual(0);
       expect(x).toBeLessThan(1);
     }
-    // The stream the balance harness, the snapshots and the Roblox port's Util.seeded all depend on.
+    // The stream the balance harness and the snapshots depend on.
     expect(Array.from({ length: 4 }, seeded(1))).toMatchSnapshot();
   });
 });
@@ -53,7 +54,7 @@ describe('the clock', () => {
     stepFloor(sim, S, 11_100); // ten seconds later: capped
     expect(S.t).toBeCloseTo(0.35, 12);
     expect(sim.lastStep).toBe(11_100);
-    S.dev = { god: false, power: false, freeze: false, wake: false, speed: 2, rot: -1, dread: -1 };
+    S.dev = { ...DEV_OFF, speed: 2 };
     stepFloor(sim, S, 11_200);
     expect(S.t).toBeCloseTo(0.55, 12);
   });
@@ -90,8 +91,8 @@ describe('startFloorNight', () => {
 });
 
 describe('adoptFloor', () => {
-  // A night saved by a build from before batN, waveAt and the toys, part way in: one mascot hunting, one charging, one
-  // feasting and one at rest.
+  // A saved night, part way in: one mascot hunting, one charging, one feasting and one at rest, and one battery left
+  // lying about.
   function savedState() {
     const { S } = start(5, 2, 3);
     const T = JSON.parse(JSON.stringify(S)) as State;
@@ -101,16 +102,10 @@ describe('adoptFloor', () => {
     flan.st = 'charge';
     squish.st = 'feast';
     stompy.st = 'rest';
-    delete T.batN;
-    delete T.waveAt;
-    delete T.toys;
-    delete T.toyId;
-    for (const p of T.players) delete p.toy;
     T.bats = (T.bats as number[]).slice(0, 1);
     return T;
   }
-  function adopt(seed: number) {
-    const T = savedState();
+  function adopt(seed: number, T = savedState()) {
     const sim = newSim({ rng: seeded(seed), now: 0 });
     for (const p of T.players) sim.players[p.id] = p;
     adoptFloor(sim, T, 5000);
@@ -136,11 +131,6 @@ describe('adoptFloor', () => {
       expect(s).toBeGreaterThanOrEqual(5);
       expect(s).toBeLessThan(50);
     }
-    // What the old build did not save is filled in.
-    expect(T.waveAt).toBeGreaterThan(T.t);
-    expect(T.toys).toEqual([]);
-    expect(T.toyId).toBe(0);
-    expect(T.players.every(p => p.toy === true)).toBe(true);
     expect(sim.nextFault).toBeGreaterThan(0);
     expect(sim.crankNoise).toBe(0);
   });
@@ -148,10 +138,7 @@ describe('adoptFloor', () => {
   it('gives a hunting Biggs half as much wind again as any other hunter', () => {
     const T = savedState();
     defined(T.m[1], 'Madame Flan').st = 'hunt';
-    const sim = newSim({ rng: seeded(7), now: 0 });
-    for (const p of T.players) sim.players[p.id] = p;
-    adoptFloor(sim, T, 5000);
-    const [biggs, other] = sim.brains;
+    const [biggs, other] = adopt(7, T).sim.brains;
     assert(biggs && other, 'Biggs and Flan have brains');
     expect(other.wind).toBeGreaterThan(0);
     expect(biggs.wind).toBeCloseTo(1.5 * other.wind, 9);
@@ -165,26 +152,7 @@ describe('adoptFloor', () => {
     const r = (v: number) => Math.round(v * 1000) / 1000;
     expect(sim.brains[3]?.cool).toBe(10);
     expect(sim.brains.map((b, i) => ({ st: T.m[i]?.st, tgt: b.tgt, timer: r(b.timer), cool: b.cool, wind: r(b.wind) }))).toMatchSnapshot();
-    expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault), waveAt: r(T.waveAt) }).toMatchSnapshot();
-  });
-
-  it('starts an empty S.bats for a state from before it, so batteries can be dropped and picked up', () => {
-    const T = savedState();
-    delete T.bats;
-    const sim = newSim({ rng: seeded(7), now: 0 });
-    for (const p of T.players) sim.players[p.id] = p;
-    adoptFloor(sim, T, 5000);
-    const S = T as NightState;
-    expect(S.bats).toEqual([]);
-    // Every battery of the night is due back: five for two guards, as batN is guessed too.
-    expect(sim.batTimers).toHaveLength(5);
-    const g = defined(S.players[0], 'g0'),
-      spot = defined(BATTERY_SPOTS[0], 'battery spot 0');
-    Object.assign(g, { x: spot.x, z: spot.z, bat: 0.5 });
-    expect(() => actFloor(sim, S, g.id, { t: 'use', what: 'bat', i: 0 })).not.toThrow();
-    // The first one back lands within 50 s.
-    idle(sim, S, 5000, 500);
-    expect(S.bats.length).toBeGreaterThan(0);
+    expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault) }).toMatchSnapshot();
   });
 
   it('walks a searching mascot to where it lost the guard when it means to check a locker that is not there', () => {
@@ -211,12 +179,12 @@ describe('restartFloor', () => {
   it('clears the run and starts night 1 as a fresh room would, apart from the event log', () => {
     const { sim, S } = start(9, 2, 4);
     idle(sim, S, 0, 900);
-    Object.assign(S, { deaths: 2, slams: 5, flats: 3 });
+    S.deaths = 2;
     S.total = { fixed: 4, burnt: 1, flats: [['G0', 1]], peels: ['G1'] };
     sim.rng = seeded(11);
     restartFloor(sim, S);
 
-    expect([S.deaths, S.slams, S.flats]).toEqual([0, 0, 0]);
+    expect(S.deaths).toBe(0);
     expect(S.total).toEqual({ fixed: 0, burnt: 0, flats: [], peels: [] });
     expect(S.total).not.toBe(S.tally);
     expect([S.phase, S.night, S.t, S.power]).toEqual(['play', 1, 0, 100]);
@@ -225,7 +193,7 @@ describe('restartFloor', () => {
     });
 
     const fresh = start(11, 2, 1);
-    const { evs, evId, flats, ...restarted } = S;
+    const { evs, evId, ...restarted } = S;
     const { evs: _evs, evId: _evId, ...started } = fresh.S;
     expect(restarted).toEqual(started);
     expect(sim.brains).toEqual(fresh.sim.brains);

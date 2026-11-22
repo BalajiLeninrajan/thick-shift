@@ -36,3 +36,9 @@ export function context2d(canvas: HTMLCanvasElement, settings?: CanvasRenderingC
   if (!c) throw new Error('no 2D context for a canvas');
   return c;
 }
+
+// The event came from something the player types into, so its keys are text and not controls.
+export const typing = (e: Event): boolean => e.target instanceof Element && !!e.target.closest('input, textarea, select, [contenteditable]');
+
+// What to show for something thrown or rejected, which need not be an Error.
+export const errorText = (err: unknown): string => (err instanceof Error && err.message ? err.message : String(err));

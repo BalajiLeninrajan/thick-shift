@@ -11,6 +11,7 @@ import bpy, bmesh, math
 import numpy as np
 from mathutils import Vector, Matrix, Euler
 from mathutils.bvhtree import BVHTree
+from common import select, smooth_shade, tris
 
 
 # ---------- noise (numpy, deterministic, no dependence on Blender's) ----------
@@ -55,13 +56,8 @@ def mesh_obj(name, verts, faces):
     me.update()
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
-    shade_smooth(ob)
+    smooth_shade(ob)
     return ob
-
-
-def shade_smooth(ob):
-    ob.data.polygons.foreach_set('use_smooth', [True] * len(ob.data.polygons))
-    ob.data.update()
 
 
 def co(ob):
@@ -81,29 +77,19 @@ def normals(ob):
     return a.reshape(-1, 3)
 
 
-def ntris(ob):
-    return sum(len(p.vertices) - 2 for p in ob.data.polygons)
-
-
-def activate(ob):
-    bpy.ops.object.select_all(action='DESELECT')
-    ob.select_set(True)
-    bpy.context.view_layer.objects.active = ob
-
-
 def modifier(ob, kind, **props):
     """Add a modifier, set its properties, apply it."""
     m = ob.modifiers.new(kind, kind)
     for k, v in props.items(): setattr(m, k, v)
-    activate(ob)
+    select([ob])
     bpy.ops.object.modifier_apply(modifier=m.name)
     return ob
 
 
-def decimate(ob, tris):
-    n = ntris(ob)
-    if n > tris: modifier(ob, 'DECIMATE', ratio=tris / n)
-    shade_smooth(ob)
+def decimate(ob, target):
+    n = tris([ob])
+    if n > target: modifier(ob, 'DECIMATE', ratio=target / n)
+    smooth_shade(ob)
     return ob
 
 
@@ -114,14 +100,12 @@ def fix_normals(ob):
     return ob
 
 
-def stamp_rest(ob, force=False):
+def stamp_rest(ob):
     """Store the current vertex positions in the attribute 'rest'. The
     materials read it instead of the real position, so a part can be built in
     a convenient pose, textured there, and moved into place afterwards."""
-    at = ob.data.attributes.get('rest')
-    if at is not None and not force: return ob
-    if at is None: at = ob.data.attributes.new('rest', 'FLOAT_VECTOR', 'POINT')
-    at.data.foreach_set('vector', co(ob).ravel())
+    if ob.data.attributes.get('rest') is None:
+        ob.data.attributes.new('rest', 'FLOAT_VECTOR', 'POINT').data.foreach_set('vector', co(ob).ravel())
     return ob
 
 
@@ -137,28 +121,12 @@ def place(at=(0, 0, 0), rot=(0, 0, 0), about=(0, 0, 0)):
     return Matrix.Translation(Vector(at)) @ Euler(rot).to_matrix().to_4x4() @ Matrix.Translation(-Vector(about))
 
 
-def mirror_x(ob, name=None):
-    """A mirrored copy across x = 0, with normals fixed."""
-    new = ob.copy(); new.data = ob.data.copy()
-    if name: new.name = name
-    bpy.context.scene.collection.objects.link(new)
-    a = co(new); a[:, 0] *= -1; setco(new, a)
-    at = new.data.attributes.get('rest')
-    if at is not None:
-        r = np.empty(len(a) * 3); at.data.foreach_get('vector', r); r = r.reshape(-1, 3); r[:, 0] *= -1
-        at.data.foreach_set('vector', r.ravel())
-    new.data.flip_normals()
-    return new
-
-
 def join(objs, name):
     """Join mesh objects into one. Every piece gets a 'rest' stamp first so
     the attribute survives the join."""
     objs = [o for o in objs if o is not None]
     for o in objs: stamp_rest(o)
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in objs: o.select_set(True)
-    bpy.context.view_layer.objects.active = objs[0]
+    select(objs)
     if len(objs) > 1: bpy.ops.object.join()
     ob = bpy.context.view_layer.objects.active
     ob.name = name
@@ -221,18 +189,11 @@ class Clay:
         ob = mesh_obj(name, np.concatenate(self.v), np.concatenate(self.f))
         modifier(ob, 'REMESH', mode='VOXEL', voxel_size=voxel, adaptivity=0)
         if smooth: modifier(ob, 'SMOOTH', factor=.5, iterations=smooth)
-        shade_smooth(ob)
+        smooth_shade(ob)
         return ob
 
 
 # ---------- sculpting on a built mesh ----------
-
-def push(ob, c, rad, vec):
-    """Move the surface near c by vec, with a gaussian falloff."""
-    a = co(ob)
-    w = np.exp(-(np.linalg.norm(a - np.asarray(c, float), axis=1) / rad) ** 2)
-    setco(ob, a + w[:, None] * np.asarray(vec, float))
-
 
 def dent(ob, c, rad, depth):
     """Press the surface in along its own normals (negative depth raises it)."""
@@ -342,7 +303,7 @@ def tube(pts, radii, n=8, name='tube', caps=True, squash=1.0, phase=0.0):
     return mesh_obj(name, verts, faces)
 
 
-def revolve(profile, n=48, name='lathe', mod=None, closed=False):
+def revolve(profile, n=48, name='lathe', mod=None):
     """Turn a profile [(y, r), ...] about the Y axis. mod(i, angle) -> (dy, dr)
     reshapes ring i at each angle, for lobes and folds."""
     ang = np.arange(n) / n * math.tau
@@ -350,16 +311,14 @@ def revolve(profile, n=48, name='lathe', mod=None, closed=False):
     for i, (y, r) in enumerate(profile):
         dy, dr = mod(i, ang) if mod else (0, 0)
         rr = r + dr
-        verts.append(np.stack([rr * np.cos(ang), y + dy + ang * 0, rr * np.sin(ang)], 1))
+        verts.append(np.stack([rr * np.cos(ang), np.full_like(ang, y + dy), rr * np.sin(ang)], 1))
     verts = np.concatenate(verts)
     faces = []
-    for i in range(m - (0 if closed else 1)):
-        i2 = (i + 1) % m
+    for i in range(m - 1):
         for j in range(n):
             k = (j + 1) % n
-            faces.append((i * n + j, i2 * n + j, i2 * n + k, i * n + k))
-    ob = mesh_obj(name, verts, faces)
-    return ob
+            faces.append((i * n + j, (i + 1) * n + j, (i + 1) * n + k, i * n + k))
+    return mesh_obj(name, verts, faces)
 
 
 def spline(ctrl, n=200):
@@ -452,13 +411,11 @@ def tube_rest(pts, radii, n=8, name='tube', length=None, origin=(0, 0, 0), **kw)
     return ob
 
 
-def loop(centre, R, r, normal=(0, -1, 0), n=28, m=6, name='loop', wobble=0.0, rng=None):
+def loop(centre, R, r, normal=(0, -1, 0), n=28, m=6, name='loop'):
     """A torus-like ring: a tube bent round a circle of radius R facing `normal`."""
     nrm = np.asarray(normal, float); nrm /= np.linalg.norm(nrm)
     a = np.cross(nrm, [0, 0, 1.0]) if abs(nrm[2]) < .9 else np.cross(nrm, [1.0, 0, 0])
     a /= np.linalg.norm(a); b = np.cross(nrm, a)
     t = np.linspace(0, math.tau, n + 1)
-    RR = R * (1 + (rng.uniform(-wobble, wobble, n + 1) if rng is not None else 0))
-    if rng is not None: RR[-1] = RR[0]
-    pts = np.asarray(centre, float) + (np.cos(t) * RR)[:, None] * a + (np.sin(t) * RR)[:, None] * b
+    pts = np.asarray(centre, float) + (np.cos(t) * R)[:, None] * a + (np.sin(t) * R)[:, None] * b
     return tube(pts, r, n=m, name=name, caps=False)

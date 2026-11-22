@@ -11,6 +11,7 @@ src/shared/            ReplicatedStorage.Shared: what both sides need
   Map.luau             packages/sim/src/map.ts: walking, sight lines, routes, walls and floors
   Sim.luau             packages/sim/src/sim.ts: the night. The server owns one
   Units.luau           metres to studs (3 to a metre) and yaw to CFrame
+  Make.luau            builders the client modules share: an instance from a table, a plain part, a torch
   Util.luau, Text.luau
 src/server/Main.server.luau   steps the sim ten times a second and sends every client the state
 src/client/            StarterPlayerScripts.Client
@@ -34,6 +35,7 @@ The server works like the web game's room (`packages/game/worker/room.ts`). Clie
 ```sh
 rojo build default.project.json -o build/ThickShift.rbxl   # the place file
 rojo serve                                                  # live sync into Studio (with the Rojo plugin)
+selene generate-roblox-std                                  # once: writes roblox.yml, the Roblox API selene checks against
 stylua src test && selene src                               # format and lint
 (cd ../.. && lune run apps/roblox/test/smoke.luau)          # client code against the sim, no Studio (from the repo root)
 ../../tools/roblox/diff/run.sh "crew of 3 competent n4" 1   # web sim vs Luau sim, one night

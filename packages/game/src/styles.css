@@ -2,6 +2,8 @@
    only lays out the stage and adds the two things the system has no class for. */
 
 html, body { height: 100%; margin: 0; overflow: hidden; }
+/* biome-ignore lint/complexity/noImportantStyles: any display rule would otherwise bring a hidden element back */
+[hidden] { display: none !important; }
 body {
   background: var(--crust);
   touch-action: none;
@@ -15,7 +17,6 @@ body {
 .ts-stage-box { display: grid; place-items: center; container-type: size; min-height: 0; }
 .ts-stage { position: relative; width: min(100cqw, 100cqh * 21 / 9); height: 100cqh; background: var(--neu-ink); }
 .ts-stage canvas { display: block; width: 100%; height: 100%; }
-.ts-stage canvas[hidden], .ts-overlay[hidden] { display: none; }
 
 /* Film grain. Blending it here is far cheaper than drawing it into the canvas every frame. */
 .ts-stage::after {
@@ -64,10 +65,15 @@ body {
 }
 .ts-logo-bad { color: var(--red); }
 
+/* The rules in the lobby. */
+.ts-rules { display: grid; gap: var(--space-1); padding-left: 1.2em; }
+.ts-rules li { margin: 0; }
+
+/* The connection strip over a night (ui.ts syncStrip). */
+.ts-net { position: fixed; top: 12px; left: 50%; z-index: 40; transform: translateX(-50%); max-width: 92vw; pointer-events: none; }
+
 /* Dev menu (?dev). Scrolls inside itself and stays narrow enough to play beside. */
 .ts-dev { width: min(380px, 92vw); z-index: 50; }
-.ts-net { position: fixed; top: 12px; left: 50%; z-index: 40; transform: translateX(-50%); max-width: 92vw; pointer-events: none; }
-.ts-net[hidden] { display: none; }
 .ts-dev-body { overflow-y: auto; touch-action: pan-y; }
 
 /* ---------- in the night ---------- */
@@ -78,11 +84,6 @@ body {
 
 /* While a night is drawn, take back the scrollbar's gutter. */
 html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
-.ts-fhud[hidden], .ts-fhud [hidden] { display: none; }
-
-/* The rules in the lobby. */
-.ts-rules { display: grid; gap: var(--space-1); padding-left: 1.2em; }
-.ts-rules li { margin: 0; }
 
 .ts-fhud {
   container: fhud / size;
@@ -349,7 +350,6 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-t-zoom { right: 116px; bottom: 102px; width: 56px; height: 56px; }
 .ts-t-toy { right: 188px; bottom: 96px; width: 56px; height: 56px; }
 .ts-t-toy[aria-disabled="true"] { opacity: .45; }
-.ts-t-zoom[hidden] { display: none; }
 /* Hands in a breaker box: nothing to walk or press but the panel. Dragging still looks round. */
 .ts-t-layer.is-busy :is(.ts-t-stick, .ts-t-btn) { display: none; }
 .ts-t-btn[aria-pressed="true"] { border-color: var(--yellow); color: var(--yellow); }

@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Data = require(Shared.Data)
+local Make = require(Shared.Make)
 local Map = require(Shared.Map)
 local Sim = require(Shared.Sim)
 local Units = require(Shared.Units)
@@ -68,25 +69,10 @@ local PROP = {
 	popcorn_cart = { 1.6, "#c83030", M.Plastic },
 }
 
-local function hexColor(s: string): Color3
-	return Color3.fromHex(s)
-end
-
 local root: Folder
+-- A part of the building, under props.Parent or the Depot's own folder.
 local function part(props): Part
-	local p = Instance.new("Part")
-	p.Anchored = true
-	p.CanCollide = false
-	p.CanQuery = false
-	p.CanTouch = false
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	p.Material = M.SmoothPlastic
-	for k, v in props do
-		(p :: any)[k] = v
-	end
-	p.Parent = props.Parent or root
-	return p
+	return Make.part(props, props.Parent or root)
 end
 
 -- A box from (x0, y0, z0) to (x1, y1, z1), metres.
@@ -95,7 +81,7 @@ local function slab(x0, y0, z0, x1, y1, z1, look, parent)
 		Size = size(x1 - x0, y1 - y0, z1 - z0),
 		CFrame = CFrame.new(v3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)),
 		Material = look[1],
-		Color = hexColor(look[2]),
+		Color = Color3.fromHex(look[2]),
 		Parent = parent,
 	})
 end
@@ -174,7 +160,7 @@ local function buildProps()
 					Name = name,
 					Size = size(foot[1] * s, look[1] * s, foot[2] * s),
 					CFrame = CFrame.new(v3(cx, y + look[1] * s / 2, cz)) * CFrame.Angles(0, a, 0),
-					Color = hexColor(look[2]),
+					Color = Color3.fromHex(look[2]),
 					Material = look[3],
 					CastShadow = true,
 					Parent = props,
@@ -200,6 +186,10 @@ end
 
 type Lamp = { def: any, light: PointLight, glow: BasePart?, room: number, base: number, i: number }
 
+local function tubeSize(dir: string): Vector3
+	return if dir == "x" then size(1.2, 0.06, 0.12) else size(0.12, 0.06, 1.2)
+end
+
 local function buildLamps(): { Lamp }
 	local folder = Instance.new("Folder")
 	folder.Name = "Lamps"
@@ -212,9 +202,8 @@ local function buildLamps(): { Lamp }
 		local y, at, glow
 		if l.kind == "tube" then
 			y = h - 0.12
-			local long = l.dir == "x"
 			glow = part({
-				Size = if long then size(1.2, 0.06, 0.12) else size(0.12, 0.06, 1.2),
+				Size = tubeSize(l.dir),
 				CFrame = CFrame.new(v3(l.x, h - 0.04, l.z)),
 				Material = M.Neon,
 				Color = col,
@@ -258,7 +247,7 @@ local function buildLamps(): { Lamp }
 		local room = math.max(0, Map.roomAt(d[1], d[2]))
 		local h = ROOMS3[room + 1].h
 		part({
-			Size = if d[3] == "x" then size(1.2, 0.06, 0.12) else size(0.12, 0.06, 1.2),
+			Size = tubeSize(d[3]),
 			CFrame = CFrame.new(v3(d[1], h - 0.04, d[2])),
 			Color = Color3.fromRGB(40, 42, 40),
 			Parent = folder,
@@ -271,6 +260,7 @@ end
 
 local AMBER, DONE, OFF = Color3.fromHex("#ffb040"), Color3.fromHex("#2c7a2c"), Color3.fromHex("#1a0d00")
 local SHUT, OPEN, DEAD = Color3.fromHex("#d20f39"), Color3.fromHex("#40a02b"), Color3.fromHex("#222222")
+local BATTERY, SPARK = Color3.fromHex("#f9e2af"), Color3.fromHex("#ff7a20")
 
 local function buildUsables()
 	local folder = Instance.new("Folder")
@@ -284,7 +274,7 @@ local function buildUsables()
 			Name = "BreakerBox",
 			Size = size(0.5, 0.7, 0.16),
 			CFrame = cf * local3(0, 0, 0.08),
-			Color = hexColor("#5a5f66"),
+			Color = Color3.fromHex("#5a5f66"),
 			Material = M.Metal,
 			Parent = folder,
 		})
@@ -300,12 +290,12 @@ local function buildUsables()
 		local door = part({
 			Size = size(0.48, 0.68, 0.03),
 			CFrame = hinge * local3(0.24, 0, 0),
-			Color = hexColor("#6b7078"),
+			Color = Color3.fromHex("#6b7078"),
 			Material = M.Metal,
 			Parent = folder,
 		})
 		local sparks = Instance.new("ParticleEmitter")
-		sparks.Color = ColorSequence.new(Color3.fromHex("#ff7a20"))
+		sparks.Color = ColorSequence.new(SPARK)
 		sparks.LightEmission = 1
 		sparks.Size = NumberSequence.new(0.15, 0)
 		sparks.Lifetime = NumberRange.new(0.15, 0.35)
@@ -314,7 +304,7 @@ local function buildUsables()
 		sparks.Rate = 0
 		sparks.Parent = body
 		local glow = Instance.new("PointLight")
-		glow.Color = Color3.fromHex("#ff7a20")
+		glow.Color = SPARK
 		glow.Range = 9 * SC
 		glow.Brightness = 0
 		glow.Shadows = true
@@ -328,7 +318,7 @@ local function buildUsables()
 			Name = "DoorButton",
 			Size = size(0.25, 0.4, 0.1),
 			CFrame = cf * local3(0, 0, 0.05),
-			Color = hexColor("#3b3f4a"),
+			Color = Color3.fromHex("#3b3f4a"),
 			Parent = folder,
 		})
 		local lamp = part({
@@ -348,7 +338,7 @@ local function buildUsables()
 		Name = "Generator",
 		Size = size(1.4, 1, 0.8),
 		CFrame = gcf * local3(0, 0.5, -Data.GEN_BACK),
-		Color = hexColor("#7a5c2e"),
+		Color = Color3.fromHex("#7a5c2e"),
 		Material = M.Metal,
 		CastShadow = true,
 		Parent = folder,
@@ -357,7 +347,7 @@ local function buildUsables()
 	u.crank = part({
 		Size = size(0.08, 0.5, 0.08),
 		CFrame = u.crankHub,
-		Color = hexColor("#c8c8c8"),
+		Color = Color3.fromHex("#c8c8c8"),
 		Material = M.Metal,
 		Parent = folder,
 	})
@@ -367,7 +357,7 @@ local function buildUsables()
 		Name = "Charger",
 		Size = size(0.6, 0.4, 0.15),
 		CFrame = dcf * local3(0, 0, 0.08),
-		Color = hexColor("#2f4f6f"),
+		Color = Color3.fromHex("#2f4f6f"),
 		Parent = folder,
 	})
 	u.dockLamp = part({
@@ -384,12 +374,12 @@ local function buildUsables()
 			Size = size(0.12, 0.16, 0.12),
 			CFrame = CFrame.new(v3(s.x, base, s.z)),
 			Material = M.Neon,
-			Color = hexColor("#f9e2af"),
+			Color = BATTERY,
 			Transparency = 1,
 			Parent = folder,
 		})
 		local l = Instance.new("PointLight")
-		l.Color = hexColor("#f9e2af")
+		l.Color = BATTERY
 		l.Range = 2.5 * SC
 		l.Brightness = 0
 		l.Parent = p
@@ -405,7 +395,7 @@ local function buildUsables()
 			local p = part({
 				Name = "BoothDoor",
 				Size = sz,
-				Color = hexColor("#565a66"),
+				Color = Color3.fromHex("#565a66"),
 				Material = M.DiamondPlate,
 				CastShadow = true,
 				Parent = folder,
@@ -419,6 +409,17 @@ end
 --[[ the wall map ]]
 
 local MAP_K, MAP_OX, MAP_OY = 8.2, 14, 9
+local MAP = {
+	back = Color3.fromHex("#070b08"),
+	room = Color3.fromHex("#12261a"),
+	line = Color3.fromHex("#3d7a4c"),
+	text = Color3.fromHex("#7fbf8a"),
+	shut = Color3.fromHex("#c0392b"),
+	fault = Color3.fromHex("#f38ba8"),
+	blink = Color3.fromHex("#f9e2af"),
+	guard = Color3.fromHex("#a6e3a1"),
+	flat = Color3.fromHex("#6c7086"),
+}
 
 local function buildWallMap()
 	local cf = mount(WALL_MAP, 1.6) * local3(0, 0, 0.03)
@@ -426,7 +427,7 @@ local function buildWallMap()
 		Name = "WallMap",
 		Size = size(1.64, 0.76, 0.04),
 		CFrame = cf,
-		Color = hexColor("#070b08"),
+		Color = MAP.back,
 		Parent = root,
 	})
 	local gui = Instance.new("SurfaceGui")
@@ -436,7 +437,7 @@ local function buildWallMap()
 	gui.Brightness = 1.5
 	gui.Parent = screen
 	local plan = Instance.new("Frame")
-	plan.BackgroundColor3 = hexColor("#070b08")
+	plan.BackgroundColor3 = MAP.back
 	plan.Size = UDim2.fromScale(1, 1)
 	plan.BorderSizePixel = 0
 	plan.Parent = gui
@@ -455,11 +456,18 @@ local function buildWallMap()
 	local py = function(z)
 		return MAP_OY + z * MAP_K
 	end
+	local function disc(x, z, r, color, parent)
+		local f = rect(px(x) - r, py(z) - r, r * 2, r * 2, color, parent)
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(1, 0)
+		c.Parent = f
+		return f
+	end
 	for _, room in ROOMS3 do
 		for _, r in room.rects do
-			local f = rect(px(r[1]), py(r[2]), (r[3] - r[1]) * MAP_K, (r[4] - r[2]) * MAP_K, hexColor("#12261a"))
+			local f = rect(px(r[1]), py(r[2]), (r[3] - r[1]) * MAP_K, (r[4] - r[2]) * MAP_K, MAP.room)
 			local stroke = Instance.new("UIStroke")
-			stroke.Color = hexColor("#3d7a4c")
+			stroke.Color = MAP.line
 			stroke.Thickness = 2
 			stroke.Parent = f
 		end
@@ -472,16 +480,13 @@ local function buildWallMap()
 				py(d.rect[2]) - 1,
 				(d.rect[3] - d.rect[1]) * MAP_K + 2,
 				(d.rect[4] - d.rect[2]) * MAP_K + 2,
-				hexColor("#12261a")
+				MAP.room
 			)
 		end
 	end
 	local boxDots = {}
 	for i, b in BOXES do
-		boxDots[i] = rect(px(b.x) - 4, py(b.z) - 4, 8, 8, hexColor("#3d7a4c"))
-		local c = Instance.new("UICorner")
-		c.CornerRadius = UDim.new(1, 0)
-		c.Parent = boxDots[i]
+		boxDots[i] = disc(b.x, b.z, 4, MAP.line)
 	end
 	local dots = Instance.new("Folder")
 	dots.Parent = plan
@@ -493,9 +498,9 @@ local function buildWallMap()
 	legend.TextSize = 20
 	legend.TextXAlignment = Enum.TextXAlignment.Left
 	legend.TextYAlignment = Enum.TextYAlignment.Top
-	legend.TextColor3 = hexColor("#7fbf8a")
+	legend.TextColor3 = MAP.text
 	legend.Parent = plan
-	local blank = rect(0, 0, 820, 380, hexColor("#070b08"))
+	local blank = rect(0, 0, 820, 380, MAP.back)
 	blank.ZIndex = 5
 
 	local nextAt = 0
@@ -509,35 +514,26 @@ local function buildWallMap()
 			return
 		end
 		for k, f in doorRects do
-			f.BackgroundColor3 = if S.doors[k] then hexColor("#c0392b") else hexColor("#12261a")
+			f.BackgroundColor3 = if S.doors[k] then MAP.shut else MAP.room
 		end
 		for i, dot in boxDots do
 			local f = S.faults and S.faults[i]
 			local r = if f then 7 else 4
 			dot.Size = UDim2.fromOffset(r * 2, r * 2)
 			dot.Position = UDim2.fromOffset(px(BOXES[i].x) - r, py(BOXES[i].z) - r)
-			dot.BackgroundColor3 = if f
-				then (if t % 1 < 0.5 then hexColor("#f38ba8") else hexColor("#f9e2af"))
-				else hexColor("#3d7a4c")
+			dot.BackgroundColor3 = if f then (if t % 1 < 0.5 then MAP.fault else MAP.blink) else MAP.line
 		end
 		dots:ClearAllChildren()
-		for _, m in S.m do
-			if m.st ~= "rest" then
-				local f = rect(px(m.x) - 8, py(m.z) - 8, 16, 16, hexColor(Data.MASC[m.i + 1].col), dots)
-				local c = Instance.new("UICorner")
-				c.CornerRadius = UDim.new(1, 0)
-				c.Parent = f
-			end
-		end
-		for _, p in S.players do
-			if p.x then
-				rect(px(p.x) - 4, py(p.z) - 4, 8, 8, if p.flat then hexColor("#6c7086") else hexColor("#a6e3a1"), dots)
-			end
-		end
 		local out, due = 0, {}
 		for _, m in S.m do
 			if m.st ~= "rest" then
 				out += 1
+				disc(m.x, m.z, 8, Color3.fromHex(Data.MASC[m.i + 1].col), dots)
+			end
+		end
+		for _, p in S.players do
+			if p.x then
+				rect(px(p.x) - 4, py(p.z) - 4, 8, 8, if p.flat then MAP.flat else MAP.guard, dots)
 			end
 		end
 		for i, b in BOXES do
@@ -561,10 +557,6 @@ end
 local World = {}
 
 function World.build()
-	local existing = workspace:FindFirstChild("Depot")
-	if existing then
-		existing:Destroy()
-	end
 	root = Instance.new("Folder")
 	root.Name = "Depot"
 	root.Parent = workspace
@@ -590,8 +582,7 @@ function World.build()
 		cc.TintColor = Color3.new(1, 1 - 0.25 * fear, 1 - 0.3 * fear)
 
 		-- The lamps give less every night and with the dread, and stutter when the power is nearly gone.
-		local night = (S.night or 1) - 1
-		local level = (1 - 0.06 * night) * (1 - 0.35 * dread)
+		local level = (1 - 0.06 * (S.night - 1)) * (1 - 0.35 * dread)
 		local low = S.power < 10 and S.power > 0 and math.sin(t * 23) * math.sin(t * 7) > 0.3
 		for _, l in lamps do
 			local g = l.def.g
@@ -639,7 +630,7 @@ function World.build()
 		end
 
 		for _, k in Data.DOORS do
-			local shut = S.doors and S.doors[k]
+			local shut = S.doors[k]
 			u.panels[k].lamp.Color = if S.power <= 0 then DEAD elseif shut then SHUT else OPEN
 			local d = u.doors[k]
 			d.at += ((if shut then 1 else 0) - d.at) * math.min(1, dt * 12)

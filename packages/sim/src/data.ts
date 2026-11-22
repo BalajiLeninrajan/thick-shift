@@ -6,10 +6,10 @@
 export type RGB = [number, number, number];
 
 export const TUBE: RGB = [0.8, 0.95, 0.74],
-  COLD: RGB = [0.62, 0.82, 1],
-  WARM: RGB = [1, 0.66, 0.36],
-  RED: RGB = [1, 0.06, 0.04],
   GREEN: RGB = [0.2, 1, 0.45];
+const COLD: RGB = [0.62, 0.82, 1],
+  WARM: RGB = [1, 0.66, 0.36],
+  RED: RGB = [1, 0.06, 0.04];
 
 // Every lamp has a place, a colour, pow (how bright the floor right under it gets) and reach (metres before it has
 // faded to nothing). The rest depends on its kind, so each kind says what it has.

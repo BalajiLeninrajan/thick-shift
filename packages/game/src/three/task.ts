@@ -13,7 +13,7 @@
 // touch (tap the parts). The room is told only when the job is done.
 import { defined } from '@thick-shift/sim/check';
 import { BOXES, ROOMS3 } from '@thick-shift/sim/map';
-import { query } from '../dom';
+import { query, typing } from '../dom';
 
 const KIND = ['Reset the breaker', 'Reconnect the wires', 'Bleed the valve'];
 // What a fault of kind k (Fault.k) asks of the guard. The sim only makes kinds 0 to 2.
@@ -223,7 +223,7 @@ export function createTask(root: HTMLElement) {
   addEventListener(
     'keydown',
     e => {
-      if (!job || (e.target instanceof Element && e.target.closest('input, textarea, select'))) return;
+      if (!job || typing(e)) return;
       const c = e.code;
       if (c === 'KeyX' || c === 'Escape') {
         e.preventDefault();
@@ -280,9 +280,6 @@ export function createTask(root: HTMLElement) {
   }
 
   return {
-    get active(): boolean {
-      return !!job;
-    },
     // i: the box; k: the kind. done: called once the job is finished; quit: when the guard lets go.
     open(i: number, k: number, done: () => void, quit_: () => void): void {
       job = defined([breaker, wires, valve][k], `fault kind ${k}`)();

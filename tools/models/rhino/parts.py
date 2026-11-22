@@ -74,7 +74,7 @@ def head(rig, M, stage, T, parent, rng, tris):
         dent(skull, hit, .1, [.03, .035, .075][stage])
 
     # mouth: a printed smile, later a slit pulled shut with thread
-    pieces, glow = [], []
+    pieces = []
     if stage == 0:
         xs = np.linspace(-.17, .17, 17)
         line = [(x, -1.2, .105 + .075 * (x / .17) ** 2) for x in xs]
@@ -114,7 +114,7 @@ def head(rig, M, stage, T, parent, rng, tris):
     L = [.42, .6, .72][stage]
     t = np.linspace(0, 1, 15)
     base = np.array([0, -.565, .31])
-    hp = base + np.stack([t * 0 + (stage and .02 * np.sin(t * 5)), -.07 * t + .13 * t * t, L * t], 1)
+    hp = base + np.stack([.02 * np.sin(t * 5) if stage else np.zeros_like(t), -.07 * t + .13 * t * t, L * t], 1)
     n = 16
     hr = np.repeat((.108 * (1 - t) ** .75 + .008)[:, None], n, 1)
     if stage:
@@ -290,7 +290,7 @@ def foot(c, ankle, M, sx, size=1.0):
 
 # ---------- small costume fittings ----------
 
-def zipper(rig, body, M, z0, z1, stage):
+def zipper(body, M, z0, z1, stage):
     """The zip down the back: tape, teeth and a pull tab, laid on the body."""
     surf = Surface(body)
     zs = np.linspace(z0, z1, 26)
@@ -325,7 +325,8 @@ def worm(rig, M, ctrl, links, rng, r0=.2, r1=.135):
     """A chain of rigid beads along the spline through ctrl. Each link's
     origin is its joint with the one before. Neighbours end in matching
     half-spheres centred on the shared joint, so a joint can bend about 25
-    degrees before the skin opens. Returns [(name, parent, start, end, R)]."""
+    degrees before the skin opens. Returns one
+    (name, start, end, R, points, radii, N, B) per link."""
     path, total = spline(ctrl, 600)
     s = np.linspace(0, total, 600)
     at = lambda u: np.array([np.interp(u, s, path[:, k]) for k in range(3)])
@@ -358,7 +359,8 @@ def worm(rig, M, ctrl, links, rng, r0=.2, r1=.135):
         d1 = (path[-1] - path[-2]) / np.linalg.norm(path[-1] - path[-2])
         us = np.array(us)
         pts = np.array([path[0] + d0 * u if u < 0 else at(u) if u <= total else path[-1] + d1 * (u - total) for u in us])
-        lump = fbm(np.stack([np.cos(ang)[None, :] * 3 + i * 9.1 + 0 * us[:, None], np.sin(ang)[None, :] * 3 + 0 * us[:, None], us[:, None] * 9 + 0 * ang[None, :]], -1).reshape(-1, 3), 3, seed=i).reshape(len(us), n)
+        U, A = np.meshgrid(us, ang, indexing='ij')
+        lump = fbm(np.stack([np.cos(A) * 3 + i * 9.1, np.sin(A) * 3, U * 9], -1).reshape(-1, 3), 3, seed=i).reshape(len(us), n)
         sag = 1 + .06 * np.cos(ang - math.pi)[None, :]             # heavier underneath
         rad = np.array(rs)[:, None] * (1 + .1 * lump) * sag
         seg = tube_rest(pts, rad, n=n, name='seg', origin=(0, 0, i * 1.7))
@@ -389,7 +391,7 @@ def worm(rig, M, ctrl, links, rng, r0=.2, r1=.135):
         parent = 'body' if i == 0 else ('extra_1' if i == 1 else f'extra_1_{i}')
         rig.add(name, parent, at(a), pieces)
         out.append((name, at(a), at(b), R[i], pts, rad, N, B))
-    return out, at(total)
+    return out
 
 
 def worm_mouth(rig, M, name, parent, tip, rj, rng, first_ring=2):

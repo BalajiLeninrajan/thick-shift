@@ -9,8 +9,9 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "types": ["node"],
-    "erasableSyntaxOnly": true,
-    "verbatimModuleSyntax": true
+    // gen-data.mjs is JS. checkJs type-checks it with what TS can infer, plus JSDoc where that falls short.
+    "allowJs": true,
+    "checkJs": true
   },
   "include": ["**/*.ts", "**/*.mjs", "**/*.js"]
 }

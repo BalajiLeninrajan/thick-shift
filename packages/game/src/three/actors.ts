@@ -10,9 +10,9 @@
 //   phone.ts   your own phone, held in view, with the minimap (app.ts makes it)
 //   plush.ts   the Mini Biggs guards throw, in the air and singing on the floor
 
-import { defined, isPlaced } from '@thick-shift/sim/check';
+import { isPlaced } from '@thick-shift/sim/check';
 import { perMascot } from '@thick-shift/sim/config';
-import { DOORWAYS } from '@thick-shift/sim/map';
+import { dist, doorwayOf, rectMid } from '@thick-shift/sim/map';
 import type { SimEvent, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { game } from '../state';
@@ -22,7 +22,7 @@ import { createHands } from './actors/hands';
 import { Mascot } from './actors/mascot';
 import { createPlush } from './actors/plush';
 import { createScare } from './actors/scare';
-import { hostClock } from './actors/track';
+import { nightClock } from './actors/track';
 import { prefs } from './player';
 
 // Other guards' torches are real lights, but every light costs every pixel, so
@@ -32,18 +32,17 @@ const TORCH_LIGHTS = 2,
 const nearest = (a: Guard, b: Guard): number => a.dist - b.dist;
 
 // What the actors are drawn for, set once a frame in sync(). x, y, z: the camera. id: the guard watching. flat: they
-// are on the floor. torch: their beam is on. watch: the guard a flat guard is watching through. third: they watch
-// from behind (prefs.third), set with the rest in sync(). frustum: what this screen shows.
+// are on the floor. watch: the guard a flat guard is watching through. third: they watch from behind (prefs.third).
+// frustum: what this screen shows, so a mascot only changes model off it.
 export interface View {
   x: number;
   y: number;
   z: number;
   id: string;
   flat: boolean;
-  torch: boolean;
   watch: string | null;
+  third: boolean;
   frustum: THREE.Frustum;
-  third?: boolean;
 }
 
 export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) {
@@ -52,12 +51,16 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     scare = createScare(camera, renderer.domElement),
     hands = createHands(camera),
     plush = createPlush(scene);
-  // watch: the guard a flat guard is watching through. frustum: what this screen shows, so a mascot only changes model off it.
-  const view: View = { x: 0, y: 0, z: 0, id: '', flat: false, torch: false, watch: null, frustum: new THREE.Frustum() },
+  const view: View = { x: 0, y: 0, z: 0, id: '', flat: false, watch: null, third: false, frustum: new THREE.Frustum() },
     viewProj = new THREE.Matrix4();
   let lights: THREE.SpotLight[] | null = null; // made when the first other guard turns up, so a guard alone pays for none
   const lit: Guard[] = [],
     list: Guard[] = []; // list: the guards in the scene, as an array to walk without garbage
+  // list is always guards.values() in order, so it is made again whenever guards changes.
+  function relist(): void {
+    list.length = 0;
+    list.push(...guards.values());
+  }
 
   function lendLights(): void {
     lights ||= Array.from({ length: TORCH_LIGHTS }, () => {
@@ -97,12 +100,8 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
         else mascots[by].sitOn(x, z, false);
       } else if (e.type === 'bang') {
         // The hit lands with the sound: whichever of them is at that door. A bang carries the key of a doorway that has one.
-        const key = e.x,
-          door = DOORWAYS.find(d => d.key === key),
-          d = defined(door, `the doorway ${key}`),
-          cx = (d.rect[0] + d.rect[2]) / 2,
-          cz = (d.rect[1] + d.rect[3]) / 2;
-        for (const m of S.m) if (m.st === 'siege' && Math.hypot(m.x - cx, m.z - cz) < 4) mascots[m.i].bang();
+        const door = rectMid(doorwayOf(e.x).rect);
+        for (const m of S.m) if (m.st === 'siege' && dist(m, door) < 4) mascots[m.i].bang();
       } else if (e.type === 'crash') {
         for (const m of S.m) if (m.st === 'stun') mascots[m.i].crash();
       } else if (e.type === 'spot') mascots[e.x.i].spotted();
@@ -110,7 +109,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     },
     // me, torch: player.ts's guard and its light. Call after player.update, which has put the camera where the guard is.
     sync(S: State, dt: number, me: Me, torch: THREE.SpotLight): void {
-      hostClock.see(S.t, performance.now() / 1000);
+      nightClock.see(S.t, performance.now() / 1000);
       camera.updateMatrixWorld();
       view.frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
       view.x = camera.position.x;
@@ -118,7 +117,6 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
       view.z = camera.position.z;
       view.id = game.myId;
       view.flat = me.flat;
-      view.torch = me.on;
       view.watch = me.watch;
       view.third = prefs.third;
       for (const m of S.m) mascots[m.i].sync(m, S, dt, view);
@@ -130,13 +128,12 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
           g?.dispose(scene);
           g = new Guard(scene, p);
           guards.set(p.id, g);
-          list.length = 0;
-          list.push(...guards.values());
+          relist();
         }
         g.here = true;
         g.sync(p, S, dt, view);
       }
-      // Gone from S.players: list is always guards.values() in order, so it is made again from what is left.
+      // Gone from S.players.
       let gone = false;
       for (const g of list)
         if (!g.here) {
@@ -144,10 +141,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
           guards.delete(g.id);
           gone = true;
         }
-      if (gone) {
-        list.length = 0;
-        list.push(...guards.values());
-      }
+      if (gone) relist();
       if (guards.size || lights) lendLights();
       plush.sync(S, view);
       scare.update(me, dt, torch);
@@ -155,7 +149,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     },
     // After the frame is drawn.
     after(): void {
-      scare.after(renderer.domElement);
+      scare.after();
     },
   };
 }

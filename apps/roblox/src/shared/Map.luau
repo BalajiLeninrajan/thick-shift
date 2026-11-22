@@ -32,11 +32,9 @@ Map.BATTERY_SPOTS = Data.BATTERY_SPOTS
 Map.HIDES = Data.HIDES
 Map.REST = Data.REST
 Map.EXTRA_NODES = Data.EXTRA_NODES
+Map.OBSTACLES = Data.OBSTACLES
 
--- Copied so addObstacle cannot change the generated data.
-local OBSTACLES: { { number } } = table.clone(Data.OBSTACLES)
-Map.OBSTACLES = OBSTACLES
-
+local OBSTACLES: { { number } } = Data.OBSTACLES
 local ROOMS3 = Data.ROOMS3
 local DOORWAYS = Data.DOORWAYS
 local DUCTS = Data.DUCTS
@@ -45,13 +43,6 @@ local MASCOT_R = Data.MASCOT_R
 function Map.spawnPoint(i: number): { x: number, z: number, yaw: number }
 	-- i is 0-based, the guard's place in join order.
 	return { x = 18.5 + (i % 4) * 1.6, z = 41.5 - math.floor(i / 4) * 1.4, yaw = math.pi }
-end
-
-local resetNav: () -> ()
-
-function Map.addObstacle(x0: number, z0: number, x1: number, z1: number)
-	table.insert(OBSTACLES, { x0, z0, x1, z1 })
-	resetNav()
 end
 
 --[[ standing and seeing ]]
@@ -513,12 +504,6 @@ local function nav(): Nav
 	return NAV :: Nav
 end
 Map.nav = nav
-
-resetNav = function()
-	NAV = nil
-	buckets = nil
-end
-Map.resetNav = resetNav
 
 -- The nearest waypoint a walker of radius r can reach in a straight line: one of the dozen nearest, or failing that
 -- the nearest. ducts: false leaves out the waypoints inside the ducts. Nil when there is no waypoint it may use at all.

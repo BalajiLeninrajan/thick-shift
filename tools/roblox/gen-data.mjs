@@ -20,7 +20,7 @@ const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * @returns {string}
  */
 function lua(v, pad = '') {
-  if (v === null || v === undefined) throw new Error('nil in data');
+  if (v === null || v === undefined || typeof v === 'function') throw new Error(`${v} in data`);
   if (typeof v === 'number') {
     if (!Number.isFinite(v)) throw new Error('non-finite number');
     return String(v); // shortest round-trip form; Luau reads it back to the same double
@@ -34,8 +34,7 @@ function lua(v, pad = '') {
     if (flat) return `{ ${v.map(x => lua(x)).join(', ')} }`;
     return `{\n${v.map(x => `${inner + lua(x, inner)},`).join('\n')}\n${pad}}`;
   }
-  // A doorway's `door` back-reference and the like are not data.
-  const entries = Object.entries(v).filter(([, x]) => x !== undefined && typeof x !== 'function');
+  const entries = Object.entries(v);
   if (!entries.length) return '{}';
   return `{\n${entries.map(([k, x]) => `${inner + (IDENT.test(k) ? k : `[${JSON.stringify(k)}]`)} = ${lua(x, inner)},`).join('\n')}\n${pad}}`;
 }
@@ -44,6 +43,7 @@ const data = {
   FINAL_NIGHT: config.FINAL_NIGHT,
   DOORS: config.DOORS,
   MASC: config.MASC,
+  STAMINA: config.STAMINA,
   PLAYER_R: map.PLAYER_R,
   MASCOT_R: map.MASCOT_R,
   EYE: map.EYE,

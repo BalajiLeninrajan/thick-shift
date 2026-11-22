@@ -4,53 +4,42 @@
 import { defined } from '@thick-shift/sim/check';
 import type { NonEmpty } from '@thick-shift/sim/types';
 import * as THREE from 'three';
+import { context2d } from '../../dom';
 
 const e = new THREE.Euler(0, 0, 0, 'YXZ'),
   q = new THREE.Quaternion();
 
 class Part {
-  declare o: THREE.Object3D | null; // null only on NONE
-  declare name: string;
-  declare restP: THREE.Vector3;
-  declare restQ: THREE.Quaternion;
-  declare restS: THREE.Vector3;
-  declare at: THREE.Vector3;
-  declare rx: number;
-  declare ry: number;
-  declare rz: number;
-  declare px: number;
-  declare py: number;
-  declare pz: number;
-  declare s: number;
-  declare ax: number;
-  declare az: number;
-  declare vx: number;
-  declare vz: number;
-  declare seed: number;
-  declare depth: number;
-  declare rzSpin?: number; // set by styles.ts's tooth rings, which turn on and on
-  constructor(o: THREE.Object3D, name: string) {
+  o: THREE.Object3D;
+  restP: THREE.Vector3;
+  restQ: THREE.Quaternion;
+  restS: THREE.Vector3;
+  at = new THREE.Vector3(); // the pivot at rest, in the model's own space (y up from the floor, z forward)
+  // radians, about the part's own axes: yaw, then pitch, then roll
+  rx = 0;
+  ry = 0;
+  rz = 0;
+  // metres, in its parent's space
+  px = 0;
+  py = 0;
+  pz = 0;
+  s = 1;
+  // springs for parts that lag (see lag()): angle and velocity on x and z
+  ax = 0;
+  az = 0;
+  vx = 0;
+  vz = 0;
+  seed = 0;
+  depth = 0;
+  rzSpin = 0; // turned on and on by styles.ts's tooth rings
+  constructor(o: THREE.Object3D) {
     this.o = o;
-    this.name = name;
     this.restP = o.position.clone();
     this.restQ = o.quaternion.clone();
     this.restS = o.scale.clone();
-    this.at = new THREE.Vector3(); // the pivot at rest, in the model's own space (y up from the floor, z forward)
-    this.rx = this.ry = this.rz = 0; // radians, about the part's own axes: yaw, then pitch, then roll
-    this.px = this.py = this.pz = 0; // metres, in its parent's space
-    this.s = 1;
-    // springs for parts that lag (see lag()): angle and velocity on x and z
-    this.ax = this.az = this.vx = this.vz = 0;
-    this.seed = 0;
-    this.depth = 0;
   }
   apply(): void {
     const o = this.o;
-    if (!o) {
-      this.rx = this.ry = this.rz = this.px = this.py = this.pz = 0;
-      this.s = 1;
-      return;
-    }
     o.quaternion.copy(this.restQ).multiply(q.setFromEuler(e.set(this.rx, this.ry, this.rz)));
     o.position.set(this.restP.x + this.px, this.restP.y + this.py, this.restP.z + this.pz);
     o.scale.copy(this.restS).multiplyScalar(this.s);
@@ -59,9 +48,8 @@ class Part {
   }
 }
 
-// Stands in for a part the model does not have, so poses need no ifs.
-const NONE = new Part(new THREE.Object3D(), '');
-NONE.o = null;
+// Stands in for a part the model does not have, so poses need no ifs. It is in no rig's list, so nothing applies it.
+const NONE = new Part(new THREE.Object3D());
 
 const NAMED = [
   'root',
@@ -92,17 +80,13 @@ export type { Part };
 // A model's parts by name, the contract's named ones as fields (NONE where the model has none), and what the gait
 // needs. chains: extra_N chains, by N. sways: the sway_ parts.
 export type Rig = Record<Named, Part> & {
-  model: THREE.Object3D;
-  all: Map<string, Part>;
   list: Part[];
-  has: Record<string, boolean>;
+  has: Record<Named, boolean>;
   chains: Record<string, NonEmpty<Part>>;
   sways: Part[];
   hipH: number;
   hipX: number;
   headH: number;
-  part: (name: string) => Part;
-  chain: (n: number | string) => readonly Part[];
   apply: () => void;
 };
 
@@ -119,6 +103,20 @@ export function bounds(geometry: THREE.BufferGeometry): THREE.Box3 {
   return defined(geometry.boundingBox, 'the bounding box computeBoundingBox sets');
 }
 
+// A soft round point for a sprite: white in the middle, `rgb` at `alpha` a fraction `at` of the way out, nothing at the edge.
+export function glowTexture(at: number, rgb: string, alpha: number): THREE.CanvasTexture {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 32;
+  const c = context2d(cv),
+    g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, '#fff');
+  g.addColorStop(at, `rgba(${rgb},${alpha})`);
+  g.addColorStop(1, `rgba(${rgb},0)`);
+  c.fillStyle = g;
+  c.fillRect(0, 0, 32, 32);
+  return new THREE.CanvasTexture(cv);
+}
+
 export function buildRig(model: THREE.Object3D): Rig {
   const all = new Map<string, Part>(),
     list: Part[] = [],
@@ -130,7 +128,7 @@ export function buildRig(model: THREE.Object3D): Rig {
     // GLTFLoader keeps the file's node name in userData.name and may rename the object itself.
     const name = o.userData.name || (o instanceof THREE.Mesh && o.parent?.userData.name ? '' : o.name);
     if (!name || all.has(name)) return;
-    const p = new Part(o, name);
+    const p = new Part(o);
     p.at.setFromMatrixPosition(o.matrixWorld).applyMatrix4(inv);
     p.seed = hashStr(name);
     all.set(name, p);
@@ -150,13 +148,12 @@ export function buildRig(model: THREE.Object3D): Rig {
     } else if (name.startsWith('sway_')) sways.push(p);
   }
   const part = (name: string): Part => all.get(name) || NONE,
-    has = Object.fromEntries(NAMED.map(n => [n, all.has(n)]));
+    // Object.fromEntries types what it builds as a string record, hence the cast.
+    has = Object.fromEntries(NAMED.map(n => [n, all.has(n)])) as Record<Named, boolean>;
   // What the gait needs to know to keep feet where they land.
   const leg = part('leg_L'),
     hipH = has.leg_L ? leg.at.y : 1;
   return {
-    model,
-    all,
     list,
     has,
     chains,
@@ -164,8 +161,6 @@ export function buildRig(model: THREE.Object3D): Rig {
     hipH,
     hipX: has.leg_L ? Math.abs(leg.at.x) : 0.3,
     headH: has.head ? part('head').at.y : hipH * 2,
-    part,
-    chain: n => chains[n] || [],
     apply: () => {
       for (const p of list) p.apply();
     },

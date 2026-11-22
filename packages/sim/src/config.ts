@@ -3,6 +3,14 @@ import type { DoorKey, MascotIndex, PerMascot } from './types.ts';
 
 export const FINAL_NIGHT = 5; // survive this one and the game is won
 export const DOORS: readonly DoorKey[] = ['L', 'V', 'R']; // the booth's three ways in: left door, vent, right door
+// A guard's breath for running, from 0 to 1: what a second of sprinting costs, what a second of rest gives back, and
+// the seconds without sprinting before it starts to come back. The sim only reads whether a guard is sprinting
+// (Guard.sp), so each client spends the breath itself, and so do the balance harness's guards.
+export const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 };
+
+// A guard's name: what one who gave none is called, and the most characters the sim keeps of one.
+export const DEFAULT_NAME = 'Guard',
+  NAME_MAX = 12;
 
 // The cast's model names, one per MascotKind.k.
 export type MascotKey = 'hippo' | 'walrus' | 'toad' | 'rhino';
@@ -21,6 +29,11 @@ export const MASC: PerMascot<MascotKind> = [
   { k: 'toad', name: 'Squish', col: '#5f8f66' },
   { k: 'rhino', name: 'Stompy', col: '#7d8299' },
 ];
+// The cast by name, for the code that treats one of them differently.
+export const BIGGS = 0,
+  FLAN = 1,
+  SQUISH = 2,
+  STOMPY = 3;
 // Every MascotIndex in order, to walk the cast or build a table per mascot with MASCOTS.map(i => ...), where i is
 // a MascotIndex rather than the plain number MASC.map would give.
 export const MASCOTS: PerMascot<MascotIndex> = [0, 1, 2, 3];

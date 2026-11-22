@@ -11,11 +11,13 @@
 import { clockF, F, faultLeft, TOY } from '@thick-shift/sim';
 import { defined, isNight, isNonEmpty, isPlaced } from '@thick-shift/sim/check';
 import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
-import { BOXES, CHARGER, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
+import { angDiff, BOXES, CHARGER, dist, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
 import type { Guard, NightState, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
 import { query } from '../dom';
-import { game } from '../state';
+import { game, myPlayer } from '../state';
 import type { Me, PlayerHandle } from '../types';
+import { esc } from '../ui';
+import { type IconName, icon } from './icons';
 import { prefs, savePrefs } from './player';
 import { faultName } from './task';
 import { canFullscreen, createTouch, toggleFullscreen } from './touch';
@@ -72,7 +74,7 @@ const LOW_BAT = 0.25,
   LOW_POWER = 25,
   CRIT_POWER = 10;
 const GEN_MARK = 40; // power, in percent, under which the compass points to the generator
-const HURRY = 15; // seconds left before a fault burns when its row turns red
+export const HURRY = 15; // seconds left before a fault burns when its row and its outline (outline.ts) turn red
 const MAX_TASKS = 6; // rows in the task list before the rest are counted, on a stage tall enough for them
 const TASK_ROW = 28; // pixels a task row and its gap take
 const TASK_TOP = 76; // pixels above the task list: the hour and the power
@@ -81,25 +83,6 @@ const CELLS = 5; // bars in the torch battery
 // What each mascot did to you, by MASC index.
 const HOW: PerMascot<string> = ['sat on you', 'hugged you a bit too hard', 'landed on you', 'did not slow down'];
 
-const PATHS = {
-  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-  fault: '<path d="M10 2 4 13h6l-2 9 10-13h-6l2-7z"/>',
-  bolt: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
-  torch: '<path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><path d="M6 6h12M12 12v2"/>',
-  battery: '<rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2M6 11v2"/>',
-  down: '<path d="M3 19h18"/><rect x="5" y="13" width="14" height="3" rx="1.5"/><path d="M12 3v6m-3-3 3 3 3-3"/>',
-  up: '<path d="M3 19h18"/><path d="M12 15V5m-4 4 4-4 4 4"/>',
-  call: '<path d="m3 11 18-5v12L3 14z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
-  info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
-  pause: '<path d="M9 5v14M15 5v14"/>',
-  full: '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
-  locker: '<rect x="5" y="2" width="14" height="20" rx="1"/><path d="M12 2v20M8 6h2M8 8h2M14 6h2M14 8h2"/>',
-  rotate: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 9a10 10 0 0 0 3 9m17-3a10 10 0 0 0-3-9"/>',
-  toy: '<circle cx="12" cy="13.5" r="7"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="6.5" r="2.2"/><path d="M9.5 11v.01M14.5 11v.01M10 16.5h.01M14 16.5h.01"/>',
-};
-type IconName = keyof typeof PATHS;
-const icon = (name: IconName): string =>
-  `<svg class="cn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name]}</svg>`;
 // Each kind of toast has its own icon and colour (in styles.css), so a low
 // torch, low power, a fault burning and a guard going down do not look alike.
 const TOAST_ICON = {
@@ -205,6 +188,14 @@ const CONTROLS: Record<'keys' | 'touch' | 'pad', ControlGroup[]> = {
       ],
     ],
     [
+      'At a breaker box',
+      [
+        ['Choose', ['Left stick', 'D-pad']],
+        ['Act', ['A']],
+        ['Let go', ['B']],
+      ],
+    ],
+    [
       'When you are flat',
       [
         ['Call out', ['Y']],
@@ -242,24 +233,19 @@ const data = (e: HTMLElement, key: string, v: string | boolean): void => {
   v = String(v);
   if (e.dataset[key] !== v) e.dataset[key] = v;
 };
-const esc = (s: string): string => String(s).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
-const angDiff = (a: number, b: number): number => {
-  let d = (a - b) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-};
 const metres = (d: number): string => `${Math.max(1, Math.round(d))} m`;
+const roomName = (p: Point): string => ROOMS3[roomAt(p.x, p.z)]?.name || '';
 // "in the Kitchen", for a sentence.
 export function where(p: Point): string {
-  const name = ROOMS3[roomAt(p.x, p.z)]?.name;
+  const name = roomName(p);
   return !name ? 'somewhere' : name === 'Backstage' ? 'backstage' : `in the ${name}`;
 }
-const roomName = (p: Point): string => ROOMS3[roomAt(p.x, p.z)]?.name || '';
 
-export function createHud(stage: Element, player: PlayerHandle) {
-  const root = el('div', 'ts-fhud', stage);
-  root.innerHTML = `
+// root: the .ts-fhud element, which app.ts makes and the task panel (task.ts) is already in.
+export function createHud(root: HTMLElement, player: PlayerHandle) {
+  root.insertAdjacentHTML(
+    'afterbegin',
+    `
     <div class="ts-f-vignette"></div>
     <div class="ts-f-status">
       <div class="ts-f-time"><b></b><span></span></div>
@@ -328,7 +314,8 @@ export function createHud(stage: Element, player: PlayerHandle) {
         </div>
       </div>
     </div>
-    <div class="ts-f-rotate"><div class="empty-state">${icon('rotate')}<strong>Turn your phone sideways</strong><span>The floor is walked in landscape.</span></div></div>`;
+    <div class="ts-f-rotate"><div class="empty-state">${icon('rotate')}<strong>Turn your phone sideways</strong><span>The floor is walked in landscape.</span></div></div>`
+  );
   const $ = (sel: string): HTMLElement => query(root, sel);
   const input = (sel: string): HTMLInputElement => query(root, sel, HTMLInputElement);
   const time = $('.ts-f-time > b'),
@@ -481,7 +468,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
     let far = 0,
       prev = path[0];
     for (const p of path.slice(1)) {
-      far += Math.hypot(p.x - prev.x, p.z - prev.z);
+      far += dist(p, prev);
       prev = p;
     }
     const leg = { x: path[0].x, z: path[0].z, far };
@@ -525,10 +512,10 @@ export function createHud(stage: Element, player: PlayerHandle) {
     const shown: Placed[] = [];
     for (const t of list) {
       let r = routes.get(t.key) ?? findRoute(S, me, t);
-      if (r.far && Math.hypot(r.x - me.x, r.z - me.z) < 1.2) r = findRoute(S, me, t); // reached the corner it pointed at
+      if (r.far && dist(r, me) < 1.2) r = findRoute(S, me, t); // reached the corner it pointed at
       const p: Placed = {
         ...t,
-        dist: Math.hypot(r.x - me.x, r.z - me.z) + r.far,
+        dist: dist(r, me) + r.far,
         off: -angDiff(Math.atan2(r.x - me.x, r.z - me.z), me.yaw) / HALF_SPAN,
       };
       if (p.kind === 'fault' && (!nearest || p.dist < nearest.dist)) nearest = p;
@@ -613,7 +600,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
     // S.faults has one slot per box.
     const ours = BOXES.flatMap((box, i) => {
       const f = S.faults[i];
-      return f ? [{ f, i, box, d: Math.hypot(box.x - me.x, box.z - me.z) }] : [];
+      return f ? [{ f, i, box, d: dist(box, me) }] : [];
     }).sort((a, b) => a.d - b.d);
     const fit = Math.max(2, Math.floor((root.clientHeight - TASK_TOP - TASK_FOOT[me.touch ? 'touch' : 'keys']) / TASK_ROW));
     const max = ours.length <= Math.min(fit, MAX_TASKS) ? ours.length : Math.max(1, Math.min(MAX_TASKS, fit - 1)); // the rest counted on one more row
@@ -629,12 +616,14 @@ export function createHud(stage: Element, player: PlayerHandle) {
 
   /* ---------- once a frame ---------- */
 
-  let lastT = 1e9,
-    was = { bat: 1, power: 100, dry: 0, empty: 0 },
+  let was = { bat: 1, power: 100, dry: 0, empty: 0 },
     calledAt = -1e9;
   return {
-    root,
     say,
+    // A night began (app.ts): the warnings about the torch and the power can be given again.
+    reset(): void {
+      was = { bat: 1, power: 100, dry: player.me.dry, empty: player.me.empty };
+    },
     // Someone flat called out: their compass mark pulses for a few seconds.
     ping(id: string): void {
       if (id === game.myId) calledAt = performance.now();
@@ -644,12 +633,11 @@ export function createHud(stage: Element, player: PlayerHandle) {
     update(S: State, me: Me, scared: boolean): void {
       // mine is undefined until this guard has joined the state.
       const now = performance.now(),
-        mine = S.players.find(p => p.id === game.myId),
+        mine = myPlayer(S),
         bat = mine?.bat ?? 1;
       const mates: Guard[] = S.players.filter(isPlaced).filter(p => p.id !== game.myId);
       root.hidden = S.phase !== 'play' || !!scared;
-      if (S.t < lastT) was = { bat: 1, power: 100, dry: me.dry, empty: me.empty }; // a night began
-      lastT = S.t;
+
       for (const t of live) if (now > t.until) drop(t);
       live = live.filter(t => !(now > t.until));
       if (root.hidden) return;
@@ -661,7 +649,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
       powerBar.style.width = `${S.power}%`;
       set(powerText, S.power > 0 ? `${Math.ceil(S.power)}%` : 'Power out');
       data(power, 'level', S.power <= 0 ? 'out' : S.power < CRIT_POWER ? 'crit' : S.power < LOW_POWER ? 'low' : S.crank ? 'crank' : 'ok');
-      if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say('Power below 25%.', 'power', 7);
+      if (S.power > 0 && S.power < LOW_POWER && was.power >= LOW_POWER) say(`Power below ${LOW_POWER}%.`, 'power', 7);
       was.power = S.power;
 
       // A night in play has its faults (startFloorNight sets them with the rest of the night).
@@ -739,7 +727,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
       flat.hidden = !me.flat || me.paused;
       if (me.flat) {
         const up = mates.filter(p => !p.flat),
-          near = up.reduce<Guard | null>((a, p) => (!a || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(a.x - me.x, a.z - me.z) ? p : a), null);
+          near = up.reduce<Guard | null>((a, p) => (!a || dist(p, me) < dist(a, me) ? p : a), null);
         // Watching nobody offers the first.
         const watched = up.find(p => p.id === me.watch),
           next = up[(watched ? up.indexOf(watched) : -1) + 1];
@@ -751,7 +739,7 @@ export function createHud(stage: Element, player: PlayerHandle) {
           watched
             ? `Watching ${watched.name}, ${where(watched)}.`
             : near
-              ? `You stay flat until someone peels you up. ${near.name} is ${metres(Math.hypot(near.x - me.x, near.z - me.z))} away.`
+              ? `You stay flat until someone peels you up. ${near.name} is ${metres(dist(near, me))} away.`
               : 'Nobody is left standing.'
         );
         set(callText, now - calledAt < F.CALL_GAP * 1000 ? 'Called' : 'Call out');

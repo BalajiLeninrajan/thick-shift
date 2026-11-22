@@ -1,8 +1,8 @@
 // Settings every project shares. Each package has a tsconfig.json for its browser code and, where it has them, a
 // tsconfig.worker.json for Worker code and a tsconfig.node.json for code that runs in Node. The tsconfig.json at the
-// root lists them all, and `pnpm typecheck` checks them with `tsc -b`. Each project keeps its build info under its package's node_modules/.tmp,
-// in a file named after its config. With allowJs and noEmit, tsc -b takes the JS sources for its own outputs and checks
-// every project on every run; the whole repo takes about a second with TS 7.
+// root lists them all, and `pnpm typecheck` checks them with `tsc -b`. Each project keeps its build info under its
+// package's node_modules/.tmp, in a file named after its config. With noEmit, tsc -b finds no outputs and checks every
+// project on every run; the whole repo takes about a second with TS 7.
 {
   "compilerOptions": {
     "target": "es2024",
@@ -11,13 +11,14 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    // The scripts in tools/ are JS. checkJs type-checks them with what TS can infer, plus JSDoc where that falls short.
-    "allowJs": true,
-    "checkJs": true,
     "noEmit": true,
     // packages/sim is TypeScript that Node runs by stripping the types, so its imports name the .ts files. Every
     // project that reaches it (the game, the tools) checks those files too.
     "allowImportingTsExtensions": true,
+    // The sim's rules, kept everywhere: type-only imports say `import type`, and nothing that stripping types cannot
+    // erase (enums, parameter properties, namespaces).
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "strict": true,
     // A parameter that is never read is named with a leading _, which keeps a shared signature (every strategy hook
     // takes S) without hiding a mistake. Biome's noUnusedFunctionParameters asks the same.

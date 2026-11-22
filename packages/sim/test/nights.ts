@@ -2,7 +2,8 @@
 // seed, with the harness's fake clock and its scripted guards, boiled down to a summary small enough to read in a
 // snapshot diff. The digests change with any change to what happened in the night; the rest says roughly how.
 import { createHash } from 'node:crypto';
-import { failures, play, scenarios } from '../../../tools/balance/harness.ts';
+import { play, scenarios } from '../../../tools/balance/harness.ts';
+import { defined } from '../src/check.ts';
 import type { NightState, SimEvent } from '../src/types.ts';
 
 export interface NightSummary {
@@ -43,10 +44,14 @@ export const countEvents = (events: SimEvent[]): string => {
     .join(', ');
 };
 
+export const scenario = (name: string) =>
+  defined(
+    scenarios.find(s => s.name === name),
+    `the harness scenario ${name}`
+  );
+
 export function playNight(name: string, seed: number): NightSummary {
-  const sc = scenarios.find(s => s.name === name);
-  if (!sc) throw new Error(`the harness has no scenario named ${name}`);
-  failures.length = 0;
+  const sc = scenario(name);
   const events: SimEvent[] = [];
   let seen = 0,
     ticks = 0,
@@ -58,8 +63,7 @@ export function playNight(name: string, seed: number): NightSummary {
       last = S;
     },
   });
-  const S = last as NightState | null;
-  if (!S) throw new Error(`${name} took no steps`);
+  const S = defined(last as NightState | null, `a step of ${name}`);
   return {
     outcome: S.phase,
     ticks,
@@ -72,6 +76,6 @@ export function playNight(name: string, seed: number): NightSummary {
     events: countEvents(events),
     eventsDigest: digest(events),
     stateDigest: digest(S),
-    failures: [...failures],
+    failures: out.failures,
   };
 }

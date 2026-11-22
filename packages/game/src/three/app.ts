@@ -4,17 +4,17 @@
 import { dreadF } from '@thick-shift/sim';
 import { defined, isPlaced } from '@thick-shift/sim/check';
 import { MASC } from '@thick-shift/sim/config';
-import { BOXES, EYE, ROOMS3, reaches, roomAt } from '@thick-shift/sim/map';
+import { angDiff, BOXES, dist, EYE, ROOMS3, reaches, roomAt } from '@thick-shift/sim/map';
 import type { EventType, Player, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { query } from '../dom';
-import { client, currentState, game } from '../state';
+import { client, currentState, game, LINGER_S, myPlayer } from '../state';
 import type { EventOf } from '../types';
 import { createActors } from './actors';
 import { createPhone } from './actors/phone';
 import { createHud, where } from './hud';
 import { createOutlines } from './outline';
-import { createPlayer, prefs } from './player';
+import { createPlayer, prefs, TORCH_FULL } from './player';
 import { createPost } from './post';
 import { createSlats } from './slats';
 import { createSound } from './sound';
@@ -24,13 +24,16 @@ import { buildWorld } from './world';
 let app: ReturnType<typeof create> | null = null;
 const FOG = 0.037,
   FOG_DREAD = 0.03; // fog density on a quiet night, and what a bad one adds
-const TORCH_FULL = 60; // the torch's intensity on a full battery (player.ts)
+const HUNTING: ReadonlySet<string> = new Set(['hunt', 'windup', 'charge', 'search']);
 
 function create() {
   const stage = query(document, '.ts-stage', HTMLDivElement); // in each app's index.html
   const canvas = document.createElement('canvas');
   canvas.id = 'c3';
-  stage.append(canvas);
+  // The HUD's element. The task panel goes in it first, because the guard needs the panel and the HUD needs the guard.
+  const root = document.createElement('div');
+  root.className = 'ts-fhud';
+  stage.append(canvas, root);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -43,10 +46,9 @@ function create() {
 
   const world = buildWorld(scene),
     actors = createActors(scene, camera, renderer),
-    player = createPlayer(camera, canvas),
-    hud = createHud(stage, player),
+    player = createPlayer(camera, canvas, createTask(root)),
+    hud = createHud(root, player),
     sound = createSound();
-  player.setTask(createTask(hud.root));
   const outlines = createOutlines(world.parts, actors);
   // post.ts draws the frame and owns its resolution and the torch's shadow map; the torch gets a cheap torch's beam pattern.
   const post = createPost(renderer, player.torch);
@@ -56,7 +58,8 @@ function create() {
   let last = performance.now(),
     lastT = 1e9,
     lastNight = 0,
-    lastEv = 0,
+    lastEv = -1,
+    fear = 0,
     shown = false,
     seat: { x: number; z: number; yaw: number; pitch: number; back: number } | null = null;
 
@@ -64,7 +67,7 @@ function create() {
     if (on === shown) return;
     shown = on;
     canvas.hidden = !on;
-    hud.root.hidden = !on;
+    root.hidden = !on;
     stage.classList.toggle('is-live', on); // the picture has its own grain (post.ts)
     if (!on && document.pointerLockElement === canvas) document.exitPointerLock();
     if (!on) sound.quiet();
@@ -72,7 +75,6 @@ function create() {
 
   // A flat guard can watch a standing teammate (player.me.watch is their id): through their eyes, or with
   // prefs.third from behind and above them. seat is that view, eased between the room's updates.
-  const LINGER = 1.5; // seconds a caught guard lies looking up at what sat on them before the night's end card
   const BACK = 3,
     ABOVE = 2.2,
     AIM = 1.4; // third person: metres behind, camera height, and the height looked at
@@ -88,7 +90,7 @@ function create() {
     seat.x += (p.x - seat.x) * k;
     seat.z += (p.z - seat.z) * k;
     seat.pitch += (p.pitch - seat.pitch) * k;
-    seat.yaw += Math.atan2(Math.sin(p.yaw - seat.yaw), Math.cos(p.yaw - seat.yaw)) * k;
+    seat.yaw += angDiff(p.yaw, seat.yaw) * k;
     if (!prefs.third) {
       camera.position.set(seat.x, EYE, seat.z);
       camera.rotation.set(seat.pitch, seat.yaw + Math.PI, 0, 'YXZ');
@@ -169,9 +171,7 @@ function create() {
     const S = currentState(),
       me = player.me;
     let worst = 0;
-    for (const m of S.m)
-      if (['hunt', 'windup', 'charge', 'search'].includes(m.st))
-        worst = Math.max(worst, (m.st === 'search' ? 0.5 : 1) * Math.max(0, 1 - Math.hypot(m.x - me.x, m.z - me.z) / 16));
+    for (const m of S.m) if (HUNTING.has(m.st)) worst = Math.max(worst, (m.st === 'search' ? 0.5 : 1) * Math.max(0, 1 - dist(m, me) / 16));
     return worst;
   }
 
@@ -184,17 +184,20 @@ function create() {
       last = now;
       show(true);
       post.fit(canvas, camera);
-      const mine = S.players.find(p => p.id === game.myId);
+      const mine = myPlayer(S);
       // A night began: another night, or this one from the start. A room brought back from storage can rewind the
       // clock by the two seconds since its last save, which is not a new night.
       if ((S.night !== lastNight || S.t < lastT - 3) && mine?.x != null) {
         player.reset(mine);
         actors.reset();
+        hud.reset();
       }
       if (mine?.x != null) {
         lastT = S.t;
         lastNight = S.night;
       }
+      // Created part way through a night: what has happened has happened (sound.ts does the same).
+      if (lastEv < 0) lastEv = S.evId;
       for (const e of S.evs)
         if (e.id > lastEv) {
           lastEv = e.id;
@@ -203,13 +206,13 @@ function create() {
         }
       player.update(S, dt, now);
       spectate(S, dt);
-      const dread = dreadF(S),
-        fear = threat();
+      const dread = dreadF(S);
+      fear = threat();
       fog.density = FOG + FOG_DREAD * dread;
       world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
       actors.sync(S, dt, player.me, player.torch); // also runs the catch, which takes the camera
-      // The end card (ui.ts) waits until LINGER after the catch is over, however long a slow machine takes over it.
-      if (actors.scare.active) client.holdUntil = Math.max(client.holdUntil, now + LINGER * 1000);
+      // The end card (ui.ts) waits until LINGER_S after the catch is over, however long a slow machine takes over it.
+      if (actors.scare.active) client.holdUntil = Math.max(client.holdUntil, now + LINGER_S * 1000);
       phone.update(S, player.me, dt, now, actors.scare.active);
       slats.update(S, player.me, dt, actors.scare.active);
       sound.update(S, player.me, dt);
@@ -217,7 +220,8 @@ function create() {
       post.render(scene, camera, now, fear, dread, world.stop, outlines.pick(S, player.me, t));
       actors.after();
     },
-    threat,
+    // The threat this frame's tick worked out, for the heartbeat (main.ts).
+    threat: () => fear,
     player,
     actors,
     world,

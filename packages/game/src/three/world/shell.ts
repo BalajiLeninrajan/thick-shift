@@ -8,13 +8,13 @@
 import { defined } from '@thick-shift/sim/check';
 import { STAGE } from '@thick-shift/sim/data';
 import type { Doorway } from '@thick-shift/sim/map';
-import { BOOTH, DOOR_H, DOORWAYS, DUCTS, REST, ROOMS3, roomAt, slabs, walls } from '@thick-shift/sim/map';
+import { BOOTH, DOOR_H, DOORWAYS, DUCTS, REST, roomAt, slabs, walls } from '@thick-shift/sim/map';
 import * as THREE from 'three';
 import type { Pics } from './art';
-import { ART, NAME_CELL, uvOf } from './art';
+import { ART, NAME_CELL, NAMES_SIZE, uvOf } from './art';
 import type { UV, Vec3 } from './geo';
-import { Batch, rgbOf } from './geo';
-import { roomData } from './sight';
+import { Batch, getOr, rgbOf } from './geo';
+import { roomData, roomOf } from './sight';
 import type { Materials } from './surfaces';
 import { LOOK, SPAN } from './surfaces';
 
@@ -116,11 +116,11 @@ const PIPES: Pipe[] = [
   [[10.6, 4.5, 6.2], [26.4, 4.5, 6.2], 0.03, BLACK],
   ...[12, 18.5, 25].flatMap(x => [2.6, 6.2].map((z): Pipe => [[x, 4.5, z], [x, 5.2, z], 0.012, BLACK])),
 ];
-// Boxes: [x0, y0, z0, x1, y1, z1, colour]. The kitchen's extract duct, and the stage's arch with its gilt edge.
+// Solid boxes: [x0, y0, z0, x1, y1, z1, colour]. The kitchen's extract duct, and the stage's arch with its gilt edge.
 const BURGUNDY = '#4a1216',
   GILT = '#a8862a';
 type Solid = [x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, col: string];
-const BOXES: Solid[] = [
+const SOLIDS: Solid[] = [
   [29, 3.05, 11.7, 41, 3.5, 12.5, GALV],
   [30.9, 2.45, 11.7, 33, 3.05, 12.6, GALV],
   [10, 0, STAGE.edge - 0.2, 10.32, 5.2, STAGE.edge + 0.2, BURGUNDY],
@@ -136,19 +136,13 @@ function sideOf(d: Doorway, low: boolean): number {
     cx = (x0 + x1) / 2,
     cz = (z0 + z1) / 2;
   const at: [number, number] = d.axis === 'x' ? [low ? x0 - 0.2 : x1 + 0.2, cz] : [cx, low ? z0 - 0.2 : z1 + 0.2];
-  return ROOMS3.findIndex(r => r.rects.some(([a0, b0, a1, b1]) => at[0] >= a0 && at[0] <= a1 && at[1] >= b0 && at[1] <= b1));
+  return roomOf(...at);
 }
 
 // mats: from surfaces(). pics: from art(). trim: the batch for small solid parts, which the caller turns into a mesh.
 export function buildShell(scene: THREE.Scene, mats: Materials, pics: Pics, trim: Batch): void {
   const batches = new Map<THREE.MeshStandardMaterial, Batch>(),
-    on = (mat: THREE.MeshStandardMaterial): Batch => {
-      const known = batches.get(mat);
-      if (known) return known;
-      const batch = new Batch();
-      batches.set(mat, batch);
-      return batch;
-    };
+    on = (mat: THREE.MeshStandardMaterial): Batch => getOr(batches, mat, () => new Batch());
   // mats.rooms and LOOK have an entry for each room
   const matsOf = (r: number) => defined(mats.rooms[r], `room ${r}'s materials`),
     lookOf = (r: number) => defined(LOOK[r], `room ${r}'s look`);
@@ -238,7 +232,7 @@ export function buildShell(scene: THREE.Scene, mats: Materials, pics: Pics, trim
       // The name of the room through the door: over it where there is wall to
       // paint on, beside it in a low room, and on the floor where the door fills the wall.
       const nameW = defined(pics.nameWidth[there], `the name of room ${there}`),
-        uv = uvOf([(there % 2) * NAME_CELL[0] + (NAME_CELL[0] - nameW) / 2, (there >> 1) * NAME_CELL[1], nameW, NAME_CELL[1]], 1024, 512);
+        uv = uvOf([(there % 2) * NAME_CELL[0] + (NAME_CELL[0] - nameW) / 2, (there >> 1) * NAME_CELL[1], nameW, NAME_CELL[1]], ...NAMES_SIZE);
       const size = (hgt: number): [number, number] => [(nameW / NAME_CELL[1]) * hgt, hgt];
       // the room on this side has a rect whose edge the door is cut in
       const rect = defined(
@@ -271,7 +265,7 @@ export function buildShell(scene: THREE.Scene, mats: Materials, pics: Pics, trim
   }
 
   for (const [a, b, r, col] of PIPES) trim.bar(a, b, r, rgbOf(col));
-  for (const [x0, y0, z0, x1, y1, z1, col] of BOXES) trim.box(x0, y0, z0, x1, y1, z1, rgbOf(col));
+  for (const [x0, y0, z0, x1, y1, z1, col] of SOLIDS) trim.box(x0, y0, z0, x1, y1, z1, rgbOf(col));
   // The ducts are sheet metal boxes bolted end to end; a rib at every joint.
   {
     const ducts = roomData(DUCTS),

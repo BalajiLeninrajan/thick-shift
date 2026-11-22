@@ -32,7 +32,7 @@ export type Phase = 'lobby' | 'play' | 'win' | 'dead' | 'won';
 // What a guard's hands are on while they hold the use key: the generator's crank, the charging dock, or a breaker box.
 export type GuardAct = '' | 'crank' | 'charge' | 'fix';
 
-// A guard as they join the room: what net.ts knows before their first night places them.
+// A guard as they join the room (joinFloor), before their first night places them.
 export interface Joined {
   id: string; // made up by the guard's own page (newId in packages/game/src/net.ts)
   name: string;
@@ -57,7 +57,7 @@ export interface Guard extends Joined {
   toy: boolean; // holding their Mini Biggs
 }
 // A guard in S.players at any time: a guard who joined after the night began has only their id and name until the
-// next step places them (stepFloor), and a state from before the toys has no toy.
+// next step places them (stepFloor).
 export type Player = Joined & Partial<Omit<Guard, keyof Joined>>;
 
 // What a mascot is doing. rest: standing on its mark, switched off. roam: walking somewhere. search: going to look at
@@ -163,7 +163,7 @@ export type SimEvent = {
   [K in EventType]: EventData[K] extends undefined ? { id: number; type: K; x?: undefined } : { id: number; type: K; x: EventData[K] };
 }[EventType];
 
-// A room's state before its first night (newState). deaths and slams count the whole run.
+// A room's state before its first night (newState). deaths counts the whole run.
 export interface LobbyState {
   phase: Phase;
   night: number;
@@ -176,7 +176,6 @@ export interface LobbyState {
   evs: SimEvent[]; // the last ten events
   evId: number;
   deaths: number;
-  slams: number;
   code: string;
   dev?: Partial<Dev>;
 }
@@ -192,15 +191,13 @@ export interface NightState extends LobbyState {
   waveAt: number; // S.t when the mascots next stir or settle
   faults: (Fault | null)[]; // one per breaker box (BOXES)
   tally: Tally; // this night's
-  total: Tally | null; // the whole run's; null only between restartFloor and the night it starts
-  flats?: number; // guards flattened over the run
+  total: Tally; // the whole run's
   batN: number; // the night's batteries, lying about or due back
   bats: number[]; // the BATTERY_SPOTS that have one lying there
   toys: Toy[];
   toyId: number;
 }
-// S as it is sent and received: a lobby state, or a night's. A state from a build before some fields existed (batN,
-// waveAt, toys) may not have them; adoptFloor fills them in.
+// S as it is sent and received: a lobby state, or a night's.
 export type State = LobbyState & Partial<Omit<NightState, keyof LobbyState>>;
 
 /* ---------- the mascots' thinking ---------- */
@@ -213,8 +210,7 @@ export interface Reach {
   z: number;
   t: number;
 }
-// What one mascot is thinking. It is never sent. Browsers get the result (m.st, m.x, m.z, m.yaw). since, was and
-// noShort are added the first time they are needed, after the rest, so a brain's keys keep today's order.
+// What one mascot is thinking. It is never sent. Browsers get the result (m.st, m.x, m.z, m.yaw).
 export interface Brain {
   path: Point[];
   repath: number;
@@ -238,11 +234,11 @@ export interface Brain {
   knows: number; // the locker it saw a guard step into, or -1
   sniff: number;
   checks: number[]; // the lockers it means to look in
-  since?: number;
-  was?: MascotState;
-  noShort?: number;
-  near?: number | undefined; // how close it has come to where it last saw its guard since it lost them
-  nearAt?: number; // and when it last got closer
+  since: number; // S.t when it took up what it is doing now
+  was: MascotState | null; // what that is, as of its last think; null before the first
+  noShort: number; // S.t before which it will not cut straight across to its guard again
+  near: number; // how close it has come to where it last saw its guard since it lost them
+  nearAt: number; // and when it last got closer
 }
 
 /* ---------- the wire ---------- */

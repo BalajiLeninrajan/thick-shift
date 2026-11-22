@@ -1,7 +1,7 @@
 --!nonstrict
 -- The night, ported from packages/sim/src/sim.ts. The server owns one Sim and steps it; clients get S. Read the JS
 -- file for why each number is what it is: the comments there are the tuning record, and this port keeps the same
--- numbers and the same order of random draws so tools/roblox/diff-sim checks it tick by tick against the original.
+-- numbers and the same order of random draws so tools/roblox/diff/run.sh checks it tick by tick against the original.
 --
 -- Index-valued fields in S (m.i, flatBy, killer, a fault's box, p.hid, S.bats) stay 0-based, as on the web.
 -- S.faults holds false where the JS holds null.
@@ -119,7 +119,6 @@ end
 local Sim = {}
 Sim.__index = Sim
 Sim.F = F
-Sim.TOY = TOY
 
 function Sim.hourF(S): number
 	return math.min(6, math.floor(S.t / F.HOUR))
@@ -263,11 +262,11 @@ local function newBrain(timer: number)
 		knows = -1,
 		sniff = 0,
 		checks = {},
-		was = nil,
 		since = 0,
-		noShort = nil,
-		near = nil,
-		nearAt = nil,
+		was = nil,
+		noShort = 0,
+		near = math.huge,
+		nearAt = 0,
 	}
 end
 
@@ -297,7 +296,6 @@ function Sim.new(code: string, rng: (() -> number)?)
 		evs = {},
 		evId = 0,
 		deaths = 0,
-		slams = 0,
 		code = code,
 	}
 	return self
@@ -343,10 +341,6 @@ function Sim:removePlayer(id: string)
 	end
 end
 
-function Sim:brainOf(i: number)
-	return self.brains[i + 1]
-end
-
 function Sim:startNight(n: number)
 	local S = self.S
 	S.phase, S.night, S.t, S.power, S.cap, S.out, S.restart, S.stir = "play", n, 0, 100, 100, false, 0, false
@@ -371,8 +365,6 @@ function Sim:startNight(n: number)
 		placeGuard(p, i - 1)
 	end
 	S.players = all
-	-- The web game shuffles with sort(() => Math.random() - .5); this is a Fisher-Yates shuffle, which the
-	-- differential test patches the JS to use as well.
 	local spots = {}
 	for i = 1, #BATTERY_SPOTS do
 		spots[i] = i - 1
@@ -392,7 +384,7 @@ end
 
 function Sim:restart()
 	local S = self.S
-	S.deaths, S.slams, S.flats, S.total = 0, 0, 0, nil
+	S.deaths, S.total = 0, newTally()
 	self:startNight(1)
 end
 
@@ -706,7 +698,7 @@ function Sim:goTo(m, b, goal, speed: number, dt: number, eager: boolean): string
 			and #r.path > 1
 			and not r.blocked
 			and dist(m, goal) < 4
-			and not (b.noShort and b.noShort > S.t)
+			and b.noShort <= S.t
 			and clear(m.x, m.z, goal.x, goal.z, PLAYER_R, S.doors)
 		then
 			b.path = { goal }
@@ -760,7 +752,6 @@ function Sim:flatten(p, m, b)
 		return
 	end
 	p.flat, p.on, p.ph, p.flatBy, p.act, p.hid = true, false, false, m.i, "", -1
-	S.flats = (S.flats or 0) + 1
 	record(S, "flats", { p.name, m.i })
 	self:emit("flat", { id = p.id, by = m.i, x = p.x, z = p.z })
 	p.bat *= FLAT_BAT
@@ -798,7 +789,7 @@ function Sim:spot(m, b, p)
 	b.tgt = p.id
 	b.last = { x = p.x, z = p.z }
 	b.lost = 0
-	b.near = nil
+	b.near = math.huge
 end
 
 function Sim:openLockers(m, b, dt: number): boolean
@@ -1041,7 +1032,6 @@ function Sim:runMascot(m, b, dt: number)
 			return
 		end
 		self:emit("bang", b.key)
-		S.slams += 1
 		m.ire += BANG_IRE
 		b.bangs += 1
 		if self.rng() < FAULT.bang then
@@ -1102,14 +1092,14 @@ function Sim:runMascot(m, b, dt: number)
 			b.lost = 0
 		elseif tp and not tp.flat and not hidden(tp) and b.lost < keeps then
 			b.last = { x = tp.x, z = tp.z }
-			b.near = nil
+			b.near = math.huge
 		end
 		local d = dist(m, b.last)
-		if b.near == nil or d < b.near - 0.3 then
+		if d < b.near - 0.3 then
 			b.near = d
 			b.nearAt = S.t
 		end
-		if not tp or tp.flat or S.t - (b.nearAt or S.t) > NEAREST then
+		if not tp or tp.flat or S.t - b.nearAt > NEAREST then
 			m.st = "search"
 			b.timer = self:rnd(4, 7)
 		end
@@ -1268,7 +1258,7 @@ end
 
 --[[ the tick ]]
 
--- dt is real seconds since the last step; the caller caps it (the web game caps at .25).
+-- dt is real seconds since the last step, capped at a quarter second as stepFloor caps it.
 function Sim:step(dt: number)
 	local S = self.S
 	dt = math.min(0.25, dt) * (S.dev and S.dev.speed or 1)
@@ -1325,15 +1315,12 @@ local function num(v: any, lo: number, hi: number, fallback: number): number
 	return if Util.isFinite(v) then math.max(lo, math.min(hi, v)) else fallback
 end
 
--- One guard's action. a.t: 'name', 'p' (where they are and what they hold), 'call', or 'use' with a.what.
+-- One guard's action. a.t: 'p' (where they are and what they hold), 'call', 'throw', or 'use' with a.what. There is
+-- no 'name': the server takes names from Roblox.
 function Sim:act(pid: string, a: any)
 	local S = self.S
 	local p = self.players[pid]
 	if not p or type(a) ~= "table" then
-		return
-	end
-	if a.t == "name" then
-		p.name = string.sub(tostring(a.n or "Guard"), 1, 12)
 		return
 	end
 	if S.phase ~= "play" or p.x == nil then
@@ -1449,7 +1436,7 @@ function Sim:act(pid: string, a: any)
 		table.remove(S.toys, k)
 		p.toy = true
 		self:emit("grab", { by = p.id, x = t.x, z = t.z })
-	elseif a.what == "hide" and HIDES[i + 1] and i >= 0 then
+	elseif a.what == "hide" and HIDES[i + 1] then
 		local h = HIDES[i + 1]
 		if p.hid == i then
 			p.hid = -1

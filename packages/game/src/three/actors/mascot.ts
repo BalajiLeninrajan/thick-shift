@@ -8,24 +8,20 @@ import { lightsF } from '@thick-shift/sim';
 import { isPlaced } from '@thick-shift/sim/check';
 import type { MascotKind } from '@thick-shift/sim/config';
 import { MASC } from '@thick-shift/sim/config';
-import { EYE, glimpses, MASCOT_R } from '@thick-shift/sim/map';
+import { angDiff, dist, EYE, glimpses, MASCOT_R } from '@thick-shift/sim/map';
 import type { MascotIndex, MascotState, Mascot as SimMascot, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
-import { context2d } from '../../dom';
 import type { View } from '../actors';
+import type { ModelStage } from '../assets';
 import { EYE_PALE, instance, loadActor, loadJSON } from '../assets';
 import type { Part, Rig } from './rig';
-import { bounds, buildRig, eachMesh, lag } from './rig';
-import type { Channels, PerStage, Stage, StageInfo, Style } from './styles';
-import { C, CHANNELS, channels, hash, isLitState, isStage, RATE, standIn, styleOf } from './styles';
-import { hostClock, Track, wrap } from './track';
+import { bounds, buildRig, eachMesh, glowTexture, lag } from './rig';
+import type { PerStage, Stage, Style } from './styles';
+import { CH, hash, isLitState, isStage, RATE, standIn, styleOf, ZERO } from './styles';
+import { nightClock, TAU, Track } from './track';
 
-const TAU = Math.PI * 2,
-  clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
-const smooth = (u: number): number => {
-  u = clamp(u, 0, 1);
-  return u * u * (3 - 2 * u);
-};
+const { clamp } = THREE.MathUtils,
+  smooth = (u: number): number => THREE.MathUtils.smoothstep(u, 0, 1);
 // Rises over `up` of the span, holds, and falls over the last `down`.
 const bump = (u: number, up: number, down: number): number => smooth(u / up) * smooth((1 - u) / down);
 // Where a foot is through the walk cycle, from -1 (as far ahead as it lands) to 1 (as far behind as it lifts): the
@@ -40,19 +36,9 @@ const SEAT_LOCAL = 0.8,
 
 // One soft point, drawn over every eye_glow so the eyes still read as two
 // pale points when the head is twenty metres away and three pixels wide.
-let haloTex: THREE.CanvasTexture | null = null;
+let haloTex: THREE.CanvasTexture | undefined;
 function haloTexture(): THREE.CanvasTexture {
-  if (haloTex) return haloTex;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = 32;
-  const c = context2d(cv),
-    g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
-  g.addColorStop(0, '#fff');
-  g.addColorStop(0.25, 'rgba(255,255,255,.55)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  c.fillStyle = g;
-  c.fillRect(0, 0, 32, 32);
-  haloTex = new THREE.CanvasTexture(cv);
+  haloTex ??= glowTexture(0.25, '255,255,255', 0.55);
   return haloTex;
 }
 const HALO_SIZE: PerStage<number> = [0.1, 0.085, 0.05],
@@ -66,7 +52,7 @@ const v = new THREE.Vector3(),
 // One model, made ready to animate (Mascot.fit): its rig and style, the halo sprites over its eye_glows and their
 // material, the part that carries the face and where the face is in that part's space, its rot stage, whether it is
 // a real model (not the stand-in), and how tall it is.
-export interface Fitted {
+interface Fitted {
   model: THREE.Object3D;
   rig: Rig;
   style: Style;
@@ -80,103 +66,65 @@ export interface Fitted {
 }
 
 export class Mascot {
-  declare i: MascotIndex;
-  declare def: MascotKind;
-  declare renderer: THREE.WebGLRenderer;
-  declare group: THREE.Group;
-  declare pivot: THREE.Group;
-  declare track: Track;
-  declare ch: Channels;
-  declare cv: Channels;
-  declare fits: [Fitted | null, Fitted | null, Fitted | null];
-  declare asked: [boolean, boolean, boolean];
-  declare cur: Fitted;
-  declare rot: number;
-  declare onScreen: THREE.Sphere;
-  declare t: number;
-  declare gt: number;
-  declare phase: number;
-  declare walk: number;
-  declare live: number;
-  declare hop: number;
-  declare st: MascotState;
-  declare lit: boolean;
-  declare seen: boolean;
-  declare lookT: number;
-  declare dist: number;
-  declare lookY: number;
-  declare lookP: number;
-  declare lookVY: number;
-  declare beat: number;
-  declare offY: number;
-  declare offP: number;
-  declare side: number;
-  declare aimY: number;
-  declare aimP: number;
-  declare eyeY: number;
-  declare eyeP: number;
-  declare kLunge: number;
-  declare kSlam: number;
-  declare kLand: number;
-  declare kFlare: number;
-  declare kRecoil: number;
-  declare kSpot: number;
-  declare seat: { on: boolean; x: number; z: number; yaw: number; w: number; v: number; turn: number };
-  declare scareOn: boolean;
-  declare scareW: number;
-  declare scareBite: number;
-  declare face: THREE.Vector3;
+  i: MascotIndex;
+  def: MascotKind;
+  renderer: THREE.WebGLRenderer;
+  group = new THREE.Group();
+  pivot = new THREE.Group();
+  track = new Track();
+  ch = { ...ZERO };
+  cv = { ...ZERO };
+  fits: [Fitted | null, Fitted | null, Fitted | null] = [null, null, null];
+  asked = [false, false, false];
+  cur: Fitted;
+  onScreen = new THREE.Sphere();
+  // Its own clock, and one that stops when a beam freezes it.
+  t: number;
+  gt: number;
+  phase: number;
+  walk = 0;
+  live = 1;
+  hop = 0;
+  st: MascotState = 'rest';
+  lit = false;
+  seen = true;
+  lookT: number;
+  dist = 0;
+  lookY = 0;
+  lookP = 0;
+  lookVY = 0;
+  beat = -1;
+  offY = 0;
+  offP = 0;
+  side = 1;
+  aimY = 0;
+  aimP = 0;
+  eyeY = 0;
+  eyeP = 0;
+  // Kicks: set to 1 by an event, and they die away. Each adds a fast move on top of the pose.
+  kLunge = 0;
+  kSlam = 0;
+  kLand = 0;
+  kFlare = 0;
+  kRecoil = 0;
+  kSpot = 0;
+  seat = { on: false, x: 0, z: 0, yaw: 0, w: 0, v: 0, turn: 0 };
+  scareOn = false;
+  scareW = 0;
+  scareBite = 0;
+  face = new THREE.Vector3(); // where its face is in the world, for the jumpscare
   constructor(scene: THREE.Scene, i: MascotIndex, renderer: THREE.WebGLRenderer) {
     this.i = i;
     this.def = MASC[i];
     this.renderer = renderer;
-    this.group = new THREE.Group();
-    this.pivot = new THREE.Group();
     this.group.add(this.pivot);
     scene.add(this.group);
-    this.track = new Track();
-    this.ch = channels();
-    this.cv = channels();
-    this.fits = [null, null, null];
-    this.asked = [false, false, false];
-    this.cur = this.fit(standIn(this.def), 0, null, false);
+    this.cur = this.fit(standIn(this.def), 0, undefined, false);
     this.pivot.add(this.cur.model);
-    this.rot = 0;
-    this.onScreen = new THREE.Sphere();
     this.t = i * 7.3;
-    this.gt = i * 3.1; // its own clock, and one that stops when a beam freezes it
+    this.gt = i * 3.1;
     this.phase = i * 0.37;
-    this.walk = 0;
-    this.live = 1;
-    this.hop = 0;
-    this.st = 'rest';
-    this.lit = false;
-    this.seen = true;
     this.lookT = i * 0.05;
-    this.dist = 0;
-    this.lookY = 0;
-    this.lookP = 0;
-    this.lookVY = 0;
-    this.beat = -1;
-    this.offY = 0;
-    this.offP = 0;
-    this.side = 1;
-    this.aimY = 0;
-    this.aimP = 0;
-    this.eyeY = 0;
-    this.eyeP = 0;
-    // Kicks: set to 1 by an event, and they die away. Each adds a fast move on top of the pose.
-    this.kLunge = 0;
-    this.kSlam = 0;
-    this.kLand = 0;
-    this.kFlare = 0;
-    this.kRecoil = 0;
-    this.kSpot = 0;
-    this.seat = { on: false, x: 0, z: 0, yaw: 0, w: 0, v: 0, turn: 0 };
-    this.scareOn = false;
-    this.scareW = 0;
-    this.scareBite = 0;
-    this.face = new THREE.Vector3(); // where its face is in the world, for the jumpscare
     this.load(0);
   }
 
@@ -200,9 +148,9 @@ export class Mascot {
     });
   }
 
-  fit(model: THREE.Object3D, stage: Stage, info: StageInfo | null | undefined, real: boolean): Fitted {
+  fit(model: THREE.Object3D, stage: Stage, info: ModelStage | undefined, real: boolean): Fitted {
     const rig = buildRig(model),
-      style = styleOf(this.def.k, stage, rig, info);
+      style = styleOf(this.def.k, stage, rig);
     const haloMat = new THREE.SpriteMaterial({ map: haloTexture(), color: EYE_PALE, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
     const halos: THREE.Sprite[] = [];
     // Only the stand-in's glints and the eye_glow meshes carry userData.glow. The halo hangs from the glint's parent,
@@ -221,11 +169,10 @@ export class Mascot {
       halos.push(s);
     });
     // The face: the manifest gives it in model space; keep it in the space of the part that carries it.
-    const lookers = style.looker ? rig.chain(style.looker) : null,
-      carrier = lookers?.at(-1) ?? (rig.has.head ? rig.head : rig.body);
+    const carrier = rig.chains[style.looker]?.at(-1) ?? (rig.has.head ? rig.head : rig.body);
     const facePoint = new THREE.Vector3(...(info?.face || [0, rig.headH + 0.25, 0.45]));
     model.updateWorldMatrix(true, true);
-    if (carrier.o) carrier.o.worldToLocal(model.localToWorld(facePoint));
+    carrier.o.worldToLocal(model.localToWorld(facePoint));
     box.setFromObject(model);
     return { model, rig, style, halos, haloMat, carrier, facePoint, stage, real, height: info?.height || box.max.y };
   }
@@ -279,27 +226,26 @@ export class Mascot {
     this.scareOn = false;
     this.scareW = 0;
     this.scareBite = 0;
-    this.ch.fill(0);
-    this.cv.fill(0);
+    Object.assign(this.ch, ZERO);
+    Object.assign(this.cv, ZERO);
   }
 
   /* ---------- the frame ---------- */
 
-  // view: { x, y, z } of the camera, id of the guard watching, flat (they are on the floor), torch (their beam is on).
+  // view: { x, y, z } of the camera, id of the guard watching, flat (they are on the floor).
   sync(m: SimMascot, S: State, dt: number, view: View): void {
     const tr = this.track,
       st = m.st;
-    if (hostClock.fresh) tr.push(S.t, m.x, m.z, m.yaw);
-    tr.sample(hostClock.now, dt);
-    this.rot = m.rot || 0;
-    this.load(this.rot);
+    if (nightClock.fresh) tr.push(S.t, m.x, m.z, m.yaw);
+    tr.sample(nightClock.now, dt);
+    this.load(m.rot);
     const litSt = m.lit && isLitState(st) ? st : null,
       lit = litSt !== null;
 
     // Can the camera see any of it? Only walls and shut doors count: sees() also stops at furniture, which is the
     // sim's rule for hiding, but a table hides none of a mascot from the eye. Lines across its whole width, close
     // enough together that one half in view past a door jamb is not hidden with the rest.
-    this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
+    this.dist = dist(tr, view);
     this.lookT -= dt;
     if (this.lookT <= 0) {
       this.lookT = LOOK_EVERY;
@@ -311,7 +257,7 @@ export class Mascot {
     const sph = this.onScreen;
     sph.center.set(tr.x, this.cur.height / 2, tr.z);
     sph.radius = this.cur.height * 0.6 + 0.6;
-    this.stage(this.rot, !this.seen || !view.frustum.intersectsSphere(sph));
+    this.stage(m.rot, !this.seen || !view.frustum.intersectsSphere(sph));
     const fit = this.cur,
       rig = fit.rig,
       style = fit.style,
@@ -340,7 +286,7 @@ export class Mascot {
 
     // Channels spring toward the pose of the state (critically damped, so they neither pop nor ring).
     const pose = this.scareOn ? style.poses.scare : litSt ? style.poses.lit[litSt] : style.poses[st];
-    for (const k of CHANNELS) {
+    for (const k of CH) {
       const w = RATE[k],
         d = ch[k] - pose[k],
         tmp = (cv[k] + w * d) * dt,
@@ -383,7 +329,7 @@ export class Mascot {
 
     const x = tr.x + (seat.x - tr.x) * seat.w,
       z = tr.z + (seat.z - tr.z) * seat.w,
-      yaw = tr.yaw + wrap(seat.yaw - tr.yaw) * seat.turn;
+      yaw = tr.yaw + angDiff(seat.yaw, tr.yaw) * seat.turn;
     this.group.position.set(x, 0, z);
     this.group.rotation.y = yaw;
     this.group.visible = this.seen;
@@ -391,7 +337,7 @@ export class Mascot {
 
     /* gait */
     const p = this.phase,
-      wk = this.walk * ch[C.legs],
+      wk = this.walk * ch.legs,
       s2 = Math.sin(TAU * p),
       c2 = Math.cos(TAU * p),
       body = rig.body,
@@ -456,10 +402,10 @@ export class Mascot {
 
     /* idle: breath and shifting weight */
     const alive = this.live,
-      br = ch[C.breath] * alive,
-      swy = ch[C.sway] * alive;
+      br = ch.breath * alive,
+      swy = ch.sway * alive;
     body.s *= 1 + 0.012 * br * Math.sin(this.gt * 1.6);
-    if (!style.floats && g.mode !== 'glide') {
+    if (g.mode !== 'float' && g.mode !== 'glide') {
       body.rz += 0.018 * swy * Math.sin(this.gt * 0.47);
       body.px += 0.02 * swy * Math.sin(this.gt * 0.47);
       body.rx += 0.01 * swy * Math.sin(this.gt * 0.31 + 1);
@@ -470,28 +416,29 @@ export class Mascot {
       recoil = this.kRecoil,
       land = this.kLand,
       lunge = this.kLunge;
-    body.rx += ch[C.lean] + slam * 0.45 - recoil * 0.5 + lunge * 0.22;
+    body.rx += ch.lean + slam * 0.45 - recoil * 0.5 + lunge * 0.22;
     root.pz += slam * 0.3 - recoil * 0.25 + lunge * 0.25 + this.scareBite * 0.15;
-    const jawMove = ch[C.jaw] + lunge * 0.6 + slam * 0.5;
+    const jawMove = ch.jaw + lunge * 0.6 + slam * 0.5;
     rig.jaw.rx += clamp(jawMove, 0, 1.15) * style.jaw;
     const armUp = slam * 1.3; // the arms come down with the hit
-    rig.arm_L.rx += ch[C.armL] + armUp;
-    rig.arm_R.rx += ch[C.armR] + armUp;
-    rig.arm_L.rz += ch[C.out];
-    rig.arm_R.rz -= ch[C.out];
-    rig.forearm_L.rx += ch[C.fore];
-    rig.forearm_R.rx += ch[C.fore];
+    rig.arm_L.rx += ch.armL + armUp;
+    rig.arm_R.rx += ch.armR + armUp;
+    rig.arm_L.rz += ch.out;
+    rig.arm_R.rz -= ch.out;
+    rig.forearm_L.rx += ch.fore;
+    rig.forearm_R.rx += ch.fore;
     // Sitting: the rear comes down hard and the legs go out in front.
-    const sit = ch[C.sit];
+    const sit = ch.sit;
     // It settles its weight, and bounces a little. A floater comes down to hover on them.
-    const drop = style.floats ? sit * (fit.height * 0.3 + Math.sin(this.t * 2.2) * 0.04) : sit * (h * style.sit - Math.abs(Math.sin(this.t * 2.2)) * 0.04);
+    const drop =
+      g.mode === 'float' ? sit * (fit.height * 0.3 + Math.sin(this.t * 2.2) * 0.04) : sit * (h * style.sit - Math.abs(Math.sin(this.t * 2.2)) * 0.04);
     // A crouch needs knees. Without shins the legs cannot shorten, so it stays up.
-    const crouch = rig.has.shin_L ? clamp(ch[C.drop], 0, h * 0.4) : 0,
+    const crouch = rig.has.shin_L ? clamp(ch.drop, 0, h * 0.4) : 0,
       bend = Math.acos(1 - crouch / h);
     root.py -= drop + crouch;
     // The shudder: stepped noise, held between steps.
     const tick = Math.floor(this.t * STEP_HZ) + this.i * 50,
-      shake = ch[C.shake] + lunge * 0.6 + this.kSpot * 0.5;
+      shake = ch.shake + lunge * 0.6 + this.kSpot * 0.5;
     if (shake > 0.01) {
       body.rz += shake * 0.035 * (hash(tick) - 0.5);
       body.rx += shake * 0.03 * (hash(tick + 0.3) - 0.5);
@@ -500,7 +447,7 @@ export class Mascot {
       rig.arm_R.rx += shake * 0.16 * (hash(tick + 2) - 0.5);
       rig.head.rz += shake * 0.1 * (hash(tick + 3) - 0.5);
     }
-    const slack = ch[C.slack];
+    const slack = ch.slack;
     if (slack > 0.01) {
       // Hung, not standing: the head lolls and the arms swing a beat late.
       rig.head.rz += slack * 0.12 * Math.sin(this.t * 1.3);
@@ -580,10 +527,10 @@ export class Mascot {
       this.offP = away ? (hash(lb + 7) * 2 - 1) * 0.3 : 0;
       if (style.stage === 1 && hash(lb * 1.3) > 0.8) this.side = -this.side; // the angle it holds its head at flips
     }
-    const tk = ch[C.track],
+    const tk = ch.track,
       free = (1 - tk) * alive;
     const wantY = clamp(
-      (this.aimY + this.offY) * tk + ch[C.sweep] * Math.sin(this.gt * 1.15) * 0.85 + free * Math.sin(this.gt * 0.31 + this.i) * 0.3 + ch[C.headY] * this.side,
+      (this.aimY + this.offY) * tk + ch.sweep * Math.sin(this.gt * 1.15) * 0.85 + free * Math.sin(this.gt * 0.31 + this.i) * 0.3 + ch.headY * this.side,
       -hs.yaw,
       hs.yaw
     );
@@ -605,11 +552,11 @@ export class Mascot {
     rig.neck.rx += hp * neck;
     rig.neck.rz -= body.rz * 0.5;
     rig.head.ry += hy * (1 - neck);
-    rig.head.rx += hp * (1 - neck) + ch[C.headX] + this.kSpot * -0.15;
-    rig.head.rz += ch[C.headZ] * this.side - body.rz * 0.5;
+    rig.head.rx += hp * (1 - neck) + ch.headX + this.kSpot * -0.15;
+    rig.head.rz += ch.headZ * this.side - body.rz * 0.5;
     // The eyes make up what the head could not turn, and never blink.
     this.eyeY = clamp(this.aimY - this.lookY, -hs.eye, hs.eye) * Math.max(tk, 0.3);
-    this.eyeP = clamp(this.aimP - this.lookP - ch[C.headX], -hs.eye, hs.eye) * Math.max(tk, 0.3);
+    this.eyeP = clamp(this.aimP - this.lookP - ch.headX, -hs.eye, hs.eye) * Math.max(tk, 0.3);
     if (style.stage === 0) {
       // Googly: unaware, they wander separately.
       rig.eye_L.ry += this.eyeY + free * Math.sin(this.gt * 0.41 + 1) * 0.35;
@@ -680,6 +627,6 @@ export class Mascot {
     const far = clamp((this.dist - HALO_NEAR) / HALO_NEAR, 0, 1);
     fit.haloMat.opacity += (((lit ? 0.2 : lightsF(S) ? 0.5 : 1) + this.kFlare) * far - fit.haloMat.opacity) * Math.min(1, dt * 8);
     for (const s of fit.halos) s.scale.set(size, size, 1);
-    fit.carrier.o?.localToWorld(this.face.copy(fit.facePoint));
+    fit.carrier.o.localToWorld(this.face.copy(fit.facePoint));
   }
 }

@@ -4,18 +4,17 @@
 // guards: being flattened and being peeled back up.
 
 import { F } from '@thick-shift/sim';
-import { glimpses, PLAYER_R } from '@thick-shift/sim/map';
+import { dist, glimpses, PLAYER_R } from '@thick-shift/sim/map';
 import type { Joined, Guard as SimGuard, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { context2d } from '../../dom';
 import type { View } from '../actors';
 import { instance, loadActor } from '../assets';
 import type { Rig } from './rig';
-import { bounds, buildRig, eachMesh } from './rig';
-import { hostClock, Track } from './track';
+import { bounds, buildRig, eachMesh, glowTexture } from './rig';
+import { nightClock, TAU, Track } from './track';
 
-const TAU = Math.PI * 2,
-  clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+const { clamp } = THREE.MathUtils;
 const TAG_NEAR = 7,
   TAG_FLAT = 25; // metres a name shows from: standing (and in sight), and flat (so someone can find them)
 const THIN = 0.035; // how much of a guard is left, front to back, once flat
@@ -71,18 +70,24 @@ function standIn(): THREE.Object3D {
   return root;
 }
 
-// Where the left hand is: just above the lowest point of arm_L, where the phone goes.
-function handOn(model: THREE.Object3D): THREE.Object3D | null {
-  const arm = model.getObjectByName('arm_L'),
-    box = new THREE.Box3(),
+// The bounds, in arm's own space, of the meshes under it that pass `keep`.
+function boxIn(arm: THREE.Object3D, keep: (m: THREE.Mesh) => boolean): THREE.Box3 {
+  const box = new THREE.Box3(),
     part = new THREE.Box3();
-  if (!arm) return null;
-  model.updateWorldMatrix(true, true);
+  arm.updateWorldMatrix(true, true);
   const back = arm.matrixWorld.clone().invert();
   eachMesh(arm, m => {
-    box.union(part.copy(bounds(m.geometry)).applyMatrix4(back.clone().multiply(m.matrixWorld)));
+    if (keep(m)) box.union(part.copy(bounds(m.geometry)).applyMatrix4(back.clone().multiply(m.matrixWorld)));
   });
-  const at = new THREE.Object3D();
+  return box;
+}
+
+// Where the left hand is: just above the lowest point of arm_L, where the phone goes.
+function handOn(model: THREE.Object3D): THREE.Object3D | null {
+  const arm = model.getObjectByName('arm_L');
+  if (!arm) return null;
+  const box = boxIn(arm, () => true),
+    at = new THREE.Object3D();
   if (box.isEmpty()) at.position.set(0, -0.55, 0.05);
   else {
     box.getCenter(at.position);
@@ -96,17 +101,10 @@ function handOn(model: THREE.Object3D): THREE.Object3D | null {
 // A point on arm_R at the front of the torch (the middle of guard.glb's
 // lamp_glow face), so the lens glow and the lent light go where the torch is.
 function lensOn(model: THREE.Object3D): THREE.Object3D | null {
-  const arm = model.getObjectByName('arm_R'),
-    box = new THREE.Box3(),
-    part = new THREE.Box3();
+  const arm = model.getObjectByName('arm_R');
   if (!arm) return null;
-  model.updateWorldMatrix(true, true);
-  const back = arm.matrixWorld.clone().invert();
-  eachMesh(arm, m => {
-    if (Array.isArray(m.material) || m.material.name !== 'lamp_glow') return;
-    box.union(part.copy(bounds(m.geometry)).applyMatrix4(back.clone().multiply(m.matrixWorld)));
-  });
-  const at = new THREE.Object3D();
+  const box = boxIn(arm, m => !Array.isArray(m.material) && m.material.name === 'lamp_glow'),
+    at = new THREE.Object3D();
   if (box.isEmpty())
     at.position.set(0, 0.05, 0.61); // the stand-in's torch
   else box.getCenter(at.position).setZ(box.max.z + 0.01);
@@ -114,19 +112,9 @@ function lensOn(model: THREE.Object3D): THREE.Object3D | null {
   return at;
 }
 
-let lensTex: THREE.CanvasTexture | null = null;
+let lensTex: THREE.CanvasTexture | undefined;
 function lens(): THREE.CanvasTexture {
-  if (lensTex) return lensTex;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = 32;
-  const c = context2d(cv),
-    g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
-  g.addColorStop(0, '#fff');
-  g.addColorStop(0.3, 'rgba(255,240,208,.6)');
-  g.addColorStop(1, 'rgba(255,240,208,0)');
-  c.fillStyle = g;
-  c.fillRect(0, 0, 32, 32);
-  lensTex = new THREE.CanvasTexture(cv);
+  lensTex ??= glowTexture(0.3, '255,240,208', 0.6);
   return lensTex;
 }
 
@@ -152,50 +140,45 @@ function nameTag(name: string): THREE.Sprite {
 }
 
 export class Guard {
-  declare id: string;
-  declare name: string;
-  declare group: THREE.Group;
-  declare pivot: THREE.Group;
-  declare track: Track;
-  declare glow: THREE.Sprite;
-  declare phone: THREE.Group;
-  declare screen: THREE.Sprite;
+  id: string;
+  name: string;
+  group = new THREE.Group();
+  pivot = new THREE.Group();
+  track = new Track();
+  glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: lens(), blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  // The phone in the left hand, and the green of its screen, which shows across a room.
+  phone = new THREE.Group();
+  screen = new THREE.Sprite(new THREE.SpriteMaterial({ map: lens(), color: 0x8cffb0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  // Set by wear(), which the constructor calls.
   declare model: THREE.Object3D;
   declare rig: Rig;
   declare lens: THREE.Object3D;
-  declare tag: THREE.Sprite;
-  declare phase: number;
-  declare walk: number;
-  declare t: number;
-  declare raise: number;
-  declare busy: number;
-  declare flat: number;
-  declare flatV: number;
-  declare isFlat: boolean;
-  declare seen: boolean;
-  declare lookT: number;
-  declare on: boolean;
-  declare ph: boolean;
-  declare phRaise: number;
-  declare dist: number;
-  declare aim: THREE.Vector3;
-  declare hand: THREE.Vector3;
-  declare here: boolean; // still in S.players this frame (actors.ts)
+  tag: THREE.Sprite;
+  phase = 0;
+  walk = 0;
+  t = 0;
+  raise = 0;
+  busy = 0;
+  flat = 0;
+  flatV = 0;
+  isFlat = false;
+  seen = true;
+  lookT = 0;
+  on = false;
+  ph = false;
+  phRaise = 0;
+  dist = 0;
+  aim = new THREE.Vector3();
+  hand = new THREE.Vector3();
+  here = true; // still in S.players this frame (actors.ts)
   constructor(scene: THREE.Scene, p: Joined) {
     this.id = p.id;
     this.name = p.name;
-    this.group = new THREE.Group();
-    this.pivot = new THREE.Group();
     this.group.add(this.pivot);
     scene.add(this.group);
-    this.track = new Track();
-    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: lens(), blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     this.glow.scale.setScalar(0.12);
-    // The phone in the left hand, and the green of its screen, which shows across a room.
-    this.phone = new THREE.Group();
     this.phone.add(new THREE.Mesh(GEO.phone, MAT.dark));
     this.phone.rotation.x = PHONE_UP - 0.25;
-    this.screen = new THREE.Sprite(new THREE.SpriteMaterial({ map: lens(), color: 0x8cffb0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     this.screen.scale.setScalar(0.16);
     this.screen.position.set(0, 0.02, -0.03);
     this.phone.add(this.screen); // on the side facing its guard
@@ -208,22 +191,6 @@ export class Guard {
     });
     this.tag = nameTag(p.name);
     this.group.add(this.tag);
-    this.phase = 0;
-    this.walk = 0;
-    this.t = 0;
-    this.raise = 0;
-    this.busy = 0;
-    this.flat = 0;
-    this.flatV = 0;
-    this.isFlat = false;
-    this.seen = true;
-    this.lookT = 0;
-    this.on = false;
-    this.ph = false;
-    this.phRaise = 0;
-    this.dist = 0;
-    this.aim = new THREE.Vector3();
-    this.hand = new THREE.Vector3();
   }
   wear(model: THREE.Object3D): void {
     this.model = model;
@@ -244,21 +211,21 @@ export class Guard {
   sync(p: SimGuard, S: State, dt: number, view: View): void {
     const tr = this.track,
       rig = this.rig,
-      flat = !!p.flat;
-    if (hostClock.fresh) tr.push(S.t, p.x, p.z, p.yaw, p.pitch || 0);
-    tr.sample(hostClock.now, dt);
+      flat = p.flat;
+    if (nightClock.fresh) tr.push(S.t, p.x, p.z, p.yaw, p.pitch);
+    tr.sample(nightClock.now, dt);
     this.t += dt;
     this.group.position.set(tr.x, 0, tr.z);
     this.group.rotation.y = tr.yaw;
-    this.dist = Math.hypot(tr.x - view.x, tr.z - view.z);
+    this.dist = dist(tr, view);
     // Any of them in view past walls and shut doors (see mascot.ts): a shoulder past a door jamb keeps them, and their torch.
     this.lookT -= dt;
     if (this.lookT <= 0) {
       this.lookT = 0.25;
       this.seen = this.dist < 2 || glimpses(view.x, view.z, tr.x, tr.z, PLAYER_R, S.doors);
     }
-    this.on = !!p.on && p.bat > 0 && !flat;
-    this.ph = !!p.ph && p.bat > 0 && !flat;
+    this.on = p.on && p.bat > 0 && !flat;
+    this.ph = p.ph && p.bat > 0 && !flat;
 
     // Flattened: over onto their back and squashed to a few centimetres, fast,
     // with a wobble as it settles. Peeled: the same spring the other way, and
@@ -323,7 +290,7 @@ export class Guard {
 
     /* head and torch arm follow where they look */
     const pitch = clamp(tr.pitch, -1.1, 1.1),
-      act = p.act || '';
+      act = p.act;
     rig.head.rx -= pitch * 0.8 * up;
     body.rx -= pitch * 0.12 * up;
     this.raise += ((this.on && !this.ph ? 1 : 0) - this.raise) * Math.min(1, dt * 9);

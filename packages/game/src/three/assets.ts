@@ -23,22 +23,15 @@ function once<T>(cache: Map<string, T>, name: string, load: () => T): T {
   }
   return made;
 }
-// three.js marks its kinds of object with a flag rather than a class to test.
-const isMesh = (o: THREE.Object3D): o is THREE.Mesh => 'isMesh' in o && o.isMesh === true;
-
-// models/<mascot>.json, one entry per stage of the mascot's model (actors/mascot.ts reads it).
+// models/<mascot>.json, as far as actors/mascot.ts reads it: one entry per stage of the mascot's model. The file is
+// written by the Blender scripts in tools/models and not checked here, so nothing in it is taken for granted.
+// face: where the stage's face is, in model space.
 export interface ModelStage {
-  file: string;
-  height: number;
-  radius: number;
-  face: [number, number, number];
-  floats: boolean;
-  nodes: string[];
-  notes: string;
+  face?: [number, number, number];
+  height?: number;
 }
-export interface ModelInfo {
-  key: string;
-  stages: ModelStage[];
+interface ModelInfo {
+  stages?: ModelStage[];
 }
 
 // The scene of models/<name>.glb. Loaded once; clone it before adding it twice.
@@ -53,7 +46,6 @@ export function loadGLB(name: string): Promise<THREE.Group | null> {
 export function loadJSON(name: string): Promise<ModelInfo | null> {
   return once(infos, name, () =>
     fetch(`models/${name}.json`)
-      // Not checked: the file is written by the Blender scripts in tools/models, next to its model.
       .then(r => (r.ok ? (r.json() as Promise<ModelInfo>) : null))
       .catch(() => null)
   );
@@ -72,7 +64,7 @@ export function loadActor(name: string): Promise<THREE.Group | null> {
       if (!src) return null;
       const glows = new Map<THREE.Material, THREE.MeshBasicMaterial>();
       src.traverse(o => {
-        if (!isMesh(o)) return;
+        if (!(o instanceof THREE.Mesh)) return;
         o.castShadow = o.receiveShadow = true;
         // GLTFLoader makes a MeshStandardMaterial for every material the actor files have.
         const m = o.material;

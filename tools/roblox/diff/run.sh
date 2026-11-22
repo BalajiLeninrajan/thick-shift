@@ -4,8 +4,7 @@
 #
 #   tools/roblox/diff/run.sh "solo competent n1" 3      scenario name (as floor.ts knows it) and seed
 #
-# Needs node and lune. With REC_OUT set, floor.ts records the night through rec.ts and shuffles the battery spots
-# the way the port does; the repo is not touched.
+# Needs node and lune. With REC_OUT set, floor.ts records the night through rec.ts; the repo is not touched.
 set -eu
 scenario=${1:-solo competent n1}
 seed=${2:-1}

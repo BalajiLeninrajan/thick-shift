@@ -63,7 +63,6 @@ export function createPhone(camera: THREE.Camera) {
   const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
-    m.castShadow = false;
     hold.add(m);
     return m;
   };

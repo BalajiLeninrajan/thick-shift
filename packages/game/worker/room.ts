@@ -5,22 +5,17 @@
 import { DurableObject } from 'cloudflare:workers';
 import { adoptFloor, commandFloor, joinFloor, leaveFloor, newSim, newState, type Sim, stepFloor } from '@thick-shift/sim';
 import type { CloseCode, Player, State, StateMessage } from '@thick-shift/sim/types';
+import { CLOSE, type Mode, PROTOCOL, parse, TICK_MS } from '../src/protocol';
 
-const TICK_MS = 100;
 const SAVE_TICKS = 20; // how often a night in play is saved, in ticks: every 2 s
 const FORGET_MS = 5 * 60_000; // how long a room with nobody in it keeps its night, for guards who lost their connection
 // How long a guard whose connection dropped mid-night stays in it, still standing (or still flat) where they were,
 // before the room takes them out. Longer than a page spends reconnecting (RETRY_MS in src/net.ts).
 const GRACE_MS = 20_000;
 const MAX_MESSAGE = 2000; // characters. A guard's commands are tiny.
-// The room's half of the protocol with src/net.ts. A page from a build that speaks another is told to reload.
-const PROTOCOL = '2';
-const NO_ROOM = 4404,
-  CODE_TAKEN = 4409,
-  OUTDATED = 4426;
 
 // A room is a four-letter code someone typed, or a lowercase letter, a dash and an id that an app gets from its
-// platform, such as d- and a Discord Activity's instance id (apps/discord). Matches ROOM in src/net.ts.
+// platform, such as d- and a Discord Activity's instance id (apps/discord).
 const ROOM = /^\/room\/([A-Z]{4}|[a-z]-[\w-]{1,80})$/;
 
 // The bindings toRoom() needs from an app's Worker (its wrangler.jsonc).
@@ -34,10 +29,6 @@ export function toRoom(req: Request, env: RoomEnv): Promise<Response> | Response
   return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(req);
 }
 
-// How a page comes into a room (?mode= from net.ts): make a new one under a code nobody is using, join one that has a
-// night, or either, for a room an app fixes (everyone in a Discord channel opens the same one) and for a guard coming
-// back after losing their connection.
-type Mode = 'make' | 'join' | 'either';
 const isMode = (m: string | null): m is Mode => m === 'make' || m === 'join' || m === 'either';
 
 // Each socket's guard, kept on the socket so it outlasts the object sleeping between nights (hibernation). gone: its
@@ -51,15 +42,7 @@ function att(ws: WebSocket): Attachment {
   if (!a) throw new Error('a room socket has no attachment');
   return a;
 }
-const OPEN = 1;
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-};
 // The ids net.ts makes up (newId): a g and lowercase letters and digits. Nothing that could name an Object property.
 const GUARD_ID = /^g[a-z0-9]{8,40}$/;
 const isPosition = (c: unknown): boolean => typeof c === 'object' && c !== null && 't' in c && c.t === 'p';
@@ -80,11 +63,8 @@ export class Room extends DurableObject<RoomEnv> {
 
   constructor(ctx: DurableObjectState, env: RoomEnv) {
     super(ctx, env);
-    void ctx.blockConcurrencyWhile(async () => {
-      const saved = await ctx.storage.get<State | Player[]>(['S', 'away']),
-        S = saved.get('S') as State | undefined;
-      if (S) this.restore(S, (saved.get('away') as Player[] | undefined) ?? []);
-    });
+    const S = ctx.storage.kv.get<State>('S');
+    if (S) this.restore(S, ctx.storage.kv.get<Player[]>('away') ?? []);
   }
 
   // The night as storage has it, with whoever is still connected (the object woke from sleep) or nobody yet (it was
@@ -107,11 +87,10 @@ export class Room extends DurableObject<RoomEnv> {
     if (S.phase === 'play') adoptFloor(sim, S, now);
     for (const ws of this.open()) this.enter(att(ws).id);
     if (this.open().length) this.run();
-    else void this.ctx.storage.setAlarm(now + FORGET_MS);
   }
 
   open(): WebSocket[] {
-    return this.ctx.getWebSockets().filter(s => s.readyState === OPEN && !att(s).gone);
+    return this.ctx.getWebSockets().filter(s => s.readyState === WebSocket.READY_STATE_OPEN && !att(s).gone);
   }
 
   enter(id: string): void {
@@ -142,12 +121,13 @@ export class Room extends DurableObject<RoomEnv> {
       server.close(code, why);
       return new Response(null, { status: 101, webSocket: client });
     };
-    if (q.get('v') !== PROTOCOL) return refuse(OUTDATED, 'reload for the new version');
-    if (!isMode(mode) || !GUARD_ID.test(id)) return refuse(1008, 'bad id or mode');
-    const mine = this.open().filter(s => att(s).id === id),
-      others = this.open().length - mine.length;
-    if (mode === 'make' && others) return refuse(CODE_TAKEN, 'room code in use');
-    if (mode === 'join' && !this.night) return refuse(NO_ROOM, 'no such room');
+    if (q.get('v') !== String(PROTOCOL)) return refuse(CLOSE.OUTDATED, 'reload for the new version');
+    if (!isMode(mode) || !GUARD_ID.test(id)) return refuse(CLOSE.BAD, 'bad id or mode');
+    const socks = this.open(),
+      mine = socks.filter(s => att(s).id === id),
+      others = socks.length - mine.length;
+    if (mode === 'make' && others) return refuse(CLOSE.CODE_TAKEN, 'room code in use');
+    if (mode === 'join' && !this.night) return refuse(CLOSE.NO_ROOM, 'no such room');
     // A new night: nobody has one here, or someone starting a room under a code whose night everyone has left.
     if (!this.night || (mode === 'make' && !others)) {
       this.stop();
@@ -168,7 +148,9 @@ export class Room extends DurableObject<RoomEnv> {
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ id } satisfies Attachment);
     this.enter(id);
-    void this.ctx.storage.deleteAlarm();
+    // The alarm stays set for as long as the room has a night, so it also fires for one whose instance died.
+    this.ctx.storage.kv.delete('empty');
+    void this.ctx.storage.setAlarm(Date.now() + FORGET_MS);
     this.changed();
     if (this.night.S.phase === 'play') this.run();
     return new Response(null, { status: 101, webSocket: client });
@@ -177,18 +159,14 @@ export class Room extends DurableObject<RoomEnv> {
   webSocketMessage(ws: WebSocket, msg: string | ArrayBuffer): void {
     if (typeof msg !== 'string' || msg.length > MAX_MESSAGE || !this.night) return;
     const { sim, S } = this.night,
-      c = parse(msg),
-      { phase, night, t } = S;
-    commandFloor(sim, S, att(ws).id, c);
+      c = parse(msg);
+    if (commandFloor(sim, S, att(ws).id, c)) {
+      this.away.clear();
+      this.changed();
+    }
     // A night in play goes out on the next tick. Between nights, anything but a position goes out now.
-    if (S.phase === 'play') {
-      // A night started: from a card between nights ('go'), or a dev skip to another night or back to its start.
-      if (phase !== 'play' || S.night !== night || S.t < t) {
-        this.away.clear();
-        this.changed();
-      }
-      this.run();
-    } else if (!isPosition(c)) this.changed();
+    if (S.phase === 'play') this.run();
+    else if (!isPosition(c)) this.changed();
   }
 
   webSocketClose(ws: WebSocket): void {
@@ -221,9 +199,15 @@ export class Room extends DurableObject<RoomEnv> {
     void this.ctx.storage.setAlarm(Date.now() + FORGET_MS);
   }
 
-  // Still nobody here: let the night go.
+  // Nobody here on two looks in a row: let the night go. The second look, GRACE_MS on, is for a room restarted a
+  // moment before the first, whose pages are still on their way back.
   async alarm(): Promise<void> {
-    if (this.open().length) return;
+    const empty = !this.open().length;
+    if (!empty || !this.ctx.storage.kv.get('empty')) {
+      this.ctx.storage.kv.put('empty', empty);
+      await this.ctx.storage.setAlarm(Date.now() + (empty ? GRACE_MS : FORGET_MS));
+      return;
+    }
     this.stop();
     this.night = null;
     this.away.clear();

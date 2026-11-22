@@ -6,36 +6,21 @@
 
 import { adoptFloor, commandFloor, joinFloor, newSim, newState, type Sim, stepFloor } from '@thick-shift/sim';
 import type { Command, State, StateMessage } from '@thick-shift/sim/types';
-import { game, platform } from './state';
+import { CLOSE, type Mode, PROTOCOL, parse, TICK_MS } from './protocol';
+import { game, myPlayer, platform } from './state';
 
-const TICK_MS = 100; // a solo night's step, as the room's
 const RETRY_MS = [500, 1000, 2000, 4000, 8000]; // waits between tries to get back into a room we lost, 15 s in all
 const QUIET_MS = 4000; // a night in play that has sent nothing for this long has lost its connection
-const PROTOCOL = 2; // worker/room.ts's PROTOCOL
-const NO_ROOM = 4404,
-  CODE_TAKEN = 4409,
-  OUTDATED = 4426; // close codes from the room
-
-// How this page comes into a room: start one, join one, or either, for a fixed room (worker/room.ts).
-type Mode = 'make' | 'join' | 'either';
 
 let ws: WebSocket | null = null;
 let retries = 0, // tries so far to get back into the room
   heard = 0; // performance.now() of the last state
-// A night this page runs itself, with no room: the room's thinking and the timer that steps it.
-let solo: { sim: Sim; S: State; loop: ReturnType<typeof setInterval> } | null = null;
+// A night this page runs itself, with no room, until the page reloads.
+let solo: { sim: Sim; S: State } | null = null;
 
 const roomUrl = (code: string, query: string): string => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/room/${code}?${query}`;
-const ROOM = /^([A-Z]{4}|[a-z]-[\w-]{1,80})$/; // a typed code, or a fixed one from an app's platform (worker/room.ts)
 const newCode = (): string => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[(Math.random() * 24) | 0]).join('');
 const newId = (): string => `g${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-};
 const isState = (m: unknown): m is StateMessage => typeof m === 'object' && m !== null && 't' in m && m.t === 's' && 's' in m;
 
 // Start a room, from the title screen, or open the app's fixed one. Without a room to reach, play solo.
@@ -43,10 +28,11 @@ export function host(code = newCode()): void {
   open(code, platform.fixedRoom ? 'either' : 'make');
 }
 
-// Join a friend's room by its code.
+// Join a friend's room by the code they typed.
 export function join(code: string): void {
-  if (!/^[a-z]-/.test(code)) code = code.toUpperCase().trim();
-  if (ROOM.test(code)) open(code, 'join');
+  code = code.trim().toUpperCase();
+  if (/^[A-Z]{4}$/.test(code)) open(code, 'join');
+  else fail('That is not a room code', 'Room codes are four letters.');
 }
 
 // back: trying to get back into a room this page was in.
@@ -76,10 +62,10 @@ function open(code: string, mode: Mode, back = false): void {
     if (ws !== sock) return;
     ws = null;
     // Someone is already in a room under the code we drew. Draw another.
-    if (e.code === CODE_TAKEN && mode === 'make') return open(newCode(), 'make');
+    if (e.code === CLOSE.CODE_TAKEN && mode === 'make') return open(newCode(), 'make');
     game.joining = false;
-    if (e.code === OUTDATED) return fail('The game has been updated', 'Reload to play the new version.');
-    if (e.code === NO_ROOM) return fail(`Could not join room ${code}`, 'Nobody is playing in a room with that code.');
+    if (e.code === CLOSE.OUTDATED) return fail('The game has been updated', 'Reload to play the new version.');
+    if (e.code === CLOSE.NO_ROOM) return fail(`Could not join room ${code}`, 'Nobody is playing in a room with that code.');
     if (opened || back) return retry(code);
     if (mode === 'join') return fail(`Could not join room ${code}`, 'The connection failed.');
     // No room to reach: play alone.
@@ -125,14 +111,15 @@ function playSolo(code: string, note: string): void {
   const S = game.S ?? newState(code),
     now = performance.now(),
     sim = newSim({ rng: Math.random, now });
-  const me = S.players.find(p => p.id === game.myId);
+  const me = myPlayer(S);
   S.players = [];
   joinFloor(sim, S, game.myId, me);
   commandFloor(sim, S, game.myId, { t: 'name', n: game.myName });
   if (S.phase === 'play') adoptFloor(sim, S, now);
   game.S = S;
   game.netNote = note;
-  solo = { sim, S, loop: setInterval(() => stepFloor(sim, S, performance.now()), TICK_MS) };
+  solo = { sim, S };
+  setInterval(() => stepFloor(sim, S, performance.now()), TICK_MS);
 }
 
 // What this guard does, to whoever runs the night: the room, or this page.

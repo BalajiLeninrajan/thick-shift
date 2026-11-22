@@ -7,11 +7,14 @@
 // slide() the game uses, at the game's speeds, and react late.
 import {
   actFloor,
+  angDiff,
   assert,
   brainOf,
+  COMING,
   DOORS,
   darkRoom,
   defined,
+  dist,
   F,
   faultLeft,
   isPlaced,
@@ -21,6 +24,7 @@ import {
   MASCOTS,
   newSim,
   newState,
+  STAMINA,
   seeded,
   startFloorNight,
   stepFloor,
@@ -36,10 +40,10 @@ let now = 0;
 // Every random draw of a night, the guards' and the sim's, comes from this one stream, which seedRandom() seeds at
 // the start of each night. The sim reads it through a closure, so it draws from whatever stream is current.
 let random = Math.random;
-// Records the night for tools/roblox/diff when REC_OUT is set, and shuffles the battery spots the Roblox port's way.
+// Records the night for tools/roblox/diff when REC_OUT is set.
 const rec = process.env.REC_OUT ? await import('../roblox/diff/rec.ts') : null;
 // One sim per thread, made once: like the module state it replaces, it carries the last step's time between nights.
-export const sim = newSim({ rng: () => random(), now: 0, shuffle: rec ? 'fisher-yates' : 'sort' });
+const sim = newSim({ rng: () => random(), now: 0 });
 const night: Night = { startFloorNight, stepFloor, actFloor };
 const api: Night = rec ? rec.wrapSim(night, sim) : night;
 
@@ -120,6 +124,7 @@ interface BotState extends DoorTimes {
   seenAt?: number;
   hideCool?: number;
   race?: Race;
+  waitRace?: Race; // the same for the one thing being waited out (honest.think)
   fleeNode?: number;
   drift?: { until: number; to: Point }; // a careless guard wandering off
 
@@ -134,6 +139,8 @@ interface BotState extends DoorTimes {
 // toy: throws their Mini Biggs to draw a wanderer off their way, while the torch has the battery to spare (spare: what has
 // to be left in it after the throw), and goes back to pick it up once nothing is about.
 // alert: how near something coming has to be before they do anything about it. beam: seconds away it is when the torch goes on it.
+// topsUp: picks up a battery they pass whenever the torch is not full, not only once it is low. crankEarly: how much
+// sooner (in power) they start cranking between waves.
 interface SkillBase {
   react: number;
   fov: number;
@@ -147,6 +154,8 @@ interface SkillBase {
   alert: number;
   beam: number;
   reserve: number;
+  topsUp: boolean;
+  crankEarly: number;
 }
 type Skill = SkillBase & ({ toy: false } | { toy: true; spare: number });
 // How a guard plays: their skill, how they think each tick, and what an honest guard leaves out (peels, cranks,
@@ -210,34 +219,32 @@ interface Objective {
 }
 
 const DT = 0.1;
-const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 }; // the same as player.ts, which cannot be imported without three.js
-const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 const ang = (a: Point, b: Point) => Math.atan2(b.x - a.x, b.z - a.z);
-const angDiff = (a: number, b: number) => {
-  let d = (a - b) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-};
+// The one of list nearest to p, by where at() puts each, or undefined from an empty list. The first of equals.
+const nearestBy = <T>(p: Point, list: readonly T[], at: (v: T) => Point) =>
+  list.reduce<T | undefined>((best, v) => (best !== undefined && dist(p, at(best)) <= dist(p, at(v)) ? best : v), undefined);
+const nearest = <T extends Point>(p: Point, list: readonly T[]) => nearestBy(p, list, v => v);
 const pick = <T>(list: readonly T[]): T => defined(list[(random() * list.length) | 0], 'a pick from an empty list');
-const MOVING: MascotState[] = ['roam', 'search', 'hunt', 'charge'],
-  COMING: MascotState[] = ['hunt', 'windup', 'charge'];
+const MOVING: MascotState[] = ['roam', 'search', 'hunt', 'charge'];
 const BOOTH_MID = { x: 21, z: 40.5 };
-// When Biggs, Flan and Squish can wake: once the night plus the guards is more than 1 plus this. Stompy waits for night 2.
-const WAKES_WITH: readonly [number, number, number] = [0, 0, 1];
+// A guard's guess at whether a resting mascot wakes this night. Rougher than the sim's rule (WAKE in sim.ts), on
+// purpose: Squish sleeps through a solo night 1, and Stompy through any night 1.
+const mayWake = (S: NightState, i: MascotIndex) => (i === 3 ? S.night > 1 : i !== 2 || S.night + S.players.length > 2);
 // How fast a mascot comes with a torch on it, as a share of its pace, by its rot.
 const LIT_PACE = [0.05, 0.3, 0.5];
 const inBooth = (p: Point) => M.roomAt(p.x, p.z) === M.BOOTH;
-const doorMid = (k: DoorKey) => {
-  const [x0, z0, x1, z1] = defined(
-    M.DOORWAYS.find(d => d.key === k),
-    `the ${k} doorway`
-  ).rect;
-  return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
-};
+const doorMid = (k: DoorKey) => M.rectMid(M.doorwayOf(k).rect);
 // Where to stand to work a door's button from outside the booth: the wall is thin enough to reach through.
 const OUTSIDE: Record<DoorKey, Point> = { L: { x: 13.9, z: 39.7 }, R: { x: 28.1, z: 39.7 }, V: { x: 23.3, z: 35.5 } };
 const front = (t: Point & { face?: number }): Point => (t.face == null ? t : { x: t.x + Math.sin(t.face) * 0.9, z: t.z + Math.cos(t.face) * 0.9 });
+// Where a guard stands to work door k's button: in front of it in the booth, or at the wall outside.
+const doorStand = (bot: Bot, k: DoorKey) => (inBooth(bot) ? front(M.PANELS[k]) : OUTSIDE[k]);
+// Where to stand to use something, and where an objective takes a guard.
+const standOf = (u: Use) => u.stand ?? front(u.at);
+const targetOf = (o: Objective) => (o.use ? standOf(o.use) : o.goal);
+const CHARGE: Use = { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' };
+const CRANK: Use = { what: 'crank', at: M.GENERATOR, hold: -1, key: 'crank' };
+const hideUse = (i: number, at: Point): Use => ({ what: 'hide', i, at, stand: at, hold: F.HIDE_HOLD, key: `hide${i}` });
 // Breaker box i: S.faults, team.fault and the 'fix' uses all name boxes by their place in M.BOXES.
 const box = (i: number) => defined(M.BOXES[i], `box ${i}`);
 // A bot's guard as the sim has them. The night places every guard in sim.players when it starts.
@@ -247,7 +254,7 @@ function guardOf(bot: Bot): Guard {
   return p;
 }
 
-export function seedRandom(seed: number): void {
+function seedRandom(seed: number): void {
   random = seeded(seed);
 }
 
@@ -305,7 +312,6 @@ function makeBot(id: string, i: number, policy: Policy): Bot {
     still: 0,
     firstSeen: [null, null, null, null],
     lastSeen: [-9, -9, -9, -9],
-    // play() sets these once the night has placed the guard.
     bat: 1,
     flat: false,
   };
@@ -407,6 +413,14 @@ function spread(
 // Waypoint i of the nav graph: the graph's indices, and the arrays priced over it, all have one entry per waypoint.
 const node = (nodes: NavNode[], i: number) => defined(nodes[i], 'a waypoint');
 const costAt = (f: Float64Array, i: number) => defined(f[i], "a waypoint's cost");
+// Can a point in room, d metres from waypoint nd, walk straight to it?
+const entry = (S: NightState, p: Point, room: number, nd: NavNode, d: number) =>
+  (nd.room === room || d < 5) && M.clear(p.x, p.z, nd.x, nd.z, M.PLAYER_R, S.doors);
+// spread()'s step over the links a guard can walk: none through a shut door, or through the ducts unless ducts is set.
+const stepper = (S: NightState, cost: Cost, ducts?: boolean) => {
+  const { nodes } = M.nav();
+  return (u: number, l: NavLink) => ((l.duct && !ducts) || (l.key && S.doors[l.key]) ? -1 : cost(node(nodes, u), node(nodes, l.to), l.d));
+};
 
 // The way a person who knows the building would go: the shortest way that keeps clear of the mascots they know about.
 // Returns { path, risk }: risk is true when every way passes close to one. Null when a shut door is in every way.
@@ -425,24 +439,19 @@ function plan(S: NightState, bot: Bot, goal: Point, ducts?: boolean): { path: Po
     if (!ducts && nd.room === M.DUCTS) continue;
     const d = dist(nd, bot),
       g = dist(nd, goal);
-    if ((nd.room === room || d < 5) && M.clear(bot.x, bot.z, nd.x, nd.z, M.PLAYER_R, S.doors)) best[i] = cost(bot, nd, d);
-    if ((nd.room === goalRoom || g < 5) && M.clear(goal.x, goal.z, nd.x, nd.z, M.PLAYER_R, S.doors)) end[i] = cost(nd, goal, g);
+    if (entry(S, bot, room, nd, d)) best[i] = cost(bot, nd, d);
+    if (entry(S, goal, goalRoom, nd, g)) end[i] = cost(nd, goal, g);
   }
   let last = -1,
     total = 1e9;
-  spread(
-    best,
-    prev,
-    (u, l) => ((l.duct && !ducts) || (l.key && S.doors[l.key]) ? -1 : cost(node(nodes, u), node(nodes, l.to), l.d)),
-    (u, d) => {
-      if (d >= total) return false;
-      const via = d + costAt(end, u);
-      if (via < total) {
-        total = via;
-        last = u;
-      }
+  spread(best, prev, stepper(S, cost, ducts), (u, d) => {
+    if (d >= total) return false;
+    const via = d + costAt(end, u);
+    if (via < total) {
+      total = via;
+      last = u;
     }
-  );
+  });
   if (last < 0) return null;
   const path: Point[] = [goal];
   // prev leads back from the last waypoint to the first, whose prev is -1.
@@ -471,7 +480,7 @@ function wayTo(S: NightState, bot: Bot, goal: Point, ducts?: boolean): Way {
 }
 
 // Walk toward a point. Returns the key of a shut door in the way, if there is one.
-function walk(S: NightState, bot: Bot, goal: Point, dt: number, sprint?: boolean, face?: number | null, ducts?: boolean): DoorKey | null {
+function walk(S: NightState, bot: Bot, goal: Point, sprint?: boolean, face?: number | null, ducts?: boolean): DoorKey | null {
   const way = wayTo(S, bot, goal, ducts),
     path = way.path;
   let next = path[0];
@@ -483,7 +492,7 @@ function walk(S: NightState, bot: Bot, goal: Point, dt: number, sprint?: boolean
   const dir = ang(bot, next);
   bot.yaw = face ?? dir;
   bot.sp = !!sprint && bot.stam > 0 && Math.abs(angDiff(dir, bot.yaw)) < 1;
-  const step = Math.min(dist(bot, next), (bot.sp ? F.SPRINT : F.WALK) * dt);
+  const step = Math.min(dist(bot, next), (bot.sp ? F.SPRINT : F.WALK) * DT);
   // Nobody walks into one they can see: no step that ends nearer to it than two metres.
   const to = { x: bot.x + Math.sin(dir) * step, z: bot.z + Math.cos(dir) * step };
   if (known(S, bot, 1).some(h => h.how !== 'map' && dist(to, h) < 2 && dist(to, h) < dist(bot, h))) {
@@ -502,8 +511,8 @@ function walk(S: NightState, bot: Bot, goal: Point, dt: number, sprint?: boolean
   return null;
 }
 
-// Do what bot.want says for one tick, then tell the host, as player.ts does.
-function act(S: NightState, bot: Bot, dt: number): void {
+// Do what bot.want says for one tick, then tell the sim, as player.ts does.
+function act(S: NightState, bot: Bot): void {
   const w = bot.want,
     before = { x: bot.x, z: bot.z };
   bot.sp = false;
@@ -526,7 +535,7 @@ function act(S: NightState, bot: Bot, dt: number): void {
           bot.holding = u.key;
           bot.hold = 0;
         }
-        bot.hold += dt;
+        bot.hold += DT;
         if (u.what === 'fix') bot.act = 'fix'; // hands in the box: the torch hangs and holds nothing
         if (bot.hold >= u.hold + 0.05) {
           api.actFloor(sim, S, bot.id, { t: 'use', what: u.what, i: u.i, k: u.k, id: u.id });
@@ -536,7 +545,7 @@ function act(S: NightState, bot: Bot, dt: number): void {
         }
       }
     } else {
-      goal = u.stand || front(u.at);
+      goal = standOf(u);
       bot.holding = null;
     }
   } else bot.holding = null;
@@ -544,45 +553,60 @@ function act(S: NightState, bot: Bot, dt: number): void {
     // No time to think about a route: straight that way, flat out.
     bot.yaw = w.dash;
     bot.sp = bot.stam > 0;
-    const step = (bot.sp ? F.SPRINT : F.WALK) * dt;
+    const step = (bot.sp ? F.SPRINT : F.WALK) * DT;
     M.slide(bot, Math.sin(w.dash) * step, Math.cos(w.dash) * step, M.PLAYER_R, S.doors);
   } else if (goal && dist(bot, goal) > 0.15) {
-    const shut = walk(S, bot, goal, dt, w.sprint, face, w.ducts);
+    const shut = walk(S, bot, goal, w.sprint, face, w.ducts);
     // A shut booth door in the way: go and press its button, from whichever side we are on.
     if (shut && lightsF(S) && !w.keep?.includes(shut)) {
-      const panel = M.PANELS[shut],
-        at = inBooth(bot) ? front(panel) : OUTSIDE[shut];
-      if (dist(bot, panel) < F.REACH - 0.3) {
+      if (dist(bot, M.PANELS[shut]) < F.REACH - 0.3) {
         if (S.t - (bot.pressed || -9) > 0.6) {
           bot.pressed = S.t;
           api.actFloor(sim, S, bot.id, { t: 'use', what: 'door', k: shut });
         }
-      } else walk(S, bot, at, dt, w.sprint, face, w.ducts);
+      } else walk(S, bot, doorStand(bot, shut), w.sprint, face, w.ducts);
     }
   } else if (face != null) bot.yaw = face;
   if (bot.sp) {
-    bot.stam = Math.max(0, bot.stam - STAMINA.drain * dt);
+    bot.stam = Math.max(0, bot.stam - STAMINA.drain * DT);
     bot.rested = 0;
   } else {
-    bot.rested += dt;
-    if (bot.rested > STAMINA.rest) bot.stam = Math.min(1, bot.stam + STAMINA.gain * dt);
+    bot.rested += DT;
+    if (bot.rested > STAMINA.rest) bot.stam = Math.min(1, bot.stam + STAMINA.gain * DT);
   }
   bot.on = !!w.on && bot.bat > 0;
-  bot.still = dist(bot, before) < 0.01 && goal && dist(bot, goal) > 3 ? bot.still + dt : 0;
+  bot.still = dist(bot, before) < 0.01 && goal && dist(bot, goal) > 3 ? bot.still + DT : 0;
   api.actFloor(sim, S, bot.id, { t: 'p', x: bot.x, z: bot.z, yaw: bot.yaw, pitch: 0, on: bot.on, sp: bot.sp, act: bot.act });
 }
 
 // Press a booth door's button if it is not already the way we want it.
 function setDoor(S: NightState, bot: Bot, k: DoorKey, shut: boolean): boolean {
   if (!!S.doors[k] === shut || !lightsF(S)) return false;
-  const panel = M.PANELS[k];
-  const stand = inBooth(bot) ? front(panel) : OUTSIDE[k];
-  bot.want.use = { what: 'door', k, at: stand, face: ang(stand, panel), stand, hold: 0.2, key: `door${k}`, reach: 0.6, shut };
+  const stand = doorStand(bot, k);
+  bot.want.use = { what: 'door', k, at: stand, face: ang(stand, M.PANELS[k]), stand, hold: 0.2, key: `door${k}`, reach: 0.6, shut };
   return true;
 }
 
 /* ---------- playing properly ---------- */
 
+const competent: Skill = {
+  react: 0.5,
+  fov: 1.5,
+  torch: 'thrifty',
+  map: true,
+  plans: true,
+  doors: true,
+  cranks: true,
+  peelRange: 99,
+  dodges: true,
+  alert: 15,
+  beam: 2.5,
+  reserve: 0.15,
+  topsUp: true,
+  crankEarly: 0,
+  toy: true,
+  spare: 0.4,
+};
 const SKILL = {
   careless: {
     react: 0.9,
@@ -597,40 +621,12 @@ const SKILL = {
     alert: 7,
     beam: 1.2,
     reserve: 0,
+    topsUp: false,
+    crankEarly: 0,
     toy: false,
   },
-  competent: {
-    react: 0.5,
-    fov: 1.5,
-    torch: 'thrifty',
-    map: true,
-    plans: true,
-    doors: true,
-    cranks: true,
-    peelRange: 99,
-    dodges: true,
-    alert: 15,
-    beam: 2.5,
-    reserve: 0.15,
-    toy: true,
-    spare: 0.4,
-  },
-  expert: {
-    react: 0.25,
-    fov: 2.2,
-    torch: 'thrifty',
-    map: true,
-    plans: true,
-    doors: true,
-    cranks: true,
-    peelRange: 99,
-    dodges: true,
-    alert: 15,
-    beam: 2.5,
-    reserve: 0.2,
-    toy: true,
-    spare: 0.4,
-  },
+  competent,
+  expert: { ...competent, react: 0.25, fov: 2.2, reserve: 0.2, crankEarly: 15 },
 } satisfies Record<string, Skill>;
 
 // How far it is by foot from a point to every waypoint. avoid: berths to keep clear of, as in plan().
@@ -642,9 +638,9 @@ function field(S: NightState, from: Point, avoid?: Berth[]): Float64Array {
     room = M.roomAt(from.x, from.z);
   for (const [i, nd] of nodes.entries()) {
     const d = dist(nd, from);
-    if (nd.room !== M.DUCTS && (nd.room === room || d < 5) && M.clear(from.x, from.z, nd.x, nd.z, M.PLAYER_R, S.doors)) best[i] = cost(from, nd, d);
+    if (nd.room !== M.DUCTS && entry(S, from, room, nd, d)) best[i] = cost(from, nd, d);
   }
-  spread(best, null, (u, l) => (l.duct || (l.key && S.doors[l.key]) ? -1 : cost(node(nodes, u), node(nodes, l.to), l.d)));
+  spread(best, null, stepper(S, cost));
   return best;
 }
 // The same distance to a point that is not a waypoint.
@@ -656,26 +652,28 @@ function fieldAt(S: NightState, f: Float64Array, p: Point): number {
   for (const [i, nd] of nodes.entries()) {
     const d = dist(nd, p),
       via = costAt(f, i) + d;
-    if (via < best && (nd.room === room || d < 5) && M.clear(p.x, p.z, nd.x, nd.z, M.PLAYER_R, S.doors)) best = via;
+    if (via < best && entry(S, p, room, nd, d)) best = via;
   }
   return best;
 }
 
 // Where everyone could be and when: seconds for this guard to walk to each waypoint keeping clear of what it knows
-// about, and seconds for the nearest of the things after it to get there. Worked out twice a second.
-function race(S: NightState, bot: Bot, hs: Memory[], pace: (h: Memory) => number): Race {
-  const st = bot.state;
-  if (st.race && S.t - st.race.at < 0.5) return st.race;
+// about, and seconds for the nearest of the things after it to get there. Worked out twice a second, and kept under
+// slot: the callers ask about different mascots at different paces, so each keeps its own.
+function race(S: NightState, bot: Bot, hs: Memory[], pace: (h: Memory) => number, slot: 'race' | 'waitRace' = 'race'): Race {
+  const st = bot.state,
+    had = st[slot];
+  if (had && S.t - had.at < 0.5) return had;
   const mine = field(S, bot, berths(S, bot)).map(d => d / F.WALK),
     theirs = new Float64Array(mine.length).fill(1e9);
   for (const h of hs) for (const [i, d] of field(S, h).entries()) theirs[i] = Math.min(costAt(theirs, i), d / pace(h));
   const r = { mine, theirs, at: S.t };
-  st.race = r;
+  st[slot] = r;
   return r;
 }
 // Where to run: the waypoint furthest (in their time) from everything after this guard, out of those the guard
 // can reach first. Kept to unless another is clearly better.
-function fleeTo(_S: NightState, bot: Bot, r: Race): Point {
+function fleeTo(bot: Bot, r: Race): Point {
   // A doorway beats the far corner of a room, and the next room beats both: a corner is where it ends.
   const { nodes } = M.nav(),
     st = bot.state,
@@ -705,19 +703,20 @@ function fleeTo(_S: NightState, bot: Bot, r: Race): Point {
 // Whose job the generator is: the last guard standing who cranks at all.
 const cranker = (team: Team) => team.bots.filter(b => !b.flat && b.skill.cranks && b.policy.cranks !== false).at(-1);
 const fixable = (S: NightState) => S.faults.map((f, i) => (f ? i : -1)).filter(i => i >= 0);
-// Share out the open faults: each to whoever would get there soonest after what they already have. The one a guard
-// is on the way to stays theirs (a person who has set off for one does not turn back because another broke out
-// somewhere else) unless they go down; the rest are shared out again. In a crew with the power getting low, the cranker takes fewer so there is
-// time to crank.
-// A guard's share: the faults they have (the same list as in team.fault), where they will be after them, and how
-// far they walk to get there.
+// A guard's share: the faults they have (the same list as in team.fault), where they will be after them, how far
+// they walk to get there, and what a metre of walking weighs for them (w).
 interface Share {
   b: Bot;
   list: number[];
   x: number;
   z: number;
   len: number;
+  w: number;
 }
+// Share out the open faults: each to whoever would get there soonest after what they already have. The one a guard
+// is on the way to stays theirs (a person who has set off for one does not turn back because another broke out
+// somewhere else) unless they go down; the rest are shared out again. In a crew with the power getting low, the
+// cranker takes fewer so there is time to crank.
 function assignFaults(S: NightState, team: Team): void {
   const spare = team.bots.length > 1 && S.power < 60 ? cranker(team) : null;
   const up = team.bots.filter(b => !b.flat && b.policy.faults !== false);
@@ -726,6 +725,7 @@ function assignFaults(S: NightState, team: Team): void {
   for (const { list } of kept) for (const i of list) open.delete(i);
   team.fault = new Map(kept.map(({ b, list }) => [b.id, list]));
   const shares = kept.map(({ b, list }): Share => {
+    const w = (b.policy.share ?? 1) * (b === spare ? 3 : 1);
     let x = b.x,
       z = b.z,
       len = 0;
@@ -736,14 +736,13 @@ function assignFaults(S: NightState, team: Team): void {
       x = c.x;
       z = c.z;
     }
-    return { b, list, x, z, len: len * (b.policy.share ?? 1) * (b === spare ? 3 : 1) };
+    return { b, list, x, z, len: len * w, w };
   });
   while (open.size && shares.length) {
     let best: { share: Share; i: number; cost: number } | null = null;
     for (const share of shares)
       for (const i of open) {
-        const { b } = share,
-          cost = share.len + dist(share, box(i)) * (b.policy.share ?? 1) * (b === spare ? 3 : 1);
+        const cost = share.len + dist(share, box(i)) * share.w;
         if (!best || cost < best.cost) best = { share, i, cost };
       }
     // shares and open are not empty, so the loop above found one.
@@ -808,10 +807,7 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   st.stirred = S.stir;
   const waking =
     sk.plans && S.stir && st.stirAt !== undefined && S.t - st.stirAt < 8
-      ? bot.mem.filter(
-          (k): k is Memory =>
-            !!k && k.st === 'rest' && S.t - k.t < 30 && dist(bot, k) < 10 && (k.i === 3 ? S.night > 1 : S.night + S.players.length > 1 + WAKES_WITH[k.i])
-        )
+      ? bot.mem.filter((k): k is Memory => !!k && k.st === 'rest' && S.t - k.t < 30 && dist(bot, k) < 10 && mayWake(S, k.i))
       : [];
   const hs = known(S, bot)
     .filter(h => (COMING.includes(h.st) && dist(bot, h) < sk.alert) || (MOVING.includes(h.st) && h.how !== 'map' && dist(bot, h) < 6))
@@ -827,7 +823,7 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
     sight = M.sees(bot.x, bot.z, h.x, h.z, S.doors);
   // Stompy winding up or already coming: get out of its line.
   // Something wandering close that is not after anyone yet: a Mini Biggs thrown away from here may take it off.
-  if (!COMING.includes(h.st)) lure(S, bot, objective?.use ? objective.use.stand || front(objective.use.at) : objective?.goal || bot);
+  if (!COMING.includes(h.st)) lure(S, bot, targetOf(objective) || bot);
   const stompy =
     sk.dodges &&
     known(S, bot, 1.5).find(
@@ -883,8 +879,8 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   }
   // Carry on with the job if we can get there and do it before anything gets there. Once running, keep running a while.
   const pressed = hs.length > 1 || (bot.bat <= 0 && h.i !== 0) || S.t - st.chased > 10;
-  const u = objective?.use,
-    target = u ? u.stand || front(u.at) : objective?.goal;
+  const u = objective.use,
+    target = targetOf(objective);
   if (target && S.t > (st.retreat || 0) && !pressed) {
     const need = fieldAt(S, r.mine, target) + (u ? Math.max(0, u.hold) + 0.8 : 0),
       have = Math.min(...hs.map(k => dist(k, target) / speed(k)));
@@ -898,7 +894,7 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   }
   // Otherwise the booth, if we can be in it with time to shut a door, or wherever gives the longest lead.
   const home = canHole && !booth ? fieldAt(S, r.mine, BOOTH_MID) : 1e9;
-  const goal = home + 2.5 < Math.min(...hs.map(k => dist(k, BOOTH_MID) / speed(k))) ? BOOTH_MID : fleeTo(S, bot, r);
+  const goal = home + 2.5 < Math.min(...hs.map(k => dist(k, BOOTH_MID) / speed(k))) ? BOOTH_MID : fleeTo(bot, r);
   w.goal = goal;
   w.use = null;
   w.sprint = eta < 3 && (!beam || speed(h) > 2.4);
@@ -914,13 +910,13 @@ function objectiveOf(S: NightState, bot: Bot, team: Team): Objective {
   // 1. A teammate on the floor.
   const flat = team.bots.filter(b => b.flat && b !== bot && pol.peels !== false);
   for (const f of flat) {
-    const helpers = team.bots.filter(b => !b.flat && b.policy.peels !== false && dist(b, f) < b.skill.peelRange).sort((a, b) => dist(a, f) - dist(b, f));
-    if (helpers[0] === bot)
+    const helpers = team.bots.filter(b => !b.flat && b.policy.peels !== false && dist(b, f) < b.skill.peelRange);
+    if (nearest(f, helpers) === bot)
       return { use: { what: 'peel', id: f.id, at: { x: f.x, z: f.z }, stand: { x: f.x, z: f.z }, hold: F.PEEL_HOLD, key: `peel${f.id}` }, urgent: true };
   }
   // 2. The faults that are ours.
   const mine = pol.faults === false ? [] : sk.plans ? (team.fault.get(bot.id) || []).filter(i => S.faults[i]) : fixable(S);
-  const [i] = mine.sort((a, b) => dist(bot, box(a)) - dist(bot, box(b)));
+  const i = nearestBy(bot, mine, box);
   if (i !== undefined) {
     // A careless guard drifts off between jobs.
     if (!sk.plans && st.drift && st.drift.until > S.t) return { goal: st.drift.to };
@@ -930,34 +926,33 @@ function objectiveOf(S: NightState, bot: Bot, team: Team): Objective {
     st.drift = { until: S.t + 6 + random() * 10, to: pick(M.nav().nodes.filter(n => n.room !== M.DUCTS)) };
   }
   // 3. Light.
-  if ((bot.bat < 1 && sk !== SKILL.careless) || bot.bat < 0.3) {
-    const b = S.bats
+  if ((bot.bat < 1 && sk.topsUp) || bot.bat < 0.3) {
+    const seen = S.bats
       .map(i => ({ i, at: defined(M.BATTERY_SPOTS[i], `battery spot ${i}`) })) // S.bats holds spot indices
-      .filter(({ at }) => dist(bot, at) < (bot.bat < sk.reserve ? 14 : 5) && M.sees(bot.x, bot.z, at.x, at.z, S.doors))
-      .sort((a, c) => dist(bot, a.at) - dist(bot, c.at))[0];
+      .filter(({ at }) => dist(bot, at) < (bot.bat < sk.reserve ? 14 : 5) && M.sees(bot.x, bot.z, at.x, at.z, S.doors));
+    const b = nearestBy(bot, seen, s => s.at);
     if (b && bot.bat <= 1 - F.BAT_PICKUP * 0.6) return { use: { what: 'bat', i: b.i, at: b.at, stand: b.at, hold: 0.2, key: 'bat' } };
   }
   // 4. The generator, if it is our job and the power needs it.
   const genJob = cranker(team) === bot;
   // A crew has the building's whole supply to keep up and more hands, so it starts sooner. An expert cranks between waves.
-  const low = (team.bots.length > 1 ? 60 : 45) + (sk === SKILL.expert && !S.stir ? 15 : 0);
+  const low = (team.bots.length > 1 ? 60 : 45) + (S.stir ? 0 : sk.crankEarly);
   if (genJob && (S.power < Math.min(S.cap - 3, st.cranking ? 80 : low) || (S.out && S.cap >= F.RESTART))) {
     st.cranking = true;
-    return { use: { what: 'crank', at: M.GENERATOR, hold: -1, key: 'crank' }, crank: true };
+    return { use: CRANK, crank: true };
   }
   st.cranking = false;
   // 4b. Hands empty: the nearest Mini Biggs on the floor, once it has had a few seconds to send what it drew on its way
   // and nothing known is moving near it. On the way to anything else, the plan keeps clear of the mascots as usual.
   if (sk.toy && !guardOf(bot).toy) {
-    const t = S.toys
-      .filter(t => S.t > t.land + 6 && !known(S, bot, 4).some(h => MOVING.includes(h.st) && dist(h, t) < 8))
-      .sort((a, b) => dist(bot, a) - dist(bot, b))[0];
+    const left = S.toys.filter(t => S.t > t.land + 6 && !known(S, bot, 4).some(h => MOVING.includes(h.st) && dist(h, t) < 8));
+    const t = nearest(bot, left);
     if (t) return { use: { what: 'toy', id: t.id, at: t, stand: t, hold: 0.2, key: `toy${t.id}` } };
   }
   // 5. Nothing to do: the booth, and the charger if the torch wants it. A careless guard wanders.
   if (!sk.plans && pol.stays !== true && !(bot.bat < 0.05 && lightsF(S)) && !st.topUp) return st.drift && st.drift.until > S.t ? { goal: st.drift.to } : {};
   st.topUp = !sk.plans && bot.bat < 0.6; // a careless guard charges only once the torch has died, and not for long
-  if (bot.bat < 0.95 && lightsF(S)) return { use: { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' }, home: true };
+  if (bot.bat < 0.95 && lightsF(S)) return { use: CHARGE, home: true };
   return { goal: BOOTH_MID, home: true };
 }
 
@@ -986,27 +981,25 @@ const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => 
         (leaving && keep.length > 0 && !obj.urgent && !(obj.fault && faultLeft(S, obj.fault) < 15))
       ) {
         w.goal = BOOTH_MID;
-        if (bot.bat < 0.95) w.use = { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' };
+        if (bot.bat < 0.95) w.use = CHARGE;
         return;
       }
     }
     w.goal = obj.goal;
     w.use = obj.use;
     // Something known is on every way there: wait for it to move on, unless the fault is about to burn.
-    const to = obj.use ? obj.use.stand || front(obj.use.at) : obj.goal;
+    const to = targetOf(obj);
     const deadline = obj.fault ? faultLeft(S, obj.fault) : 1e9;
     if (sk.plans && to && dist(bot, to) > 2 && wayTo(S, bot, to).risk && !obj.urgent && deadline > (dist(bot, to) / F.WALK) * 1.4 + 8) {
       lure(S, bot, to); // and wait all the same while it goes
-      const nearest = known(S, bot, 4)
-        .filter(h => MOVING.includes(h.st))
-        .sort((a, b) => dist(bot, a) - dist(bot, b))[0];
+      const moving = known(S, bot, 4).filter(h => MOVING.includes(h.st));
+      const h = nearest(bot, moving);
       w.goal = booth
         ? BOOTH_MID
-        : nearest && dist(bot, nearest) < 8
+        : h && dist(bot, h) < 8
           ? fleeTo(
-              S,
               bot,
-              race(S, bot, [nearest], () => 3)
+              race(S, bot, [h], () => 3, 'waitRace')
             )
           : null;
       w.use = null;
@@ -1020,28 +1013,26 @@ const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => 
 
 // Mini Biggs. The nearest thing this guard can see wandering or searching (not after anyone): throw one where it will
 // hear it sing, and where walking to it takes it away from the guard and from where the guard is going (to). Sixteen
-// ways round are tried. Only with skill.spare of the battery left after it. Returns true if one was thrown.
-function lure(S: NightState, bot: Bot, to: Point): boolean {
+// ways round are tried. Only with skill.spare of the battery left after it.
+function lure(S: NightState, bot: Bot, to: Point): void {
   const me = guardOf(bot),
     st = bot.state;
-  if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < bot.skill.spare || S.t < (st.lureAt || 0)) return false;
-  const h = known(S, bot, 1.5)
-    .filter(k => k.how !== 'map' && (k.st === 'roam' || k.st === 'search') && dist(bot, k) < 14)
-    .sort((a, b) => dist(bot, a) - dist(bot, b))[0];
-  if (!h) return false;
+  if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < bot.skill.spare || S.t < (st.lureAt || 0)) return;
+  const wandering = known(S, bot, 1.5).filter(k => k.how !== 'map' && (k.st === 'roam' || k.st === 'search') && dist(bot, k) < 14);
+  const h = nearest(bot, wandering);
+  if (!h) return;
   let best: { yaw: number; d: number; score: number } | null = null;
   for (let k = 0; k < 16; k++) {
     const yaw = (k * Math.PI) / 8,
-      at = landing(S, me.x, me.z, yaw, TOY.range); // from where the host has them
+      at = landing(S, me.x, me.z, yaw, TOY.range); // from where the sim has them
     if ([M.DUCTS, M.BOOTH].includes(M.roomAt(at.x, at.z)) || dist(at, h) > TOY.hear - 2 || dist(at, bot) < 6 || dist(at, to) < 6 || segDist(h, at, bot) < 4)
       continue;
     const score = dist(at, bot) + dist(at, to) - dist(at, h);
-    if (!best || score > best.score) best = { yaw, d: dist(me, at) + 0.05, score }; // a hair over, so the host's own steps reach the same spot
+    if (!best || score > best.score) best = { yaw, d: dist(me, at) + 0.05, score }; // a hair over, so the sim's own steps reach the same spot
   }
-  if (!best) return false;
+  if (!best) return;
   st.lureAt = S.t + 6; // and give that one time to work before throwing another
   api.actFloor(sim, S, bot.id, { t: 'throw', yaw: best.yaw, d: best.d });
-  return true;
 }
 
 // Lockers (M.HIDES). The nearest one nobody is in, within `within` metres, as something to use.
@@ -1049,8 +1040,8 @@ function freeLocker(S: NightState, bot: Bot, within: number): Use | undefined {
   const free = M.HIDES.map((h, i) => ({ h, i })).filter(
     ({ h, i }) => !S.players.some(p => p.hid === i) && dist(bot, h.at) < within && M.clear(bot.x, bot.z, h.at.x, h.at.z, M.PLAYER_R, S.doors)
   );
-  const best = free.sort((a, b) => dist(bot, a.h.at) - dist(bot, b.h.at))[0];
-  return best && { what: 'hide', i: best.i, at: best.h.at, stand: best.h.at, hold: F.HIDE_HOLD, key: `hide${best.i}` };
+  const best = nearestBy(bot, free, f => f.h.at);
+  return best && hideUse(best.i, best.h.at);
 }
 // In a locker: stay while anything known is moving nearby, then out after a few seconds of quiet (or 25 s at most,
 // since the faults do not wait). Returns true while in one.
@@ -1084,12 +1075,12 @@ const DEGENERATE = {
       w.on = !lightsF(S);
       if (toys) lure(S, bot, BOOTH_MID);
       for (const [j, k] of DOORS.entries()) if (((bot.i + j) % 3 === 0 || S.t > 4) && setDoor(S, bot, k, true)) return;
-      const h = known(S, bot).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
+      const h = nearest(bot, known(S, bot));
       if (h && dist(bot, h) < 12) {
         w.face = ang(bot, h);
         w.on = true;
       }
-      if (bot.bat < 0.9) w.use = { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' };
+      if (bot.bat < 0.9) w.use = CHARGE;
       else w.goal = BOOTH_MID;
     },
   }),
@@ -1098,9 +1089,9 @@ const DEGENERATE = {
     skill: SKILL.competent,
     think(S, bot) {
       const w = bot.want,
-        h = known(S, bot).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
+        h = nearest(bot, known(S, bot));
       w.on = true;
-      w.use = { what: 'charge', at: M.CHARGER, hold: -1, key: 'charge' };
+      w.use = CHARGE;
       w.face = h ? ang(bot, h) : Math.PI + (bot.i - 1) * 0.8;
     },
   }),
@@ -1133,7 +1124,7 @@ const DEGENERATE = {
       const leg = (i: number) => defined(loop[i], `leg ${i} of the loop`); // st.leg is kept to the loop's length
       st.leg ??= 0;
       if (dist(bot, leg(st.leg)) < 1.5) st.leg = (st.leg + 1) % loop.length;
-      const h = known(S, bot).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
+      const h = nearest(bot, known(S, bot));
       bot.want.goal = leg(st.leg);
       bot.want.sprint = !!h && dist(bot, h) < 5;
       bot.want.on = false;
@@ -1145,7 +1136,7 @@ const DEGENERATE = {
     think(S, bot) {
       const w = bot.want,
         at = { x: spot.x + ((bot.i % 3) - 1) * spot.dx, z: spot.z + ((bot.i % 3) - 1) * (spot.dz || 0) };
-      const h = known(S, bot).sort((a, b) => dist(bot, a) - dist(bot, b))[0];
+      const h = nearest(bot, known(S, bot));
       w.ducts = true;
       if (dist(bot, at) > 0.3) w.goal = at;
       if (h && dist(bot, h) < F.BEAM_RANGE) {
@@ -1162,7 +1153,7 @@ const DEGENERATE = {
       const spawn = M.spawnPoint(0),
         order = M.HIDES.map((h, i) => ({ h, i })).sort((a, b) => dist(spawn, a.h.at) - dist(spawn, b.h.at));
       const { h, i } = defined(order[bot.i % order.length], 'a locker');
-      bot.want.use = { what: 'hide', i, at: h.at, stand: h.at, hold: F.HIDE_HOLD, key: `hide${i}` };
+      bot.want.use = hideUse(i, h.at);
     },
   }),
   // Crank the generator and nothing else, torch on whatever turns up.
@@ -1170,10 +1161,9 @@ const DEGENERATE = {
     skill: SKILL.competent,
     think(S, bot) {
       const w = bot.want,
-        h = known(S, bot)
-          .filter(k => k.how !== 'map')
-          .sort((a, b) => dist(bot, a) - dist(bot, b))[0];
-      w.use = { what: 'crank', at: M.GENERATOR, hold: -1, key: 'crank' };
+        seen = known(S, bot).filter(k => k.how !== 'map'),
+        h = nearest(bot, seen);
+      w.use = CRANK;
       if (h && dist(bot, h) < F.BEAM_RANGE) {
         w.face = ang(bot, h);
         w.on = true;
@@ -1184,17 +1174,12 @@ const DEGENERATE = {
 
 /* ---------- the things that must never happen ---------- */
 
-// What went wrong, as "<scenario>: <what>". The command line prints them; a worker sends its own back.
-export const failures: string[] = [];
-export const fail = (name: string, what: string) => {
-  if (failures.length < 60) failures.push(`${name}: ${what}`);
-};
-
+const inside = (x: number, z: number) => x >= 0 && z >= 0 && x < M.SIZE_X && z < M.SIZE_Z;
 // Flood the floor a mascot can stand on, from where the mascots start.
 function flood(ducts: boolean): { has: (x: number, z: number) => boolean } {
   const step = 0.25,
-    W = Math.ceil(42 / step),
-    H = Math.ceil(44 / step),
+    W = Math.ceil(M.SIZE_X / step),
+    H = Math.ceil(M.SIZE_Z / step),
     seen = new Uint8Array(W * H),
     cell = (x: number, z: number) => Math.round(z / step) * W + Math.round(x / step);
   const ok = (x: number, z: number) => M.walkable(x, z, M.MASCOT_R) && (ducts || M.roomAt(x, z) !== M.DUCTS);
@@ -1210,24 +1195,26 @@ function flood(ducts: boolean): { has: (x: number, z: number) => boolean } {
     ] as const) {
       const nx = x + dx,
         nz = z + dz;
-      if (nx >= 0 && nz >= 0 && nx < 42 && nz < 44 && !seen[cell(nx, nz)] && ok(nx, nz)) {
+      if (inside(nx, nz) && !seen[cell(nx, nz)] && ok(nx, nz)) {
         seen[cell(nx, nz)] = 1;
         queue.push([nx, nz]);
       }
     }
   }
-  return { has: (x, z) => x >= 0 && z >= 0 && x < 42 && z < 44 && !!seen[cell(x, z)] };
+  return { has: (x, z) => inside(x, z) && !!seen[cell(x, z)] };
 }
 
 // Things about the building that hold before anyone plays.
-export function checkBuilding(name: string): void {
+export function checkBuilding(): string[] {
+  const failures: string[] = [];
+  const bad = (what: string) => failures.push(`the building: ${what}`);
   const start = M.spawnPoint(0),
     reach = F.REACH - 0.3;
   const reachable = (label: string, at: Point, stand: Point) => {
-    if (!M.walkable(stand.x, stand.z, M.PLAYER_R)) return fail(name, `${label}: nowhere to stand at ${stand.x.toFixed(1)}, ${stand.z.toFixed(1)}`);
-    if (dist(stand, at) > reach) return fail(name, `${label}: its standing spot is out of reach`);
+    if (!M.walkable(stand.x, stand.z, M.PLAYER_R)) return bad(`${label}: nowhere to stand at ${stand.x.toFixed(1)}, ${stand.z.toFixed(1)}`);
+    if (dist(stand, at) > reach) return bad(`${label}: its standing spot is out of reach`);
     const r = M.route(start.x, start.z, stand.x, stand.z, { r: M.PLAYER_R });
-    if (!r.path.length) fail(name, `${label}: no route from the booth`);
+    if (!r.path.length) bad(`${label}: no route from the booth`);
   };
   M.BOXES.forEach((c, i) => {
     reachable(`box ${i}`, c, front(c));
@@ -1242,11 +1229,11 @@ export function checkBuilding(name: string): void {
     const panel = M.PANELS[k],
       outside = OUTSIDE[k];
     reachable(`door ${k} inside`, panel, front(panel));
-    if (!M.walkable(outside.x, outside.z, M.PLAYER_R) || dist(outside, panel) > reach) fail(name, `door ${k}: cannot be worked from outside`);
+    if (!M.walkable(outside.x, outside.z, M.PLAYER_R) || dist(outside, panel) > reach) bad(`door ${k}: cannot be worked from outside`);
   }
   for (const i of MASCOTS) {
     const r = M.REST[i];
-    if (!M.walkable(r.x, r.z, M.MASCOT_R)) fail(name, `${MASC[i].name} rests inside something`);
+    if (!M.walkable(r.x, r.z, M.MASCOT_R)) bad(`${MASC[i].name} rests inside something`);
   }
   // Nowhere a guard can stand is out of every mascot's reach: the walkers everywhere but the ducts, Squish there.
   // A mascot that cannot get nearer reaches F.GRAB across furniture, so that is the distance that counts.
@@ -1255,8 +1242,8 @@ export function checkBuilding(name: string): void {
     R = F.GRAB - 0.25;
   let safe = 0,
     where = '';
-  for (let x = 0.25; x < 42; x += 0.25)
-    for (let z = 0.25; z < 44; z += 0.25) {
+  for (let x = 0.25; x < M.SIZE_X; x += 0.25)
+    for (let z = 0.25; z < M.SIZE_Z; z += 0.25) {
       if (!M.walkable(x, z, 0.2)) continue;
       const f = M.roomAt(x, z) === M.DUCTS ? squish : walkers;
       let caught = false;
@@ -1267,13 +1254,16 @@ export function checkBuilding(name: string): void {
         where ||= `${x}, ${z}`;
       }
     }
-  if (safe) fail(name, `${safe} standing spots no mascot can reach, first at ${where}`);
+  if (safe) bad(`${safe} standing spots no mascot can reach, first at ${where}`);
+  return failures;
 }
 
 /* ---------- one night ---------- */
 
-// What one night came to, for the table. Times are seconds; firstFlat is 1e9 if nobody was flattened.
+// What one night came to, for the table. Times are seconds; firstFlat is 1e9 if nobody was flattened. failures
+// says what went wrong in it, as "<scenario>: seed <n>: <what>": a softlock, or a night that broke its own rules.
 export interface Outcome {
+  failures: string[];
   win: boolean;
   t: number;
   flats: number;
@@ -1283,7 +1273,6 @@ export interface Outcome {
   firstFlat: number;
   notes: string[];
   hunted: number;
-  quiet: number;
   calms: number;
   stood: number;
   lit: number;
@@ -1311,6 +1300,45 @@ export interface PlayOptions {
   onStep?: (S: NightState) => void;
 }
 
+// One guard's tick: a flat one calls for help, the rest look, think and act.
+function tick(S: NightState, bot: Bot, team: Team, tickNo: number): void {
+  const me = guardOf(bot);
+  bot.bat = me.bat;
+  if (me.flat) {
+    if (!bot.flat) {
+      bot.flat = true;
+      bot.x = me.x;
+      bot.z = me.z;
+    }
+    if (S.t - (bot.called || -9) > F.CALL_GAP) {
+      bot.called = S.t;
+      api.actFloor(sim, S, bot.id, { t: 'call' });
+    }
+    return;
+  }
+  bot.flat = false;
+  if (me.hid >= 0) {
+    bot.x = me.x;
+    bot.z = me.z;
+  }
+  bot.want = { on: false };
+  if ((tickNo + bot.i) % 3 === 0) perceive(S, bot);
+  bot.policy.think(S, bot, team);
+  act(S, bot);
+}
+// The --steps line: the time, where each guard is and what they want, then each mascot (brains: and its brain).
+function traceLine(S: NightState, team: Team, brains: boolean): string {
+  const guards = team.bots.map(b => {
+    const doing = b.want.use?.key || (b.want.goal ? `go ${b.want.goal.x.toFixed(1)},${b.want.goal.z.toFixed(1)}` : '-');
+    return `${b.flat ? 'FLAT' : ''}(${b.x.toFixed(1)},${b.z.toFixed(1)}) bat ${b.bat.toFixed(2)}${b.on ? '*' : ''} ${doing}`;
+  });
+  const mascots = S.m.map(m => {
+    const brain = brains ? JSON.stringify({ ...brainOf(sim, m.i), path: brainOf(sim, m.i).path.length }) : '';
+    return `${m.st}${m.lit ? '*' : ''}(${m.x.toFixed(0)},${m.z.toFixed(0)})${brain}`;
+  });
+  return `${S.t.toFixed(0).padStart(6)}  ${guards.join(' ')}  |  ${mascots.join(' ')}${S.stir ? '  STIR' : ''}`;
+}
+
 export function play(sc: Scenario, seed: number, { trace = 0, brains = false, onStep }: PlayOptions = {}): Outcome {
   seedRandom(seed);
   const S = newState('TEST');
@@ -1325,9 +1353,10 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
   if (sc.dev) S.dev = sc.dev; // the sim reads only the cheats that are there
   for (const b of team.bots) {
     const { x, z } = guardOf(b);
-    Object.assign(b, { x, z, bat: 1, flat: false });
+    Object.assign(b, { x, z });
   }
   const out: Outcome = {
+    failures: [],
     win: false,
     t: 0,
     flats: 0,
@@ -1337,7 +1366,6 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     firstFlat: 1e9,
     notes: [],
     hunted: 0,
-    quiet: 0,
     calms: 0,
     stood: 0,
     lit: 0,
@@ -1357,6 +1385,9 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     toys: 0,
     lured: 0,
   };
+  const fail = (what: string) => {
+    if (out.failures.length < 60) out.failures.push(`${sc.name}: seed ${seed}: ${what}`);
+  };
   const parked = S.m.map(m => ({ x: m.x, z: m.z, t: 0 }));
   let seenEv = 0,
     faultKey = '',
@@ -1373,54 +1404,15 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
       assignFaults(S, team);
     }
     for (const bot of team.bots) {
-      const me = guardOf(bot);
-      bot.bat = me.bat;
-      if (me.flat) {
-        if (!bot.flat) {
-          bot.flat = true;
-          bot.x = me.x;
-          bot.z = me.z;
-        }
-        if (S.t - (bot.called || -9) > F.CALL_GAP) {
-          bot.called = S.t;
-          api.actFloor(sim, S, bot.id, { t: 'call' });
-        }
-        continue;
-      }
-      bot.flat = false;
-      if (me.hid >= 0) {
-        bot.x = me.x;
-        bot.z = me.z;
-      }
-      bot.want = { on: false };
-      if ((tickNo + bot.i) % 3 === 0) perceive(S, bot);
-      bot.policy.think(S, bot, team);
-      act(S, bot, DT);
+      tick(S, bot, team, tickNo);
       if (bot.still > 45) {
-        fail(sc.name, `seed ${seed}: guard ${bot.i} could not move at ${bot.x.toFixed(1)}, ${bot.z.toFixed(1)} for 45 s`);
+        fail(`guard ${bot.i} could not move at ${bot.x.toFixed(1)}, ${bot.z.toFixed(1)} for 45 s`);
         bot.still = 0;
       }
     }
     api.stepFloor(sim, S, now);
     onStep?.(S);
-    if (trace === 2 && tickNo % 10 === 0)
-      console.log(
-        `${S.t.toFixed(0).padStart(6)}  ` +
-          team.bots
-            .map(
-              b =>
-                `${b.flat ? 'FLAT' : ''}(${b.x.toFixed(1)},${b.z.toFixed(1)}) bat ${b.bat.toFixed(2)}${b.on ? '*' : ''} ${b.want.use?.key || (b.want.goal ? `go ${b.want.goal.x.toFixed(1)},${b.want.goal.z.toFixed(1)}` : '-')}`
-            )
-            .join(' ') +
-          '  |  ' +
-          S.m
-            .map(
-              m =>
-                `${m.st}${m.lit ? '*' : ''}(${m.x.toFixed(0)},${m.z.toFixed(0)})${brains ? JSON.stringify({ ...brainOf(sim, m.i), path: brainOf(sim, m.i).path.length }) : ''}`
-            )
-            .join(' ') +
-          (S.stir ? '  STIR' : '')
-      );
+    if (trace === 2 && tickNo % 10 === 0) console.log(traceLine(S, team, brains));
 
     // Measure.
     let anyHunted = false;
@@ -1453,10 +1445,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     if (anyHunted) {
       if (calm >= 20) out.calms++;
       calm = 0;
-    } else {
-      calm += DT;
-      out.quiet += DT;
-    }
+    } else calm += DT;
     for (const e of S.evs)
       if (e.id > seenEv) {
         seenEv = e.id;
@@ -1467,7 +1456,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
             gi = S.players.findIndex(p => p.id === e.x.id),
             bot = team.bots[gi];
           if (!bot) {
-            fail(sc.name, `seed ${seed}: ${e.x.id}, who is not playing, was flattened`);
+            fail(`${e.x.id}, who is not playing, was flattened`);
             continue;
           }
           const m = defined(S.m[by], `mascot ${by}`),
@@ -1494,26 +1483,26 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
 
     // Softlocks.
     if (S.players.every(p => p.flat) && S.phase === 'play') {
-      fail(sc.name, `seed ${seed}: everyone is flat and the night goes on`);
+      fail(`everyone is flat and the night goes on`);
       break;
     }
     if (S.t > 6 * F.HOUR + 1) {
-      fail(sc.name, `seed ${seed}: past 6 AM and still playing`);
+      fail(`past 6 AM and still playing`);
       break;
     }
     S.m.forEach((m, i) => {
       const p = defined(parked[i], `where mascot ${i} stood`); // one per mascot
-      if (!Number.isFinite(m.x + m.z + m.yaw)) fail(sc.name, `seed ${seed}: ${MASC[m.i].name} is nowhere`);
+      if (!Number.isFinite(m.x + m.z + m.yaw)) fail(`${MASC[m.i].name} is nowhere`);
       if (!['roam', 'search', 'hunt'].includes(m.st) || m.lit || dist(m, p) > 0.5) Object.assign(p, { x: m.x, z: m.z, t: S.t });
       else if (S.t - p.t > 30) {
-        fail(sc.name, `seed ${seed}: ${MASC[m.i].name} stood ${m.st}ing at ${m.x.toFixed(1)}, ${m.z.toFixed(1)} for 30 s`);
+        fail(`${MASC[m.i].name} stood ${m.st}ing at ${m.x.toFixed(1)}, ${m.z.toFixed(1)} for 30 s`);
         p.t = S.t;
       }
     });
   }
   if (calm >= 20) out.calms++;
   Object.assign(out, { win: S.phase === 'win' || S.phase === 'won', t: S.t, power: S.power, burnt: S.tally.burnt, fixed: S.tally.fixed });
-  if (S.phase === 'play') fail(sc.name, `seed ${seed}: the night did not end`);
+  if (S.phase === 'play') fail(`the night did not end`);
   return out;
 }
 

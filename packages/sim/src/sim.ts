@@ -36,8 +36,9 @@
 // faults a guard alone is near that and crews fall faster from night 3 (see the
 // README's "Balance on the floor").
 import { assert, defined, isNonEmpty, isPlaced } from './check.ts';
-import { DOORS, FINAL_NIGHT, MASC, MASCOTS } from './config.ts';
+import { BIGGS, DEFAULT_NAME, DOORS, FINAL_NIGHT, FLAN, MASC, MASCOTS, NAME_MAX, SQUISH, STOMPY } from './config.ts';
 import {
+  angDiff,
   BATTERY_SPOTS,
   BOOTH,
   BOXES,
@@ -45,8 +46,10 @@ import {
   clear,
   DOORWAYS,
   DUCTS,
+  dist,
   GENERATOR,
   HIDES,
+  hypot,
   MASCOT_R,
   PANELS,
   PLAYER_R,
@@ -162,9 +165,13 @@ const WINDUP = { time: 1.5, commit: 0.5 }; // Stompy's wind-up before a charge, 
 const SEARCH_MAX = 14; // seconds one spends looking for what it heard or lost before it gives that up
 const NOTICE = 0.7; // seconds a mascot stands and stares after spotting a guard, before it moves
 // How long a mascot keeps after a guard before it gives up and goes home: seconds on night 1, and more each night after.
-// Biggs keeps on twice as long. With the power out nothing gives up.
+// Biggs keeps on half as long again. With the power out nothing gives up.
 const WIND: [number, number] = [8, 0.75];
-const RELENT = 8; // seconds Biggs keeps knowing where its guard is after losing sight of them
+const windOf = (S: NightState, m: Mascot) => (WIND[0] + WIND[1] * S.night) * (m.i === BIGGS ? 1.5 : 1);
+// Seconds a mascot keeps knowing where its guard is after losing sight of them: Biggs, and the rest.
+const RELENT = 8,
+  KEEP = 1.2;
+const keepsFor = (m: Mascot) => (m.i === BIGGS ? RELENT : KEEP);
 const NEAREST = 3; // seconds one that has lost its guard goes without getting closer to where it last saw them before it searches there
 // The mascots stir and settle in turns: seconds of each, before the night's heat stretches one and shrinks the other.
 const STIR: [number, number] = [28, 42],
@@ -198,15 +205,7 @@ const LOCKER_NOISE: [number, number] = [6, 0.5];
 export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3 };
 
 const OPEN = (): Doors => ({ L: false, V: false, R: false });
-// Math.hypot is looked up on every call: tools/roblox/diff/rec.ts swaps it for the plain formula Luau uses.
-const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
-const angDiff = (a: number, b: number) => {
-  let d = (a - b) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-};
-// The night's random numbers, all drawn from sim.rng in the order the night has always drawn them (CONTRACT.md).
+// The night's random numbers, all drawn from sim.rng. The Roblox port draws in the same order (CONTRACT.md).
 const rnd = (sim: Sim, a: number, b: number) => a + sim.rng() * (b - a);
 // A draw in [0, 1) times the length of a list that is not empty always lands on an entry.
 const pick = <T>(sim: Sim, list: NonEmpty<T>): T => defined(list[(sim.rng() * list.length) | 0], 'a random pick');
@@ -251,7 +250,8 @@ const pack = (S: NightState) => (S.out ? 4 : 1 + Math.floor(heat(S) * 1.2 + (S.p
 // night 3, 3 AM on night 4 and 1 AM on night 5. A crew of three meets all four from 2 AM on night 1, four or more
 // from the start.
 const roster = (S: NightState) => (S.out ? 4 : 2 + Math.floor(heat(S) * 3.3 + (S.players.length - 1) * 0.75));
-const COMING: MascotState[] = ['hunt', 'windup', 'charge'];
+// The states in which a mascot is coming for a guard.
+export const COMING: readonly MascotState[] = ['hunt', 'windup', 'charge'];
 const inDucts = (p: Guard) => !p.flat && roomAt(p.x, p.z) === DUCTS;
 // When each mascot first comes out, by MASC index: hours of the run (six to a night), and how many hours sooner
 // for each guard past the first. Alone, Squish turns up at 3 AM on night 1. Stompy turns up on night 2 for every
@@ -265,7 +265,10 @@ const WAKE: PerMascot<[number, number]> = [
   [10, 0.8],
 ];
 const isActive = (S: NightState, m: Mascot) =>
-  !!S.dev?.wake || S.out || (S.night - 1) * 6 + S.t / F.HOUR + (S.players.length - 1) * WAKE[m.i][1] >= WAKE[m.i][0] || (m.i === 2 && S.players.some(inDucts));
+  !!S.dev?.wake ||
+  S.out ||
+  (S.night - 1) * 6 + S.t / F.HOUR + (S.players.length - 1) * WAKE[m.i][1] >= WAKE[m.i][0] ||
+  (m.i === SQUISH && S.players.some(inDucts));
 
 // Events with nothing to say take no x, and the rest must give theirs. The entry always has the key x, as it always
 // has, even when it is undefined.
@@ -276,21 +279,15 @@ function emit<K extends EventType>(S: LobbyState, type: K, ...[x]: EventData[K] 
 
 /* ---------- the night ---------- */
 
-// How the night's battery spots are shuffled. 'sort' is the game's: a sort with a random comparator. 'fisher-yates'
-// is the Roblox port's, which the recorder for tools/roblox/diff asks for so the two draw alike.
-export type Shuffle = 'sort' | 'fisher-yates';
-
 export interface SimOptions {
   rng: Rng; // every random draw the night makes
   now: number; // milliseconds on the caller's clock, as performance.now() gives: the start of the first step
-  shuffle?: Shuffle; // 'sort' unless given
 }
 
 // What only whoever runs the night knows: the guards in the room and the mascots' thinking. The caller makes one with
 // newSim() and passes it, with S, to every call below. Nothing else in the package keeps state about a night.
 export interface Sim {
   rng: Rng; // the caller may swap it between calls
-  shuffle: Shuffle;
   players: Record<string, Player>; // guard id -> that guard's record, the same object as their entry in S.players
   // What each mascot is thinking, by MASC index. It is never sent. Browsers get the result (m.st, m.x, m.z, m.yaw).
   brains: Brain[];
@@ -301,7 +298,7 @@ export interface Sim {
 }
 
 export function newSim(opts: SimOptions): Sim {
-  return { rng: opts.rng, shuffle: opts.shuffle ?? 'sort', players: {}, brains: [], batTimers: [], crankNoise: 0, nextFault: 0, lastStep: opts.now };
+  return { rng: opts.rng, players: {}, brains: [], batTimers: [], crankNoise: 0, nextFault: 0, lastStep: opts.now };
 }
 
 // The balance harness reads what a mascot is after. Nothing in the game does.
@@ -311,8 +308,7 @@ export const brainOf = (sim: Sim, i: number): Brain => defined(sim.brains[i], `m
 // What the end screens count: faults fixed and faults left to burn as numbers, flats as [guard, mascot index], peels as the peeler's name.
 // S.tally is this night's, S.total the whole run's.
 const newTally = (): Tally => ({ fixed: 0, burnt: 0, flats: [], peels: [] });
-// This night's and the run's. S.total is null only between restartFloor and the night it starts.
-const tallies = (S: NightState) => [S.tally, defined(S.total, "the run's tally")];
+const tallies = (S: NightState) => [S.tally, S.total];
 const count = (S: NightState, key: 'fixed' | 'burnt', n: number) => {
   for (const t of tallies(S)) t[key] += n;
 };
@@ -327,6 +323,37 @@ const guards = (sim: Sim) => Object.values(sim.players);
 const standing = (S: NightState) => S.players.filter(p => !p.flat);
 // The guards a mascot could see, light, hear or walk into: standing and not in a locker.
 const outside = (S: NightState) => S.players.filter(p => !p.flat && !hidden(p));
+
+// A mascot with nothing in mind, and a few seconds before it first stirs.
+const newBrain = (sim: Sim): Brain => ({
+  path: [],
+  repath: 0,
+  dest: null,
+  tgt: null,
+  last: null,
+  lost: 0,
+  timer: rnd(sim, 0, 8),
+  bangs: 0,
+  cool: 0,
+  dir: null,
+  stuck: 0,
+  key: null,
+  home: false,
+  spent: false,
+  woke: false,
+  notice: 0,
+  wind: 0,
+  stared: 0,
+  reach: null,
+  knows: -1,
+  sniff: 0,
+  checks: [],
+  since: 0,
+  was: null,
+  noShort: 0,
+  near: Infinity,
+  nearAt: 0,
+});
 
 // Sets every Guard field at once (isPlaced relies on that).
 function placeGuard(p: Player, i: number): asserts p is Guard {
@@ -346,9 +373,9 @@ function placeGuard(p: Player, i: number): asserts p is Guard {
   });
 }
 
-// A room's state before its first night. evs is the event list (emit); deaths and slams count the whole run.
+// A room's state before its first night. evs is the event list (emit); deaths counts the whole run.
 export function newState(code: string): State {
-  return { phase: 'lobby', night: 1, t: 0, power: 100, doors: OPEN(), m: [], players: [], killer: -1, evs: [], evId: 0, deaths: 0, slams: 0, code };
+  return { phase: 'lobby', night: 1, t: 0, power: 100, doors: OPEN(), m: [], players: [], killer: -1, evs: [], evId: 0, deaths: 0, code };
 }
 
 // Start night n: the guards in sim.players on their spawn points, the mascots on their marks.
@@ -373,34 +400,10 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
   // S.waveAt is when the mascots next stir or settle, on S.t, kept in S so a night picked up from S alone has it.
   const quiet = n === 1 ? 34 : Math.max(12, 26 - n * 3);
   S.waveAt = quiet + rnd(sim, 0, 6);
-  sim.brains = MASC.map((_d, _i) => ({
-    path: [],
-    repath: 0,
-    dest: null,
-    tgt: null,
-    last: null,
-    lost: 0,
-    timer: rnd(sim, 0, 8),
-    bangs: 0,
-    cool: 0,
-    dir: null,
-    stuck: 0,
-    key: null,
-    home: false,
-    spent: false,
-    woke: false,
-    notice: 0,
-    wind: 0,
-    stared: 0,
-    reach: null,
-    knows: -1,
-    sniff: 0,
-    checks: [],
-  }));
-  // One entry per breaker box: null, or the fault in it: { k: kind (index into F.FIX), at: when it broke out, burnt:
-  // whether it has started on the ceiling }. Any guard can fix any fault. (Faults given to one guard each were tried
-  // in the balance harness: alone it made no difference, and crews of two to six won a third to half as often,
-  // crossing the building past each other instead of each taking the nearest.)
+  sim.brains = MASC.map(() => newBrain(sim));
+  // One entry per breaker box: null, or the fault in it. Any guard can fix any fault. (Faults given to one guard each
+  // were tried in the balance harness: alone it made no difference, and crews of two to six won a third to half as
+  // often, crossing the building past each other instead of each taking the nearest.)
   S.faults = BOXES.map(() => null);
   sim.nextFault = FAULT.first + (n === 1 ? 6 : 0) + rnd(sim, 0, 6);
   S.tally = newTally();
@@ -410,22 +413,14 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
     placeGuard(p, i);
     return p;
   });
-  // The game sorts with a random comparator, so V8 decides how many draws that takes. The Roblox port shuffles them
-  // Fisher-Yates, and the recorder for tools/roblox/diff asks for that so the two draw alike.
+  // Fisher-Yates, drawing as the Roblox port does.
   const spots = BATTERY_SPOTS.map((_, i) => i);
-  if (sim.shuffle === 'sort') spots.sort(() => sim.rng() - 0.5);
-  else
-    for (let i = spots.length - 1; i > 0; i--) {
-      const j = (sim.rng() * (i + 1)) | 0;
-      const a = defined(spots[i], `spot ${i}`),
-        b = defined(spots[j], `spot ${j}`);
-      spots[i] = b;
-      spots[j] = a;
-    }
+  for (let i = spots.length - 1; i > 0; i--) {
+    const j = (sim.rng() * (i + 1)) | 0;
+    [spots[i], spots[j]] = [defined(spots[j], `spot ${j}`), defined(spots[i], `spot ${i}`)];
+  }
   S.batN = Math.min(spots.length, 3 + all.length); // the night's batteries, lying about or due back
   S.bats = spots.slice(0, S.batN);
-  // The Mini Biggses thrown and not picked up again: { id, by, x0, z0: where it left the hand, x, z: where it lands,
-  // at: when it was thrown, land: when it lands, heard: whether it has sung }.
   S.toys = [];
   S.toyId = 0;
   sim.batTimers = [];
@@ -444,33 +439,10 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
     h = heat(S);
   sim.lastStep = now;
   sim.brains = S.m.map(m => {
-    const b: Brain = {
-      path: [],
-      repath: 0,
-      dest: null,
-      tgt: null,
-      last: { x: m.x, z: m.z },
-      lost: 0,
-      timer: rnd(sim, 0, 8),
-      bangs: 0,
-      cool: m.i === 3 ? CHARGE_GAP : 0,
-      dir: null,
-      stuck: 0,
-      key: null,
-      home: false,
-      spent: false,
-      woke: m.st !== 'rest',
-      notice: 0,
-      wind: 0,
-      stared: 0,
-      reach: null,
-      knows: -1,
-      sniff: 0,
-      checks: [],
-    };
+    const b: Brain = { ...newBrain(sim), last: { x: m.x, z: m.z }, cool: m.i === STOMPY ? CHARGE_GAP : 0, woke: m.st !== 'rest' };
     if (m.st === 'rest') b.timer = rnd(sim, ...SPENT) * (1 - 0.5 * h);
     const prey = up.reduce<Guard | null>((a, p) => (!a || dist(m, p) < dist(m, a) ? p : a), null);
-    if (m.st === 'hunt' && prey) Object.assign(b, { tgt: prey.id, last: { x: prey.x, z: prey.z }, wind: (WIND[0] + WIND[1] * S.night) * (m.i ? 1 : 1.5) });
+    if (m.st === 'hunt' && prey) Object.assign(b, { tgt: prey.id, last: { x: prey.x, z: prey.z }, wind: windOf(S, m) });
     else if (['hunt', 'windup', 'charge', 'siege'].includes(m.st)) {
       m.st = 'search';
       b.timer = rnd(sim, 3, 6);
@@ -478,16 +450,7 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
     return b;
   });
   // Batteries taken are back in 30 to 50 s. How long ago these went is lost, so they come back any time in that.
-  // A state from a build before S.batN and S.waveAt existed has neither, so guess those from the crew and the wave.
-  // One from before S.bats has no batteries lying about, so they are all due back.
-  state.bats ??= [];
-  const missing = (state.batN ?? Math.min(BATTERY_SPOTS.length, 3 + S.players.length)) - state.bats.length;
-  sim.batTimers = Array.from({ length: Math.max(0, missing) }, () => rnd(sim, 5, 50)).sort((a, b) => a - b);
-  state.waveAt ??= S.t + rnd(sim, 0.2, 1) * (S.stir ? rnd(sim, ...STIR) * (1 + h) : rnd(sim, ...CALM) * (1 - 0.7 * h));
-  // A state from before the toys has none, so everyone has theirs in hand.
-  state.toys ||= [];
-  state.toyId ||= 0;
-  for (const p of state.players) p.toy ??= true;
+  sim.batTimers = Array.from({ length: S.batN - S.bats.length }, () => rnd(sim, 5, 50)).sort((a, b) => a - b);
   // When the next fault was due is lost too, so it comes any time in a usual gap.
   sim.nextFault = faultGap(S) * rnd(sim, 0.2, 1);
   sim.crankNoise = 0;
@@ -495,7 +458,7 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
 
 // Back to night 1 with the run's counts cleared.
 export function restartFloor(sim: Sim, S: State): void {
-  Object.assign(S, { deaths: 0, slams: 0, flats: 0, total: null });
+  Object.assign(S, { deaths: 0, total: newTally() });
   startFloorNight(sim, S, 1);
 }
 
@@ -506,7 +469,7 @@ export const darkRoom = (S: NightState, room: number): boolean =>
     const f = S.faults[i];
     return f && box.room === room && S.t - f.at > FAULT.dark;
   });
-// Seconds left before a fault starts burning ceiling, and how much it leaks now (percent a second).
+// Seconds left before a fault starts burning ceiling.
 export const faultLeft = (S: NightState, f: { at: number }): number => FAULT.scar - (S.t - f.at);
 const boxAt = (i: number) => defined(BOXES[i], `box ${i}`);
 const hideAt = (h: number) => defined(HIDES[h], `locker ${h}`);
@@ -654,7 +617,7 @@ function canSee(S: NightState, m: Mascot, p: Guard) {
 function noise(sim: Sim, S: NightState, x: number, z: number, radius: number, chance: number) {
   for (const [i, m] of S.m.entries()) {
     const b = brainOf(sim, i);
-    if (!['roam', 'search'].includes(m.st) || b.home || Math.hypot(m.x - x, m.z - z) > radius || sim.rng() > chance) continue;
+    if (!['roam', 'search'].includes(m.st) || b.home || hypot(m.x - x, m.z - z) > radius || sim.rng() > chance) continue;
     m.st = 'search';
     b.last = { x, z };
     b.timer = rnd(sim, 3, 6);
@@ -697,15 +660,15 @@ function pickDest(sim: Sim, S: NightState, m: Mascot): Point {
   }
   if (isNonEmpty(up)) {
     // Squish goes for whoever is sitting in the booth, by the vent if it is open.
-    if (m.i === 2 && up.some(p => roomAt(p.x, p.z) === BOOTH) && sim.rng() < 0.6) room = BOOTH;
+    if (m.i === SQUISH && up.some(p => roomAt(p.x, p.z) === BOOTH) && sim.rng() < 0.6) room = BOOTH;
     else if (S.crank && sim.rng() < 0.5) room = GENERATOR.room;
     else if (sim.rng() < 0.25 + 0.5 * heat(S)) {
       const p = pick(sim, up);
       room = roomAt(p.x, p.z);
     }
   }
-  if (room == null || room < 0 || (room === DUCTS && m.i !== 2)) {
-    const rooms = ROOMS3.map((_, i) => i).filter(i => i !== BOOTH && (i !== DUCTS || m.i === 2) && i !== roomAt(m.x, m.z));
+  if (room == null || room < 0 || (room === DUCTS && m.i !== SQUISH)) {
+    const rooms = ROOMS3.map((_, i) => i).filter(i => i !== BOOTH && (i !== DUCTS || m.i === SQUISH) && i !== roomAt(m.x, m.z));
     assert(isNonEmpty(rooms), 'there is a room to wander to'); // eight outside the booth, and it stands in one at most
     room = pick(sim, rooms);
   }
@@ -734,7 +697,7 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
     return 'there';
   }
   if (b.repath <= 0 || !b.path.length) {
-    const r = route(m.x, m.z, goal.x, goal.z, { doors: S.doors, ducts: m.i === 2 });
+    const r = route(m.x, m.z, goal.x, goal.z, { doors: S.doors, ducts: m.i === SQUISH });
     b.path = r.path;
     b.key = r.blocked || null;
     b.repath = eager ? 0.35 : 1.5;
@@ -742,14 +705,7 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
     // The last few metres to a guard tucked somewhere a mascot does not fit: straight at them, not back to the
     // nearest waypoint every time it asks again. Whatever stops it short, it reaches over (see tucked). Not straight
     // after that line jammed it: a gap a guard fits through and it does not would hold it there for good.
-    if (
-      eager &&
-      r.path.length > 1 &&
-      !r.blocked &&
-      dist(m, goal) < 4 &&
-      (b.noShort === undefined || b.noShort <= S.t) &&
-      clear(m.x, m.z, goal.x, goal.z, PLAYER_R, S.doors)
-    )
+    if (eager && r.path.length > 1 && !r.blocked && dist(m, goal) < 4 && b.noShort <= S.t && clear(m.x, m.z, goal.x, goal.z, PLAYER_R, S.doors))
       b.path = [goal];
   }
   // Near enough a waypoint counts as there, but only if the way on is clear from here: a prop can stand close
@@ -766,7 +722,7 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
   if (!next) return b.key ? 'blocked' : 'there';
   const dx = next.x - m.x,
     dz = next.z - m.z,
-    d = Math.hypot(dx, dz),
+    d = hypot(dx, dz),
     stepLen = Math.min(d, speed * dt);
   turn(m, Math.atan2(dx, dz), 7 * dt);
   // Getting nowhere is sliding along something without getting nearer, as well as not moving at all.
@@ -787,7 +743,6 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
 function flatten(S: NightState, p: Guard, m: Mascot, b: Brain) {
   if (S.dev?.god) return;
   Object.assign(p, { flat: true, on: false, ph: false, flatBy: m.i, act: '', hid: -1 });
-  S.flats = (S.flats || 0) + 1;
   recordFlat(S, [p.name, m.i]);
   emit(S, 'flat', { id: p.id, by: m.i, x: p.x, z: p.z });
   p.bat *= FLAT_BAT;
@@ -823,13 +778,13 @@ function spot(S: NightState, m: Mascot, b: Brain, p: Guard) {
     b.notice = NOTICE;
     b.repath = 0;
     b.home = false;
-    b.wind = (WIND[0] + WIND[1] * S.night) * (m.i ? 1 : 1.5);
+    b.wind = windOf(S, m);
   }
   m.st = 'hunt';
   b.tgt = p.id;
   b.last = { x: p.x, z: p.z };
   b.lost = 0;
-  b.near = undefined;
+  b.near = Infinity;
 }
 
 // The locker a searching mascot means to look in next, and its index in HIDES. Nothing when it has no check left or
@@ -879,7 +834,7 @@ function seenHiding(sim: Sim, S: NightState, p: Guard) {
   for (const [i, m] of S.m.entries()) {
     const b = brainOf(sim, i);
     if (m.st === 'rest' || (b.spent && !S.out) || !b.woke) continue;
-    const after = COMING.includes(m.st) && b.tgt === p.id && b.lost < (m.i === 0 ? RELENT : 1.2);
+    const after = COMING.includes(m.st) && b.tgt === p.id && b.lost < keepsFor(m);
     if (!after && !canSee(S, m, p)) continue;
     b.knows = p.hid;
     if (m.st === 'roam' || m.st === 'search') {
@@ -912,7 +867,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     b.was = m.st;
     b.since = S.t;
   }
-  const ductGuest = m.i === 2 ? up.find(p => inDucts(p) && S.t >= p.safe) : null;
+  const ductGuest = m.i === SQUISH ? up.find(p => inDucts(p) && S.t >= p.safe) : null;
 
   // Standing where it stands. A wave gets it moving, or (Squish) someone in the ducts.
   if (m.st === 'rest') {
@@ -1014,7 +969,6 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     b.timer -= dt;
     if (b.timer > 0) return;
     emit(S, 'bang', key);
-    S.slams++;
     m.ire += BANG_IRE;
     b.bangs++;
     if (sim.rng() < FAULT.bang) breakOut(sim, S, BANG_BOX[key]);
@@ -1055,23 +1009,22 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     b.spent = true;
     emit(S, 'quit', { i: m.i, x: m.x, z: m.z });
   } else if (!seen && m.st === 'hunt') {
-    const tp = S.players.find(p => p.id === b.tgt),
-      keeps = m.i === 0 ? RELENT : 1.2;
+    const tp = S.players.find(p => p.id === b.tgt);
     b.lost += dt;
     // It saw them get into a locker: straight to its doors.
     if (tp && hidden(tp) && b.knows === tp.hid) {
       b.last = { ...hideAt(tp.hid).at };
       b.lost = 0;
-    } else if (tp && !tp.flat && !hidden(tp) && b.lost < keeps) {
+    } else if (tp && !tp.flat && !hidden(tp) && b.lost < keepsFor(m)) {
       b.last = { x: tp.x, z: tp.z }; // it knows which way you went round the corner
-      b.near = undefined;
+      b.near = Infinity;
     }
     // Otherwise it keeps on to the last place it knew they were, for as long as its wind lasts, and searches there:
     // once it gets there, or once it has gone NEAREST seconds without getting any closer (the spot is somewhere a
     // guard fits and it does not, and it is as near as it gets).
     const d = dist(m, defined(b.last, 'the guard it is after'));
-    if (b.near === undefined || d < b.near - 0.3) Object.assign(b, { near: d, nearAt: S.t });
-    if (!tp || tp.flat || S.t - (b.nearAt ?? S.t) > NEAREST) {
+    if (d < b.near - 0.3) Object.assign(b, { near: d, nearAt: S.t });
+    if (!tp || tp.flat || S.t - b.nearAt > NEAREST) {
       m.st = 'search';
       b.timer = rnd(sim, 4, 7);
     }
@@ -1098,17 +1051,17 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       speed = 0;
     }
     // Stompy: with a clear run at you, it winds up and charges.
-    else if (m.i === 3 && seen && b.cool <= 0 && near > 6 && near < 16 && clear(m.x, m.z, seen.x, seen.z, MASCOT_R, S.doors)) {
+    else if (m.i === STOMPY && seen && b.cool <= 0 && near > 6 && near < 16 && clear(m.x, m.z, seen.x, seen.z, MASCOT_R, S.doors)) {
       m.st = 'windup';
       b.timer = WINDUP.time;
       emit(S, 'roar', { i: m.i, x: m.x, z: m.z });
       return;
     } else {
       speed = SPEED.hunt[m.i] * angry;
-      if (m.i === 1 && !up.some(p => watchedBy(S, p, m))) speed = SPEED.unwatched * angry;
-      if (m.i === 2 && roomAt(m.x, m.z) === DUCTS) speed *= SPEED.ducts;
+      if (m.i === FLAN && !up.some(p => watchedBy(S, p, m))) speed = SPEED.unwatched * angry;
+      if (m.i === SQUISH && roomAt(m.x, m.z) === DUCTS) speed *= SPEED.ducts;
     }
-  } else if (m.st === 'search' && b.since !== undefined && S.t - b.since > SEARCH_MAX) {
+  } else if (m.st === 'search' && S.t - b.since > SEARCH_MAX) {
     m.st = 'roam';
     b.dest = null;
     return;
@@ -1261,20 +1214,19 @@ const num = (v: unknown, lo: number, hi: number, fallback: number) => (Number.is
 // it reads is checked here; the casts below only tell TypeScript what those checks found.
 export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
   const S = state as NightState,
-    who = sim.players[pid];
-  if (!who) return;
+    p = sim.players[pid];
+  if (!p) return;
   if (a.t === 'name') {
-    who.name = String(a.n || 'Guard').slice(0, 12);
+    p.name = String(a.n || DEFAULT_NAME).slice(0, NAME_MAX);
     return;
   }
-  if (S.phase !== 'play' || !isPlaced(who)) return;
-  const p = who;
+  if (S.phase !== 'play' || !isPlaced(p)) return;
   if (a.t === 'p') {
     // The guard's own browser moves them. Whoever runs the night only refuses a position inside a wall or a shut door.
     // In a locker they stay where they stepped in, with the torch off.
+    p.yaw = num(a.yaw, -1e3, 1e3, p.yaw);
+    p.pitch = num(a.pitch, -1.6, 1.6, p.pitch);
     if (hidden(p)) {
-      p.yaw = num(a.yaw, -1e3, 1e3, p.yaw);
-      p.pitch = num(a.pitch, -1.6, 1.6, p.pitch);
       p.on = p.sp = false;
       p.act = '';
       p.ph = !!a.ph && p.bat > 0;
@@ -1284,8 +1236,6 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
       p.x = a.x;
       p.z = a.z;
     }
-    p.yaw = num(a.yaw, -1e3, 1e3, p.yaw);
-    p.pitch = num(a.pitch, -1.6, 1.6, p.pitch);
     p.on = !!a.on && p.bat > 0 && !p.flat;
     p.ph = !!a.ph && p.bat > 0 && !p.flat; // the phone up, reading the map
     p.sp = !!a.sp && !p.flat && !p.ph;

@@ -1,15 +1,17 @@
 // Sound. Physical events (doors, bangs, footsteps, growls) are recordings from
 // packages/game/public/sfx; things that change as you play (the hum, the heartbeat) are
-// synthesised. If a recording has not loaded yet, a synthesised stand-in plays.
+// synthesised. The sounds you play by (footsteps, door motors, bangs, growls) have a synthesised stand-in
+// for when their recording has not loaded.
 // three/sound.ts places each sound in the building, built from these
 // pieces: it plays them into its own nodes with into().
+import { TOY } from '@thick-shift/sim';
 import { defined } from '@thick-shift/sim/check';
 import type { NonEmpty } from '@thick-shift/sim/types';
 
 // The context and the two nodes at the end of every chain, made together by the first unlockAudio(). Code that
-// makes a sound gets the engine from free() or a null check and passes it down, so nothing below reads a context
+// makes a sound gets the engine from free(), live() or a null check and passes it down, so nothing reads a context
 // that might not be there.
-interface Engine {
+export interface Engine {
   ac: AudioContext;
   master: DynamicsCompressorNode; // everything goes through this limiter
   ears: BiquadFilterNode; // one filter over the whole mix, after the limiter. muffle() closes it.
@@ -20,7 +22,7 @@ const OPEN_HZ = 20000;
 function makeEngine(): Engine | null {
   let ac: AudioContext;
   try {
-    ac = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
+    ac = new AudioContext();
   } catch {
     return null;
   }
@@ -44,16 +46,9 @@ export function unlockAudio(): void {
   if (engine?.ac.state === 'suspended') engine.ac.resume();
 }
 
-// The engine, for the helpers that three/sound.ts calls only once the context is running (room, whiteNoise).
-function running(): Engine {
-  if (!engine) throw new Error('audio is not unlocked yet');
-  return engine;
-}
-
-// The context, but only while it can make sound: null before the first
-// gesture and while the browser has it suspended.
-export const ctx = (): AudioContext | null => (engine?.ac.state === 'running' ? engine.ac : null);
-export const bus = (): DynamicsCompressorNode | null => engine?.master ?? null;
+// The engine, but only while it can make sound: null before the first
+// gesture and while the browser has the context suspended.
+export const live = (): Engine | null => (engine?.ac.state === 'running' ? engine : null);
 
 // Everything, heard from under something heavy. No argument opens it again.
 export function muffle(hz = OPEN_HZ, at = 0): void {
@@ -154,8 +149,7 @@ function loadSamples(ac: AudioContext): void {
 
 // A generated room: a second and a half of decaying noise, used as a reverb.
 let roomNode: ConvolverNode | null = null;
-export const room = (): ConvolverNode => roomFor(running());
-function roomFor(e: Engine): ConvolverNode {
+export function roomFor(e: Engine): ConvolverNode {
   roomNode ??= makeRoom(e);
   return roomNode;
 }
@@ -226,12 +220,13 @@ export function sample(name: string, { gain = 1, rate = 1, lowpass = 0, at = 0, 
   } else play(src, g, t, end);
   return true;
 }
-const oneOf = <T>(list: NonEmpty<T>): T => defined(list[(Math.random() * list.length) | 0], 'a random pick');
+export const oneOf = <T>(list: NonEmpty<T>): T => defined(list[(Math.random() * list.length) | 0], 'a random pick');
 export const pick = <T>(...names: NonEmpty<T>): T => oneOf(names);
 
 /* ---------- synthesis ---------- */
 
-export function tone(f: number, d: number, type: OscillatorType = 'sine', v = 0.2, f2?: number, at = 0): void {
+// to: sweep to this many Hz over the note. at: seconds from now.
+export function tone(f: number, d: number, type: OscillatorType = 'sine', v = 0.2, { to = 0, at = 0 }: { to?: number; at?: number } = {}): void {
   const e = free();
   if (!e) return;
   const { ac } = e;
@@ -240,7 +235,7 @@ export function tone(f: number, d: number, type: OscillatorType = 'sine', v = 0.
     t = ac.currentTime + at;
   o.type = type;
   o.frequency.setValueAtTime(f, t);
-  if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
   g.gain.setValueAtTime(v, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + d);
   o.connect(g).connect(out(e));
@@ -249,8 +244,7 @@ export function tone(f: number, d: number, type: OscillatorType = 'sine', v = 0.
 
 // Two seconds of white noise, made once. Every burst and hiss plays from it.
 let white: AudioBuffer | null = null;
-export const whiteNoise = (): AudioBuffer => whiteFor(running().ac);
-function whiteFor(ac: AudioContext): AudioBuffer {
+export function whiteFor(ac: AudioContext): AudioBuffer {
   white ??= makeWhite(ac);
   return white;
 }
@@ -301,6 +295,7 @@ export function noise(d: number, v = 0.3, { at = 0, band = 0, band2 = 0, q = 1, 
 // A piercing scream: two voices a semitone apart (so they beat against each
 // other), sweeping from about 2.6 kHz up past 6 kHz and cracking on the way
 // down. Everything below 2.8 kHz is cut, so there is no body to it, only edge.
+// Counted as one voice, and never dropped for want of one: it is the jumpscare.
 export function shriek(level = 0.7, at = 0): void {
   const e = engine;
   if (!e) return;
@@ -353,23 +348,24 @@ export function shriek(level = 0.7, at = 0): void {
   bite.Q.value = 1.2;
   bite.gain.value = 9;
   mix.connect(cut1).connect(cut2).connect(bite).connect(chop).connect(amp).connect(out(e));
+  track(rasp, amp, t1);
 }
 
 // A Mini Biggs singing where it came down (TOY in packages/sim/src/sim.ts): a thump on the floor, a click as the voice box
 // wakes, then two lines of Happy Birthday from a chip that was never meant to run on a torch battery. A thin pulse
 // wave, crushed to a few bits like a cheap voice box, that drags and sags in pitch as the charge runs out over
-// `secs`, until the last note is a groan. Made once into a buffer, so the whole song is one voice.
+// TOY.sing seconds, until the last note is a groan. Made once into a buffer, so the whole song is one voice.
 let songBuf: AudioBuffer | null = null;
-export function song(gain = 0.5, at = 0, secs = 3): void {
+export function song(): void {
   const e = free();
   if (!e) return;
   const { ac } = e;
-  songBuf ||= songBuffer(ac, secs);
+  songBuf ||= songBuffer(ac, TOY.sing);
   const src = ac.createBufferSource(),
     g = ac.createGain(),
-    t = ac.currentTime + at;
+    t = ac.currentTime;
   src.buffer = songBuf;
-  g.gain.value = gain;
+  g.gain.value = 0.5;
   src.connect(g).connect(out(e));
   play(src, g, t, t + songBuf.duration);
 }
@@ -494,35 +490,17 @@ const BANGS: NonEmpty<() => void> = [
 
 /* ---------- event sounds ---------- */
 
-// Keyed by simulation event type, for the sounds three/sound.ts reuses (bang, out, scare) and the win jingle,
-// which main.ts plays itself because it has no place in the building.
-export const SFX = {
-  bang(): void {
-    if (!buffers.has('slam1')) {
-      noise(0.35, 0.5);
-      tone(55, 0.4, 'sine', 0.5, 30);
-      return;
-    }
-    oneOf(BANGS)();
-  },
-  scare(): void {
-    // The growl leads. The shriek is quieter than it sounds like it should be,
-    // because everything shares one limiter and a loud shriek ducks the growl.
-    sample('hit_low', { gain: 0.8 });
-    if (!sample('scare_growl', { gain: 1.7, wet: 0.25 })) noise(1.2, 0.6);
-    sample('scare_growl', { gain: 0.9, rate: 0.5, lowpass: 900 }); // the same growl an octave down, for body
-    shriek(0.42);
-  },
-  win(): void {
-    [523, 659, 784, 1047].forEach((f, i) => {
-      setTimeout(() => tone(f, 0.5, 'triangle', 0.2), i * 160);
-    });
-  },
-  out(): void {
-    sample('hit_low', { gain: 0.9, rate: 0.7 });
-    tone(200, 1.2, 'sawtooth', 0.12, 30);
-  },
-};
+export function bang(): void {
+  if (buffers.has('slam1')) oneOf(BANGS)();
+  else {
+    noise(0.35, 0.5);
+    tone(55, 0.4, 'sine', 0.5, { to: 30 });
+  }
+}
+// The win jingle, which main.ts plays itself because it has no place in the building.
+export function win(): void {
+  for (const [i, f] of [523, 659, 784, 1047].entries()) tone(f, 0.5, 'triangle', 0.2, { at: i * 0.16 });
+}
 
 /* ---------- ambience ---------- */
 
@@ -546,14 +524,10 @@ function startBed({ ac, master }: Engine): GainNode {
     o.connect(g).connect(level);
     o.start();
   }
-  const n = ac.sampleRate * 3,
-    buf = ac.createBuffer(1, n, ac.sampleRate),
-    data = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
   const src = ac.createBufferSource(),
     lp = ac.createBiquadFilter(),
     g = ac.createGain();
-  src.buffer = buf;
+  src.buffer = whiteFor(ac);
   src.loop = true;
   lp.type = 'lowpass';
   lp.frequency.value = 240;
@@ -588,11 +562,10 @@ const ODD: NonEmpty<() => void> = [
     sample('knock1', { gain: 0.18, rate: 0.7, lowpass: 500, at: 0.28, wet: 0.6 });
   }, // two knocks
   () => sample(pick('creak1', 'creak2'), { gain: 0.3, rate: 0.7, lowpass: 900, wet: 0.6 }), // a door, far off
-  () => tone(70, 2.2, 'sawtooth', 0.035, 52), // something dragged
-  () =>
-    [660, 587, 660].forEach((f, i) => {
-      setTimeout(() => tone(f, 0.5, 'sine', 0.018, f * 0.985), i * 520);
-    }), // someone humming
+  () => tone(70, 2.2, 'sawtooth', 0.035, { to: 52 }), // something dragged
+  () => {
+    for (const [i, f] of [660, 587, 660].entries()) tone(f, 0.5, 'sine', 0.018, { to: f * 0.985, at: i * 0.52 });
+  }, // someone humming
   // It, somewhere below you. Muffled this far, it is closer to a whisper than a growl.
   // Listed three times so it is the sound you hear most.
   farGrowl,
@@ -616,8 +589,8 @@ export function ambience(threat: number, dread = 0): void {
   if (threat > 0 && now > nextBeat) {
     // heartbeat, faster as it leans in
     nextBeat = now + 1 - threat * 0.55;
-    tone(58, 0.14, 'sine', 0.22 + threat * 0.2, 38);
-    setTimeout(() => tone(52, 0.16, 'sine', 0.16 + threat * 0.15, 34), 150);
+    tone(58, 0.14, 'sine', 0.22 + threat * 0.2, { to: 38 });
+    tone(52, 0.16, 'sine', 0.16 + threat * 0.15, { to: 34, at: 0.15 });
   }
   if (now > nextOdd) {
     if (nextOdd && dread > 0.25) oneOf(ODD)();

@@ -74,17 +74,15 @@ actEvent.OnServerEvent:Connect(function(player: Player, a: any)
 	local now = os.clock()
 	local b = budget[player]
 	if not b or now - b.t >= 1 then
-		b = { t = now, n = 0 }
-		budget[player] = b :: any
-	end
-	local used = b :: any
-	used.n += 1
-	if used.n > RATE then
+		budget[player] = { t = now, n = 1 }
+	elseif b.n >= RATE then
 		return
+	else
+		b.n += 1
 	end
 	if a.t == "next" then
 		advance()
-	elseif a.t ~= "name" then -- names come from Roblox
+	else
 		sim:act(idOf(player), a)
 	end
 end)

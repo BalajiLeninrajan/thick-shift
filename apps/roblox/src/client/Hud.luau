@@ -10,6 +10,9 @@ local Data = require(Shared.Data)
 local Map = require(Shared.Map)
 local Sim = require(Shared.Sim)
 local Text = require(Shared.Text)
+local Util = require(Shared.Util)
+
+local new = require(Shared.Make).new
 
 local HURRY = 15 -- seconds left before a fault burns when its row turns red
 local MAX_TASKS = 6
@@ -26,6 +29,7 @@ local C = {
 	green = Color3.fromHex("#a6e3a1"),
 	blue = Color3.fromHex("#89b4fa"),
 	peach = Color3.fromHex("#fab387"),
+	track = Color3.fromHex("#313244"),
 }
 local TOAST = {
 	info = C.sub,
@@ -42,14 +46,6 @@ local TOAST = {
 	hide = C.blue,
 }
 
-local function new(class: string, props, parent)
-	local o = Instance.new(class)
-	for k, v in props do
-		o[k] = v
-	end
-	o.Parent = parent
-	return o
-end
 local function label(props, parent)
 	local base = {
 		BackgroundTransparency = 1,
@@ -68,7 +64,7 @@ local function bar(pos: UDim2, w: number, h: number, parent)
 	local back = new("Frame", {
 		Position = pos,
 		Size = UDim2.fromOffset(w, h),
-		BackgroundColor3 = Color3.fromHex("#313244"),
+		BackgroundColor3 = C.track,
 		BorderSizePixel = 0,
 	}, parent)
 	local fill = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.green, BorderSizePixel = 0 }, back)
@@ -76,6 +72,8 @@ local function bar(pos: UDim2, w: number, h: number, parent)
 end
 
 local Hud = {}
+
+Hud.CATCH = 1.6 -- seconds a catch holds the screen: the red flash here, the camera in Main
 
 function Hud.new(gui: ScreenGui, myId: string, send: (any) -> ())
 	local self = {}
@@ -250,7 +248,7 @@ function Hud.new(gui: ScreenGui, myId: string, send: (any) -> ())
 	end
 	-- I was caught: the screen goes red and says by whom.
 	function self.scare(byName: string, how: string)
-		scareUntil = os.clock() + 1.6
+		scareUntil = os.clock() + Hud.CATCH
 		scareText.Text = byName .. " " .. how .. "."
 	end
 
@@ -311,12 +309,9 @@ function Hud.new(gui: ScreenGui, myId: string, send: (any) -> ())
 			cardBody.Text = "<b>Guards here:</b> " .. who .. "\n\n" .. table.concat(Text.RULES, "\n\n")
 			go.Text = "Start night 1"
 		elseif S.phase == "win" then
-			local anyFlat = false
-			for _, p in S.players do
-				if p.flat then
-					anyFlat = true
-				end
-			end
+			local anyFlat = Util.some(S.players, function(p)
+				return p.flat
+			end)
 			local note = if anyFlat
 				then "The day shift will peel up whoever is still on the floor."
 				elseif S.tally and #S.tally.flats > 0 then "Everyone is the right shape again."
@@ -358,15 +353,24 @@ function Hud.new(gui: ScreenGui, myId: string, send: (any) -> ())
 		end)
 		for k, r in list do
 			if k > MAX_TASKS then
-				table.insert(rows, string.format("<font color='#a6adc8'>and %d more</font>", #list - MAX_TASKS))
+				table.insert(
+					rows,
+					string.format("<font color='#%s'>and %d more</font>", C.sub:ToHex(), #list - MAX_TASKS)
+				)
 				break
 			end
 			local room = Map.ROOMS3[Map.BOXES[r.i].room + 1].name
 			local when = if r.f.burnt then "burning" else string.format("%ds", math.max(0, math.ceil(r.left)))
-			local col = if r.f.burnt or r.left < HURRY then "#f38ba8" else "#f9e2af"
+			local col = if r.f.burnt or r.left < HURRY then C.red else C.yellow
 			table.insert(
 				rows,
-				string.format("<font color='%s'>%s, %s  %s</font>", col, Text.FAULT_NAME[r.f.k + 1], room, when)
+				string.format(
+					"<font color='#%s'>%s, %s  %s</font>",
+					col:ToHex(),
+					Text.FAULT_NAME[r.f.k + 1],
+					room,
+					when
+				)
 			)
 		end
 		return table.concat(rows, "\n")
@@ -381,7 +385,7 @@ function Hud.new(gui: ScreenGui, myId: string, send: (any) -> ())
 				table.remove(toasts, i)
 			end
 		end
-		local k = math.clamp((scareUntil - now) / 1.6, 0, 1)
+		local k = math.clamp((scareUntil - now) / Hud.CATCH, 0, 1)
 		flash.BackgroundTransparency = 1 - 0.75 * k
 		scareText.TextTransparency = 1 - k
 
@@ -392,12 +396,9 @@ function Hud.new(gui: ScreenGui, myId: string, send: (any) -> ())
 		else
 			cardKey = ""
 		end
-		local mine
-		for _, p in S.players do
-			if p.id == myId then
-				mine = p
-			end
-		end
+		local mine = Util.find(S.players, function(p)
+			return p.id == myId
+		end)
 		local show = playing and mine ~= nil and mine.x ~= nil
 		corner.Visible, torchText.Visible, prompt.Visible = show, show, show
 		for _, c in cells do
@@ -426,7 +427,7 @@ function Hud.new(gui: ScreenGui, myId: string, send: (any) -> ())
 		end
 		tasks.Text = faultRows(S)
 
-		local bat = mine.bat or 0
+		local bat = mine.bat
 		torchText.Text = if me.on then "Torch on" else "Torch off  (F)"
 		torchText.TextColor3 = if bat < LOW_BAT then C.red else C.text
 		for i, c in cells do

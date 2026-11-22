@@ -3,7 +3,7 @@
 
 import { clockF } from '@thick-shift/sim';
 import { defined } from '@thick-shift/sim/check';
-import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
+import { DEFAULT_NAME, FINAL_NIGHT, MASC, NAME_MAX } from '@thick-shift/sim/config';
 import type { State, Tally } from '@thick-shift/sim/types';
 import { unlockAudio } from './audio';
 import { byId } from './dom';
@@ -22,6 +22,14 @@ const netBanner = (): string => (game.netNote ? `<div class="banner cn-tone-warn
 // Anyone in the room can start the next night. Whoever runs it acts on the first press (goFloor).
 const goButton = (label: string): string => `<button class="btn btn-primary" id="go">${label}</button>`;
 
+// The name a guard plays under, as the sim will keep it: Guard for none, and no longer than NAME_MAX.
+export const guardName = (name: string): string => (name || DEFAULT_NAME).slice(0, NAME_MAX);
+// What the title screen opens with, here and in an app's own (platform.title).
+export const INTRO = `
+      <h1 class="ts-logo">Thick Shift 3D</h1>
+      <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
+      <p class="cn-meta cn-m-0">Keep the power on until 6 AM. The retired mascots are enormous, and at night they wander.</p>`;
+
 /* ---------- screens ---------- */
 // Each returns { key, html, wire }. The overlay only re-renders when key changes. An app can swap in its own title
 // screen and lobby invite through platform (state.ts), built from the exported helpers here.
@@ -36,19 +44,15 @@ function titleScreen(): OverlayScreen {
   return {
     key: 'title',
     html: card(
-      `
-      <h1 class="ts-logo">Thick Shift 3D</h1>
-      <p class="lede cn-m-0">Midnight at the Mascot Depot</p>
-      <p class="cn-meta cn-m-0">Keep the power on until 6 AM. The retired mascots are enormous, and at night they wander.</p>
-      <div class="field"><label for="nm">Your name</label><input id="nm" maxlength="12" placeholder="Guard" value="${esc(savedName)}"></div>
+      `${INTRO}
+      <div class="field"><label for="nm">Your name</label><input id="nm" maxlength="${NAME_MAX}" placeholder="${DEFAULT_NAME}" value="${esc(savedName)}"></div>
       <div class="field"><label for="rc">Room code</label><input id="rc" maxlength="4" placeholder="To join a friend" autocapitalize="characters" value="${esc((q.get('room') || '').slice(0, 4))}"></div>`,
       '<button class="btn btn-primary" id="hb">Host a night</button><button class="btn btn-secondary" id="jb">Join room</button>'
     ),
     wire() {
       const begin = (then: () => void) => (): void => {
         unlockAudio();
-        const name = byId('nm', HTMLInputElement).value;
-        game.myName = (name || 'Guard').slice(0, 12);
+        game.myName = guardName(byId('nm', HTMLInputElement).value);
         try {
           localStorage.setItem('tsName', game.myName);
         } catch {
@@ -85,31 +89,13 @@ const RULES = [
 // The night's tallies as a list: S.tally for one night, S.total for the run (see packages/sim/src/sim.ts).
 // Flats are grouped by guard, with who did it for a night and a count for the run.
 function floorStats(t: Tally, run?: boolean): string {
-  const group = <T, V>(list: T[], key: (e: T) => string, val: (e: T) => V): [string, V[]][] => {
-    const by: Record<string, V[]> = {};
-    for (const e of list) {
-      const k = key(e),
-        vals = by[k];
-      if (vals) vals.push(val(e));
-      else by[k] = [val(e)];
-    }
-    return Object.entries(by);
-  };
-  const flats = group(
-    t.flats,
-    e => e[0],
-    e => MASC[e[1]].name
-  )
-    .map(([name, by]) => `${esc(name)} ${run ? by.length : `(${by.map(esc).join(', ')})`}`)
+  const flats = Object.entries(Object.groupBy(t.flats, ([name]) => name))
+    .map(([name, by = []]) => `${esc(name)} ${run ? by.length : `(${by.map(([, i]) => esc(MASC[i].name)).join(', ')})`}`)
     .join(', ');
-  const peels = group(
-    t.peels,
-    e => e,
-    () => 1
-  )
-    .map(([name, n]) => `${esc(name)}${n.length > 1 || run ? ` ${n.length}` : ''}`)
+  const peels = Object.entries(Object.groupBy(t.peels, name => name))
+    .map(([name, by = []]) => `${esc(name)}${by.length > 1 || run ? ` ${by.length}` : ''}`)
     .join(', ');
-  return `<dl class="kv"><dt>Faults fixed</dt><dd class="cn-tabular">${t.fixed ?? 0}</dd><dt>Left to burn</dt><dd class="cn-tabular">${t.burnt ?? 0}</dd>
+  return `<dl class="kv"><dt>Faults fixed</dt><dd class="cn-tabular">${t.fixed}</dd><dt>Left to burn</dt><dd class="cn-tabular">${t.burnt}</dd>
     <dt>Flattened</dt><dd>${flats || 'Nobody'}</dd><dt>Peeled a friend up</dt><dd>${peels || 'Nobody'}</dd></dl>`;
 }
 

@@ -5,11 +5,11 @@
 
 import { defined } from '@thick-shift/sim/check';
 import type { Doorway, Room } from '@thick-shift/sim/map';
-import { DOORWAYS, ROOMS3 } from '@thick-shift/sim/map';
+import { DOORWAYS, ROOMS3, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
 
-const G = 4,
-  W = 42 * G,
-  H = 44 * G; // grid cells per metre (walls are two cells thick), and the building's size in cells
+export const G = 4,
+  W = SIZE_X * G,
+  H = SIZE_Z * G; // grid cells per metre (walls are two cells thick), and the building's size in cells
 const FAR = 30; // fog and the torch's reach leave nothing to see past this many metres
 const RAYS = 180; // directions looked in from each point: two degrees apart
 
@@ -27,7 +27,7 @@ const doorAt = (x: number, z: number, pad = 0): Doorway | undefined =>
 export const open = (x: number, z: number): boolean => roomOf(x, z) >= 0 || !!doorAt(x, z);
 
 // Each cell: 0 for wall, 1 for a doorway, 2 + r for room r.
-const grid = new Uint8Array(W * H);
+export const grid = new Uint8Array(W * H);
 for (let j = 0; j < H; j++)
   for (let i = 0; i < W; i++) {
     const x = (i + 0.5) / G,

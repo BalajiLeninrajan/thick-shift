@@ -31,6 +31,23 @@ export const PLAYER_R = 0.35,
   MASCOT_R = 0.7;
 export const EYE = 1.65,
   DOOR_H = 3;
+// The length of (x, z) by the plain formula. Math.hypot rounds differently in the last bits, and the Roblox port
+// (Util.hypot) has to come out the same.
+export const hypot = (x: number, z: number): number => Math.sqrt(x * x + z * z);
+export const dist = (a: Point, b: Point): number => hypot(a.x - b.x, a.z - b.z);
+// The turn from yaw b to yaw a by the short way round, between -pi and pi.
+export const angDiff = (a: number, b: number): number => {
+  let d = (a - b) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+};
+// The building's footprint in metres, from the origin. Every room and doorway lies inside it (map.test.ts), and
+// the floor-plan grids, the lightmap and the wall map cover exactly this.
+export const SIZE_X = 42,
+  SIZE_Z = 44;
+// The middle of a rect.
+export const rectMid = ([x0, z0, x1, z1]: Rect): Point => ({ x: (x0 + x1) / 2, z: (z0 + z1) / 2 });
 
 // rects: [x0, z0, x1, z1]. A room with two overlaps them so you can walk from one into the other.
 // h: ceiling height.
@@ -234,11 +251,7 @@ export const spawnPoint = (i: number): Pose => ({ x: 18.5 + (i % 4) * 1.6, z: 41
 // Solid things standing on the floor: [x0, z0, x1, z1]. Players and mascots
 // walk round them. They come from the furniture table in dressing.ts,
 // which is plain data, so the simulation knows them without loading a model.
-export const OBSTACLES: Rect[] = obstacles(GENERATOR);
-export function addObstacle(x0: number, z0: number, x1: number, z1: number): void {
-  OBSTACLES.push([x0, z0, x1, z1]);
-  resetNav();
-}
+export const OBSTACLES: readonly Rect[] = obstacles(GENERATOR);
 
 /* ---------- standing and seeing ---------- */
 
@@ -304,7 +317,7 @@ export function walkable(x: number, z: number, r: number, doors?: Doors | null, 
 // Move a circle by (dx, dz), sliding along whatever it meets. Changes p.x and
 // p.z and returns how far it got as a fraction of what was asked.
 export function slide(p: Point, dx: number, dz: number, r: number, doors?: Doors | null): number {
-  const len = Math.hypot(dx, dz);
+  const len = hypot(dx, dz);
   if (!len) return 1;
   const steps = Math.ceil(len / (r * 0.5)),
     sx = dx / steps,
@@ -319,13 +332,13 @@ export function slide(p: Point, dx: number, dz: number, r: number, doors?: Doors
     else if (sz && walkable(p.x, p.z + sz, r, doors)) p.z += sz;
     else break;
   }
-  return Math.hypot(p.x - x0, p.z - z0) / len;
+  return hypot(p.x - x0, p.z - z0) / len;
 }
 
 // Is the straight line between two points clear for something of radius r?
 // With r near 0 this is line of sight: walls and shut doors block it.
 export function clear(ax: number, az: number, bx: number, bz: number, r: number, doors?: Doors | null, over?: boolean): boolean {
-  const len = Math.hypot(bx - ax, bz - az),
+  const len = hypot(bx - ax, bz - az),
     steps = Math.max(1, Math.ceil(len / 0.35));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -343,7 +356,7 @@ export const reaches = (ax: number, az: number, bx: number, bz: number, doors?: 
 const GLIMPSE = 0.25; // metres: closer gave no fewer misses in testing
 export function glimpses(ax: number, az: number, bx: number, bz: number, r: number, doors?: Doors | null): boolean {
   if (reaches(ax, az, bx, bz, doors)) return true;
-  const d = Math.hypot(bx - ax, bz - az) || 1,
+  const d = hypot(bx - ax, bz - az) || 1,
     ux = -(bz - az) / d,
     uz = (bx - ax) / d,
     n = Math.ceil(r / GLIMPSE);
@@ -368,10 +381,13 @@ export function roomAt(x: number, z: number): number {
   }
   return -1;
 }
-export const roomCentre = (i: number): Point => {
-  const [x0, z0, x1, z1] = defined(ROOMS3[i], `room ${i}`).rects[0];
-  return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 };
-};
+export const roomCentre = (i: number): Point => rectMid(defined(ROOMS3[i], `room ${i}`).rects[0]);
+// The doorway that booth door k shuts.
+export const doorwayOf = (k: DoorKey): Doorway =>
+  defined(
+    DOORWAYS.find(d => d.key === k),
+    `the doorway of door ${k}`
+  );
 
 /* ---------- walls, for the renderer ---------- */
 
@@ -538,7 +554,7 @@ function buildNav(): Nav {
   const join = (i: number, j: number, extra: { key?: DoorKey | undefined; duct: boolean }) => {
     const a = defined(nodes[i], `waypoint ${i}`),
       b = defined(nodes[j], `waypoint ${j}`),
-      d = Math.hypot(a.x - b.x, a.z - b.z);
+      d = hypot(a.x - b.x, a.z - b.z);
     defined(links[i], `waypoint ${i}'s links`).push({ to: j, d, ...extra });
     defined(links[j], `waypoint ${j}'s links`).push({ to: i, d, ...extra });
   };
@@ -577,11 +593,6 @@ export const nav = (): Nav => {
   NAV ||= buildNav();
   return NAV;
 };
-// Props added after the first path was asked for change what is walkable.
-export function resetNav(): void {
-  NAV = null;
-  buckets = null;
-}
 
 // The nearest waypoint that a walker of radius r can reach in a straight line: one of the dozen nearest, or failing that the nearest.
 // ducts: false leaves out the waypoints inside the ducts, for a walker that cannot go in. Undefined when there is no
@@ -594,7 +605,7 @@ function nearestNode(x: number, z: number, doors: Doors | undefined, ducts: bool
       bestNode: NavNode | undefined,
       bd = 1e9;
     for (const [i, n] of nodes.entries()) {
-      const d = Math.hypot(n.x - x, n.z - z);
+      const d = hypot(n.x - x, n.z - z);
       if (d < bd && (ducts || n.room !== DUCTS) && !tried.includes(i)) {
         bd = d;
         best = i;

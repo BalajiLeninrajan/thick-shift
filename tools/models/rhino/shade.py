@@ -61,7 +61,6 @@ def math_(op, a, b=None, c=None, clamp=False):
 
 def absf(a): return math_('ABSOLUTE', a)
 def maxf(a, b): return math_('MAXIMUM', a, b)
-def minf(a, b): return math_('MINIMUM', a, b)
 def sinf(a): return math_('SINE', a)
 def sat(a): return math_('ADD', a, 0.0, clamp=True)
 
@@ -208,7 +207,7 @@ def _blood(p, mid, big, stains, off=0.0):
     return total
 
 
-def hide(name, stage, pale=(), blood=(), meat=(), tears=(), sockets=(), seam_x=True, bald=None):
+def hide(name, stage, pale=(), blood=(), meat=(), tears=(), sockets=(), seam_x=True):
     """The costume's plush. stage 0: clean short pile. 1 and 2: dull, matted
     into clumps, bald where the pile has worn off the backing cloth.
     pale: [(centre, radii)] ellipsoids that are belly-coloured, with a sewn edge.
@@ -249,7 +248,7 @@ def hide(name, stage, pale=(), blood=(), meat=(), tears=(), sockets=(), seam_x=T
         grease = smooth(big, .5, .75)
         col = mix(grease * .55, col, '#23242c')
         rough = rough - grease * .25
-        bare = smooth(noise(p, 4.5, 4, .55, off=7), bald or [0, .66, .61][stage], (bald or [0, .66, .61][stage]) + .04)
+        bare = smooth(noise(p, 4.5, 4, .55, off=7), [0, .66, .61][stage], [0, .66, .61][stage] + .04)
         wx, wy, wz = xyz(vscale(p, (700, 700, 700)))
         weave = smooth(sinf(wx) * sinf(wz) + sinf(wy) * .5, -.3, .3)
         col = mix(bare, col, mix(weave, '#2b2826', '#5d554c'))

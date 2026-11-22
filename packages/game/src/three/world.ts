@@ -9,7 +9,7 @@
 //   sight.ts              which rooms can be seen from which, so the rest are not drawn
 
 import type { State } from '@thick-shift/sim/types';
-import type { BufferGeometry, Camera, Material, Mesh, Scene } from 'three';
+import { type Camera, Mesh, type Scene } from 'three';
 import { art } from './world/art';
 import { Batch } from './world/geo';
 import { createLight, lit, torchCookie } from './world/light';
@@ -32,18 +32,21 @@ export function buildWorld(scene: Scene) {
     usables = createUsables(scene);
   props.ready.then(has => light.glows(has));
   scene.traverse(o => {
-    if ((o as Mesh).isMesh) lit((o as Mesh<BufferGeometry, Material>).material);
+    if (o instanceof Mesh && !Array.isArray(o.material)) lit(o.material);
   });
 
   return {
     torchCookie,
     parts: usables.parts, // what outline.ts can put a gold edge round
-    stop: 1, // how far to stop the picture down against torch glare this frame (light.ts)
+    // How far to stop the picture down against torch glare this frame (light.ts).
+    get stop(): number {
+      return light.stop;
+    },
     // torch: how bright the local guard's torch is, 0 to 1. dread, threat: 0 to 1.
     update(S: State, t: number, dt: number, camera: Camera, torch: number, dread: number, threat: number): void {
       const inView = roomsSeenFrom(camera.position.x, camera.position.z);
       light.update(S, t, dt, camera, torch, dread, threat);
-      this.stop = light.stop;
+
       props.update(inView, light.level, dt);
       usables.update(S, t, dt, camera, inView);
     },

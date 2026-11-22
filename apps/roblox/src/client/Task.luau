@@ -13,7 +13,23 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Map = require(Shared.Map)
 local Text = require(Shared.Text)
 
-local WIRES = { { "#f38ba8", "red" }, { "#f9e2af", "yellow" }, { "#89b4fa", "blue" }, { "#a6e3a1", "green" } }
+local new = require(Shared.Make).new
+
+local C = {
+	text = Color3.fromHex("#cdd6f4"),
+	sub = Color3.fromHex("#a6adc8"),
+	ink = Color3.fromHex("#11111b"),
+	panel = Color3.fromHex("#181825"),
+	track = Color3.fromHex("#313244"),
+	edge = Color3.fromHex("#45475a"),
+	down = Color3.fromHex("#585b70"),
+	red = Color3.fromHex("#f38ba8"),
+	yellow = Color3.fromHex("#f9e2af"),
+	blue = Color3.fromHex("#89b4fa"),
+	green = Color3.fromHex("#a6e3a1"),
+	band = Color3.fromHex("#40a02b"),
+}
+local WIRES = { C.red, C.yellow, C.blue, C.green }
 local VALVE = { rise = 0.9, fall = 1.1, wobble = 0.35, band = { 0.58, 0.8 }, need = 1.3 }
 
 local function shuffle(list)
@@ -24,15 +40,6 @@ local function shuffle(list)
 	return list
 end
 
-local function new(class: string, props, parent)
-	local o = Instance.new(class)
-	for k, v in props do
-		o[k] = v
-	end
-	o.Parent = parent
-	return o
-end
-
 local Task = {}
 
 function Task.new(gui: ScreenGui)
@@ -40,19 +47,19 @@ function Task.new(gui: ScreenGui)
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -24),
 		Size = UDim2.fromOffset(560, 250),
-		BackgroundColor3 = Color3.fromHex("#181825"),
+		BackgroundColor3 = C.panel,
 		BackgroundTransparency = 0.08,
 		Visible = false,
 	}, gui)
 	new("UICorner", { CornerRadius = UDim.new(0, 10) }, panel)
-	local stroke = new("UIStroke", { Color = Color3.fromHex("#45475a"), Thickness = 2 }, panel)
+	local stroke = new("UIStroke", { Color = C.edge, Thickness = 2 }, panel)
 	local title = new("TextLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(16, 10),
 		Size = UDim2.new(1, -32, 0, 24),
 		Font = Enum.Font.GothamBold,
 		TextSize = 20,
-		TextColor3 = Color3.fromHex("#cdd6f4"),
+		TextColor3 = C.text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}, panel)
 	local where = new("TextLabel", {
@@ -61,7 +68,7 @@ function Task.new(gui: ScreenGui)
 		Size = UDim2.new(1, -32, 0, 24),
 		Font = Enum.Font.Gotham,
 		TextSize = 16,
-		TextColor3 = Color3.fromHex("#a6adc8"),
+		TextColor3 = C.sub,
 		TextXAlignment = Enum.TextXAlignment.Right,
 	}, panel)
 	local body = new(
@@ -76,16 +83,16 @@ function Task.new(gui: ScreenGui)
 		Font = Enum.Font.Gotham,
 		TextSize = 14,
 		TextWrapped = true,
-		TextColor3 = Color3.fromHex("#a6adc8"),
+		TextColor3 = C.sub,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}, panel)
 
 	local job, onDone, onQuit = nil, nil, nil
 
 	local function buzz()
-		stroke.Color = Color3.fromHex("#f38ba8")
+		stroke.Color = C.red
 		task.delay(0.25, function()
-			stroke.Color = Color3.fromHex("#45475a")
+			stroke.Color = C.edge
 		end)
 	end
 
@@ -97,7 +104,7 @@ function Task.new(gui: ScreenGui)
 			AutoButtonColor = false,
 			Font = Enum.Font.GothamBold,
 			TextSize = 18,
-			TextColor3 = Color3.fromHex("#11111b"),
+			TextColor3 = C.ink,
 			Text = "",
 		}, body)
 		new("UICorner", { CornerRadius = UDim.new(0, 6) }, b)
@@ -106,7 +113,7 @@ function Task.new(gui: ScreenGui)
 	local function selectStroke(b, on)
 		local s = b:FindFirstChildOfClass("UIStroke")
 			or new("UIStroke", { Thickness = 3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, b)
-		s.Color = Color3.fromHex("#f9e2af")
+		s.Color = C.yellow
 		s.Enabled = on
 	end
 
@@ -123,14 +130,14 @@ function Task.new(gui: ScreenGui)
 			sel = 1,
 			next = 1,
 			done = false,
+			order = order, -- what the tags say, for roblox/test/smoke.luau
 			help = "Flip the tripped switches up in the order on their tags. A D or 1 to 5 to choose, E to flip.",
 		}
-		j.order = order -- what the tags say, for roblox/test/smoke.luau
 		local buttons = {}
 		local function draw()
 			for i = 1, n do
 				local b = buttons[i]
-				b.BackgroundColor3 = if up[i] then Color3.fromHex("#a6e3a1") else Color3.fromHex("#585b70")
+				b.BackgroundColor3 = if up[i] then C.green else C.down
 				local tag = table.find(order, i)
 				b.Text = (if up[i] then "UP" else "DOWN\n" .. tostring(tag)) .. "\n\n" .. i
 				selectStroke(b, i == j.sel)
@@ -154,7 +161,7 @@ function Task.new(gui: ScreenGui)
 			draw()
 		end
 		for i = 1, n do
-			local b = button((i - 1) * 104 + 6, 0, 92, 140, Color3.fromHex("#585b70"))
+			local b = button((i - 1) * 104 + 6, 0, 92, 140, C.down)
 			b.Activated:Connect(function()
 				j.sel = i
 				flip(i)
@@ -213,21 +220,17 @@ function Task.new(gui: ScreenGui)
 		local function join(s)
 			if right[s] == live() then
 				joined[right[s]] = true
-				local n = 0
-				for _ in joined do
-					n += 1
-				end
-				j.done = n == 4
+				j.done = live() == nil
 			else
 				buzz()
 			end
 			draw()
 		end
 		for w = 1, 4 do
-			ends[w] = button(10, (w - 1) * 36 + 2, 120, 30, Color3.fromHex(WIRES[w][1]))
+			ends[w] = button(10, (w - 1) * 36 + 2, 120, 30, WIRES[w])
 		end
 		for s = 1, 4 do
-			local b = button(388, (s - 1) * 36 + 2, 120, 30, Color3.fromHex(WIRES[right[s]][1]))
+			local b = button(388, (s - 1) * 36 + 2, 120, 30, WIRES[right[s]])
 			b.Activated:Connect(function()
 				j.sel = s
 				join(s)
@@ -267,31 +270,28 @@ function Task.new(gui: ScreenGui)
 		local track = new("Frame", {
 			Position = UDim2.fromOffset(0, 20),
 			Size = UDim2.new(1, 0, 0, 40),
-			BackgroundColor3 = Color3.fromHex("#313244"),
+			BackgroundColor3 = C.track,
 		}, body)
 		new("Frame", {
 			Position = UDim2.fromScale(VALVE.band[1], 0),
 			Size = UDim2.fromScale(VALVE.band[2] - VALVE.band[1], 1),
-			BackgroundColor3 = Color3.fromHex("#40a02b"),
+			BackgroundColor3 = C.band,
 			BorderSizePixel = 0,
 		}, track)
 		local needle = new("Frame", {
 			Size = UDim2.new(0, 6, 1, 10),
 			Position = UDim2.fromScale(0, -0.125),
-			BackgroundColor3 = Color3.fromHex("#cdd6f4"),
+			BackgroundColor3 = C.text,
 			BorderSizePixel = 0,
 		}, track)
 		local bar = new("Frame", {
 			Position = UDim2.fromOffset(0, 90),
 			Size = UDim2.new(1, 0, 0, 16),
-			BackgroundColor3 = Color3.fromHex("#313244"),
+			BackgroundColor3 = C.track,
 		}, body)
-		local fill = new(
-			"Frame",
-			{ Size = UDim2.fromScale(0, 1), BackgroundColor3 = Color3.fromHex("#a6e3a1"), BorderSizePixel = 0 },
-			bar
-		)
-		local hold = button(200, 116, 120, 30, Color3.fromHex("#89b4fa"))
+		local fill =
+			new("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.green, BorderSizePixel = 0 }, bar)
+		local hold = button(200, 116, 120, 30, C.blue)
 		hold.Text = "Hold"
 		hold.MouseButton1Down:Connect(function()
 			j.held = true

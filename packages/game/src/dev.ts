@@ -13,7 +13,24 @@ import { game } from './state';
 
 // The menu's sliders and switches.
 const input = (id: string): HTMLInputElement => byId(id, HTMLInputElement);
-const SWITCHES: ('god' | 'power' | 'freeze' | 'wake')[] = ['god', 'power', 'freeze', 'wake'];
+const SWITCHES = [
+  ['god', 'God mode: nothing can flatten you'],
+  ['power', 'Infinite power'],
+  ['freeze', 'Freeze mascots'],
+  ['wake', 'Wake every mascot now'],
+] as const;
+// The buttons: the dev command each sends, and its label. Each does nothing outside a night.
+const ACTIONS: [DevDo, string][] = [
+  ['hour', '+1 hour'],
+  ['late', 'Skip to 5:50'],
+  ['win', 'Win night'],
+  ['next', 'Next night'],
+  ['final', 'Jump to last night'],
+  ['low', 'Power to 5%'],
+  ['out', 'Power out'],
+  ['bat', 'Fill every torch'],
+  ['peel', 'Peel everyone up'],
+];
 // The night's cheats as the last state had them, with a missing field off.
 const cheats = (): Dev => ({ ...DEV_OFF, ...game.S?.dev });
 const dev = (c: DevCommand): void => {
@@ -34,10 +51,7 @@ const HTML = `
 <div class="cn-stack cn-gap-24 cn-p-24 ts-dev-body">
   <p class="cn-meta cn-m-0" id="dv-note"></p>
   <div class="cn-stack">
-    ${toggle('dv-god', 'God mode: nothing can flatten you')}
-    ${toggle('dv-power', 'Infinite power')}
-    ${toggle('dv-freeze', 'Freeze mascots')}
-    ${toggle('dv-wake', 'Wake every mascot now')}
+    ${SWITCHES.map(([key, label]) => toggle(`dv-${key}`, label)).join('')}
   </div>
   <div class="cn-stack">
     <span class="cn-label">Rot stage</span>
@@ -48,33 +62,17 @@ const HTML = `
     ${toggle('dv-dread-on', 'Override dread')}
     <div class="field"><label for="dv-dread">Dread: <output id="dv-dread-out">0</output>%</label><input class="slider" type="range" id="dv-dread" min="0" max="100" step="5" value="0"></div>
   </div>
-  <div class="cn-cluster">
-    ${button('dv-hour', '+1 hour')}${button('dv-late', 'Skip to 5:50')}${button('dv-win', 'Win night')}${button('dv-next', 'Next night')}${button('dv-final', 'Jump to last night')}
-    ${button('dv-low', 'Power to 5%')}${button('dv-out', 'Power out')}${button('dv-bat', 'Fill every torch')}${button('dv-peel', 'Peel everyone up')}
-  </div>
+  <div class="cn-cluster">${ACTIONS.map(([what, label]) => button(`dv-${what}`, label)).join('')}</div>
   <div class="cn-stack cn-divide" id="dv-mascots"></div>
   <dl class="kv" id="dv-read"></dl>
 </div>`;
 
 /* ---------- actions ---------- */
 
-// The buttons, by id, and the dev command each sends. Each does nothing outside a night.
-const ACTIONS: Record<string, DevDo> = {
-  'dv-hour': 'hour',
-  'dv-late': 'late',
-  'dv-win': 'win',
-  'dv-next': 'next',
-  'dv-final': 'final',
-  'dv-out': 'out',
-  'dv-bat': 'bat',
-  'dv-peel': 'peel',
-  'dv-low': 'low',
-};
-
 function bind(el: HTMLDialogElement): void {
   // The controls catch up with the change when the next state arrives (the timer in mountDev).
   const set = (c: Partial<Dev>): void => dev({ t: 'dev', set: c });
-  for (const key of SWITCHES) {
+  for (const [key] of SWITCHES) {
     const box = input(`dv-${key}`);
     box.onchange = () => set({ [key]: box.checked });
   }
@@ -88,7 +86,7 @@ function bind(el: HTMLDialogElement): void {
   const level = (): number => Number(input('dv-dread').value) / 100;
   input('dv-dread-on').onchange = () => set({ dread: input('dv-dread-on').checked ? level() : -1 });
   input('dv-dread').oninput = () => set({ dread: level() });
-  for (const [id, what] of Object.entries(ACTIONS)) byId(id).onclick = () => dev({ t: 'dev', do: what });
+  for (const [what] of ACTIONS) byId(`dv-${what}`).onclick = () => dev({ t: 'dev', do: what });
   byId('dv-mascots').onclick = e => {
     const b = e.target instanceof Element ? e.target.closest('button') : null;
     // sync builds every button in the list with data-act, 'near' or 'home', and data-i, the mascot's MASC index.
@@ -108,7 +106,7 @@ function sync(el: HTMLDialogElement): void {
   for (const control of el.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')) if (control.id !== 'dv-close') control.disabled = !on;
   if (!S) return;
   const dv = cheats();
-  for (const key of SWITCHES) input(`dv-${key}`).checked = dv[key];
+  for (const [key] of SWITCHES) input(`dv-${key}`).checked = dv[key];
   for (const b of byId('dv-rot').querySelectorAll('button')) b.setAttribute('aria-pressed', String(Number(b.dataset.v) === dv.rot));
   input('dv-speed').value = String(dv.speed);
   byId('dv-speed-out').textContent = String(dv.speed);
@@ -117,7 +115,7 @@ function sync(el: HTMLDialogElement): void {
   byId('dv-dread-out').textContent = String(Math.round(dreadF(S) * 100));
   byId('dv-mascots').innerHTML = S.m
     .map(
-      m => `<div class="cn-row cn-between cn-wrap cn-py-8"><span><b class="cn-name">${MASC[m.i].name}</b><br><span class="cn-meta">${m.st}, stage ${m.rot || 0}, ${Math.round((m.ire || 0) * 18)} s in a beam</span></span>
+      m => `<div class="cn-row cn-between cn-wrap cn-py-8"><span><b class="cn-name">${MASC[m.i].name}</b><br><span class="cn-meta">${m.st}, stage ${m.rot}, ire ${m.ire.toFixed(2)}</span></span>
     <span class="cn-cluster">${[
       ['near', 'In front of me'],
       ['home', 'Send home'],

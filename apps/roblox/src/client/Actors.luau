@@ -9,11 +9,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Data = require(Shared.Data)
+local Make = require(Shared.Make)
 local Map = require(Shared.Map)
 local Units = require(Shared.Units)
 local Util = require(Shared.Util)
 
 local SC = Units.SC
+local part = Make.part
 local STAGE = Data.STAGE
 
 -- By MASC index: body [width, height, depth], head size, colour, and what sticks out of the face.
@@ -23,22 +25,12 @@ local LOOK = {
 	{ body = { 1.7, 1.0, 1.5 }, head = 1.0, legs = 0.35, col = "#5f8f66", snout = { 0.9, 0.25, 0.3 } }, -- Squish, toad
 	{ body = { 1.5, 1.5, 2.2 }, head = 0.9, legs = 0.6, col = "#7d8299", snout = { 0.45, 0.4, 0.5 }, horn = true }, -- Stompy, rhino
 }
+-- SpotLight brightness of a teammate's torch: dimmer than your own, as TORCH_POWER in actors.ts is.
+local MATE_TORCH = 2.5
 local EYES = { Color3.fromRGB(240, 240, 230), Color3.fromRGB(255, 210, 60), Color3.fromRGB(255, 40, 30) } -- by rot
 
 local function floorY(x: number, z: number): number
 	return if Map.roomAt(x, z) == STAGE.room and z < STAGE.edge then STAGE.rise else 0
-end
-
-local function part(props, parent)
-	local p = Instance.new("Part")
-	p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch = true, false, false, false
-	p.TopSurface, p.BottomSurface = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
-	p.Material = Enum.Material.SmoothPlastic
-	for k, v in props do
-		p[k] = v
-	end
-	p.Parent = parent
-	return p
 end
 
 local function darken(c: Color3, k: number): Color3
@@ -148,15 +140,14 @@ local function pose(a, m, t: number)
 	parts.body.CFrame = at(sx, bodyY, 0) * CFrame.Angles(-lean, 0, 0)
 	local hs = look.head
 	local headCF = parts.body.CFrame * CFrame.new(0, (h * squash * tall / 2 + hs * 0.25) * SC, (d / 2 - hs * 0.1) * SC)
-	-- The head turns a little toward where it is going, and looks up at a torch.
+	-- The head looks up at a torch.
 	headCF *= CFrame.Angles(if m.lit then -0.25 else 0, 0, 0)
 	parts.head.CFrame = headCF
 	local sn = look.snout
 	parts.snout.CFrame = headCF * CFrame.new(0, -hs * 0.1 * SC, (hs / 2 + sn[3] / 2 - 0.05) * SC)
-	local open = a.jaw
 	parts.jaw.CFrame = headCF
 		* CFrame.new(0, (-hs * 0.1 - sn[2] / 2) * SC, (hs / 2) * SC)
-		* CFrame.Angles(open, 0, 0)
+		* CFrame.Angles(a.jaw, 0, 0)
 		* CFrame.new(0, 0, sn[3] * 0.45 * SC)
 	for s, e in parts.eyes do
 		local side = if s == 1 then -1 else 1
@@ -203,15 +194,7 @@ local function buildGuard(folder, name: string)
 		CastShadow = true,
 	}, model)
 	local cap = part({ Size = Units.size(0.32, 0.08, 0.36), Color = Color3.fromHex("#1a2238") }, model)
-	local holder = part({ Transparency = 1, Size = Vector3.one * 0.2 }, model)
-	local torch = Instance.new("SpotLight")
-	torch.Color = Color3.fromRGB(255, 240, 208)
-	torch.Angle = 60
-	torch.Range = math.min(60, 22 * SC)
-	torch.Shadows = true
-	torch.Brightness = 0
-	torch.Face = Enum.NormalId.Front
-	torch.Parent = holder
+	local holder, torch = Make.torch(model)
 	local tag = Instance.new("BillboardGui")
 	tag.Size = UDim2.fromOffset(160, 24)
 	tag.StudsOffset = Vector3.new(0, 0.5 * SC, 0)
@@ -271,7 +254,7 @@ function Actors.new()
 	function self.sync(S, dt: number, t: number, myId: string)
 		local k = math.min(1, dt * 10)
 		for i, a in mascots do
-			local m = S.m and S.m[i]
+			local m = S.m[i]
 			a.model.Parent = if m then folder else nil
 			if m then
 				-- A night began: jump, do not glide across the building.
@@ -300,10 +283,10 @@ function Actors.new()
 					g = buildGuard(folder, p.name)
 					guards[p.id] = g
 				end
-				ease(g, p.x, p.z, p.yaw or 0, k)
-				g.pitch += ((p.pitch or 0) - g.pitch) * k
+				ease(g, p.x, p.z, p.yaw, k)
+				g.pitch += (p.pitch - g.pitch) * k
 				local y0 = floorY(g.x, g.z)
-				local hidden = (p.hid or -1) >= 0
+				local hidden = p.hid >= 0
 				for _, part_ in { g.body, g.head, g.cap } do
 					part_.Transparency = if hidden then 1 else 0
 				end
@@ -312,7 +295,7 @@ function Actors.new()
 					local root = CFrame.new(Units.v3(g.x, y0 + 0.12, g.z))
 						* CFrame.Angles(0, g.yaw + math.pi, 0)
 						* CFrame.Angles(math.pi / 2, 0, 0)
-					g.body.CFrame = root * CFrame.new(0, 0, 0)
+					g.body.CFrame = root
 					g.head.CFrame = root * CFrame.new(0, 0.75 * SC, 0)
 					g.cap.CFrame = g.head.CFrame * CFrame.new(0, 0.12 * SC, 0)
 				else
@@ -323,7 +306,7 @@ function Actors.new()
 					g.cap.CFrame = g.head.CFrame * CFrame.new(0, 0.14 * SC, -0.02 * SC)
 				end
 				g.holder.CFrame = Units.eye(g.x, 1.4, g.z, g.yaw, g.pitch) * CFrame.new(0.22 * SC, 0, -0.3 * SC)
-				g.torch.Brightness = if p.on and not p.flat and (p.bat or 0) > 0 then 2.5 else 0
+				g.torch.Brightness = if p.on and not p.flat and p.bat > 0 then MATE_TORCH else 0
 			end
 		end
 		for id, g in guards do
