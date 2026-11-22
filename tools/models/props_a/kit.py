@@ -18,6 +18,8 @@ from contextlib import contextmanager
 from mathutils import Vector, Matrix, Euler, noise
 from mathutils.bvhtree import BVHTree
 
+noise.seed_set(1)   # noise_vector's table is otherwise seeded from the clock, and crumple() would differ on every build
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEX = os.path.join(HERE, 'tex')
 _atlas = None
