@@ -6,7 +6,7 @@
 # The game loads GLB files from packages/game/public/models. A model is a tree of rigid,
 # named parts (no armature); the game animates the parts in code. See
 # README.md here for the naming contract.
-import bpy, json, math, os, sys
+import bpy, json, math, os, subprocess, sys
 from mathutils import Matrix, Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -98,7 +98,10 @@ def export_glb(name, objs=None, draco=True, jpeg_quality=88, folder=MODELS):
     (with their children); default is the whole scene. Blender's -Y is the
     model's front; it comes out facing +Z in three.js, with +Y up. `folder`
     is for a work-in-progress file the game should not see; report() and
-    preview() take it too."""
+    preview() take it too. Textures over 1024 px are shrunk to that after the
+    export by cap_textures.py, which needs python3 with numpy and Pillow
+    and lists the few images that keep their size.
+    Bakes may stay larger: shrinking a 2048 px bake is supersampling."""
     os.makedirs(folder, exist_ok=True)
     path = os.path.join(folder, name + '.glb')
     bpy.ops.object.select_all(action='DESELECT')
@@ -113,6 +116,7 @@ def export_glb(name, objs=None, draco=True, jpeg_quality=88, folder=MODELS):
               export_draco_mesh_compression_enable=draco)
     if draco: kw.update(export_draco_mesh_compression_level=6, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_color_quantization=10)
     bpy.ops.export_scene.gltf(**kw)
+    subprocess.run(['python3', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cap_textures.py'), path], check=True)
     print(f'[export] {path} {os.path.getsize(path) / 1e6:.2f} MB')
     return path
 
