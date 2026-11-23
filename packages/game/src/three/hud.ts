@@ -13,6 +13,7 @@ import { defined, isNight, isNonEmpty, isPlaced } from '@thick-shift/sim/check';
 import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
 import { angDiff, BOXES, CHARGER, dist, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
 import type { Guard, NightState, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
+import { getVolume, setVolume } from '../audio';
 import { query } from '../dom';
 import { game, myPlayer } from '../state';
 import type { Me, PlayerHandle } from '../types';
@@ -305,6 +306,7 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
           <div class="ts-f-pane ts-f-groups" role="tabpanel" data-pane="controls"></div>
           <div class="ts-f-pane cn-stack cn-gap-16" role="tabpanel" data-pane="settings">
             <div class="field"><label for="ts-sens">Look sensitivity</label><input class="slider" id="ts-sens" type="range" min=".3" max="2.5" step=".1"><small></small></div>
+            <div class="field"><label for="ts-volume">Volume</label><input class="slider" id="ts-volume" type="range" min="0" max="1" step=".05"><small></small></div>
             <label class="choice"><input class="switch" type="checkbox" id="ts-invert">Invert looking up and down</label>
             <label class="choice"><input class="switch" type="checkbox" id="ts-outline">Highlight things you can use</label>
             <label class="choice"><input class="switch" type="checkbox" id="ts-third">Watch teammates from behind when you are flat</label>
@@ -354,6 +356,8 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
     padTab = $('[data-tab="pad"]'),
     sens = input('#ts-sens'),
     sensText = $('#ts-sens + small'),
+    volume = input('#ts-volume'),
+    volumeText = $('#ts-volume + small'),
     invert = input('#ts-invert'),
     outline = input('#ts-outline'),
     third = input('#ts-third');
@@ -415,10 +419,17 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
     outline.checked = prefs.outline;
     third.checked = prefs.third;
     set(sensText, `${Math.round(prefs.sens * 100)}% of normal`);
+    volume.value = String(getVolume());
+    set(volumeText, getVolume() ? `${Math.round(getVolume() * 100)}%` : 'Off');
   };
   sens.oninput = () => {
     prefs.sens = +sens.value;
     savePrefs();
+    showPrefs();
+  };
+  // The volume is audio.ts's to keep and save, not one of prefs.
+  volume.oninput = () => {
+    setVolume(+volume.value);
     showPrefs();
   };
   invert.onchange = () => {

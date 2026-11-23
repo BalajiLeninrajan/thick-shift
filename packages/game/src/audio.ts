@@ -8,16 +8,41 @@ import { TOY } from '@thick-shift/sim';
 import { defined } from '@thick-shift/sim/check';
 import type { NonEmpty } from '@thick-shift/sim/types';
 
-// The context and the two nodes at the end of every chain, made together by the first unlockAudio(). Code that
+// The context and the three nodes at the end of every chain, made together by the first unlockAudio(). Code that
 // makes a sound gets the engine from free(), live() or a null check and passes it down, so nothing reads a context
 // that might not be there.
 export interface Engine {
   ac: AudioContext;
   master: DynamicsCompressorNode; // everything goes through this limiter
   ears: BiquadFilterNode; // one filter over the whole mix, after the limiter. muffle() closes it.
+  volume: GainNode; // the last node before the speakers. setVolume() turns it.
 }
 let engine: Engine | null = null;
 const OPEN_HZ = 20000;
+
+// How loud everything is, 0 to 1, kept between visits under a key of its own. The look settings (three/player.ts)
+// are saved whole under another key, and that file is in the three.js chunk, which this one must not import.
+let volume = 1;
+try {
+  // Number(null) is 0, so a volume never saved has to be told from one saved as 0.
+  const saved = localStorage.getItem('tsVolume');
+  if (saved !== null && Number.isFinite(+saved)) volume = Math.min(1, Math.max(0, +saved));
+} catch {
+  /* storage blocked */
+}
+// Squared, so half way along the slider sounds about half as loud.
+const gainFor = (v: number): number => v * v;
+export const getVolume = (): number => volume;
+export function setVolume(v: number): void {
+  volume = Math.min(1, Math.max(0, v));
+  try {
+    localStorage.setItem('tsVolume', String(volume));
+  } catch {
+    /* storage blocked */
+  }
+  // Eased, so dragging the slider does not click.
+  engine?.volume.gain.setTargetAtTime(gainFor(volume), engine.ac.currentTime, 0.03);
+}
 
 function makeEngine(): Engine | null {
   let ac: AudioContext;
@@ -35,9 +60,12 @@ function makeEngine(): Engine | null {
   const ears = ac.createBiquadFilter();
   ears.type = 'lowpass';
   ears.frequency.value = OPEN_HZ;
-  master.connect(ears).connect(ac.destination);
+  // The volume comes after the limiter, so turning down does not change what the limiter does to the mix.
+  const loud = ac.createGain();
+  loud.gain.value = gainFor(volume);
+  master.connect(ears).connect(loud).connect(ac.destination);
   loadSamples(ac);
-  return { ac, master, ears };
+  return { ac, master, ears, volume: loud };
 }
 
 // Browsers only allow audio after a user gesture, so call this from handlers.
