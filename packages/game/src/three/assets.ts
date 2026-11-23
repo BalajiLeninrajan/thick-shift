@@ -11,16 +11,22 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const draco = new DRACOLoader().setDecoderPath(DRACO_GLTF_CONFIG);
 const loader = new GLTFLoader().setDRACOLoader(draco);
 
-// Each load is made once, by name, and every later ask gets the same promise.
+// Each load is made once, by name, and every later ask gets the same promise. A load that came to nothing is the
+// exception: it is forgotten, so the next ask tries the network again. The lobby starts these loads early (app.ts's
+// preload), and a file that failed there must not stay a stand-in for the whole session. Nothing asks per frame. A
+// guard asks when it is made and a mascot when its stage changes, so a file that really is missing costs one request
+// each time.
 const glbs = new Map<string, Promise<THREE.Group | null>>(),
   infos = new Map<string, Promise<ModelInfo | null>>(),
   actors = new Map<string, Promise<THREE.Group | null>>();
-function once<T>(cache: Map<string, T>, name: string, load: () => T): T {
-  let made = cache.get(name);
-  if (made === undefined) {
-    made = load();
-    cache.set(name, made);
-  }
+function once<T>(cache: Map<string, Promise<T | null>>, name: string, load: () => Promise<T | null>): Promise<T | null> {
+  const kept = cache.get(name);
+  if (kept) return kept;
+  const made = load();
+  cache.set(name, made);
+  made.then(got => {
+    if (got === null) cache.delete(name);
+  });
   return made;
 }
 // models/<mascot>.json, as far as actors/mascot.ts reads it: one entry per stage of the mascot's model. The file is
