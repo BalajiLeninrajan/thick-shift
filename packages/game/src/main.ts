@@ -14,8 +14,10 @@ const debugWindow = window as Window & { ts?: { game: object; client: object; fl
 // Every sound with a place is played there by three/sound.ts. The win jingle has none, so it plays here.
 // The end card waits out the catch and the look up at it afterwards. three/app.ts pushes holdUntil on while its catch
 // is still playing, however long a slow machine takes over it.
-let lastEv = 0; // id of the last event we reacted to
+let lastEv = -1; // id of the last event we reacted to
 function reactToEvents(S: State): void {
+  // A page that arrives part way through has missed what already happened (three/app.ts and sound.ts do the same).
+  if (lastEv < 0) lastEv = S.evId;
   for (const e of S.evs) {
     if (e.id <= lastEv) continue;
     lastEv = e.id;
@@ -24,7 +26,8 @@ function reactToEvents(S: State): void {
   }
 }
 
-// three/app.ts is fetched the first time a night is drawn. Until it arrives the stage stays dark.
+// three/app.ts is fetched the first time a night is drawn, if the lobby has not fetched it already. Until it arrives
+// the stage stays dark.
 let floor: FloorModule | null = null,
   floorLoading = false,
   floorThreat = 0;
@@ -48,11 +51,22 @@ function drawFloor(): void {
   if (debugWindow.ts) debugWindow.ts.floor = app; // ?debug
 }
 
+// The lobby is a wait anyway, so it fetches three/app.ts and the models a night opens with, and starting the night
+// does not wait on them. Asked for once. A failure here is dropped: drawFloor imports the file again for itself, and
+// that is the import whose failure the player is told about.
+let preloaded = false;
+function preloadFloor(): void {
+  if (preloaded) return;
+  preloaded = true;
+  import('./three/app').then(m => m.preload()).catch(() => {});
+}
+
 function frame(): void {
   requestAnimationFrame(frame);
   const S = game.S;
   if (S) reactToEvents(S);
   syncOverlay();
+  if (S?.phase === 'lobby') preloadFloor();
   if (S && S.phase !== 'lobby' && S.phase !== 'won') drawFloor();
   else floor?.hide();
   if (S && S.phase === 'play') ambience(floorThreat, dreadF(S));

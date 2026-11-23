@@ -1,5 +1,5 @@
-// The renderer and the frame. main.ts imports this file the first time a
-// night is drawn, so the title screen and lobby never wait on three.js.
+// The renderer and the frame. main.ts imports this file while the lobby is up,
+// or the first time a night is drawn, so the title screen never waits on three.js.
 
 import { dreadF } from '@thick-shift/sim';
 import { defined, isPlaced } from '@thick-shift/sim/check';
@@ -12,6 +12,7 @@ import { client, currentState, game, LINGER_S, myPlayer } from '../state';
 import type { EventOf } from '../types';
 import { createActors } from './actors';
 import { createPhone } from './actors/phone';
+import { loadActor, loadJSON } from './assets';
 import { createHud, where } from './hud';
 import { createOutlines } from './outline';
 import { createPlayer, prefs, TORCH_FULL } from './player';
@@ -232,6 +233,21 @@ function create() {
     post,
     phone,
   };
+}
+
+// The models a night opens with, asked for while the lobby is still up (main.ts): the guard and each mascot's first
+// stage. assets.ts keeps every load that worked by name, so actors/guard.ts and actors/mascot.ts get these same loads
+// when the night is made. One that failed here is not kept, and the night asks for it again. Nothing is drawn and no
+// canvas is made.
+// The two prop kits need no asking here, because world/props.ts loads them as soon as it is imported. It keeps that
+// one load for good, so a kit that fails leaves its props out for the session. That was so before the lobby imported
+// this file, only the import came later, at the first frame of a night.
+export function preload(): void {
+  loadActor('guard');
+  for (const { k } of MASC) {
+    loadActor(`${k}_0`);
+    loadJSON(k);
+  }
 }
 
 export function frame(now: number): ReturnType<typeof create> {

@@ -93,6 +93,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     flat: false,
     paused: false,
     touch: false,
+    pad: false,
     watch: null,
     ph: false,
     task: null,
@@ -103,6 +104,8 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     hid: -1,
   };
   const keys = new Set<string>();
+  // Keys a breaker box took, each until it comes up. Their repeats never reach keys, even once the box has shut.
+  const boxKeys = new Set<string>();
   // Touch and gamepad code can drive the guard through these instead of keys.
   const pad: Pad = { fwd: 0, strafe: 0, sprint: false, use: false };
   const gp: Pad = { fwd: 0, strafe: 0, sprint: false, use: false };
@@ -112,6 +115,8 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     usedTap = false,
     lastCall = -1e9,
     drop = 0;
+  // me.pad goes up with gpLive and comes down sooner: a game key clears it as well as a locked pointer. gpLive has to
+  // outlast a key press, because it is what lets the sticks through and only a button sets it again.
   let mouseLocked = false,
     gpLive = false,
     gpWas: boolean[] = [];
@@ -222,21 +227,45 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         e.preventDefault();
         keysLive = true;
+        me.pad = false;
         resume();
       }
+      return;
+    }
+    // Hands in a box: the box gets first go at the key, and what it takes goes no further. So W A S D choose and do
+    // not walk, Space is not a flat guard's key, and Esc or X lets go of the box and does not pause. With the pointer
+    // locked Esc is the browser's: it gives the mouse back, and pointerlockchange lets go of the box.
+    // The box keeps a key it took until the key comes up. Otherwise the repeats of a held W would walk the guard off
+    // when the box shut, and those of E would open the box again before the room had cleared the fault.
+    const taken = boxKeys.has(e.code);
+    if (taken || (me.task && !(e.code === 'Escape' && mouseLocked) && task.key(e.code, e.repeat))) {
+      boxKeys.add(e.code);
+      e.preventDefault();
+      me.pad = false;
       return;
     }
     if (e.code === 'Escape' && !mouseLocked) {
       pause();
       return;
     }
-    if (GAME_KEYS.test(e.code)) keysLive = true;
+    if (GAME_KEYS.test(e.code)) {
+      keysLive = true;
+      me.pad = false;
+    }
     if (!e.repeat) PRESS[e.code]?.();
     if (e.code === 'Space' || e.code === 'Tab' || e.code.startsWith('Arrow')) e.preventDefault();
     keys.add(e.code);
   });
-  addEventListener('keyup', e => keys.delete(e.code));
-  addEventListener('blur', () => keys.clear());
+  addEventListener('keyup', e => {
+    if (me.task) task.keyUp(e.code); // the valve is held open only as long as its key
+    boxKeys.delete(e.code);
+    keys.delete(e.code);
+  });
+  // No keyup arrives for a key let go while the window is away.
+  addEventListener('blur', () => {
+    keys.clear();
+    boxKeys.clear();
+  });
   canvas.addEventListener('click', () => {
     unlockAudio();
     if (!mouseLocked) resume();
@@ -250,7 +279,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   document.addEventListener('pointerlockchange', () => {
     const was = mouseLocked;
     mouseLocked = document.pointerLockElement === canvas;
-    if (mouseLocked) gpLive = false;
+    if (mouseLocked) gpLive = me.pad = false;
     // Esc, or the browser, took the mouse away in the middle of a night: that is a pause.
     // Esc with hands in a box lets go of the box, not the night.
     if (was && !mouseLocked) {
@@ -289,10 +318,10 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       hit = (i: number): boolean => down(i) && !gpWas[i];
     if (hit(GP.pause)) {
       if (me.paused || !me.locked) {
-        gpLive = true;
+        gpLive = me.pad = true;
         me.paused = false;
       } else pause();
-    } else if (!me.paused && g.buttons.some((b, i) => b.pressed && !gpWas[i])) gpLive = true; // any button takes over from the mouse
+    } else if (!me.paused && g.buttons.some((b, i) => b.pressed && !gpWas[i])) gpLive = me.pad = true; // any button takes over from the mouse
     if (gpLive && !me.paused && me.task) {
       // Hands in a box: the stick and d-pad choose, A works it, B lets go.
       const sx = axis(0),
