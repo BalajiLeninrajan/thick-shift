@@ -26,7 +26,8 @@ function reactToEvents(S: State): void {
   }
 }
 
-// three/app.ts is fetched the first time a night is drawn. Until it arrives the stage stays dark.
+// three/app.ts is fetched the first time a night is drawn, if the lobby has not fetched it already. Until it arrives
+// the stage stays dark.
 let floor: FloorModule | null = null,
   floorLoading = false,
   floorThreat = 0;
@@ -50,11 +51,22 @@ function drawFloor(): void {
   if (debugWindow.ts) debugWindow.ts.floor = app; // ?debug
 }
 
+// The lobby is a wait anyway, so it fetches three/app.ts and the models a night opens with, and starting the night
+// does not wait on them. Asked for once. A failure here is dropped: drawFloor imports the file again for itself, and
+// that is the import whose failure the player is told about.
+let preloaded = false;
+function preloadFloor(): void {
+  if (preloaded) return;
+  preloaded = true;
+  import('./three/app').then(m => m.preload()).catch(() => {});
+}
+
 function frame(): void {
   requestAnimationFrame(frame);
   const S = game.S;
   if (S) reactToEvents(S);
   syncOverlay();
+  if (S?.phase === 'lobby') preloadFloor();
   if (S && S.phase !== 'lobby' && S.phase !== 'won') drawFloor();
   else floor?.hide();
   if (S && S.phase === 'play') ambience(floorThreat, dreadF(S));

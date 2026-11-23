@@ -107,7 +107,7 @@ export interface OutlineMark {
 // One event from S.evs, narrowed to its type: EventOf<'flat'>['x'] is { id, by, x, z }.
 export type EventOf<K extends EventType> = Extract<SimEvent, { type: K }>;
 
-// three/app.ts, which main.ts imports the first time a night is drawn.
+// three/app.ts, which main.ts imports while the lobby is up, or the first time a night is drawn.
 export type FloorModule = typeof import('./three/app');
 export type Actors = ReturnType<typeof createActors>;
 export type PlayerHandle = ReturnType<typeof createPlayer>;
