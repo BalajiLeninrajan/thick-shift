@@ -14,8 +14,10 @@ const debugWindow = window as Window & { ts?: { game: object; client: object; fl
 // Every sound with a place is played there by three/sound.ts. The win jingle has none, so it plays here.
 // The end card waits out the catch and the look up at it afterwards. three/app.ts pushes holdUntil on while its catch
 // is still playing, however long a slow machine takes over it.
-let lastEv = 0; // id of the last event we reacted to
+let lastEv = -1; // id of the last event we reacted to
 function reactToEvents(S: State): void {
+  // A page that arrives part way through has missed what already happened (three/app.ts and sound.ts do the same).
+  if (lastEv < 0) lastEv = S.evId;
   for (const e of S.evs) {
     if (e.id <= lastEv) continue;
     lastEv = e.id;
