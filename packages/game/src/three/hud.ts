@@ -181,6 +181,7 @@ const CONTROLS: Record<'keys' | 'touch' | 'pad', ControlGroup[]> = {
       'Working',
       [
         ['Use, fix', ['A']],
+        ['Peel a friend up, hide', ['Hold A']],
         ['Torch', ['X']],
         ['Phone map', ['B'], DRAINS],
         ['Zoom the map', ['D-pad up']],
@@ -728,7 +729,7 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
       dot.hidden = me.flat || me.paused;
       prompt.hidden = !t || !!me.task;
       if (t) {
-        set(promptKey, me.touch ? 'Use' : 'E');
+        set(promptKey, me.touch ? 'Use' : me.pad ? 'A' : 'E');
         set(promptText, (t.hold === 0 ? '' : 'Hold to ') + (t.hold === 0 ? t.label : t.label.charAt(0).toLowerCase() + t.label.slice(1)));
         hold.hidden = !(t.hold > 0);
         holdBar.style.width = `${Math.min(1, me.hold / t.hold) * 100}%`;

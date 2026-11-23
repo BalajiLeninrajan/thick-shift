@@ -75,6 +75,7 @@ export interface Me {
   flat: boolean;
   paused: boolean; // the pause panel is up: nothing here moves the guard
   touch: boolean; // a finger is driving (set by touch.ts), so there is no pointer to lock
+  pad: boolean; // a gamepad button was the last thing pressed, so the prompt names the pad's button
   watch: string | null; // id of the teammate a flat guard is watching through
   ph: boolean; // the phone is up, showing the minimap
   task: { i: number; at: number } | null; // hands in a breaker box: the box, and when its fault broke out (Fault.at)
