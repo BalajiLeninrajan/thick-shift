@@ -210,7 +210,7 @@ const LOCKER_NOISE: [number, number] = [6, 0.5],
 export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3, box: 6 };
 
 const OPEN = (): Doors => ({ L: false, V: false, R: false });
-// The night's random numbers, all drawn from sim.rng. The Roblox port draws in the same order (CONTRACT.md).
+// The night's random numbers, all drawn from sim.rng (CONTRACT.md).
 const rnd = (sim: Sim, a: number, b: number) => a + sim.rng() * (b - a);
 // A draw in [0, 1) times the length of a list that is not empty always lands on an entry.
 const pick = <T>(sim: Sim, list: NonEmpty<T>): T => defined(list[(sim.rng() * list.length) | 0], 'a random pick');
@@ -419,7 +419,7 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
     placeGuard(p, i);
     return p;
   });
-  // Fisher-Yates, drawing as the Roblox port does.
+  // Fisher-Yates.
   const spots = BATTERY_SPOTS.map((_, i) => i);
   for (let i = spots.length - 1; i > 0; i--) {
     const j = (sim.rng() * (i + 1)) | 0;

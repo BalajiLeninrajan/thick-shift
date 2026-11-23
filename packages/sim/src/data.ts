@@ -1,6 +1,5 @@
-// Plain-data tables the renderer owns but other code needs too: the game's light.ts and shell.ts draw them, and
-// tools/roblox/gen-data.mjs writes them into the Roblox port's Data.luau. They live here, away from three.js, so
-// Node can import them.
+// Plain-data tables for the lamps and the stage, which the game's light.ts and shell.ts draw. They live here, away
+// from three.js, so Node can import them.
 
 // A colour as [r, g, b], 0 to 1.
 export type RGB = [number, number, number];

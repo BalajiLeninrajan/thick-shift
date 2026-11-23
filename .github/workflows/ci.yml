@@ -20,11 +20,6 @@ jobs:
     name: Check
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      # Must match the lune line in apps/roblox/rokit.toml; the install step checks that it does. The hash is of
-      # lune-<version>-linux-x86_64.zip from the lune-org/lune GitHub release.
-      LUNE_VERSION: 0.11.1
-      LUNE_SHA256: 39859282ce677fce19e6eb45c37596a90a25c324c95b4e7e02d428b6cae294a1
     steps:
       - name: Check out the repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -59,33 +54,3 @@ jobs:
 
       - name: Build both apps
         run: pnpm build
-
-      - name: Check Data.luau is up to date
-        run: |
-          node tools/roblox/gen-data.mjs
-          git diff --exit-code apps/roblox/src/shared/Data.luau
-
-      - name: Install lune
-        run: |
-          pinned=$(sed -n 's/^lune = "lune-org\/lune@\(.*\)"$/\1/p' apps/roblox/rokit.toml)
-          if [ "$pinned" != "$LUNE_VERSION" ]; then
-            echo "::error::apps/roblox/rokit.toml pins lune $pinned but CI installs $LUNE_VERSION; update LUNE_VERSION and LUNE_SHA256 in ci.yml"
-            exit 1
-          fi
-          dir="$RUNNER_TEMP/lune"
-          mkdir -p "$dir"
-          curl -fsSL -o "$dir/lune.zip" "https://github.com/lune-org/lune/releases/download/v$LUNE_VERSION/lune-$LUNE_VERSION-linux-x86_64.zip"
-          echo "$LUNE_SHA256  $dir/lune.zip" | sha256sum -c -
-          unzip -q "$dir/lune.zip" -d "$dir"
-          chmod +x "$dir/lune"
-          echo "$dir" >> "$GITHUB_PATH"
-
-      - name: Compare the Luau port with the web sim
-        run: |
-          tools/roblox/diff/run.sh "solo competent n1" 3
-          tools/roblox/diff/run.sh "crew of 3 competent n4" 1
-          tools/roblox/diff/run.sh "solo expert n5" 2
-
-      # The client modules played against the sim under Lune: a scripted night, then each minigame to the end.
-      - name: Smoke-test the Roblox client
-        run: lune run apps/roblox/test/smoke.luau
