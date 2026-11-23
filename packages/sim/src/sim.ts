@@ -144,12 +144,13 @@ const BANG_BOX: Record<DoorKey, number> = { L: 5, R: 7, V: 6 };
 // Metres per second. Hunt speed is per mascot, by MASC index. Biggs is slower
 // than a walking guard and never stops coming. Flan crawls while a guard is
 // looking at her and runs when nobody is. Squish is quick, quicker in the
-// ducts. Stompy walks until it has a straight run, then charges. With the power
-// out every one of them moves `out` times as fast. Squish then outruns a
-// sprinting guard on any night. Biggs is just short of a sprint until night 4
-// and Stompy until night 5 (KEEN and RAMP below set the night), and Flan
-// outruns one only while nobody watches her. A sprint does not last, so the
-// crank is still the only way out. (Untuned against the harness.)
+// ducts. Stompy walks until it has a straight run, then charges. All but Biggs
+// run out of breath on a long hunt and slow down for a while (TIRE). With the
+// power out every one of them moves `out` times as fast and none of them tires.
+// Squish then outruns a sprinting guard on any night. Biggs is just short of a
+// sprint until night 4 and Stompy until night 5 (KEEN and RAMP below set the
+// night), and Flan outruns one only while nobody watches her. A sprint does not
+// last, so the crank is still the only way out. (Untuned against the harness.)
 const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6] satisfies PerMascot<number>, unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15, out: 2 };
 const KEEN: [number, number] = [0.78, 0.025]; // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
@@ -171,6 +172,16 @@ const GRAB_TIME = 1.2; // seconds a mascot stuck behind furniture takes to reach
 const STARE = 5; // seconds one waiting its turn stands and stares before it goes back to what it was doing
 const CHARGE_GAP = 10; // seconds before Stompy can charge again
 export const WINDUP = { time: 1.5, commit: 0.5 }; // Stompy's wind-up before a charge, and how much of it at the end is spent not turning
+// A mascot's breath for running, as a guard has STAMINA. One that moves faster than it searches is running: any hunt
+// but Biggs's. `run` seconds of that empty a full breath, and `rest` seconds of anything slower fill it again
+// (roaming, searching, standing, stunned, or held in a torch beam). Out of breath it is winded: it hunts at `winded`
+// of its speed, which is slower than a guard walks, until its breath is back to `back`. That takes six seconds, and
+// what it has then lasts under five, so a guard who keeps moving away from one gets clear of it in the end.
+// Biggs never runs: he is slower than a walking guard already, and never stopping is all he has. Stompy's charge
+// costs nothing (CHARGE_GAP spaces those out), and with the power out nothing tires: the crank is the only way out.
+// The harness's guards stand and hold a hunter in the torch more than they run from it, so its table hardly moves
+// with these: what they are worth is to a guard who runs.
+const TIRE = { run: 8, rest: 10, winded: 0.6, back: 0.6 };
 const SEARCH_MAX = 14; // seconds one spends looking for what it heard or lost before it gives that up
 // How far a mascot sees a guard, in metres. `torch` is for a guard with their torch on, `lit` for one in a lit room
 // with it off and `dark` for one in a dark room with it off. Past `near` metres it only sees within `cone` radians
@@ -415,6 +426,9 @@ const newBrain = (sim: Sim): Brain => ({
   nearAt: 0,
   song: null,
   wise: 0,
+  puff: 1,
+  ran: false,
+  winded: false,
 });
 
 // Sets every Guard field at once (isPlaced relies on that).
@@ -1067,6 +1081,11 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   m.lit = !!lighter;
   if (lighter) m.ire += dt / GLARE_PER_IRE;
   b.cool -= dt;
+  // Its breath: spent if it ran on the last step, coming back if it did not.
+  b.puff = Math.max(0, Math.min(1, b.puff + (b.ran ? -dt / TIRE.run : dt / TIRE.rest)));
+  b.ran = false;
+  if (b.puff <= 0) b.winded = true;
+  else if (b.puff >= TIRE.back) b.winded = false;
   if (m.st !== b.was) {
     // It has just lost the guard it was after: which lockers it will look in.
     b.checks = m.st === 'search' && b.was === 'hunt' ? lockersNear(sim, b.last) : m.st === 'search' ? b.checks : [];
@@ -1208,7 +1227,8 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   }
   if (looking && openLockers(sim, S, m, b, dt)) return;
 
-  // A hunt does not tire. It ends when the guard is caught, shut out behind a door (siege) or lost from sight.
+  // A hunt slows when the mascot is out of breath (TIRE), and ends when the guard is caught, shut out behind a door
+  // (siege) or lost from sight.
   if (!seen && m.st === 'hunt') {
     const tp = S.players.find(p => p.id === b.tgt);
     b.lost += dt;
@@ -1265,6 +1285,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       speed = SPEED.hunt[m.i] * angry;
       if (m.i === FLAN && !up.some(p => watchedBy(S, p, m))) speed = SPEED.unwatched * angry;
       if (m.i === SQUISH && roomAt(m.x, m.z) === DUCTS) speed *= SPEED.ducts;
+      if (b.winded && !S.out) speed *= TIRE.winded;
     }
   } else if (m.st === 'search' && S.t - b.since > SEARCH_MAX) {
     m.st = 'roam';
@@ -1299,6 +1320,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   if (S.out) speed *= SPEED.out;
   if (m.lit) speed *= defined(LIT_SPEED[m.rot], 'a rot stage'); // rot is 0, 1 or 2
   if (stare) speed = 0;
+  b.ran = !b.winded && !S.out && m.i !== BIGGS && speed > SPEED.search * angry;
   if (m.lit && lighter) turn(m, Math.atan2(lighter.x - m.x, lighter.z - m.z), 4 * dt); // it turns to face the light
 
   // Close enough to a singing toy is there: it stands over it and looks about.

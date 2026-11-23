@@ -345,8 +345,36 @@ describe('a hunt', () => {
     Object.assign(p, { x: 19.5, z: 18, yaw: 0, pitch: 0, on: true });
     Object.assign(m, { x: 19.5, z: 24, yaw: Math.PI, st: 'hunt' });
     Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z } });
-    return { sim, S, p, m };
+    return { sim, S, p, m, b };
   }
+
+  it('runs out of breath, comes on slower, and gets it back in a torch beam', () => {
+    const { sim, S, p, m, b } = chase();
+    p.on = false;
+    // How far she gets in one step of a tenth of a second.
+    let now = 0;
+    const step = () => {
+      const from = { x: m.x, z: m.z };
+      now += 100;
+      stepFloor(sim, S, now);
+      return dist(m, from);
+    };
+    step();
+    const fresh = step();
+    expect(fresh).toBeGreaterThan(0.1);
+    expect(b.puff).toBeCloseTo(1 - 0.1 / 8, 6); // one step of running out of the eight seconds she has
+    b.puff = 0;
+    const winded = step();
+    expect(b.winded).toBe(true);
+    expect(winded / fresh).toBeCloseTo(0.6, 2);
+    // Held in the beam she is not running: ten seconds of that would fill her, and six bring her round.
+    p.on = true;
+    for (let k = 0; k < 59; k++) step();
+    expect(b.winded).toBe(true);
+    for (let k = 0; k < 3; k++) step();
+    expect(b.winded).toBe(false);
+    expect(p.flat).toBe(false);
+  });
 
   it('does not give up on a guard it can see, however long a torch holds it', () => {
     const { sim, S, p, m } = chase();

@@ -254,6 +254,9 @@ export interface Brain {
   nearAt: number; // and when it last got closer
   song: Point | null; // where the last Mini Biggs it went to was singing (lured in sim.ts)
   wise: number; // S.t before which a Mini Biggs does nothing to it
+  puff: number; // its breath for running, 0 to 1 (TIRE in sim.ts)
+  ran: boolean; // it ran on its last step, which costs breath on this one
+  winded: boolean; // out of breath, and slow until enough of it is back
 }
 
 /* ---------- the wire ---------- */
