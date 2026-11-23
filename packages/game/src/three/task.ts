@@ -11,9 +11,11 @@
 // Everything works from the keyboard (W A S D or the number keys to choose,
 // E or Space to act, X or Esc to let go), a gamepad (stick or d-pad, A, B) and
 // touch (tap the parts). The room is told only when the job is done.
+// The panel reads no keyboard or gamepad input of its own: player.ts reads it
+// all and hands the box its share through key(), keyUp() and pad().
 import { defined } from '@thick-shift/sim/check';
 import { BOXES, ROOMS3 } from '@thick-shift/sim/map';
-import { query, typing } from '../dom';
+import { query } from '../dom';
 
 const KIND = ['Reset the breaker', 'Reconnect the wires', 'Bleed the valve'];
 // What a fault of kind k (Fault.k) asks of the guard. The sim only makes kinds 0 to 2.
@@ -220,35 +222,6 @@ export function createTask(root: HTMLElement) {
   /* ---------- input ---------- */
 
   const KEY_DIR: Record<string, [number, number]> = { KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0] };
-  addEventListener(
-    'keydown',
-    e => {
-      if (!job || typing(e)) return;
-      const c = e.code;
-      if (c === 'KeyX' || c === 'Escape') {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        quit();
-        return;
-      }
-      if (e.repeat && c !== 'KeyE' && c !== 'Space') return;
-      if (KEY_DIR[c]) job.move(...KEY_DIR[c]);
-      else if (/^Digit[1-9]$/.test(c)) job.pick(+c.slice(5) - 1);
-      else if ((c === 'KeyE' || c === 'Space') && !e.repeat) job.act(true);
-      else return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      check();
-    },
-    true
-  );
-  addEventListener(
-    'keyup',
-    e => {
-      if (job && (e.code === 'KeyE' || e.code === 'Space')) job.act(false);
-    },
-    true
-  );
   panel.addEventListener('click', e => {
     if (e.target instanceof Element && e.target.closest('[data-task="quit"]')) {
       quit();
@@ -292,6 +265,26 @@ export function createTask(root: HTMLElement) {
       panel.hidden = false;
     },
     close,
+    // Keyboard: a key going down, by KeyboardEvent.code. True when the box took it, and then it is not the guard's.
+    // X and Esc let go. A held key's repeats are not taken: nothing here repeats, and the valve reads E as held from
+    // its press to its keyUp.
+    key(code: string, repeat: boolean): boolean {
+      if (!job) return false;
+      if (code === 'KeyX' || code === 'Escape') {
+        quit();
+        return true;
+      }
+      if (repeat) return false;
+      if (KEY_DIR[code]) job.move(...KEY_DIR[code]);
+      else if (/^Digit[1-9]$/.test(code)) job.pick(+code.slice(5) - 1);
+      else if (code === 'KeyE' || code === 'Space') job.act(true);
+      else return false;
+      check();
+      return true;
+    },
+    keyUp(code: string): void {
+      if (job && (code === 'KeyE' || code === 'Space')) job.act(false);
+    },
     // Gamepad: dir is [dx, dy] on a fresh press; a: the A button held; b: pressed this frame.
     pad(dir: [number, number] | null, a: boolean, aWas: boolean, b: boolean): void {
       if (!job) return;
