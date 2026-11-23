@@ -95,9 +95,8 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     // Every new event in S.evs comes through here.
     event(e: SimEvent, S: State, me: Me): void {
       if (e.type === 'flat') {
-        const { id, by, x, z } = e.x;
+        const { id, by } = e.x;
         if (id === game.myId) scare.start(mascots[by], me);
-        else mascots[by].sitOn(x, z, false);
       } else if (e.type === 'bang') {
         // The hit lands with the sound: whichever of them is at that door. A bang carries the key of a doorway that has one.
         const door = rectMid(doorwayOf(e.x).rect);

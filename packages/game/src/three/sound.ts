@@ -178,7 +178,6 @@ interface MascotVoice {
   lit: boolean;
   creak: number;
   strain: number;
-  chew: number;
   glup: number;
 }
 // Another guard's emitter and footstep count.
@@ -333,7 +332,7 @@ export function createSound() {
     const mascots = perMascot((i): MascotVoice => {
       const e = emitter(0.2),
         band = filter('bandpass', BREATH[i].hz, BREATH[i].q);
-      return { e, band, breath: loop(e.in, hiss, band), x: null, z: 0, walked: 0, phase: Math.random() * 6, lit: false, creak: 0, strain: 0, chew: 0, glup: 2 };
+      return { e, band, breath: loop(e.in, hiss, band), x: null, z: 0, walked: 0, phase: Math.random() * 6, lit: false, creak: 0, strain: 0, glup: 2 };
     });
     const gen = emitter(0.25),
       charger = emitter(0.15);
@@ -634,10 +633,10 @@ export function createSound() {
           if (m.rot) squelch(0.1 * m.rot, 0.03);
         });
     }
-    // Breath: faster when it is after someone, lower and louder as it rots. None while it eats.
+    // Breath: faster when it is after someone, lower and louder as it rots.
     const keen = COMING.includes(m.st) ? 1.7 : m.lit ? 1.4 : 1;
     v.phase += dt * b.rate * keen * Math.PI * 2;
-    aim(v.breath.gain, awake && m.st !== 'feast' ? b.level * (1 + m.rot * 0.35) * Math.max(0, Math.sin(v.phase)) ** b.sharp : 0, 0.05);
+    aim(v.breath.gain, awake ? b.level * (1 + m.rot * 0.35) * Math.max(0, Math.sin(v.phase)) ** b.sharp : 0, 0.05);
     aim(v.band.frequency, b.hz * (1 - m.rot * 0.15));
     // Held in a beam it strains against it: its own growl in short overlapping
     // pulls, louder and lower the less the light can hold it.
@@ -661,13 +660,6 @@ export function createSound() {
       into(v.e.in, () => sample(pick('creak1', 'creak2'), { from: rnd(0, 0.4), len: 0.5, rate: rnd(1.2, 1.6), gain: m.lit ? 0.5 : 0.25 }));
     }
     v.lit = m.lit;
-    if (m.st === 'feast') {
-      v.chew -= dt;
-      if (v.chew <= 0 && far < HEAR) {
-        v.chew = rnd(0.22, 0.38);
-        into(v.e.in, () => squelch(0.5));
-      }
-    }
     // Squish gulps now and then, wherever it is.
     if (m.i === 2 && awake) {
       v.glup -= dt;

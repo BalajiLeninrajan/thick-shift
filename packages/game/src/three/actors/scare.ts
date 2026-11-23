@@ -98,7 +98,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
       };
       pos.copy(from);
       mascot.scareOn = mascot.seen = true;
-      mascot.sitOn(me.x, me.z, true);
+      mascot.catchAt(me.x, me.z);
     },
     stop,
     // Call after player.ts and the actors have run. Takes the camera (and the torch), and at the end hands me.yaw and me.pitch back where the camera is.
@@ -116,7 +116,7 @@ export function createScare(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasE
         return stop();
       }
       m.scareBite = smooth((t - CUES.bite) / 0.1) * (1 - smooth((t - CUES.drop) / 0.2));
-      if (t >= CUES.drop) m.scareOn = false; // it lets go and sits
+      if (t >= CUES.drop) m.scareOn = false; // it lets go
 
       // Where the camera is held: straight out in front of the face, a little below it.
       const fill = FILL[m.i][m.cur.style.stage] * (1 - (1 - BITE) * m.scareBite);

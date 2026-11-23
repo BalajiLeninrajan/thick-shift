@@ -3,7 +3,25 @@
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
 import { BIGGS, FLAN, MASCOTS, STOMPY } from '../src/config.ts';
-import { BATTERY_SPOTS, BOXES, DUCTS, dist, HIDES, MASCOT_R, PANELS, PLAYER_R, REST, roomAt, sees, spawnPoint, TOY_BOX, walkable } from '../src/map.ts';
+import {
+  BATTERY_SPOTS,
+  BOOTH,
+  BOXES,
+  DUCTS,
+  dist,
+  HIDES,
+  MASCOT_R,
+  PANELS,
+  PLAYER_R,
+  REST,
+  ROOMS3,
+  roomAt,
+  roomCentre,
+  sees,
+  spawnPoint,
+  TOY_BOX,
+  walkable,
+} from '../src/map.ts';
 import { seeded } from '../src/random.ts';
 import { DEV_OFF } from '../src/session.ts';
 import { actFloor, adoptFloor, brainOf, F, landing, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor, TOY } from '../src/sim.ts';
@@ -92,7 +110,7 @@ describe('startFloorNight', () => {
 });
 
 describe('adoptFloor', () => {
-  // A saved night, part way in: one mascot hunting, one charging, one feasting and one at rest, and one battery left
+  // A saved night, part way in: one mascot hunting, one charging, one stunned and one at rest, and one battery left
   // lying about.
   function savedState() {
     const { S } = start(5, 2, 3);
@@ -101,7 +119,7 @@ describe('adoptFloor', () => {
     assert(biggs && flan && squish && stompy, 'the night has all four mascots');
     biggs.st = 'hunt';
     flan.st = 'charge';
-    squish.st = 'feast';
+    squish.st = 'stun';
     stompy.st = 'rest';
     T.bats = (T.bats as number[]).slice(0, 1);
     return T;
@@ -118,8 +136,8 @@ describe('adoptFloor', () => {
     expect(sim.lastStep).toBe(5000);
     expect(sim.brains).toHaveLength(4);
     // The hunt goes on after the nearest guard (g0 stands 1.6 m nearer Biggs' mark); a charge has lost its heading
-    // and looks round instead; a feast and a rest stay as they are.
-    expect(T.m.map(m => m.st)).toEqual(['hunt', 'search', 'feast', 'rest']);
+    // and looks round instead; a stun and a rest stay as they are.
+    expect(T.m.map(m => m.st)).toEqual(['hunt', 'search', 'stun', 'rest']);
     expect(sim.brains[0]).toMatchObject({ tgt: 'g0', last: { x: 18.5, z: 41.5 }, woke: true });
     expect(sim.brains[1]).toMatchObject({ tgt: null, last: { x: REST[1].x, z: REST[1].z }, woke: true });
     expect(sim.brains[2]?.woke).toBe(true);
@@ -138,12 +156,22 @@ describe('adoptFloor', () => {
 
   it('gives each mascot the timers a seeded stream says', () => {
     // The idle night below ends before most of these timers play out, so pin them here: the search timer for the
-    // lost charge, the feast timer, the rest timer and Stompy's full charge gap (CHARGE_GAP, 10 s).
+    // lost charge, the stun timer, the rest timer and Stompy's full charge gap (CHARGE_GAP, 10 s).
     const { sim, T } = adopt(7);
     const r = (v: number) => Math.round(v * 1000) / 1000;
     expect(sim.brains[3]?.cool).toBe(10);
     expect(sim.brains.map((b, i) => ({ st: T.m[i]?.st, tgt: b.tgt, timer: r(b.timer), cool: b.cool }))).toMatchSnapshot();
     expect({ batTimers: sim.batTimers.map(r), nextFault: r(sim.nextFault) }).toMatchSnapshot();
+  });
+
+  it('sends a mascot wandering when the saved night has it in a state this build does not have', () => {
+    // Builds before this one had the catcher sit on its guard ('feast'), and a room may have saved a night like that.
+    const T = savedState();
+    Object.assign(defined(T.m[2], 'Squish'), { st: 'feast' });
+    const { sim } = adopt(7, T);
+    expect(T.m.map(m => m.st)).toEqual(['hunt', 'search', 'roam', 'rest']);
+    expect(sim.brains[2]).toMatchObject({ woke: true, dest: null, home: false });
+    for (let k = 1; k <= 50; k++) stepFloor(sim, T, 5000 + k * 100); // and the night goes on
   });
 
   it('walks a searching mascot to where it lost the guard when it means to check a locker that is not there', () => {
@@ -327,6 +355,43 @@ describe('a hunt', () => {
     expect(m.st).toBe('hunt');
     expect(dist(m, { x: 19.5, z: 24 })).toBeLessThan(0.5); // held where it stood
     expect(p.flat).toBe(false);
+  });
+
+  it('walks away from the guard it caught, to another room at least 8 m off, and does not come back to stand over them', () => {
+    const { sim, S } = start(3, 2, 1);
+    S.stir = true;
+    S.waveAt = 1e9;
+    const p = defined(S.players[0], 'g0'),
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
+    Object.assign(p, { x: 19.5, z: 18, yaw: 0, pitch: 0 });
+    Object.assign(m, { x: 19.5, z: 19, yaw: Math.PI, st: 'hunt' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z } });
+    stepFloor(sim, S, 100);
+    expect(p.flat).toBe(true);
+    expect(S.phase).toBe('play'); // g1 is still up, in the booth
+    expect(m.st).toBe('roam');
+    const dest = defined(b.dest, 'where it means to go');
+    expect(roomAt(dest.x, dest.z)).not.toBe(roomAt(p.x, p.z));
+    expect(dist(dest, p)).toBeGreaterThanOrEqual(8);
+    let near = 0;
+    for (let k = 2; k <= 300; k++) {
+      stepFloor(sim, S, k * 100);
+      if (k > 80 && m.i === FLAN && dist(m, p) < 4) near++;
+    }
+    expect(near).toBe(0); // from 8 s on, for the rest of half a minute
+  });
+
+  it('has somewhere to walk away to wherever a guard is caught', () => {
+    // pickDest wants a room that is not the booth, the ducts, the body's or the one the mascot stands in, with its
+    // middle 8 m or more from the body.
+    for (let x = 0.5; x < 60; x++)
+      for (let z = 0.5; z < 60; z++) {
+        const at = roomAt(x, z);
+        if (at < 0) continue;
+        const rooms = ROOMS3.map((_, i) => i).filter(i => i !== BOOTH && i !== DUCTS && i !== at && dist(roomCentre(i), { x, z }) >= 8);
+        expect(rooms.length, `rooms clear of (${x}, ${z})`).toBeGreaterThanOrEqual(2);
+      }
   });
 
   // A guard hidden in locker 0, and Madame Flan right outside its doors, close enough to touch them, knowing they are in.

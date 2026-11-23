@@ -161,9 +161,9 @@ const ROT = { night: 0.12, hour: 0.066, ire: 0.25 };
 const BANG_IRE = 0.1,
   GLARE_PER_IRE = 18;
 const FLAT_BAT = 0.5; // what is left of a torch its guard was flattened on top of
-// Seconds one sits on the guard it caught. It then looks round for whoever comes to peel them up rather than going
-// home, so a catch is no breather for the rest of a crew: when it went home, four guards won most of night 5.
-const FEAST = 3.5;
+// Metres one that has just caught a guard puts between the body and where it wanders next, so it does not stand over
+// them waiting for whoever comes to peel them up.
+const AWAY = 8;
 const GRAB_TIME = 1.2; // seconds a mascot stuck behind furniture takes to reach over it
 const STARE = 5; // seconds one waiting its turn stands and stares before it goes back to what it was doing
 const CHARGE_GAP = 10; // seconds before Stompy can charge again
@@ -183,6 +183,8 @@ const NOTICE = 1.2; // seconds a mascot stands and stares after spotting a guard
 // until the game was eased. The balance harness's win rates did not move with it.
 export const RELENT = 4.5,
   KEEP = 1.2;
+// Every state a mascot can be in. A saved night may hold one an older build had (adoptFloor).
+const STATES: readonly string[] = ['rest', 'roam', 'search', 'hunt', 'windup', 'charge', 'stun', 'siege'] satisfies MascotState[];
 const keepsFor = (m: Mascot) => (m.i === BIGGS ? RELENT : KEEP);
 const NEAREST = 3; // seconds one that has lost its guard goes without getting closer to where it last saw them before it searches there
 // A hunt that gets nowhere: one free to move that has not left a circle of STUCK.within metres in STUCK.time seconds,
@@ -506,7 +508,9 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
     else if (['hunt', 'windup', 'charge', 'siege'].includes(m.st)) {
       m.st = 'search';
       b.timer = rnd(sim, 3, 6);
-    } else if (m.st === 'feast' || m.st === 'stun') b.timer = rnd(sim, 1, 3);
+    } else if (m.st === 'stun') b.timer = rnd(sim, 1, 3);
+    // A night saved by a build whose mascots sat on the guard they caught ('feast'): it wanders off, as one does now.
+    else if (!STATES.includes(m.st)) m.st = 'roam';
     return b;
   });
   // Batteries taken are back in 30 to 50 s. How long ago these went is lost, so they come back any time in that.
@@ -782,8 +786,10 @@ function flyToys(sim: Sim, S: NightState, dt: number) {
 // Has it given this guard up for now (STUCK)?
 const shuns = (S: NightState, b: Brain, p: Guard) => !!b.shun && b.shun.id === p.id && S.t < b.shun.until;
 
-// Where to walk next.
-function pickDest(sim: Sim, S: NightState, m: Mascot, b: Brain): Point {
+// Where to walk next. body: the guard it has just flattened, if this is the walk away from them. That walk ends in
+// another room and at least AWAY from them. (In the dark it goes to a guard still standing, as ever.)
+function pickDest(sim: Sim, S: NightState, m: Mascot, b: Brain, body?: Point): Point {
+  const clearOf = (at: Point) => !body || dist(at, body) >= AWAY;
   const up = outside(S);
   let room: number | undefined;
   // In the dark they do not wander. They come to where you are, and a locker does not hide that: they stand at its
@@ -802,16 +808,18 @@ function pickDest(sim: Sim, S: NightState, m: Mascot, b: Brain): Point {
       room = roomAt(p.x, p.z);
     }
   }
-  if (room == null || room < 0 || (room === DUCTS && m.i !== SQUISH)) {
-    const rooms = ROOMS3.map((_, i) => i).filter(i => i !== BOOTH && (i !== DUCTS || m.i === SQUISH) && i !== roomAt(m.x, m.z));
-    assert(isNonEmpty(rooms), 'there is a room to wander to'); // eight outside the booth, and it stands in one at most
+  // Walking away from a body, a room is no good if the body is in it or its middle is within AWAY of the body.
+  const far = (i: number) => !body || (i !== roomAt(body.x, body.z) && clearOf(roomCentre(i)));
+  if (room == null || room < 0 || (room === DUCTS && m.i !== SQUISH) || !far(room)) {
+    const rooms = ROOMS3.map((_, i) => i).filter(i => i !== BOOTH && (i !== DUCTS || m.i === SQUISH) && i !== roomAt(m.x, m.z) && far(i));
+    assert(isNonEmpty(rooms), 'there is a room to wander to'); // eight outside the booth; it stands in one at most, and no body is near them all
     room = pick(sim, rooms);
   }
   const [x0, z0, x1, z1] = pick(sim, defined(ROOMS3[room], `room ${room}`).rects);
   for (let tries = 0; tries < 8; tries++) {
     const x = rnd(sim, x0 + 1, x1 - 1),
       z = rnd(sim, z0 + 1, z1 - 1);
-    if (walkable(x, z, MASCOT_R + 0.2)) return { x, z };
+    if (walkable(x, z, MASCOT_R + 0.2) && clearOf({ x, z })) return { x, z };
   }
   return roomCentre(room);
 }
@@ -887,19 +895,21 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
   return 'going';
 }
 
-function flatten(S: NightState, p: Guard, m: Mascot, b: Brain) {
+function flatten(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
   if (S.dev?.god) return;
   Object.assign(p, { flat: true, on: false, ph: false, flatBy: m.i, act: '', hid: -1 });
   recordFlat(S, [p.name, m.i]);
   emit(S, 'flat', { id: p.id, by: m.i, x: p.x, z: p.z });
   p.bat *= FLAT_BAT;
-  // It sits on what it caught, then stays and looks round for whoever comes to peel them up.
-  m.st = 'feast';
-  b.timer = FEAST;
-  b.tgt = null;
-  b.path = [];
-  b.last = { x: p.x, z: p.z };
-  if (!standing(S).length) endNight(S, m.i);
+  // It does not sit on what it caught or wait there for whoever comes to peel them up. It goes back to wandering,
+  // somewhere else first, and it still comes for any guard it sees on the way.
+  m.st = 'roam';
+  Object.assign(b, { tgt: null, path: [], repath: 0, timer: 0, home: false, reach: null });
+  if (!standing(S).length) {
+    b.dest = null;
+    return endNight(S, m.i);
+  }
+  b.dest = pickDest(sim, S, m, b, p);
 }
 function endNight(S: NightState, by: MascotIndex | -1) {
   S.phase = 'dead';
@@ -909,19 +919,19 @@ function endNight(S: NightState, by: MascotIndex | -1) {
 }
 
 // Touching is being within F.CATCH with no wall between: a table between does not save anyone.
-function catchGuards(S: NightState, m: Mascot, b: Brain) {
+function catchGuards(sim: Sim, S: NightState, m: Mascot, b: Brain) {
   for (const p of outside(S))
     if (S.t >= p.safe && dist(m, p) < F.CATCH && reaches(m.x, m.z, p.x, p.z, S.doors)) {
-      catchOne(S, p, m, b);
+      catchOne(sim, S, p, m, b);
       return true;
     }
   return false;
 }
 // It has its hands on this guard. One busy in a breaker box, whose hands are not still shaking from the last time,
 // gets a start. Anyone else is flattened. Every catch of a guard on the floor comes through here.
-function catchOne(S: NightState, p: Guard, m: Mascot, b: Brain) {
+function catchOne(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
   if (fixing(S, p) && p.fixAt >= p.shaky) startle(S, p, m, b);
-  else flatten(S, p, m, b);
+  else flatten(sim, S, p, m, b);
 }
 // Hands in a breaker box: the client says so, and there is an open fault in reach to have them in.
 const fixing = (S: NightState, p: Guard) => p.act === 'fix' && BOXES.some((box, i) => S.faults[i] && dist(p, box) < F.REACH);
@@ -980,7 +990,7 @@ function nextCheck(m: Mascot, b: Brain) {
 }
 
 // It stands outside an occupied locker: one that knows who is in there opens it at once, any other after SNIFF.time.
-function openLockers(S: NightState, m: Mascot, b: Brain, dt: number) {
+function openLockers(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   const p = standing(S).find(
     q => hidden(q) && S.t >= q.safe && dist(m, hideAt(q.hid).at) < SNIFF.near && reaches(m.x, m.z, hideAt(q.hid).at.x, hideAt(q.hid).at.z, S.doors)
   );
@@ -999,7 +1009,7 @@ function openLockers(S: NightState, m: Mascot, b: Brain, dt: number) {
   b.sniff = 0;
   // They banged their way in, shaking: no start on it this time.
   if (p.inAt < p.shaky) {
-    flatten(S, p, m, b);
+    flatten(sim, S, p, m, b);
     return true;
   }
   // Out on the floor in front of the doors, with a split second's start on it.
@@ -1068,19 +1078,13 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     }
     return;
   }
-  // States that run on a timer and ignore everything else.
-  if (m.st === 'feast' || m.st === 'stun') {
+  // Knocked silly: it runs on a timer and ignores everything else.
+  if (m.st === 'stun') {
     b.timer -= dt;
     if (b.timer > 0) return;
-    if (m.st === 'feast') {
-      m.st = 'search';
-      b.timer = rnd(sim, 4, 7);
-      b.repath = 0;
-    } else {
-      m.st = 'roam';
-      b.dest = null;
-      b.home = false;
-    }
+    m.st = 'roam';
+    b.dest = null;
+    b.home = false;
     b.path = [];
     return;
   }
@@ -1106,7 +1110,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       Object.assign(m, from);
       got = 0;
     }
-    if (catchGuards(S, m, b)) return;
+    if (catchGuards(sim, S, m, b)) return;
     b.timer -= dt;
     if (got < 0.5) {
       m.st = 'stun';
@@ -1157,7 +1161,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     const key = defined(b.key, 'the door it is banging on');
     const door = DOORWAYS.find(d => d.key === key);
     if (door) turn(m, Math.atan2((door.rect[0] + door.rect[2]) / 2 - m.x, (door.rect[1] + door.rect[3]) / 2 - m.z), 5 * dt);
-    if (catchGuards(S, m, b)) return;
+    if (catchGuards(sim, S, m, b)) return;
     if (!S.doors[key]) {
       m.st = b.tgt ? 'hunt' : 'roam';
       b.repath = 0;
@@ -1194,7 +1198,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       b.timer = Math.max(b.timer, 1.5);
     }
   }
-  if (looking && openLockers(S, m, b, dt)) return;
+  if (looking && openLockers(sim, S, m, b, dt)) return;
 
   // A hunt does not tire. It ends when the guard is caught, shut out behind a door (siege) or lost from sight.
   if (!seen && m.st === 'hunt') {
@@ -1292,7 +1296,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   // Close enough to a singing toy is there: it stands over it and looks about.
   const atToy = lured(m, b) && dist(m, goal) < TOY_STAND && reaches(m.x, m.z, goal.x, goal.z, S.doors);
   const res = atToy ? 'there' : speed > 0 ? goTo(S, m, b, goal, speed, dt, eager) : 'going';
-  if (catchGuards(S, m, b)) return;
+  if (catchGuards(sim, S, m, b)) return;
   // The guard it is hunting, while it knows where they are: in sight, or out of it for less time than it keeps them
   // in mind. Stepping behind a prop does not start a reach over, or lose one that has begun.
   const tp = m.st === 'hunt' ? S.players.find(p => p.id === b.tgt) : undefined;
@@ -1307,7 +1311,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     holds = (p: Guard | null) => !!p && !!r && r.id === p.id && dist(p, r) <= 0.5;
   if (tucked && r && holds(tucked) && gap >= r.d - 0.3) {
     if (S.t - r.t > GRAB_TIME) {
-      catchOne(S, tucked, m, b);
+      catchOne(sim, S, tucked, m, b);
       return;
     }
   } else if (tucked) b.reach = { id: tucked.id, d: gap, x: tucked.x, z: tucked.z, t: S.t };

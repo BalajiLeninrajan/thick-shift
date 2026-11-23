@@ -100,8 +100,6 @@ function scuttle(a: Mascot, rig: Rig, g: Gait, wk: number, dt: number): void {
 const SEEN_RANGE = 46; // metres: past this the fog has it anyway
 const LOOK_EVERY = 0.2; // seconds between checks of whether the camera can see it
 const STEP_HZ = 14; // shudders and spasms change this often and hold in between, like stop motion
-const SEAT_LOCAL = 0.8,
-  SEAT_OTHER = 0.3; // metres from a flattened guard's middle to where it sits: on them, but in view of the one underneath
 
 // One soft point, drawn over every eye_glow so the eyes still read as two
 // pale points when the head is twenty metres away and three pixels wide.
@@ -179,11 +177,11 @@ export class Mascot {
   // Kicks: set to 1 by an event, and they die away. Each adds a fast move on top of the pose.
   kLunge = 0;
   kSlam = 0;
-  kLand = 0;
   kFlare = 0;
   kRecoil = 0;
   kSpot = 0;
-  seat = { on: false, x: 0, z: 0, yaw: 0, w: 0, v: 0, turn: 0 };
+  // The catch: where it stood and which way it turned to the guard, and how far it is held to each (0 to 1).
+  hold = { x: 0, z: 0, yaw: 0, w: 0, v: 0, turn: 0 };
   scareOn = false;
   scareW = 0;
   scareBite = 0;
@@ -270,18 +268,14 @@ export class Mascot {
 
   /* ---------- events ---------- */
 
-  // The guard it caught is at (x, z): it turns to them and sits. mine: the guard is the one watching.
-  sitOn(x: number, z: number, mine: boolean): void {
-    const s = this.seat,
-      tr = this.track,
-      dx = tr.x - x,
-      dz = tr.z - z,
-      d = Math.hypot(dx, dz) || 1,
-      off = mine ? SEAT_LOCAL : SEAT_OTHER;
-    s.on = true;
-    s.x = x + (dx / d) * off;
-    s.z = z + (dz / d) * off;
-    s.yaw = Math.atan2(-dx, -dz);
+  // The guard it caught is at (x, z), and is the one watching: for the catch (scareOn) it turns to them and is
+  // drawn where it stands now. The room already has it walking off.
+  catchAt(x: number, z: number): void {
+    const h = this.hold,
+      tr = this.track;
+    h.x = tr.x;
+    h.z = tr.z;
+    h.yaw = Math.atan2(x - tr.x, z - tr.z);
   }
   bang(): void {
     this.kSlam = 1;
@@ -296,8 +290,7 @@ export class Mascot {
   reset(): void {
     this.track.n = 0;
     this.lookT = 0;
-    this.seat.on = false;
-    this.seat.w = this.seat.turn = 0;
+    this.hold.w = this.hold.v = this.hold.turn = 0;
     this.scareOn = false;
     this.scareW = 0;
     this.scareBite = 0;
@@ -347,8 +340,6 @@ export class Mascot {
       this.kFlare = 1;
     } // the light went off it
     if (st !== this.st) {
-      if (st === 'feast') this.kLand = 1;
-      else if (this.st === 'feast') this.seat.on = false;
       if (st === 'charge') this.kLunge = 1;
       if (st === 'stun' && this.st === 'charge' && this.cur.style.ahead) {
         const k = this.knock,
@@ -364,7 +355,6 @@ export class Mascot {
     const decay = Math.exp(-dt * 5);
     this.kLunge *= Math.exp(-dt * 3);
     this.kSlam *= decay;
-    this.kLand *= decay;
     this.kFlare *= Math.exp(-dt * 2);
     this.kRecoil *= Math.exp(-dt * 2.5);
     this.kSpot *= decay;
@@ -379,17 +369,18 @@ export class Mascot {
       cv[k] = (cv[k] - w * tmp) * e;
       ch[k] = pose[k] + (d + tmp) * e;
     }
-    // It turns to the guard it caught at once, and goes and sits on them when the catch lets go.
-    const seat = this.seat,
-      sw = seat.on && st === 'feast' && !this.scareOn ? 1 : 0;
-    seat.turn += ((seat.on && (st === 'feast' || this.scareOn) ? 1 : 0) - seat.turn) * Math.min(1, dt * 10);
+    // It turns to the guard it caught at once and stays put for the catch. When the catch lets go it is eased back to
+    // where the room has it.
+    const hold = this.hold,
+      sw = this.scareOn ? 1 : 0;
+    hold.turn += (sw - hold.turn) * Math.min(1, dt * 10);
     {
       const w = 9,
-        d = seat.w - sw,
-        tmp = (seat.v + w * d) * dt,
+        d = hold.w - sw,
+        tmp = (hold.v + w * d) * dt,
         e = Math.exp(-w * dt);
-      seat.v = (seat.v - w * tmp) * e;
-      seat.w = sw + (d + tmp) * e;
+      hold.v = (hold.v - w * tmp) * e;
+      hold.w = sw + (d + tmp) * e;
     }
     this.scareW += ((this.scareOn ? 1 : 0) - this.scareW) * Math.min(1, dt * 12);
 
@@ -424,9 +415,9 @@ export class Mascot {
       k.far = 0;
       k.d = Math.max(0, k.d - tr.moved * BOUNCE.settle);
     }
-    const x = tr.x + (seat.x - tr.x) * seat.w + k.x * k.d,
-      z = tr.z + (seat.z - tr.z) * seat.w + k.z * k.d,
-      yaw = tr.yaw + angDiff(seat.yaw, tr.yaw) * seat.turn;
+    const x = tr.x + (hold.x - tr.x) * hold.w + k.x * k.d,
+      z = tr.z + (hold.z - tr.z) * hold.w + k.z * k.d,
+      yaw = tr.yaw + angDiff(hold.yaw, tr.yaw) * hold.turn;
     this.group.position.set(x, 0, z);
     this.group.rotation.y = yaw;
     this.group.visible = this.seen;
@@ -512,7 +503,6 @@ export class Mascot {
     /* the pose */
     const slam = this.kSlam,
       recoil = this.kRecoil,
-      land = this.kLand,
       lunge = this.kLunge;
     body.rx += ch.lean + slam * 0.45 - recoil * 0.5 + lunge * 0.22;
     root.pz += slam * 0.3 - recoil * 0.25 + lunge * 0.25 + this.scareBite * 0.15;
@@ -525,15 +515,10 @@ export class Mascot {
     rig.arm_R.rz -= ch.out;
     rig.forearm_L.rx += ch.fore;
     rig.forearm_R.rx += ch.fore;
-    // Sitting: the rear comes down hard and the legs go out in front.
-    const sit = ch.sit;
-    // It settles its weight, and bounces a little. A floater comes down to hover on them.
-    const drop =
-      g.mode === 'float' ? sit * (fit.height * 0.3 + Math.sin(this.t * 2.2) * 0.04) : sit * (h * style.sit - Math.abs(Math.sin(this.t * 2.2)) * 0.04);
     // A crouch needs knees. Without shins the legs cannot shorten, so it stays up.
     const crouch = rig.has.shin_L ? clamp(ch.drop, 0, h * 0.4) : 0,
       bend = Math.acos(1 - crouch / h);
-    root.py -= drop + crouch;
+    root.py -= crouch;
     // The shudder: stepped noise, held between steps.
     const tick = Math.floor(this.t * STEP_HZ) + this.i * 50,
       shake = ch.shake + lunge * 0.6 + this.kSpot * 0.5;
@@ -592,7 +577,7 @@ export class Mascot {
     let tx = view.x,
       ty = view.y,
       tz = view.z,
-      best = view.flat && !this.scareOn && !seat.w ? 1e9 : this.dist;
+      best = view.flat && !this.scareOn ? 1e9 : this.dist;
     for (const q of S.players) {
       if (!isPlaced(q) || q.flat || q.id === view.id) continue;
       const d = Math.hypot(q.x - x, q.z - z);
@@ -689,8 +674,7 @@ export class Mascot {
 
     /* feet planted: the legs take back whatever the body did above them */
     if (rig.has.leg_L && g.mode !== 'crawl' && g.mode !== 'hop' && g.mode !== 'scuttle') {
-      const legsOut = sit * 1.35,
-        lean = body.rx,
+      const lean = body.rx,
         tilt = body.rz + body.px / h,
         twist = body.ry;
       // The hips turned, so each hip joint moved forward or back; the leg swings only the rest of the way to its foot.
@@ -698,8 +682,8 @@ export class Mascot {
         aL = Math.asin(clamp(footL - hipZ, -1, 1)),
         aR = Math.asin(clamp(footR + hipZ, -1, 1));
       body.py += rig.hipX * Math.abs(body.rz) + h * (Math.cos(p < 0.5 ? aL : aR) - 1) * this.walk; // the hips ride over the standing leg
-      rig.leg_L.rx += aL - lean - bend - legsOut;
-      rig.leg_R.rx += aR - lean - bend - legsOut;
+      rig.leg_L.rx += aL - lean - bend;
+      rig.leg_R.rx += aR - lean - bend;
       rig.leg_L.rz -= tilt;
       rig.leg_R.rz -= tilt;
       rig.leg_L.ry -= twist;
@@ -715,7 +699,6 @@ export class Mascot {
     rig.arm_R.rz = clamp(rig.arm_R.rz, -lim.out, lim.out);
     rig.forearm_L.rx = clamp(rig.forearm_L.rx, -lim.fore, lim.fore);
     rig.forearm_R.rx = clamp(rig.forearm_R.rx, -lim.fore, lim.fore);
-    this.pivot.scale.set(1, 1 - land * 0.06, 1);
     rig.apply();
 
     /* eyes in the dark */

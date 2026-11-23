@@ -35,7 +35,6 @@ export const CH = [
   'shake',
   'breath',
   'sway',
-  'sit',
   'rear',
   'reach',
   'slack',
@@ -58,7 +57,7 @@ export type Stage = 0 | 1 | 2;
 export type PerStage<T> = readonly [T, T, T];
 export const isStage = (n: number): n is Stage => n === 0 || n === 1 || n === 2;
 // How fast each channel follows its target, per second. Shaking and tracking
-// start at once; weight (lean, sit, drop) takes its time.
+// start at once; weight (lean, drop) takes its time.
 export const RATE: Channels = {
   lean: 6,
   drop: 7,
@@ -75,7 +74,6 @@ export const RATE: Channels = {
   shake: 16,
   breath: 2,
   sway: 2,
-  sit: 10,
   rear: 9,
   reach: 6,
   slack: 5,
@@ -97,7 +95,6 @@ const COMMON: Partial<Record<PoseName, PoseLayer>> = {
   windup: { lean: 0.42, drop: 0.14, headX: 0.4, armL: 0.7, armR: 0.7, track: 1, shake: 0.4, rear: 1, jaw: 0.4 },
   charge: { lean: 0.55, headX: 0.35, armL: 0.9, armR: 0.9, jaw: 1, track: 0.4, rear: -1 },
   stun: { lean: -0.16, slack: 1, headZ: 0.5, headX: 0.3, drop: 0.08, sway: 3, breath: 2.5 },
-  feast: { sit: 1, headX: 0.5, lean: -0.1, armL: -0.35, armR: -0.35, out: 0.4, jaw: 0.35, track: 0.6, breath: 2 },
   scare: { track: 1, lean: 0.3, jaw: 1, armL: -1.5, armR: -1.5, out: 0.5, fore: -0.3, shake: 0.5, reach: 1 },
 };
 const STAGE: PerStage<Partial<Record<PoseName | 'lit', PoseLayer>>> = [
@@ -123,8 +120,8 @@ const STAGE: PerStage<Partial<Record<PoseName | 'lit', PoseLayer>>> = [
     lit: { track: 1, lean: 0.44, shake: 1, jaw: 1, armL: -1.4, armR: -1.4, fore: -0.6, drop: 0.1, reach: 1 },
   },
 ];
-// For something whose hands and feet never leave the floor: no lean, crouch, sit or arm pose, whatever the state.
-const PLANTED: PoseLayer = { lean: 0, drop: 0, sit: 0, armL: 0, armR: 0, fore: 0, out: 0, slack: 0 };
+// For something whose hands and feet never leave the floor: no lean, crouch or arm pose, whatever the state.
+const PLANTED: PoseLayer = { lean: 0, drop: 0, armL: 0, armR: 0, fore: 0, out: 0, slack: 0 };
 
 // How it gets about. mode: walk, float (nothing to stand on), crawl (on all fours), hop, glide (nothing steps), or
 // scuttle (on hands and feet, belly up, in a panic; max is its stride).
@@ -171,7 +168,6 @@ interface Tuning {
   limit?: Partial<Limit>;
   gestures?: Gesture[];
   jaw?: number;
-  sit?: number;
   swayMax?: number;
   looker?: number;
   states?: Partial<Record<PoseName | 'lit', PoseLayer>>;
@@ -212,14 +208,12 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       head: { yaw: 0.65, pitch: 0.24 },
       limit: { arm: 0.75, out: 0.7, fore: 0.7 },
       gestures: ['tilt', 'hug'],
-      sit: 0.5,
     },
     {
       gait: { max: 0.5, knee: 0.65 },
       head: { yaw: 0.65, pitch: 0.2, step: 7, twitch: 0.1 },
       limit: { arm: 0.75, out: 0.7, fore: 0.7 },
       jaw: 0.75,
-      sit: 0.5,
     },
     {
       // The drape hangs dead still and the head stays level and on you; all the movement is the four legs behind.
@@ -227,7 +221,6 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       head: { yaw: 1, pitch: 0.9, rate: 11, twitch: 0.12, neck: 0.45 },
       jaw: 1.3,
       swayMax: 0.16,
-      sit: 0.35,
       states: {
         roam: { jaw: 0, sway: 0, breath: 0 },
         search: { lean: 0, jaw: 0, sweep: 1 },
@@ -237,7 +230,7 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       },
       chains: { 1: harvestman, 2: harvestman, 3: deadLeg, 4: harvestman },
       hook(a, rig, ch) {
-        rig.neck.rx += ch.track * 0.1 + a.scareW * 0.6 + ch.sit * 0.5;
+        rig.neck.rx += ch.track * 0.1 + a.scareW * 0.6;
       }, // the neck brings the face down to you
     },
   ],
@@ -248,7 +241,6 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       head: { yaw: 0.42, pitch: 0.3 },
       limit: { arm: 1.4, out: 0.5 },
       gestures: ['tilt', 'wave'],
-      sit: 0.45,
       states: { scare: { headX: 0.3, armL: -1.2, armR: -1.2 } },
     },
     {
@@ -256,13 +248,11 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       head: { yaw: 0.35, pitch: 0.3, step: 6, twitch: 0.12 },
       limit: { arm: 1.05, fore: 1.2 },
       jaw: 0.6,
-      sit: 0.2,
       states: {
         hunt: { lean: 0, armL: 0, armR: 0, fore: 0, jaw: 0.7 },
         lit: { lean: 0.1, armR: -1, fore: -0.9 },
         siege: { lean: -0.1, armL: -1, armR: -1, fore: -0.8 },
         scare: { lean: 0.1, armL: -1.4, armR: -1.4, fore: -0.85, headX: 0.35 },
-        feast: { armL: 0, armR: 0 },
       },
     },
     {
@@ -270,7 +260,6 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       gait: { mode: 'float' },
       head: { yaw: 0.5, pitch: 0.33, rate: 12, twitch: 0.14, eye: 0.6 },
       jaw: 1.1,
-      sit: 0.6,
       states: {
         roam: { jaw: 0.12 },
         search: { jaw: 0.3, lean: 0.1 },
@@ -278,7 +267,6 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
         lit: { lean: 0.1, jaw: 0.75, shake: 1, drop: 0 },
         siege: { lean: -0.2, jaw: 0.6 },
         scare: { lean: 0, headX: -0.25, jaw: 1 },
-        feast: { jaw: 0.5, lean: 0 },
       },
       chains: { 1: spine },
     },
@@ -290,7 +278,6 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       head: { yaw: 0.7, pitch: 0.4 },
       limit: { arm: 1.05, out: 0.5, fore: 0.87 },
       gestures: ['wave', 'tilt'],
-      sit: 0.5,
       states: { windup: { headX: 0.35, armL: 0.9, armR: 0.9 }, scare: { headX: 0.3, lean: 0.35 } },
     },
     {
@@ -298,7 +285,6 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       gait: { mode: 'hop', max: 0.5 },
       head: { yaw: 0.6, pitch: 0.5, step: 6, twitch: 0.12 },
       limit: { arm: 0.78, fore: 0.7 },
-      sit: 0.05,
       states: {
         roam: { headZ: 0.2 },
         hunt: { lean: 0.12, armL: -0.2, armR: -0.2, fore: 0, headZ: 0.3 },
@@ -306,7 +292,6 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
         siege: { lean: -0.1, armL: -0.75, armR: -0.75, fore: -0.5 },
         windup: { lean: 0.3, drop: 0, armL: -0.4, armR: -0.4, legs: 0 },
         charge: { lean: 0.6, armL: -0.7, armR: -0.7, legs: 0 },
-        feast: { armL: 0, armR: 0, lean: 0 },
         scare: { lean: 0.55, armL: -0.75, armR: -0.75, fore: -0.5, legs: 0 },
       },
       hook(_a, rig, ch) {
@@ -326,7 +311,6 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       gait: { mode: 'scuttle', max: 0.42, fast: 2.6 },
       head: { yaw: 0.1, pitch: 0.1, rate: 3, neck: 0 },
       limit: { arm: 0.7, out: 0.5, fore: 0.78 },
-      sit: 0,
       looker: 1,
       swayMax: 0.5,
       states: {
@@ -339,7 +323,6 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
         windup: { ...PLANTED, rear: 0, coil: 1, headX: 0, legs: 0 },
         charge: { ...PLANTED, rear: 0, lance: 1, headX: 0, track: 0, legs: 1 },
         stun: { ...PLANTED, track: 0, sway: 1, legs: 0 },
-        feast: { ...PLANTED },
         scare: { ...PLANTED, rear: -1, jaw: 1 },
       },
       chains: { 1: worm, 2: ring(1.6), 3: ring(-2.3), 4: ring(3.1), 5: gullet },
@@ -348,14 +331,13 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
   ],
   // Big Biggs.
   hippo: [
-    { gait: { max: 0.42, hipRoll: 0.08, hipYaw: 0.26, shift: 0.07 }, head: { yaw: 0.55, pitch: 0.3 }, gestures: ['wave', 'tilt'], sit: 0.5 },
-    { gait: { max: 0.45, hipRoll: 0.09, hipYaw: 0.26, shift: 0.07 }, head: { yaw: 0.5, pitch: 0.3, step: 7, twitch: 0.1 }, jaw: 0.6, sit: 0.5 },
+    { gait: { max: 0.42, hipRoll: 0.08, hipYaw: 0.26, shift: 0.07 }, head: { yaw: 0.55, pitch: 0.3 }, gestures: ['wave', 'tilt'] },
+    { gait: { max: 0.45, hipRoll: 0.09, hipYaw: 0.26, shift: 0.07 }, head: { yaw: 0.5, pitch: 0.3, step: 7, twitch: 0.1 }, jaw: 0.6 },
     {
       // Hunched, knuckles on the floor. The mask in its mouth leans out to look.
       gait: { max: 0.4, hipRoll: 0.1, hipYaw: 0.3, shift: 0.08, arm: 0.55 },
       head: { yaw: 0.5, pitch: 0.3, rate: 7, twitch: 0.12 },
       jaw: 0.7,
-      sit: 0.45,
       states: {
         roam: { jaw: 0.25 },
         hunt: { lean: 0.16, jaw: 0.8, armL: 0, armR: 0, fore: 0, reach: 1 },
@@ -583,7 +565,6 @@ export interface Style {
   gait: Gait;
   head: Head;
   jaw: number;
-  sit: number;
   swayMax: number;
   gestures: Gesture[];
   hook: Hook | null;
@@ -605,7 +586,6 @@ export function styleOf(key: MascotKey, stage: Stage, rig: Rig): Style {
     gait: { ...GAIT, ...tuning.gait },
     head: { ...HEAD, twitch: stage ? 0.1 : 0, ...tuning.head },
     jaw: tuning.jaw ?? 0.5,
-    sit: tuning.sit ?? 0.5,
     swayMax: tuning.swayMax ?? 0.35,
     gestures: tuning.gestures || [],
     hook: tuning.hook || null,
@@ -623,7 +603,6 @@ export function styleOf(key: MascotKey, stage: Stage, rig: Rig): Style {
       windup: pose('windup'),
       charge: pose('charge'),
       stun: pose('stun'),
-      feast: pose('feast'),
       scare: pose('scare'),
       lit: { roam: litPose('roam'), search: litPose('search'), hunt: litPose('hunt') },
     },
