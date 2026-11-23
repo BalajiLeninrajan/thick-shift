@@ -33,9 +33,9 @@
 // target: a competent crew of three survives night 1 every time and each later
 // night about 22 points less often (78, 55, 33, then 10% of night 5s); a guard
 // alone and crews of two, four and six fall the same way with no cliffs; and
-// every strategy in the harness's second half loses. Since the clocks became
-// faults a guard alone is near that and crews fall faster from night 3 (see the
-// README's "Balance on the floor").
+// every strategy in the harness's second half loses. Nothing is there yet: a
+// guard alone wins 63% of night 1s and 25% of night 3s, and crews of two to six
+// win 38 to 85% of night 1s and 3 to 13% of night 3s (see the README's "Balance").
 import { assert, defined, isNonEmpty, isPlaced } from './check.ts';
 import { BIGGS, DEFAULT_NAME, DOORS, FINAL_NIGHT, FLAN, MASC, MASCOTS, NAME_MAX, SQUISH, STOMPY } from './config.ts';
 import {
@@ -122,21 +122,24 @@ export const F = {
   RESTART: 14, // with the power out, the crank has to put this much back before anything works again
 };
 // Percent of building power per second, and per event. Tuned so a competent guard alone ends night 5 near half
-// power and a crew of four near 15%, losing the power on half its nights and winning under half as often if
-// nobody cranks, and so a crew that shuts the doors and stays in is dead soon after 2 AM.
+// power, and so a crew that shuts the doors and stays in is dead by about 3 AM. A crew pays less for each shut door,
+// each bang and each torch on the dock (crewDraw): it has more guards in the booth and more mascots at its doors
+// than a guard alone, and at the full price doors and bangs took 55 to 60 points of a crew of four's night 1
+// against a lone guard's 13, which put the power out on 85% of its nights.
 const DRAIN = { base: 0.02, lights: 0.03, door: 0.18, charge: 0.48 }; // charge: four times the old rate, to match the dock's 4x speed, so a full torch still costs the same power
 const WEAR = 0.07; // everything draws this much more for each night after the first
 const CRANK = 0.7,
   BANG_COST = 2.5;
 // Faults (breakOut, stepFaults, drainPower). A guard alone gets one every `every` seconds on night 1 at midnight, a
-// little sooner each night and hour; each guard past the first adds `crew` of that again. An open one leaks leak[0]
+// little sooner each night and hour; each guard past the first adds `crew` of that again (at 0.75 a crew of four
+// left a third of its faults to burn on night 1 against a lone guard's eighth). An open one leaks leak[0]
 // percent a second, rising to leak[1] over `ripen` seconds, and after `dark` seconds its room's lights go. Past
 // `scar` seconds it burns `cap` points of ceiling a second, which the crank cannot put back. Leaks and burns are
 // shared by the guards (crewShare), and both grow by `pile` for every fault open past what the crew can be expected
 // to have on its hands (see drainPower). With the power out the open faults eat outLeak times their leak out of
 // what the crank puts back. A bang on a booth door breaks one in the room outside it `bang` of the time.
 // Tuned against the harness so that ignoring them, or leaving them to one guard while the rest stay in, loses.
-const FAULT = { every: 50, crew: 0.75, first: 18, leak: [0.01, 0.06] as const, ripen: 50, scar: 65, cap: 0.2, dark: 25, bang: 0.35, outLeak: 3, pile: 0.4 };
+const FAULT = { every: 50, crew: 0.5, first: 18, leak: [0.01, 0.06] as const, ripen: 50, scar: 65, cap: 0.2, dark: 25, bang: 0.35, outLeak: 3, pile: 0.4 };
 // How many points of ceiling count as an hour's worth of neglect, for the night's heat and the mascots' speed.
 const CAP_SCALE = 25;
 // The box nearest each booth door from outside, for the bang that breaks one.
@@ -557,7 +560,10 @@ export const faultLeft = (S: NightState, f: { at: number }): number => FAULT.sca
 const boxAt = (i: number) => defined(BOXES[i], `box ${i}`);
 const hideAt = (h: number) => defined(HIDES[h], `locker ${h}`);
 const crewRate = (S: NightState) => 1 + FAULT.crew * (Math.max(1, S.players.length) - 1),
-  crewShare = (S: NightState) => 1 / Math.max(1, S.players.length);
+  crewShare = (S: NightState) => 1 / Math.max(1, S.players.length),
+  // What a crew pays of a lone guard's price for a shut door or a bang on one: all of it alone, two thirds for two,
+  // two fifths for four. A torch on the dock is priced the same way in drainPower.
+  crewDraw = (S: NightState) => 2 / (Math.max(1, S.players.length) + 1);
 const leakOf = (S: NightState, f: { at: number }) => (FAULT.leak[0] + (FAULT.leak[1] - FAULT.leak[0]) * Math.min(1, (S.t - f.at) / FAULT.ripen)) * crewShare(S);
 
 // A fault breaks out in a box nobody is standing at; or, from a bang, in the box by that door.
@@ -596,11 +602,13 @@ function drainPower(S: NightState, dt: number) {
   // One handle: a second guard at the generator adds nothing.
   S.crank = S.players.some(p => p.act === 'crank' && near(p, GENERATOR));
   for (const p of charging) p.bat = Math.min(1, p.bat + F.CHARGE * dt);
-  // Shorts compound: each open fault past one, and one more for every two guards past the first, makes all of them
-  // leak and burn FAULT.pile more, so a crew that keeps on top of them pays little and one that lets them pile up
-  // (one guard doing the rounds for three who stay in, say) pays a lot.
+  // Shorts compound: each open fault past one makes all of them leak and burn FAULT.pile more, so a crew that keeps
+  // on top of them pays little and one that lets them pile up (one guard doing the rounds for three who stay in, say)
+  // pays a lot. A crew's count is divided by how many times a lone guard's faults it gets (crewRate), so four guards
+  // with five open pay what one guard pays with two. (The allowance was one more fault for every two guards past the
+  // first, which fell behind the rate: a crew of four spent 19 points of night 1 on this against a lone guard's 2.)
   const open = S.faults.filter(Boolean).length,
-    pile = 1 + FAULT.pile * Math.max(0, open - 1 - Math.floor((S.players.length - 1) / 2));
+    pile = 1 + FAULT.pile * Math.max(0, open / crewRate(S) - 1);
   const leaks = S.faults.reduce((sum, f) => sum + (f ? leakOf(S, f) : 0), 0) * pile;
   // A fault left too long burns out ceiling, power or no power.
   const burning = S.faults.filter(f => f?.burnt).length;
@@ -625,8 +633,8 @@ function drainPower(S: NightState, dt: number) {
     }
   } else {
     // A bigger crew has more torches to charge from the same supply, so each draws less: two guards' worth at most.
-    const drain =
-      (DRAIN.base + DRAIN.lights + DRAIN.door * shut + (DRAIN.charge * charging.length * 2) / (S.players.length + 1)) * (1 + WEAR * late(S)) + leaks;
+    const doors = DRAIN.door * shut * crewDraw(S);
+    const drain = (DRAIN.base + DRAIN.lights + doors + (DRAIN.charge * charging.length * 2) / (S.players.length + 1)) * (1 + WEAR * late(S)) + leaks;
     // A bang on a door can take the last of it between ticks, crank turning or not.
     if (S.power > 0) S.power = Math.max(0, Math.min(S.cap, S.power + ((S.crank ? CRANK : 0) - drain) * dt));
     if (S.power <= 0) {
@@ -1200,7 +1208,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     m.ire += BANG_IRE;
     b.bangs++;
     if (sim.rng() < FAULT.bang) breakOut(sim, S, BANG_BOX[key]);
-    if (!S.dev?.power) S.power = Math.max(0, S.power - BANG_COST);
+    if (!S.dev?.power) S.power = Math.max(0, S.power - BANG_COST * crewDraw(S));
     b.timer = rnd(sim, 1.6, 3);
     if (b.bangs >= 3 + (S.night > 2 ? 1 : 0)) {
       m.st = 'roam';
