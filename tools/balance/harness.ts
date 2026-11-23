@@ -33,19 +33,14 @@ import {
 import type { NavLink, NavNode } from '../../packages/sim/src/map.ts';
 import * as M from '../../packages/sim/src/map.ts';
 import type { Dev, DoorKey, Fault, Guard, GuardAct, MascotIndex, MascotState, NightState, Point, UseWhat } from '../../packages/sim/src/types.ts';
-import type { Night } from '../roblox/diff/rec.ts';
 
 // The sim's clock, in milliseconds: each tick moves it on by DT. It runs on from one night to the next.
 let now = 0;
 // Every random draw of a night, the guards' and the sim's, comes from this one stream, which seedRandom() seeds at
 // the start of each night. The sim reads it through a closure, so it draws from whatever stream is current.
 let random = Math.random;
-// Records the night for tools/roblox/diff when REC_OUT is set.
-const rec = process.env.REC_OUT ? await import('../roblox/diff/rec.ts') : null;
 // One sim per thread, made once: like the module state it replaces, it carries the last step's time between nights.
 const sim = newSim({ rng: () => random(), now: 0 });
-const night: Night = { startFloorNight, stepFloor, actFloor };
-const api: Night = rec ? rec.wrapSim(night, sim) : night;
 
 /* ---------- the shapes ---------- */
 
@@ -540,7 +535,7 @@ function act(S: NightState, bot: Bot): void {
         bot.hold += DT;
         if (u.what === 'fix') bot.act = 'fix'; // hands in the box: the torch hangs and holds nothing
         if (bot.hold >= u.hold + 0.05) {
-          api.actFloor(sim, S, bot.id, { t: 'use', what: u.what, i: u.i, k: u.k, id: u.id });
+          actFloor(sim, S, bot.id, { t: 'use', what: u.what, i: u.i, k: u.k, id: u.id });
           bot.hold = 0;
           bot.holding = null;
           if (u.what === 'door' && S.doors[u.k] !== u.shut) bot.state[`stuck${u.k}`] = S.t + 2;
@@ -564,7 +559,7 @@ function act(S: NightState, bot: Bot): void {
       if (dist(bot, M.PANELS[shut]) < F.REACH - 0.3) {
         if (S.t - (bot.pressed || -9) > 0.6) {
           bot.pressed = S.t;
-          api.actFloor(sim, S, bot.id, { t: 'use', what: 'door', k: shut });
+          actFloor(sim, S, bot.id, { t: 'use', what: 'door', k: shut });
         }
       } else walk(S, bot, doorStand(bot, shut), w.sprint, face, w.ducts);
     }
@@ -578,7 +573,7 @@ function act(S: NightState, bot: Bot): void {
   }
   bot.on = !!w.on && bot.bat > 0;
   bot.still = dist(bot, before) < 0.01 && goal && dist(bot, goal) > 3 ? bot.still + DT : 0;
-  api.actFloor(sim, S, bot.id, { t: 'p', x: bot.x, z: bot.z, yaw: bot.yaw, pitch: 0, on: bot.on, sp: bot.sp, act: bot.act });
+  actFloor(sim, S, bot.id, { t: 'p', x: bot.x, z: bot.z, yaw: bot.yaw, pitch: 0, on: bot.on, sp: bot.sp, act: bot.act });
 }
 
 // Press a booth door's button if it is not already the way we want it.
@@ -1036,7 +1031,7 @@ function lure(S: NightState, bot: Bot, to: Point): void {
   }
   if (!best) return;
   st.lureAt = S.t + 6; // and give that one time to work before throwing another
-  api.actFloor(sim, S, bot.id, { t: 'throw', yaw: best.yaw, d: best.d });
+  actFloor(sim, S, bot.id, { t: 'throw', yaw: best.yaw, d: best.d });
 }
 
 // Lockers (M.HIDES). The nearest one nobody is in, within `within` metres, as something to use.
@@ -1323,7 +1318,7 @@ function tick(S: NightState, bot: Bot, team: Team, tickNo: number): void {
     }
     if (S.t - (bot.called || -9) > F.CALL_GAP) {
       bot.called = S.t;
-      api.actFloor(sim, S, bot.id, { t: 'call' });
+      actFloor(sim, S, bot.id, { t: 'call' });
     }
     return;
   }
@@ -1360,7 +1355,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     sim.players[id] = { id, name: `G${i}` };
     team.bots.push(makeBot(id, i, sc.guard(i, sc.n)));
   }
-  api.startFloorNight(sim, S, sc.night);
+  startFloorNight(sim, S, sc.night);
   if (sc.dev) S.dev = sc.dev; // the sim reads only the cheats that are there
   for (const b of team.bots) {
     const { x, z } = guardOf(b);
@@ -1421,7 +1416,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
         bot.still = 0;
       }
     }
-    api.stepFloor(sim, S, now);
+    stepFloor(sim, S, now);
     onStep?.(S);
     if (trace === 2 && tickNo % 10 === 0) console.log(traceLine(S, team, brains));
 

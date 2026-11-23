@@ -31,8 +31,8 @@ export const PLAYER_R = 0.35,
   MASCOT_R = 0.7;
 export const EYE = 1.65,
   DOOR_H = 3;
-// The length of (x, z) by the plain formula. Math.hypot rounds differently in the last bits, and the Roblox port
-// (Util.hypot) has to come out the same.
+// The length of (x, z) by the plain formula. Math.hypot rounds differently in the last bits, and the seeded snapshots
+// were taken with this one.
 export const hypot = (x: number, z: number): number => Math.sqrt(x * x + z * z);
 export const dist = (a: Point, b: Point): number => hypot(a.x - b.x, a.z - b.z);
 // The turn from yaw b to yaw a by the short way round, between -pi and pi.

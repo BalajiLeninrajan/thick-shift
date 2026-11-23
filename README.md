@@ -4,7 +4,7 @@ Midnight at the Mascot Depot. A co-op night-shift survival game in first person:
 
 ## Run it
 
-The repo is a pnpm workspace. The game is TypeScript in `packages/game/src/`, and each app in `apps/` runs it somewhere: the web, a Discord Activity, or Roblox. The web and Discord apps are Vite builds. three.js and the Discord SDK come from npm and are bundled, and Cloudflare's Vite plugin runs each app's Worker inside the dev server.
+The repo is a pnpm workspace. The game is TypeScript in `packages/game/src/`, and each app in `apps/` runs it somewhere: the web or a Discord Activity. The web and Discord apps are Vite builds. three.js and the Discord SDK come from npm and are bundled, and Cloudflare's Vite plugin runs each app's Worker inside the dev server.
 
 It needs Node 22.18 or later (`.node-version` names the one CI uses) and the pnpm that `packageManager` in `package.json` pins. `corepack enable` sets that pnpm up.
 
@@ -22,7 +22,7 @@ pnpm format              # reformat everything with Biome
 pnpm format:check        # fail if anything is not formatted
 ```
 
-The game, the simulation, the apps and the balance tools are TypeScript. Vite strips the types without checking them, and `pnpm typecheck` checks them. The compiler options every project shares are in `tsconfig.base.json` and the lint rules in `biome.jsonc`, each with its reason beside it. `tools/roblox/gen-data.mjs` is still JavaScript, checked with `checkJs`. GitHub Actions runs the typecheck, the lint, the format check, the tests, both builds, a check that `tools/roblox/gen-data.mjs` leaves `Data.luau` unchanged, and the Roblox sim diff on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
+The game, the simulation, the apps and the balance tools are TypeScript. Vite strips the types without checking them, and `pnpm typecheck` checks them. The compiler options every project shares are in `tsconfig.base.json` and the lint rules in `biome.jsonc`, each with its reason beside it. GitHub Actions runs the typecheck, the lint, the format check, the tests and both builds on every pull request and every push to `main`. Biome reformatted the whole repo once, in a commit of its own, and `git config blame.ignoreRevsFile .git-blame-ignore-revs` makes `git blame` skip it.
 
 Rooms need the Worker. `vite dev` runs it, Durable Object and all, so starting and joining a room work locally, and the page reloads when the game's code changes. A build's `apps/web/dist/client/` is the whole static site, and any static server that serves it at the root of a domain runs the game solo: with no room to reach, the page runs the night itself. The page loads its scripts from `/assets/`, so it does not work from a sub-path.
 
@@ -54,7 +54,7 @@ packages/sim/           the simulation as plain TypeScript, with no DOM and no t
   src/config.ts         the mascot roster, the doors, the number of nights
   src/map.ts            the building as data: rooms, doorways, walking, sight lines, routes
   src/dressing.ts       where the furniture stands
-  src/data.ts           the lamps and the stage, which the picture and the Roblox port share
+  src/data.ts           the lamps and the stage, which the picture draws
   src/sim.ts            the night: newSim, startFloorNight, stepFloor, actFloor, adoptFloor
   src/session.ts        joining, leaving and checking every command; what the room and a solo page run
   src/check.ts          defined() and assert(), for a value that is there by construction
@@ -73,11 +73,9 @@ apps/
     src/activity.ts     the sign-in, the room and the Activity's title screen and invite
     worker/index.ts     the rooms, the Discord sign-in and the CDN pass-through
     terms.html, privacy.html  two more pages in the build, served at /terms and /privacy
-  roblox/               the Luau port, built with Rojo (apps/roblox/README.md)
 tools/
   balance/floor.ts      scripted guards played through packages/sim
   models/               the Blender scripts that build packages/game/public/models
-  roblox/               generates the port's data from the game, and checks its sim against the game's
   tsconfig.json         the tools' TypeScript project
 tsconfig.base.json      the compiler options every project shares
 tsconfig.json           the solution file: every project, for tsc -b
@@ -247,7 +245,7 @@ One-shots are counted (`voices()` in `audio.ts`) and cut from the graph when the
 
 `packages/sim/src/dressing.ts` is plain data. `map.ts` imports it to fill `OBSTACLES`, which is how the room walks mascots round furniture without loading a model. After moving a prop or a waypoint, run `pnpm test`. `packages/sim/test/floor-plan.test.ts` fails if a doorway, a waypoint, a breaker box, a button, a battery spot, a locker's doors, a resting mark or a spawn point is blocked or cut off. A locker placed anywhere but the booth is a hiding place, so give it a metre of clear floor in front.
 
-The building's lamps are not three.js lights. `light.ts` bakes them at load into 168 by 176 floor-plan textures, one texel per 25 cm, with the walls casting soft shadows and each room getting some of its own light back as bounce. Every `MeshStandardMaterial` in the scene is patched (`lit`) to look its light up by world position, so mascots, guards and props get it too. The steady lamps are one texture in colour. The second holds four groups, one per channel: two kinds of flicker, a tube that is mostly dead, and the exit signs, which have batteries. A third holds the glow of props with lit screens, baked once the kits have loaded and only for props that did. A group flickers by changing one uniform. With the power out the steady and flickering groups go to zero and the exit signs, the breaker boxes' lamps and the torches are all there is. A fourth texture, two texels a metre, is a mask of how much light each room is getting (`roomMask`): it stutters while a fault in the room is open and drops to almost nothing once `darkRoom` says the room is dark; the exit signs ignore it. To add a lamp, add a row to `LAMPS` in the sim's `data.ts`, which the Roblox port reads too.
+The building's lamps are not three.js lights. `light.ts` bakes them at load into 168 by 176 floor-plan textures, one texel per 25 cm, with the walls casting soft shadows and each room getting some of its own light back as bounce. Every `MeshStandardMaterial` in the scene is patched (`lit`) to look its light up by world position, so mascots, guards and props get it too. The steady lamps are one texture in colour. The second holds four groups, one per channel: two kinds of flicker, a tube that is mostly dead, and the exit signs, which have batteries. A third holds the glow of props with lit screens, baked once the kits have loaded and only for props that did. A group flickers by changing one uniform. With the power out the steady and flickering groups go to zero and the exit signs, the breaker boxes' lamps and the torches are all there is. A fourth texture, two texels a metre, is a mask of how much light each room is getting (`roomMask`): it stutters while a fault in the room is open and drops to almost nothing once `darkRoom` says the room is dark; the exit signs ignore it. To add a lamp, add a row to `LAMPS` in the sim's `data.ts`.
 
 The same patch adds two terms no spotlight gives. One is a little spill round the torch, so a mascot standing beside the beam is a shape. The other is a trace of night vision within a couple of metres, so the dark is not one flat value. The torch itself (`player.ts`) gets a cookie texture with a hot centre and the reflector's rings, and dust that shows only inside the beam. Held close to a wall the beam would bleach it, so the exposure stops down as the lit surface comes nearer than five metres (`GLARE_FROM`). That is what makes a notice readable at arm's length.
 

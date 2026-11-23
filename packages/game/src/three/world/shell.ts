@@ -4,7 +4,7 @@
 // frames, pipes and the stage's arch go into the trim batch; posters, stains
 // and the stencilled room names go into two decal meshes.
 
-// The stage's platform (STAGE) is plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read it too.
+// The stage's platform (STAGE) is plain data in @thick-shift/sim.
 import { defined } from '@thick-shift/sim/check';
 import { STAGE } from '@thick-shift/sim/data';
 import type { Doorway } from '@thick-shift/sim/map';

@@ -12,7 +12,7 @@
 import { darkRoom } from '@thick-shift/sim';
 import { defined, isNight } from '@thick-shift/sim/check';
 import type { Lamp, LampGroup, RGB } from '@thick-shift/sim/data';
-// The lamps and the dead fittings are plain data in @thick-shift/sim, so tools/roblox/gen-data.mjs can read them too.
+// The lamps and the dead fittings are plain data in @thick-shift/sim.
 import { DEAD_TUBES, GREEN, LAMPS, TUBE } from '@thick-shift/sim/data';
 import { BOXES, DOOR_H, ROOMS3, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
 import type { NightState, State } from '@thick-shift/sim/types';

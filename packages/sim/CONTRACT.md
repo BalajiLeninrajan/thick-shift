@@ -1,6 +1,6 @@
 # @thick-shift/sim: the contract
 
-How the night simulation is called, and the rules its callers and its Luau port rely on. `src/sim.ts` is the night,
+How the night simulation is called, and the rules its callers rely on. `src/sim.ts` is the night,
 `src/session.ts` is what whoever runs a night does with the guards' browsers, and `src/types.ts` has the types.
 
 ## Layout
@@ -80,22 +80,21 @@ the pages in a room hold an `S` and no `Sim`.
 
 ### The random numbers
 
-Every draw goes through `sim.rng()`. The Luau port (`apps/roblox/src/shared/Sim.luau`) makes the same draws at the
-same points, and `tools/roblox/diff/run.sh` checks the two tick by tick, so a change to when or how the sim draws is
-a change to both files:
+Every draw goes through `sim.rng()`. A change to when or how the sim draws changes every seeded night after it, and
+the test snapshots with it:
 
 - `rnd(a, b)` is `a + sim.rng() * (b - a)`.
 - `pick(list)` is `list[(sim.rng() * list.length) | 0]`.
 - The night's battery spots are shuffled Fisher-Yates:
   `for (let i = spots.length - 1; i > 0; i--) { const j = (sim.rng() * (i + 1)) | 0; swap(i, j); }`
 - Fault kinds are `(sim.rng() * F.FIX.length) | 0`.
-- A short-circuit that skips a draw skips it on both sides: `noise()` draws only after the state, home and distance
+- Some draws sit behind a short-circuit: `noise()` draws only after the state, home and distance
   tests pass; `lockersNear()` draws only for lockers within `CHECK.near`; `pickDest()` draws for Squish's booth
   chance only when a guard is in the booth, and for the crank chance only when `S.crank`.
 - An expression with two draws takes them left to right.
 
 Distances come from `hypot` in `map.ts`, the plain `Math.sqrt(x * x + z * z)`, and `dist(a, b)` beside it. `Math.hypot` rounds differently in the
-last bits and Luau has no such function, so the sim and the map never call it.
+last bits, so switching to it would move the seeded snapshots.
 
 The game passes `rng: Math.random`. Its other random numbers (a room's code, a guard's id, the sounds) are not part
 of any seeded run and use `Math.random` directly.
@@ -141,22 +140,3 @@ three things:
   every draw after it.
 - The sim is never remade between nights in a worker, so `lastStep` carries from one night to the next and the
   first step of a night has the same `dt`. `play()` empties `sim.players` and makes a new `S` for each night.
-
-### The Roblox diff (tools/roblox/diff)
-
-`run.sh` plays one harness night with `REC_OUT` set, then replays the recording through the Luau port:
-
-```sh
-tools/roblox/diff/run.sh "solo competent n1" 3
-```
-
-With `REC_OUT` set, `harness.ts` loads `rec.ts` and calls the night through `rec.wrapSim(night, sim)`. The recorder
-wraps `sim.rng` and writes one JSON line per sim call: the call, the draws the sim made during it, and `S` after
-starts and steps. It records draws only inside a sim call, so the guards' draws are left out. For a step it also
-records `dt`, taken as `(now - sim.lastStep) / 1000` before the call. `apps/roblox/test/diff-sim.luau` feeds the
-port the same calls and draws and stops at the first tick where its `S` differs.
-
-### gen-data
-
-`tools/roblox/gen-data.mjs` writes `apps/roblox/src/shared/Data.luau` from `config.ts`, `map.ts`, `dressing.ts` and
-`data.ts`. Run it after changing any of them; CI fails if `Data.luau` is out of date.

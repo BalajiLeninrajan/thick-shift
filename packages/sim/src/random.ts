@@ -1,5 +1,5 @@
 // A seeded random source for runs that have to come out the same every time: the balance harness
-// (tools/balance/floor.ts), the tests, and through the harness the Roblox diff. The game itself passes Math.random.
+// (tools/balance/floor.ts) and the tests. The game itself passes Math.random.
 import type { Rng } from './types.ts';
 
 // mulberry32, from a seed spread over 32 bits by Knuth's multiplier. Numbers in [0, 1), as Math.random gives.
