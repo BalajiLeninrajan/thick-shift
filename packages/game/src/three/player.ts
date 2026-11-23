@@ -227,6 +227,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         e.preventDefault();
         keysLive = true;
+        me.pad = false;
         resume();
       }
       return;
