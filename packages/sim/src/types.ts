@@ -241,6 +241,7 @@ export interface Brain {
   notice: number;
   stared: number;
   reach: Reach | null;
+  saw: Point | null; // where it last saw the guard it is after, which is not always where it last knew they were
   knows: number; // the locker it saw a guard step into, or -1
   sniff: number;
   checks: number[]; // the lockers it means to look in

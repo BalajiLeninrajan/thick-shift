@@ -19,8 +19,9 @@
 // still, less so the more it has rotted, and the torch runs down. Touch a
 // mascot and you are flattened, and stay on the floor until another guard
 // peels you up. Everyone flat at once ends the night. A guard can step into a
-// locker to get out of sight. A mascot that saw them go in pulls them out, one
-// that lost them nearby checks the lockers, and one that lingers sniffs them out.
+// locker to get out of sight. Only a mascot that saw them go in knows which one
+// and pulls them out. One that lost them nearby may check a locker, and one that
+// lingers at the doors sniffs them out.
 // A guard can also throw a Mini Biggs, a plush keyring with a voice box, which
 // sings on a bar of the torch's battery where it lands, and a mascot wandering
 // nearby goes to see whose birthday it is.
@@ -196,10 +197,12 @@ const SPENT: [number, number] = [18, 30]; // seconds one stays put after a shut 
 // How many nights' worth of wear each night has had, for rot, heat, speed and power drain. Night 5 counts for more
 // than one step past night 4: with a plain 4, a crew of three won 18% of night 5s against a target of 10.
 const RAMP = [0, 1, 2, 3.15, 4.3] as const;
-// Lockers (HIDES in map.ts). A mascot that saw a guard step in, or was hunting them and still knew where they were
-// (the same few seconds it keeps after losing sight round a corner, four and a half for Biggs), opens that locker
-// when it gets there. Any other that stands within SNIFF.near of an occupied locker for SNIFF.time seconds opens it
-// anyway, so a locker is for getting out of sight, not for waiting out the night. The doors are heard: LOCKER_NOISE is
+// Lockers (HIDES in map.ts). A mascot that saw a guard step in opens that locker when it gets there. Seeing is all
+// that gives a locker away: one that was hunting them and lost sight before they stepped in, however close behind,
+// goes to where it last saw them and searches from there (CHECK). When it also knew where they went round the corner
+// (keepsFor), a guard could turn a corner, step in and be pulled straight out. Any other that stands within
+// SNIFF.near of an occupied locker for SNIFF.time seconds opens it anyway, so a locker is for getting out of sight,
+// not for waiting out the night. The doors are heard: LOCKER_NOISE is
 // [metres, chance], as for noise(). A guard it pulls out is not caught there: it stands for ESCAPE.head seconds, and
 // nothing can touch them in that time, so they have a moment to run. For ESCAPE.shaky seconds after that their hands
 // shake: getting into a locker bangs its doors (LOCKER_DIN, heard across most of the building), and whatever opens
@@ -213,8 +216,10 @@ const SNIFF = { near: 1.6, time: 3 };
 const ESCAPE = { head: 0.6, shaky: 8 };
 // One that loses the guard it was hunting checks the lockers near where it last knew they were: each within
 // CHECK.near metres of that spot, nearest first, with CHECK.chance, at most CHECK.most of them. It walks to the
-// doors and opens them, empty or not. The way to beat it is to get further than that.
-const CHECK = { near: 8, chance: 0.5, most: 2 };
+// doors and opens them, empty or not. The way to beat it is to get further than that. At 8 metres, even odds and two
+// lockers, the one round the corner (most often the nearest) was opened about half the time, so breaking sight and
+// stepping in was a coin flip.
+const CHECK = { near: 6, chance: 0.3, most: 1 };
 const LOCKER_NOISE: [number, number] = [6, 0.5],
   LOCKER_DIN: [number, number] = [24, 1];
 // Mini Biggs: a palm-sized plush of Big Biggs on a keyring, from the gift shop, with a voice box that sings "Happy
@@ -391,6 +396,7 @@ const newBrain = (sim: Sim): Brain => ({
   notice: 0,
   stared: 0,
   reach: null,
+  saw: null,
   knows: -1,
   sniff: 0,
   checks: [],
@@ -923,7 +929,17 @@ const fixing = (S: NightState, p: Guard) => p.act === 'fix' && BOXES.some((box, 
 function headStart(S: NightState, p: Guard, m: Mascot, b: Brain) {
   p.safe = Math.max(p.safe, S.t + ESCAPE.head);
   p.shaky = S.t + ESCAPE.shaky;
-  Object.assign(b, { tgt: p.id, last: { x: p.x, z: p.z }, lost: 0, near: Infinity, notice: ESCAPE.head, home: false, repath: 0, path: [] });
+  Object.assign(b, {
+    tgt: p.id,
+    last: { x: p.x, z: p.z },
+    saw: { x: p.x, z: p.z },
+    lost: 0,
+    near: Infinity,
+    notice: ESCAPE.head,
+    home: false,
+    repath: 0,
+    path: [],
+  });
   m.st = 'hunt';
 }
 // It reached a guard who was busy in a breaker box. They let go of the box, and it is after them.
@@ -949,6 +965,7 @@ function spot(S: NightState, m: Mascot, b: Brain, p: Guard) {
   m.st = 'hunt';
   b.tgt = p.id;
   b.last = { x: p.x, z: p.z };
+  b.saw = { x: p.x, z: p.z };
   b.lost = 0;
   b.near = Infinity;
 }
@@ -1001,14 +1018,12 @@ function lockersNear(sim: Sim, at: Point | null) {
     .map(c => c.i);
 }
 
-// A guard stepped into a locker. Whatever could see them do it knows where they are; whatever was hunting them and
-// still knew where they were (b.lost under its keeping time) does too.
+// A guard stepped into a locker. Whatever could see them do it knows where they are, and nothing else does.
 function seenHiding(sim: Sim, S: NightState, p: Guard) {
   for (const [i, m] of S.m.entries()) {
     const b = brainOf(sim, i);
     if (m.st === 'rest' || (b.spent && !S.out) || !b.woke || charmed(S, m, b)) continue;
-    const after = COMING.includes(m.st) && b.tgt === p.id && b.lost < keepsFor(m);
-    if (!after && !canSee(S, m, p)) continue;
+    if (!canSee(S, m, p)) continue;
     b.knows = p.hid;
     if (m.st === 'roam' || m.st === 'search') {
       m.st = 'search';
@@ -1189,7 +1204,11 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     if (tp && hidden(tp) && b.knows === tp.hid) {
       b.last = { ...hideAt(tp.hid).at };
       b.lost = 0;
-    } else if (tp && !tp.flat && !hidden(tp) && b.lost < keepsFor(m)) {
+    } else if (tp && hidden(tp)) {
+      // They got into one out of its sight. It does not know which: following them round the corner would walk it to
+      // the doors, so it goes back to where it last saw them.
+      if (b.saw && b.last !== b.saw) Object.assign(b, { last: b.saw, near: Infinity, repath: 0 });
+    } else if (tp && !tp.flat && b.lost < keepsFor(m)) {
       b.last = { x: tp.x, z: tp.z }; // it knows which way you went round the corner
       b.near = Infinity;
     }

@@ -345,6 +345,51 @@ describe('a hunt', () => {
     return { sim, S, p, m };
   }
 
+  // Madame Flan awake in the West Hall on a quiet night 1, and a guard with their torch on. Locker 10 is round the
+  // hall's corner from the top of its long leg.
+  function spotted(mascot: { x: number; z: number; yaw: number }, guard: { x: number; z: number }) {
+    const { sim, S } = start(1, 1, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    const p = defined(S.players[0], 'g0'),
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
+    Object.assign(p, { ...guard, on: true });
+    Object.assign(m, { ...mascot, st: 'roam' });
+    b.woke = true;
+    stepFloor(sim, S, 100);
+    expect(m.st).toBe('hunt');
+    return { sim, S, p, m, b, h: defined(HIDES[10], 'locker 10') };
+  }
+
+  it('does not know the locker of a guard who got in round a corner from it', () => {
+    const seenAt = { x: 4, z: 37 };
+    const { sim, S, p, m, b, h } = spotted({ x: 4, z: 28, yaw: 0 }, seenAt);
+    // Round the corner and up to the doors. For a moment it still knows which way they went.
+    Object.assign(p, { x: 10.6, z: 40.6 });
+    stepFloor(sim, S, 200);
+    expect(m.st).toBe('hunt');
+    expect(b.last).toEqual({ x: 10.6, z: 40.6 });
+    actFloor(sim, S, 'g0', { t: 'use', what: 'hide', i: 10 });
+    expect(p.hid).toBe(10);
+    expect(b.knows).toBe(-1);
+    // It goes on to where it last saw them, not to the doors.
+    stepFloor(sim, S, 300);
+    expect(b.knows).toBe(-1);
+    expect(b.last).toEqual(seenAt);
+    expect(dist(seenAt, h.at)).toBeGreaterThan(5);
+  });
+
+  it('knows the locker of a guard it watched get in, and pulls them out', () => {
+    const { sim, S, p, b } = spotted({ x: 6.5, z: 40.5, yaw: Math.PI / 2 }, { x: 10.6, z: 40.6 });
+    actFloor(sim, S, 'g0', { t: 'use', what: 'hide', i: 10 });
+    expect(p.hid).toBe(10);
+    expect(b.knows).toBe(10);
+    for (let k = 2; k <= 100 && p.hid === 10; k++) stepFloor(sim, S, k * 100);
+    expect(S.evs.some(e => e.type === 'found')).toBe(true);
+    expect(p.hid).toBe(-1);
+  });
+
   it('pulls a guard out of a locker and gives them a split second before it can touch them', () => {
     const { sim, S, p, m } = hiding();
     stepFloor(sim, S, 100);
