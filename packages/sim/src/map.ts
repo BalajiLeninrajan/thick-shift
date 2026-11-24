@@ -373,6 +373,36 @@ export function glimpses(ax: number, az: number, bx: number, bz: number, r: numb
   return false;
 }
 
+// Where a body of radius r gets nearest to (x, z) with nothing but furniture between: the place a mascot walks to
+// for a guard tucked in where it does not fit, and reaches in from. Looked for on a grid NEAR_STEP apart, out to
+// NEAR_MAX metres. ducts: false leaves out the ducts, for a walker that may not go in. Undefined when there is nowhere
+// that near: a wall or a shut door is all the way round.
+const NEAR_STEP = 0.15,
+  NEAR_MAX = 3;
+let ring: [number, number][] | null = null;
+let lastNear: { x: number; z: number; r: number; doors: string; ducts: boolean; at: Point | undefined } | null = null;
+export function standNear(x: number, z: number, r: number, doors?: Doors | null, ducts = true): Point | undefined {
+  const shut = doors ? `${+doors.L}${+doors.V}${+doors.R}` : '';
+  // Every mascot after the same guard asks the same thing, and asks again each time it thinks.
+  if (lastNear && lastNear.x === x && lastNear.z === z && lastNear.r === r && lastNear.doors === shut && lastNear.ducts === ducts) return lastNear.at;
+  if (!ring) {
+    ring = [];
+    const n = Math.round(NEAR_MAX / NEAR_STEP);
+    for (let i = -n; i <= n; i++) for (let j = -n; j <= n; j++) if (hypot(i, j) <= n) ring.push([i * NEAR_STEP, j * NEAR_STEP]);
+    ring.sort((a, b) => hypot(a[0], a[1]) - hypot(b[0], b[1]));
+  }
+  let at: Point | undefined;
+  for (const [dx, dz] of ring) {
+    const px = x + dx,
+      pz = z + dz;
+    if (!walkable(px, pz, r, doors) || (!ducts && roomAt(px, pz) === DUCTS) || !reaches(px, pz, x, z, doors)) continue;
+    at = { x: px, z: pz };
+    break;
+  }
+  lastNear = { x, z, r, doors: shut, ducts, at };
+  return at;
+}
+
 // Which room a point is in, or -1. A doorway counts as the room on its `a` side.
 export function roomAt(x: number, z: number): number {
   const i = ROOMS3.findIndex(room => room.rects.some(r => x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3]));

@@ -10,7 +10,7 @@ How the night simulation is called, and the rules its callers rely on. `src/sim.
 | `@thick-shift/sim` | `src/index.ts` | everything below, the night and the session included |
 | `@thick-shift/sim/check` | `src/check.ts` | `assert`, `defined`, `isNonEmpty`, `isPlaced`, `isNight` |
 | `@thick-shift/sim/config` | `src/config.ts` | `FINAL_NIGHT`, `DOORS`, `STAMINA`, `DEFAULT_NAME`, `NAME_MAX`, `MASC`, the mascots by name |
-| `@thick-shift/sim/map` | `src/map.ts` | rooms, doorways, fixtures, the footprint (`SIZE_X`, `SIZE_Z`), `dist`, `angDiff`, `rectMid`, `doorwayOf`, `walkable`, `slide`, `clear`, `sees`, `reaches`, `glimpses`, `roomAt`, `route`, `nav`, `walls`, `slabs`, ... |
+| `@thick-shift/sim/map` | `src/map.ts` | rooms, doorways, fixtures, the footprint (`SIZE_X`, `SIZE_Z`), `dist`, `angDiff`, `rectMid`, `doorwayOf`, `walkable`, `slide`, `clear`, `sees`, `reaches`, `glimpses`, `standNear`, `roomAt`, `route`, `nav`, `walls`, `slabs`, ... |
 | `@thick-shift/sim/dressing` | `src/dressing.ts` | `FOOT`, `GEN_BACK`, `DRESSING`, `obstacles` |
 | `@thick-shift/sim/data` | `src/data.ts` | `LAMPS`, `DEAD_TUBES`, `TUBE`, `GREEN`, `STAGE` |
 | `@thick-shift/sim/types` | `src/types.ts` | `State`, `NightState`, `Guard`, `Mascot`, `SimEvent`, `Brain`, `Action`, the wire messages (`Command`, `StateMessage`, `CloseCode`), `Rng` |

@@ -2,12 +2,12 @@
 // night up from S alone (adoptFloor), starting the run again (restartFloor) and a guard's actions (actFloor).
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
-import { FLAN, STOMPY } from '../src/config.ts';
-import { BATTERY_SPOTS, BOXES, dist, HIDES, PANELS, REST, spawnPoint, TOY_BOX } from '../src/map.ts';
+import { FLAN, MASCOTS, STOMPY } from '../src/config.ts';
+import { BATTERY_SPOTS, BOXES, dist, HIDES, MASCOT_R, PANELS, PLAYER_R, REST, spawnPoint, TOY_BOX, walkable } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
 import { DEV_OFF } from '../src/session.ts';
-import { actFloor, adoptFloor, brainOf, landing, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor, TOY } from '../src/sim.ts';
-import type { Guard, NightState, SimEvent, State } from '../src/types.ts';
+import { actFloor, adoptFloor, brainOf, F, landing, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor, TOY } from '../src/sim.ts';
+import type { Guard, MascotIndex, NightState, Point, SimEvent, State } from '../src/types.ts';
 import { countEvents, digest, eventsSince } from './nights.ts';
 
 // A night started for n guards who have only joined, with the sim drawing from seed.
@@ -367,6 +367,42 @@ describe('a hunt', () => {
     for (let k = 2; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
     expect(p.flat).toBe(true);
     expect(S.t).toBeLessThan(1.5); // as soon as it may touch them, not after another start
+  });
+
+  // A night-1 guard standing still with the torch off, and one mascot already hunting them from `from`, the rest
+  // kept on their marks. Stompy never charges.
+  function stalk(i: MascotIndex, guard: Point, from: Point) {
+    const { sim, S } = start(1, 1, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    const p = defined(S.players[0], 'g0'),
+      m = defined(S.m[i], 'the hunter'),
+      b = brainOf(sim, i);
+    Object.assign(p, guard, { on: false });
+    Object.assign(m, from, { st: 'hunt' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { ...guard }, cool: 1e9 });
+    return { sim, S, p, m, b };
+  }
+  // Step until the guard is flat or `seconds` have gone by. before: called ahead of each step with the step's number.
+  function until(sim: Sim, S: NightState, p: Guard, seconds: number, before?: (k: number) => void) {
+    for (let k = 1; k <= seconds * 10 && !p.flat; k++) {
+      before?.(k);
+      stepFloor(sim, S, k * 100);
+    }
+    return S.t;
+  }
+
+  it('walks to the nearest place it fits for a guard tucked in behind furniture, and reaches in', () => {
+    // The Main Hall's north-east corner, past the end of the trestle table: a guard fits and a mascot does not.
+    const guard = { x: 26.6, z: 11.86 };
+    expect(walkable(guard.x, guard.z, PLAYER_R)).toBe(true);
+    expect(walkable(guard.x, guard.z, MASCOT_R)).toBe(false);
+    for (const i of MASCOTS) {
+      const { sim, S, p, m } = stalk(i, guard, { x: 24.3, z: 13.8 });
+      expect(until(sim, S, p, 10)).toBeLessThan(6);
+      expect(p).toMatchObject({ flat: true, flatBy: i });
+      expect(dist(m, p)).toBeGreaterThan(F.CATCH); // not by touching them
+    }
   });
 
   // A guard with their hands in breaker box 0, which has a fault, and Madame Flan a step behind them, hunting.

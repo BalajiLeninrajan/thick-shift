@@ -62,6 +62,7 @@ import {
   sees,
   slide,
   spawnPoint,
+  standNear,
   TOY_BOX,
   walkable,
 } from './map.ts';
@@ -814,25 +815,29 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
     return 'there';
   }
   if (b.repath <= 0 || !b.path.length) {
-    const r = route(m.x, m.z, goal.x, goal.z, { doors: S.doors, ducts: m.i === SQUISH });
+    const ducts = m.i === SQUISH;
+    // A goal that is no place for a mascot (a guard tucked in behind the furniture, or in the ducts): it makes for
+    // the nearest place to it that is, and whatever is still between them it reaches over (see tucked).
+    const fits = walkable(goal.x, goal.z, MASCOT_R, S.doors) && (ducts || roomAt(goal.x, goal.z) !== DUCTS);
+    const to = fits ? goal : (standNear(goal.x, goal.z, MASCOT_R, S.doors, ducts) ?? goal);
+    const r = route(m.x, m.z, to.x, to.z, { doors: S.doors, ducts });
     b.path = r.path;
     b.key = r.blocked || null;
     b.repath = eager ? 0.35 : 1.5;
     if (!r.path.length && !r.blocked) return 'nowhere';
-    // The last few metres to a guard tucked somewhere a mascot does not fit: straight at them, not back to the
-    // nearest waypoint every time it asks again. Whatever stops it short, it reaches over (see tucked). Not straight
-    // after that line jammed it: a gap a guard fits through and it does not would hold it there for good.
-    if (eager && r.path.length > 1 && !r.blocked && dist(m, goal) < 4 && b.noShort <= S.t && clear(m.x, m.z, goal.x, goal.z, PLAYER_R, S.doors))
+    // The last few metres to a guard it can walk right up to: straight at them, not back to the nearest waypoint
+    // every time it asks again. Not straight after that line jammed it: a gap a guard fits through and it does not
+    // would hold it there for good.
+    if (eager && fits && r.path.length > 1 && !r.blocked && dist(m, goal) < 4 && b.noShort <= S.t && clear(m.x, m.z, goal.x, goal.z, PLAYER_R, S.doors))
       b.path = [goal];
   }
   // Near enough a waypoint counts as there, but only if the way on is clear from here: a prop can stand close
-  // beside the line between two waypoints. The last leg is to wherever the guard is, which may be no place for a
-  // mascot, so it only has to be clear for a guard; and standing on the waypoint counts whatever is ahead.
+  // beside the line between two waypoints. Standing on the waypoint counts whatever is ahead. The end of the way
+  // it walks right up to: that is as near its goal as it gets. (Short of a shut door, near enough will do.)
   const passed = () => {
     const [here, after] = b.path;
-    return (
-      !!here && dist(m, here) < 0.6 && (!after || dist(m, here) < 0.1 || clear(m.x, m.z, after.x, after.z, b.path.length === 2 ? PLAYER_R : MASCOT_R, S.doors))
-    );
+    if (!here || dist(m, here) >= 0.6) return false;
+    return dist(m, here) < 0.1 || (after ? clear(m.x, m.z, after.x, after.z, MASCOT_R, S.doors) : !!b.key);
   };
   while (passed()) b.path.shift();
   const next = b.path[0];
