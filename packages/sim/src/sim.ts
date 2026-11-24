@@ -657,7 +657,8 @@ function canSee(S: NightState, m: Mascot, p: Guard) {
   const range = p.on ? SIGHT.torch : darkRoom(S, roomAt(p.x, p.z)) ? SIGHT.dark : SIGHT.lit;
   if (d > range) return false;
   if (d > SIGHT.near && Math.abs(angDiff(Math.atan2(p.x - m.x, p.z - m.z), m.yaw)) > SIGHT.cone) return false;
-  return sees(m.x, m.z, p.x, p.z, S.doors);
+  // What it could reach over it can see over: within arm's reach only a wall or a shut door hides a guard.
+  return d < F.GRAB ? reaches(m.x, m.z, p.x, p.z, S.doors) : sees(m.x, m.z, p.x, p.z, S.doors);
 }
 
 // Is it going to a singing Mini Biggs, or standing over one? b.song is the spot the song gave it to look at, and it
@@ -1263,20 +1264,25 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   const atToy = lured(m, b) && dist(m, goal) < TOY_STAND && reaches(m.x, m.z, goal.x, goal.z, S.doors);
   const res = atToy ? 'there' : speed > 0 ? goTo(S, m, b, goal, speed, dt, eager) : 'going';
   if (catchGuards(S, m, b)) return;
+  // The guard it is hunting, while it knows where they are: in sight, or out of it for less time than it keeps them
+  // in mind. Stepping behind a prop does not start a reach over, or lose one that has begun.
+  const tp = m.st === 'hunt' ? S.players.find(p => p.id === b.tgt) : undefined;
+  const prey = tp && !tp.flat && !hidden(tp) && S.t >= tp.safe && (seen === tp || b.lost < keepsFor(m)) ? tp : null,
+    gap = prey ? dist(m, prey) : Infinity;
   // Free to move, within arm's reach of a guard who is staying put, and getting no nearer however it tries: they
   // are tucked in behind the furniture. It reaches in. (A mascot wedged on a prop can rock back and forth a metre
   // looking for a way round, so this goes by the gap between them, not by whether it has moved.)
-  const tucked = m.st === 'hunt' && speed > 0 && seen && near < F.GRAB && reaches(m.x, m.z, seen.x, seen.z, S.doors) ? seen : null;
-  // Rocking back out of arm's reach for a moment does not start it over, while the guard it means stays put in sight.
+  const tucked = speed > 0 && prey && gap < F.GRAB && reaches(m.x, m.z, prey.x, prey.z, S.doors) ? prey : null;
+  // Rocking back out of arm's reach for a moment does not start it over, while the guard it means stays put.
   const r = b.reach,
     holds = (p: Guard | null) => !!p && !!r && r.id === p.id && dist(p, r) <= 0.5;
-  if (tucked && r && holds(tucked) && near >= r.d - 0.3) {
+  if (tucked && r && holds(tucked) && gap >= r.d - 0.3) {
     if (S.t - r.t > GRAB_TIME) {
       catchOne(S, tucked, m, b);
       return;
     }
-  } else if (tucked) b.reach = { id: tucked.id, d: near, x: tucked.x, z: tucked.z, t: S.t };
-  else if (!(m.st === 'hunt' && holds(seen) && near < F.GRAB + 1)) b.reach = null;
+  } else if (tucked) b.reach = { id: tucked.id, d: gap, x: tucked.x, z: tucked.z, t: S.t };
+  else if (!(holds(prey) && gap < F.GRAB + 1)) b.reach = null;
   if (res === 'blocked') {
     m.st = 'siege';
     b.timer = 1.2;

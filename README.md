@@ -150,7 +150,7 @@ Each is a different problem:
 
 Alone, Biggs and Flan are there from night 1, Squish from 3 AM that night and Stompy from night 4 (`WAKE`). Each extra guard brings them two hours sooner. They are slowest on night 1 (`KEEN`).
 
-A mascot within 1.25 metres with no wall between has you (`F.CATCH`). Furniture does not count as a wall. For a guard tucked in where it does not fit, a mascot walks to the nearest place it does (`standNear` in `map.ts`), and from within 2.6 metres of a guard who stays put it reaches over after 1.2 seconds (`F.GRAB`), so there is nowhere in the building to stand that they cannot get to. The harness checks that against the furniture in the sim's `dressing.ts`.
+A mascot within 1.25 metres with no wall between has you (`F.CATCH`). Furniture does not count as a wall. For a guard tucked in where it does not fit, a mascot walks to the nearest place it does (`standNear` in `map.ts`), and from within 2.6 metres of a guard who stays put it reaches over after 1.2 seconds (`F.GRAB`), so there is nowhere in the building to stand that they cannot get to. The harness checks that against the furniture in the sim's `dressing.ts`. Within that reach it also sees over the furniture, and stepping out of its sight behind a prop does not stop a reach that has begun.
 
 A flattened guard stays on the floor until another guard stands over them and holds use for three seconds, and then has four seconds in which nothing can touch them. The mascot that did it sits on them for three and a half seconds (`FEAST`), then stays and looks round for whoever comes to peel them up. Everyone flat at once ends the night, which for a guard alone is the first touch.
 

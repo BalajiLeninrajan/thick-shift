@@ -2,8 +2,8 @@
 // night up from S alone (adoptFloor), starting the run again (restartFloor) and a guard's actions (actFloor).
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
-import { FLAN, MASCOTS, STOMPY } from '../src/config.ts';
-import { BATTERY_SPOTS, BOXES, DUCTS, dist, HIDES, MASCOT_R, PANELS, PLAYER_R, REST, roomAt, spawnPoint, TOY_BOX, walkable } from '../src/map.ts';
+import { BIGGS, FLAN, MASCOTS, STOMPY } from '../src/config.ts';
+import { BATTERY_SPOTS, BOXES, DUCTS, dist, HIDES, MASCOT_R, PANELS, PLAYER_R, REST, roomAt, sees, spawnPoint, TOY_BOX, walkable } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
 import { DEV_OFF } from '../src/session.ts';
 import { actFloor, adoptFloor, brainOf, F, landing, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor, TOY } from '../src/sim.ts';
@@ -411,6 +411,36 @@ describe('a hunt', () => {
     const { sim, S, p } = stalk(STOMPY, { x: 39.62, z: 2.16 }, { x: 34, z: 6.5 });
     expect(until(sim, S, p, 20)).toBeLessThan(8);
     expect(p.flat).toBe(true);
+  });
+
+  it('keeps reaching for a guard a prop hides each time it rocks back', () => {
+    // The Kitchen's south-east corner, behind the locker. Stompy is put by turns where it can reach them and a step
+    // back, out of reach and with the locker in the way of its eyes, as one wedged on the locker rocked.
+    const guard = { x: 41.63, z: 24.02 },
+      near = { x: 40.65, z: 22.22 },
+      back = { x: 40.2, z: 21.45 };
+    expect(dist(near, guard)).toBeLessThan(F.GRAB);
+    expect(dist(back, guard)).toBeGreaterThan(F.GRAB);
+    expect(sees(back.x, back.z, guard.x, guard.z)).toBe(false);
+    const { sim, S, p, m } = stalk(STOMPY, guard, near);
+    const t = until(sim, S, p, 20, k => Object.assign(m, k % 8 < 4 ? near : back));
+    expect(p.flat).toBe(true);
+    expect(t).toBeLessThan(4);
+  });
+
+  it('sees a guard within its reach over the furniture, and no further', () => {
+    // Across the round table by the Snack Bar's soda machine, with its back to nobody: 2.2 m and 3.4 m away.
+    for (const [x, found] of [
+      [26.6, true],
+      [27.8, false],
+    ] as const) {
+      const { sim, S, p, m, b } = stalk(BIGGS, { x, z: 31 }, { x: 24.4, z: 31 });
+      Object.assign(m, { st: 'roam', yaw: Math.PI / 2 });
+      Object.assign(b, { tgt: null, last: null, dest: { x: m.x, z: m.z }, timer: 1e9 });
+      expect(sees(m.x, m.z, p.x, p.z)).toBe(false);
+      until(sim, S, p, 5);
+      expect(p.flat).toBe(found);
+    }
   });
 
   it('finds its way out of the ducts if it is not Squish', () => {
