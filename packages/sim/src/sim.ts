@@ -170,7 +170,7 @@ const SEARCH_MAX = 14; // seconds one spends looking for what it heard or lost b
 // 12, which spotted a guard from across a hall. Picked by hand to let a guard get closer, not tuned against the
 // harness, which they barely move.
 const SIGHT = { torch: 10, lit: 7.5, dark: 5, near: 2.5, cone: 1.2 };
-const NOTICE = 0.7; // seconds a mascot stands and stares after spotting a guard, before it moves
+const NOTICE = 1.2; // seconds a mascot stands and stares after spotting a guard, before it moves
 // Seconds a mascot keeps knowing where its guard is after losing sight of them: Biggs, and the rest.
 const RELENT = 8,
   KEEP = 1.2;
