@@ -167,7 +167,7 @@ const BANG_IRE = 0.1,
   GLARE_PER_IRE = 18;
 const FLAT_BAT = 0.5; // what is left of a torch its guard was flattened on top of
 // Metres one that has just caught a guard puts between the body and where it wanders next, so it does not stand over
-// them waiting for whoever comes to peel them up.
+// them waiting for whoever comes to peel them up. It makes that walk before a calm sends it home (b.away).
 const AWAY = 8;
 // Seconds before one that has just caught a guard can catch another. Without it a crew standing together goes down in
 // one go: the guard beside the one it caught is already in reach, and nothing holds it still any more.
@@ -426,6 +426,7 @@ const newBrain = (sim: Sim): Brain => ({
   was: null,
   noShort: 0,
   park: null,
+  away: null,
   shun: null,
   noCatch: 0,
   near: Infinity,
@@ -941,7 +942,8 @@ function flatten(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
     b.dest = null;
     return endNight(S, m.i);
   }
-  b.dest = pickDest(sim, S, m, b, p);
+  b.away = { x: p.x, z: p.z };
+  b.dest = pickDest(sim, S, m, b, b.away);
 }
 function endNight(S: NightState, by: MascotIndex | -1) {
   S.phase = 'dead';
@@ -1109,6 +1111,8 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     // Getting nowhere (STUCK) is timed from here: what it stood through banging on a door or winding up is not held
     // against the hunt that follows.
     b.park = null;
+    // Anything but wandering ends its walk away from the guard it caught.
+    if (m.st !== 'roam') b.away = null;
   }
   const ductGuest = m.i === SQUISH ? up.find(p => inDucts(p) && S.t >= p.safe && !shuns(S, b, p)) : null;
 
@@ -1315,7 +1319,10 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   } else {
     // Between waves they walk back to where they stand. So does one that has been turned away at a door, and
     // it stays there a while. With the power out nothing goes home.
-    const settle = (!S.stir || b.spent) && !S.out;
+    // One walking away from the guard it caught gets clear of them first: AWAY off and out of their room, or where it
+    // was going. In the dark it is not walking away from anyone.
+    if (b.away && (S.out || (dist(m, b.away) >= AWAY && roomAt(m.x, m.z) !== roomAt(b.away.x, b.away.z)))) b.away = null;
+    const settle = (!S.stir || b.spent) && !S.out && !b.away;
     if (settle !== b.home) {
       b.home = settle;
       b.dest = settle ? REST[m.i] : null;
@@ -1329,7 +1336,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       return;
     }
     if (!b.dest) {
-      b.dest = pickDest(sim, S, m, b);
+      b.dest = pickDest(sim, S, m, b, b.away ?? undefined);
       b.repath = 0;
     }
     speed = SPEED.roam;
@@ -1402,6 +1409,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   }
   if (res === 'there') {
     if (m.st === 'roam') {
+      b.away = null;
       b.timer -= dt;
       if (b.timer <= 0) {
         b.dest = null;

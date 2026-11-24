@@ -411,6 +411,33 @@ describe('a hunt', () => {
     expect(near).toBe(0); // from 8 s on, for the rest of half a minute
   });
 
+  it('walks away from the guard it caught before a calm sends it home', () => {
+    // Nothing is stirring, so a roamer goes home. Flan catches g0 a step and a half from her mark.
+    const { sim, S } = start(3, 2, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    const p = defined(S.players[0], 'g0'),
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
+    Object.assign(p, { x: REST[FLAN].x, z: REST[FLAN].z + 1.6, yaw: 0, pitch: 0 });
+    Object.assign(m, { x: REST[FLAN].x, z: REST[FLAN].z + 0.7, yaw: 0, st: 'hunt' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z } });
+    stepFloor(sim, S, 100);
+    expect(p.flat).toBe(true);
+    expect(m.st).toBe('roam');
+    // She is 8 m off and out of the room before she turns for home or stands still.
+    let k = 2;
+    const clear = () => dist(m, p) >= 8 && roomAt(m.x, m.z) !== roomAt(p.x, p.z);
+    while (k <= 600 && !clear()) {
+      stepFloor(sim, S, k++ * 100);
+      expect([m.st, b.home], `at ${S.t.toFixed(1)} s, ${dist(m, p).toFixed(1)} m off`).toEqual(['roam', false]);
+    }
+    expect(clear()).toBe(true);
+    // Then the calm has her: she walks back to her mark and stands there.
+    while (k <= 1200 && m.st !== 'rest') stepFloor(sim, S, k++ * 100);
+    expect(m.st).toBe('rest');
+  });
+
   it('cannot catch the guard standing beside the one it caught for 1.8 s, and can after that', () => {
     const { sim, S } = start(3, 3, 1);
     S.stir = true;

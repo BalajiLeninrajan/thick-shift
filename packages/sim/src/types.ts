@@ -248,6 +248,7 @@ export interface Brain {
   was: MascotState | null; // what that is, as of its last think; null before the first
   noShort: number; // S.t before which it will not cut straight across to its guard again
   park: (Point & { t: number }) | null; // where a hunt that is getting nowhere has been standing, and since when
+  away: Point | null; // where the guard it has just caught lies, while it is walking away from them
   shun: { id: string; until: number } | null; // the guard it gave up on, and the S.t until which it leaves them be
   noCatch: number; // S.t before which it will not catch another guard, having just caught one
   near: number; // how close it has come to where it last saw its guard since it lost them
