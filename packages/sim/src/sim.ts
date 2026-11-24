@@ -146,8 +146,8 @@ const CAP_SCALE = 25;
 const BANG_BOX: Record<DoorKey, number> = { L: 5, R: 7, V: 6 };
 // Metres per second. Hunt speed is per mascot, by MASC index. Biggs is slower
 // than a walking guard and never stops coming. Flan crawls while a guard is
-// looking at her and runs when nobody is. Squish is quick, quicker in the
-// ducts. Stompy walks until it has a straight run, then charges. All but Biggs
+// looking at her and runs when nobody is. Squish is a little quicker than
+// Biggs, and quicker again in the ducts. Stompy walks until it has a straight run, then charges. All but Biggs
 // run out of breath on a long hunt and slow down for a while (TIRE). With the
 // power out every one of them moves `out` times as fast and none of them tires.
 // Squish then outruns a sprinting guard on any night. With no ceiling burnt,
@@ -155,16 +155,20 @@ const BANG_BOX: Record<DoorKey, number> = { L: 5, R: 7, V: 6 };
 // and RAMP below set the night), and Flan outruns one only while nobody watches
 // her. A sprint does not last, so the crank is still the only way out. (Untuned
 // against the harness.)
-const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6] satisfies PerMascot<number>, unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15, out: 2 };
+// With the lights on, an unwatched Flan is slower than a walking guard on night 1 and short of a sprint on night 5,
+// dark rooms and burnt ceiling included. At 4.2 she outran a walk from night 1 and nearly matched a sprint late on.
+// Squish was 3.6, 1.4 times that in the ducts: 3.9 m/s there on night 1 against a guard's 3 m/s walk. At 3.2 and 1.25
+// it is under a walk in the open on night 1 and about a walk in the ducts.
+const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.2, 2.6] satisfies PerMascot<number>, unwatched: 3.5, ducts: 1.25, charge: 7, dark: 1.15, out: 2 };
 const KEEN: [number, number] = [0.78, 0.025]; // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
 const LIT_SPEED = [0, 0.2, 0.4] as const;
 const ROT = { night: 0.12, hour: 0.066, ire: 0.25 };
-// What a bang on a shut door adds to m.ire, and the seconds in a torch beam that add 1. Tuned so torchlight is what
-// rots them: on night 1, about 25 s of beam on one mascot brings out stage 1 and 35 to 50 s stage 2, so a guard who
-// lights up everything sees two of them at stage 2 before 6 AM (and the torch holds those two less well).
+// What a bang on a shut door adds to m.ire, and the seconds in a torch beam that add 1. Torchlight is what rots them:
+// on night 1, about 40 s of beam on one mascot at midnight brings out stage 1 and 80 s stage 2, less later in the
+// night. At 18 it was 25 s and 35 to 50 s, which rotted them faster than players liked.
 const BANG_IRE = 0.1,
-  GLARE_PER_IRE = 18;
+  GLARE_PER_IRE = 30;
 const FLAT_BAT = 0.5; // what is left of a torch its guard was flattened on top of
 // Metres one that has just caught a guard puts between the body and where it wanders next, so it does not stand over
 // them waiting for whoever comes to peel them up. It makes that walk before a calm sends it home (b.away).
@@ -214,6 +218,14 @@ const STUCK = { within: 1, time: 8, shun: 10 };
 const STIR: [number, number] = [28, 42],
   CALM: [number, number] = [24, 38];
 const SPENT: [number, number] = [18, 30]; // seconds one stays put after a shut door has turned it away
+// Seconds after a shut door turned it away before one picks the booth to wander to again (pickDest). Without it,
+// opening the vent once Squish had gone brought it straight back: home, SPENT, then the booth again, half a minute
+// round.
+const BARRED = 60;
+// Metres off Squish hears a guard in the ducts. It used to know of anyone in them from anywhere, get up off its mark
+// for them at once, and come whatever the pack said: going into the vent called it. Being in there still wakes it
+// early (isActive).
+const DUCT_EAR = 8;
 // How many nights' worth of wear each night has had, for rot, heat, speed and power drain. Night 5 counts for more
 // than one step past night 4: with a plain 4, a crew of three won 18% of night 5s against a target of 10.
 const RAMP = [0, 1, 2, 3.15, 4.3] as const;
@@ -326,12 +338,14 @@ const pack = (S: NightState) => (S.out ? 4 : 1 + Math.floor(heat(S) * 1.2 + (S.p
 const roster = (S: NightState) => (S.out ? 4 : 2 + Math.floor(heat(S) * 3.3 + (S.players.length - 1) * 0.75));
 // The states in which a mascot is coming for a guard.
 export const COMING: readonly MascotState[] = ['hunt', 'windup', 'charge'];
+// How many are taking a turn against the guards (pack): coming for one, or banging on a booth door.
+const onGuards = (S: NightState) => S.m.filter(o => COMING.includes(o.st) || o.st === 'siege').length;
 const inDucts = (p: Guard) => !p.flat && roomAt(p.x, p.z) === DUCTS;
 // When each mascot first comes out, by MASC index: hours of the run (six to a night), and how many hours sooner
 // for each guard past the first. Alone, Squish turns up at 3 AM on night 1. Stompy turns up on night 2 for every
 // crew: at 4 AM alone, 2:24 for three, midnight for six. When it waited for night 3 or 4, night 2 played like
-// night 1 and the night it woke was a cliff. With the power out they are all up, and Squish is up for anyone in
-// its ducts.
+// night 1 and the night it woke was a cliff. With the power out they are all up, and anyone in its ducts wakes
+// Squish early. Woken, it still waits on its mark for a wave to get it moving.
 const WAKE: PerMascot<[number, number]> = [
   [0, 2],
   [0, 2],
@@ -428,6 +442,7 @@ const newBrain = (sim: Sim): Brain => ({
   park: null,
   away: null,
   shun: null,
+  barred: 0,
   noCatch: 0,
   near: Infinity,
   nearAt: 0,
@@ -836,12 +851,15 @@ function pickDest(sim: Sim, S: NightState, m: Mascot, b: Brain, body?: Point): P
     return hidden(p) ? { ...hideAt(p.hid).at } : { x: p.x, z: p.z };
   }
   if (isNonEmpty(up)) {
-    // Squish goes for whoever is sitting in the booth, by the vent if it is open.
-    if (m.i === SQUISH && up.some(p => roomAt(p.x, p.z) === BOOTH) && sim.rng() < 0.6) room = BOOTH;
+    // Squish goes for whoever is sitting in the booth, by the vent if it is open: more often as the night gets
+    // worse, and not for a while after a shut door turned it away.
+    if (m.i === SQUISH && S.t >= b.barred && up.some(p => roomAt(p.x, p.z) === BOOTH) && sim.rng() < 0.25 + 0.35 * heat(S)) room = BOOTH;
     else if (S.crank && sim.rng() < 0.5) room = GENERATOR.room;
     else if (sim.rng() < 0.25 + 0.5 * heat(S)) {
       const p = pick(sim, up);
       room = roomAt(p.x, p.z);
+      // Nor does anything else wander back to a booth whose door has just turned it away.
+      if (room === BOOTH && S.t < b.barred) room = undefined;
     }
   }
   // Walking away from a body, a room is no good if the body is in it or its middle is within AWAY of the body.
@@ -1120,13 +1138,13 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     // Anything but wandering ends its walk away from the guard it caught.
     if (m.st !== 'roam') b.away = null;
   }
-  const ductGuest = m.i === SQUISH ? up.find(p => inDucts(p) && S.t >= p.safe && !shuns(S, b, p)) : null;
+  // Squish hears a guard crawling in its ducts within DUCT_EAR, through the walls, once it is up and about.
+  const ductGuest = m.i === SQUISH && m.st !== 'rest' ? up.find(p => inDucts(p) && dist(m, p) < DUCT_EAR && S.t >= p.safe && !shuns(S, b, p)) : undefined;
 
-  // Standing where it stands. A wave gets it moving, or (Squish) someone in the ducts.
+  // Standing where it stands. A wave gets it moving.
   if (m.st === 'rest') {
     b.timer -= dt;
-    if (ductGuest) spot(S, m, b, ductGuest);
-    else if (b.timer <= 0 && S.stir && S.m.filter(o => o.st !== 'rest').length < roster(S)) {
+    if (b.timer <= 0 && S.stir && S.m.filter(o => o.st !== 'rest').length < roster(S)) {
       m.st = 'roam';
       b.dest = null;
       b.home = false;
@@ -1193,14 +1211,12 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
         seen = p;
       }
   if (!seen && looking && lighter && S.t >= lighter.safe && !shuns(S, b, lighter)) seen = lighter; // a beam on it gives you away
-  // Only so many come for the guards at once. The rest stop and stare, and wait their turn.
-  // Squish does not wait for anyone in its ducts.
+  if (!seen && looking && ductGuest) seen = ductGuest;
+  // Only so many come for the guards at once. The rest stop and stare, and wait their turn. One banging on a booth
+  // door takes a turn too: without it, every one a shut door held gave its turn to the next, and a crew in the booth
+  // had all four at its doors. Squish waits its turn for one it hears in the ducts like any other.
   let stare = false;
-  if (seen && (m.st === 'hunt' || S.m.filter(o => COMING.includes(o.st)).length < pack(S))) {
-    near = dist(m, seen);
-    spot(S, m, b, seen);
-  } else if (ductGuest && looking) {
-    seen = ductGuest;
+  if (seen && (m.st === 'hunt' || onGuards(S) < pack(S))) {
     near = dist(m, seen);
     spot(S, m, b, seen);
   } else if (seen) {
@@ -1238,6 +1254,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       b.bangs = 0;
       b.timer = 0;
       b.spent = true;
+      b.barred = S.t + BARRED;
     }
     return;
   }
@@ -1393,6 +1410,15 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     return;
   }
   if (res === 'blocked') {
+    // One that was only wandering bangs on the door only if the pack has a turn for it. Otherwise the shut door
+    // turns it away and it wanders somewhere else: wanderers sent to the booth by pickDest used to start banging
+    // whatever the pack said, and a crew in the booth found all four at its doors.
+    if (m.st !== 'hunt' && onGuards(S) >= pack(S)) {
+      b.dest = null;
+      b.path = [];
+      b.barred = S.t + BARRED;
+      return;
+    }
     m.st = 'siege';
     b.timer = 1.2;
     b.bangs = 0;
