@@ -118,23 +118,26 @@ function lens(): THREE.CanvasTexture {
   return lensTex;
 }
 
+// The tag is as wide as the name, at least the 256px a short one gets, so a long name keeps its letter size.
 function nameTag(name: string): THREE.Sprite {
-  const cv = document.createElement('canvas');
-  cv.width = 256;
+  const font = '600 34px system-ui, sans-serif',
+    cv = document.createElement('canvas'),
+    c = context2d(cv);
+  c.font = font;
+  cv.width = Math.max(256, Math.ceil(c.measureText(name).width) + 16);
   cv.height = 64;
-  const c = context2d(cv);
-  c.font = '600 34px system-ui, sans-serif';
+  c.font = font; // resizing the canvas reset it
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   c.lineWidth = 6;
   c.strokeStyle = '#08080e';
-  c.strokeText(name, 128, 32, 240);
+  c.strokeText(name, cv.width / 2, 32);
   c.fillStyle = '#cdd6f4';
-  c.fillText(name, 128, 32, 240);
+  c.fillText(name, cv.width / 2, 32);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, fog: false, depthWrite: false }));
-  s.scale.set(0.9, 0.225, 1);
+  s.scale.set((0.9 * cv.width) / 256, 0.225, 1);
   s.renderOrder = 5;
   return s;
 }
