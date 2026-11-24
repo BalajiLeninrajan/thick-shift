@@ -88,8 +88,11 @@ the test snapshots with it:
 - The night's battery spots are shuffled Fisher-Yates:
   `for (let i = spots.length - 1; i > 0; i--) { const j = (sim.rng() * (i + 1)) | 0; swap(i, j); }`
 - Fault kinds are `(sim.rng() * F.FIX.length) | 0`.
-- Some draws sit behind a short-circuit: `noise()` draws only after the state, home and distance
-  tests pass; `lockersNear()` draws only for lockers within `CHECK.near`; `pickDest()` draws for Squish's booth
+- Some draws sit behind a short-circuit: `noise()` draws only after the state, home, charmed and distance
+  tests pass (`charmed()`: taken up with a Mini Biggs, power on); `sing()` (a Mini Biggs's song) draws once per
+  mascot, in `S.m` order, only after the state, home, `wise` and distance tests pass, and draws no timer;
+  `flyToys()` (a direct hit) draws nothing; `lockersNear()` draws
+  only for lockers within `CHECK.near`; `pickDest()` draws for Squish's booth
   chance only when a guard is in the booth, and for the crank chance only when `S.crank`.
 - An expression with two draws takes them left to right.
 

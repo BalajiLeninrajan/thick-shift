@@ -11,7 +11,7 @@
 //   plush.ts   the Mini Biggs guards throw, in the air and singing on the floor
 
 import { isPlaced } from '@thick-shift/sim/check';
-import { perMascot } from '@thick-shift/sim/config';
+import { perMascot, STOMPY } from '@thick-shift/sim/config';
 import { dist, doorwayOf, rectMid } from '@thick-shift/sim/map';
 import type { SimEvent, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
@@ -103,8 +103,10 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
         const door = rectMid(doorwayOf(e.x).rect);
         for (const m of S.m) if (m.st === 'siege' && dist(m, door) < 4) mascots[m.i].bang();
       } else if (e.type === 'crash') {
-        for (const m of S.m) if (m.st === 'stun') mascots[m.i].crash();
-      } else if (e.type === 'spot') mascots[e.x.i].spotted();
+        mascots[STOMPY].crash(); // only Stompy charges into walls; the others in 'stun' were hit by a toy (bonk)
+      } else if (e.type === 'bonk')
+        mascots[e.x.i].crash(); // a Mini Biggs in the face: the same recoil
+      else if (e.type === 'spot') mascots[e.x.i].spotted();
       else if (e.type === 'check' || e.type === 'found') mascots[e.x.i].bang(); // the yank on the locker door
     },
     // me, torch: player.ts's guard and its light. Call after player.update, which has put the camera where the guard is.

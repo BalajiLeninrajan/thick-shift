@@ -6,7 +6,7 @@ import { FLAN, STOMPY } from '../src/config.ts';
 import { BATTERY_SPOTS, BOXES, dist, HIDES, PANELS, REST, spawnPoint, TOY_BOX } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
 import { DEV_OFF } from '../src/session.ts';
-import { actFloor, adoptFloor, brainOf, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor, TOY } from '../src/sim.ts';
+import { actFloor, adoptFloor, brainOf, landing, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor, TOY } from '../src/sim.ts';
 import type { Guard, NightState, SimEvent, State } from '../src/types.ts';
 import { countEvents, digest, eventsSince } from './nights.ts';
 
@@ -446,5 +446,166 @@ describe('a hunt', () => {
     expect(stompy.st).toBe('hunt');
     expect(b.cool).toBeGreaterThanOrEqual(9.5); // CHARGE_GAP, 10 s, less the ticks since
     expect(b.dir).toBeNull();
+  });
+});
+
+describe('a thrown Mini Biggs', () => {
+  // g0 on night 1 with the mascots frozen and awake, facing the longest clear throw from where they stand. to: where
+  // a full throw that way comes down. step(): one tick. fly(): tick until the toy has sung (two seconds at most).
+  function thrower() {
+    const { sim, S } = start(1, 1, 1);
+    sim.rng = () => 0; // every mascot in earshot hears a song
+    S.dev = { freeze: true };
+    const p = defined(S.players[0], 'g0');
+    const throws = Array.from({ length: 16 }, (_, k) => {
+      const yaw = (k * Math.PI) / 8;
+      return { yaw, to: landing(S, p.x, p.z, yaw, TOY.range) };
+    });
+    const { yaw, to } = throws.reduce((a, b) => (dist(p, b.to) > dist(p, a.to) ? b : a));
+    assert(dist(p, to) > 8, 'there is a clear throw from the spawn point');
+    S.m.forEach((_, i) => {
+      brainOf(sim, i).woke = true;
+    });
+    let now = 0;
+    const step = () => {
+      now += 100;
+      stepFloor(sim, S, now);
+    };
+    const fly = () => {
+      const toy = defined(S.toys.at(-1), 'the toy thrown');
+      for (let k = 0; k < 20 && !toy.heard; k++) step();
+      return toy;
+    };
+    const lob = () => {
+      p.toy = true;
+      actFloor(sim, S, 'g0', { t: 'throw', yaw, d: TOY.range });
+      return fly();
+    };
+    // A point d metres along the throw and `side` metres to its left.
+    const along = (d: number, side = 0) => ({ x: p.x + Math.sin(yaw) * d + Math.cos(yaw) * side, z: p.z + Math.cos(yaw) * d - Math.sin(yaw) * side });
+    return { sim, S, p, to, step, lob, along };
+  }
+
+  it('stuns the mascot it hits and drops at its feet, and sails past the same one until that has worn off', () => {
+    const { sim, S, p, to, step, lob, along } = thrower();
+    const m = defined(S.m[0], 'Big Biggs'),
+      b = brainOf(sim, 0);
+    Object.assign(m, along(6, 0.5), { st: 'hunt' });
+    Object.assign(b, { tgt: 'g0', last: { x: p.x, z: p.z } });
+    const first = lob();
+    expect(S.evs.slice(-2)).toMatchObject([
+      { type: 'bonk', x: { i: 0, by: 'g0', x: m.x, z: m.z } },
+      { type: 'toy', x: { x: m.x, z: m.z } },
+    ]);
+    expect(first).toMatchObject({ x: m.x, z: m.z });
+    expect([m.st, b.tgt, b.timer]).toEqual(['stun', null, TOY.stun]);
+    // Stunned, and for a while after it is back up, another one goes by.
+    S.dev = {};
+    const up = S.t + TOY.stun;
+    while (S.t < up - 0.15) step();
+    expect(m.st).toBe('stun');
+    step();
+    step();
+    expect(m.st).not.toBe('stun');
+    S.dev = { freeze: true };
+    Object.assign(m, along(6, 0.5), { st: 'hunt' });
+    expect(lob()).toMatchObject(to);
+    expect(m.st).toBe('hunt');
+    expect(S.evs.filter(e => e.type === 'bonk')).toHaveLength(1);
+    // Once it has forgotten, it is hit again.
+    S.t = b.wise;
+    lob();
+    expect(m.st).toBe('stun');
+  });
+
+  it('stuns nothing until it has flown TOY.armed metres', () => {
+    const { sim, S, p, to, lob, along } = thrower();
+    const m = defined(S.m[0], 'Big Biggs');
+    Object.assign(brainOf(sim, 0), { tgt: 'g0', last: { x: p.x, z: p.z } });
+    // Thrown a metre, at one standing a metre off: it lands and sings there, and that is all.
+    Object.assign(m, along(1), { st: 'hunt' });
+    actFloor(sim, S, 'g0', { t: 'throw', yaw: Math.atan2(to.x - p.x, to.z - p.z), d: 1 });
+    for (let k = 1; k <= 5; k++) stepFloor(sim, S, k * 100);
+    expect(defined(S.toys.at(-1), 'the toy thrown').heard).toBe(true);
+    expect(m.st).not.toBe('stun');
+    // Thrown as far as it goes, through one two metres off: it flies on to where it was thrown.
+    brainOf(sim, 0).wise = 0;
+    Object.assign(m, along(2), { st: 'hunt' });
+    expect(lob()).toMatchObject(to);
+    expect(m.st).not.toBe('stun');
+    // One it reaches just short of TOY.armed metres out is passed too.
+    brainOf(sim, 0).wise = 0;
+    Object.assign(m, along(TOY.armed + 0.5), { st: 'hunt' });
+    expect(lob()).toMatchObject(to);
+    expect(S.evs.some(e => e.type === 'bonk')).toBe(false);
+    // Six metres off, it is hit.
+    brainOf(sim, 0).wise = 0;
+    Object.assign(m, along(6), { st: 'hunt' });
+    lob();
+    expect(m.st).toBe('stun');
+    expect(S.evs.filter(e => e.type === 'bonk')).toHaveLength(1);
+  });
+
+  it('with the power out, sails past one that is hunting', () => {
+    const { sim, S, p, to, lob, along } = thrower();
+    const m = defined(S.m[0], 'Big Biggs');
+    Object.assign(S, { out: true, power: 0 });
+    Object.assign(m, along(6), { st: 'hunt' });
+    Object.assign(brainOf(sim, 0), { tgt: 'g0', last: { x: p.x, z: p.z } });
+    expect(lob()).toMatchObject(to);
+    expect(m.st).toBe('hunt');
+    expect(S.evs.some(e => e.type === 'bonk')).toBe(false);
+  });
+
+  // Big Biggs wandering three metres in front of the guard, facing them, when a toy lands further on and takes him.
+  function taken(out: boolean) {
+    const { sim, S, p, lob, along, step } = thrower();
+    const m = defined(S.m[0], 'Big Biggs');
+    if (out) Object.assign(S, { out: true, power: 0 });
+    Object.assign(m, along(3), { st: 'roam' });
+    m.yaw = Math.atan2(p.x - m.x, p.z - m.z);
+    lob();
+    expect(m.st).toBe('search');
+    S.dev = {};
+    step();
+    return { m, b: brainOf(sim, 0) };
+  }
+
+  it('takes all the attention of one that goes to its song', () => {
+    const { m, b } = taken(false);
+    expect([m.st, b.tgt]).toEqual(['search', null]); // the guard is three metres in front of it
+  });
+
+  it('with the power out, leaves one that goes to its song looking: it hunts the guard it sees', () => {
+    const { m, b } = taken(true);
+    expect([m.st, b.tgt]).toEqual(['hunt', 'g0']);
+  });
+
+  it('misses one switched off on its mark', () => {
+    const { S, to, lob, along } = thrower();
+    Object.assign(defined(S.m[0], 'Big Biggs'), along(6), { st: 'rest' });
+    expect(lob()).toMatchObject(to);
+    expect(S.evs.some(e => e.type === 'bonk')).toBe(false);
+  });
+
+  it('sings a hunting mascot off its guard, but not one charging, wise to it or hunting in the dark', () => {
+    const { sim, S, p, to, lob } = thrower();
+    const [biggs, flan, squish, stompy] = S.m;
+    assert(biggs && flan && squish && stompy, 'the four mascots');
+    // All within earshot of where it lands, clear of its flight.
+    const beside = { x: to.x + (3 * (p.z - to.z)) / dist(p, to), z: to.z - (3 * (p.x - to.x)) / dist(p, to) };
+    for (const m of [biggs, flan, squish]) Object.assign(m, beside, { st: 'hunt' });
+    Object.assign(stompy, beside, { st: 'charge' });
+    for (const i of [0, 1, 2]) Object.assign(brainOf(sim, i), { tgt: 'g0', last: { x: p.x, z: p.z } });
+    brainOf(sim, 2).wise = 1e9;
+    lob();
+    expect(S.m.map(m => m.st)).toEqual(['search', 'search', 'hunt', 'charge']);
+    expect(brainOf(sim, 0)).toMatchObject({ tgt: null, last: to, timer: TOY.linger, checks: [] });
+    // With the power out a hunt goes on through the song.
+    for (const m of [biggs, flan]) m.st = 'hunt';
+    for (const i of [0, 1]) brainOf(sim, i).wise = 0;
+    Object.assign(S, { out: true, power: 0 });
+    lob();
+    expect(S.m.map(m => m.st)).toEqual(['hunt', 'hunt', 'hunt', 'charge']);
   });
 });

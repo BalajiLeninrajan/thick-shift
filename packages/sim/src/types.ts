@@ -68,8 +68,9 @@ export interface Guard extends Joined {
 export type Player = Joined & Partial<Omit<Guard, keyof Joined>>;
 
 // What a mascot is doing. rest: standing on its mark, switched off. roam: walking somewhere. search: going to look at
-// something it heard or lost. hunt: after a guard. windup and charge: Stompy's run. stun: Stompy after hitting a wall.
-// feast: sitting on a guard it flattened. siege: banging on a shut booth door.
+// something it heard or lost. hunt: after a guard. windup and charge: Stompy's run. stun: Stompy after hitting a wall,
+// or any of them hit by a thrown Mini Biggs. feast: sitting on a guard it flattened. siege: banging on a shut booth
+// door.
 export type MascotState = 'rest' | 'roam' | 'search' | 'hunt' | 'windup' | 'charge' | 'stun' | 'feast' | 'siege';
 
 // The cast, by their place in MASC (config.ts): Big Biggs, Madame Flan, Squish, Stompy. Every table kept per mascot
@@ -99,7 +100,8 @@ export interface Fault {
 }
 
 // A thrown Mini Biggs that nobody has picked up. by: the thrower's id. x0, z0: where it left the hand. x, z: where
-// it lands. at: S.t when it was thrown. land: S.t when it lands. heard: it has sung.
+// it lands. at: S.t when it was thrown. land: S.t when it lands. heard: it has sung. One that hits a mascot on the way
+// comes down at its feet there and then: x, z and land change to that.
 export interface Toy {
   id: number;
   by: string;
@@ -152,6 +154,7 @@ export interface EventData {
   startle: { i: MascotIndex; id: string; x: number; z: number }; // caught at a breaker box, and let run
   check: { i: MascotIndex; h: number; x: number; z: number };
   crash: { x: number; z: number };
+  bonk: { i: MascotIndex; by: string; x: number; z: number }; // a thrown Mini Biggs hit mascot i
   bang: DoorKey;
   arrive: DoorKey;
   roar: { i: MascotIndex; x: number; z: number };
@@ -246,6 +249,8 @@ export interface Brain {
   noShort: number; // S.t before which it will not cut straight across to its guard again
   near: number; // how close it has come to where it last saw its guard since it lost them
   nearAt: number; // and when it last got closer
+  song: Point | null; // where the last Mini Biggs it went to was singing (lured in sim.ts)
+  wise: number; // S.t before which a Mini Biggs does nothing to it
 }
 
 /* ---------- the wire ---------- */

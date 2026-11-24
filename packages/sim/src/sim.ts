@@ -214,14 +214,34 @@ const LOCKER_NOISE: [number, number] = [6, 0.5],
 // ago, so a guard tops it up from the torch: a throw costs `cost` of the battery (one of the five bars on the HUD)
 // and needs that much left. It is thrown along the guard's view, no further than `range` metres, and flies at `speed`
 // metres a second over the furniture until a wall or a shut door stops it. Where it lands it sings for `sing`
-// seconds, which is a noise() of `hear` metres at `chance`: whatever is wandering or searching nearby goes to look,
-// and whatever is already after a guard does not, so it buys a way past, not a way out. Then it lies there (S.toys)
-// until a guard with empty hands picks it up, which means walking to where the mascots were sent. The cost was set
-// against the harness, whose competent and expert guards throw theirs at a wanderer in their way while they have the
-// battery to spare and go back for it once things are quiet. Light spent on a song is light not holding a mascot off.
+// seconds, and the mascots put that first (sing()): each one within `hear` metres that is wandering, searching or
+// hunting drops what it was doing, `chance` of the time, and walks to the toy. On the way and for the `linger`
+// seconds it stands over it, it sees and hears nothing else, though walking into it still gets a guard flattened.
+// So a song ends a chase as well as clearing a corridor. One that is winding up, charging, stunned, banging on a
+// door or on its way home does not listen.
+// A throw that hits a mascot does more (flyToys()). A toy whose flight passes within `hit` metres of one's edge stops
+// and drops at its feet, and that mascot is stunned for `stun` seconds, whatever it was doing, a charge included.
+// Only one standing switched off on its mark is missed. The toy sings where it dropped for the others to hear.
+// The toy has to have flown `armed` metres before it touches the mascot: one that reaches it sooner flies on past
+// and lands and sings as any other, so a guard about to be caught cannot stun their way out with a throw at their
+// own feet.
+// With the power out a toy does less, so that the crank is still the only way out of the dark. One that is hunting,
+// winding up or charging does not turn for a song, and a thrown toy sails past it. One that is wandering or
+// searching still goes to a song, but with its eyes and ears open, as it would to any noise: it hunts the guard it
+// sees on the way.
+// For `wise` seconds after a song takes it or a toy hits it, a mascot falls for neither: a thrown one sails past it
+// and a song does not turn it. That is what stops a crew with a carton keeping one stunned all night: at most `stun`
+// seconds in every `wise`.
+// Then the toy lies there (S.toys) until a guard with empty hands picks it up, which means walking to where the
+// mascots were sent. The cost was set against the harness, whose competent and expert guards throw theirs at
+// whatever is coming for them, or at a wanderer in their way, while they have the battery to spare, and go back for
+// it once things are quiet. Light spent on a song is light not holding a mascot off.
 // A carton of them from the gift shop sits in the booth (TOY_BOX in map.ts) with `box` in it at clock-in, shared by
 // the crew and not restocked until the next night (S.toyBox), so a throw need not mean the walk back for it.
-export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3, box: 6 };
+export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3, box: 6, linger: 4, hit: 0.3, armed: 4, stun: 5, wise: 15 };
+// How near a mascot going to a singing toy has to get to count as standing over it. A toy can lie closer to a wall
+// than a mascot fits.
+const TOY_STAND = 1.5;
 
 const OPEN = (): Doors => ({ L: false, V: false, R: false });
 // The night's random numbers, all drawn from sim.rng (CONTRACT.md).
@@ -371,6 +391,8 @@ const newBrain = (sim: Sim): Brain => ({
   noShort: 0,
   near: Infinity,
   nearAt: 0,
+  song: null,
+  wise: 0,
 });
 
 // Sets every Guard field at once (isPlaced relies on that).
@@ -635,11 +657,20 @@ function canSee(S: NightState, m: Mascot, p: Guard) {
   return sees(m.x, m.z, p.x, p.z, S.doors);
 }
 
-// Something made a sound here. Mascots that are out, not on their way home and not already after someone may come and look.
+// Is it going to a singing Mini Biggs, or standing over one? b.song is the spot the song gave it to look at, and it
+// is lured for as long as that is still the very spot it is looking for: anything else that sends it somewhere gives
+// b.last a new one.
+const lured = (m: Mascot, b: Brain) => m.st === 'search' && !!b.song && b.last === b.song;
+// And does the toy have all its attention, so that it sees and hears nothing else? Not with the power out: a song
+// in the dark is only a noise to go and look at.
+const charmed = (S: NightState, m: Mascot, b: Brain) => lured(m, b) && !S.out;
+
+// Something made a sound here. Mascots that are out, not on their way home, not already after someone and not taken
+// up with a Mini Biggs (charmed) may come and look.
 function noise(sim: Sim, S: NightState, x: number, z: number, radius: number, chance: number) {
   for (const [i, m] of S.m.entries()) {
     const b = brainOf(sim, i);
-    if (!['roam', 'search'].includes(m.st) || b.home || hypot(m.x - x, m.z - z) > radius || sim.rng() > chance) continue;
+    if (!['roam', 'search'].includes(m.st) || b.home || charmed(S, m, b) || hypot(m.x - x, m.z - z) > radius || sim.rng() > chance) continue;
     m.st = 'search';
     b.last = { x, z };
     b.timer = rnd(sim, 3, 6);
@@ -659,14 +690,76 @@ export function landing(S: State, x: number, z: number, yaw: number, d: number):
   return { x: x + sx * k, z: z + sz * k };
 }
 
-// A thrown Mini Biggs that has just come down sings where it lands, and whatever hears it comes to look.
-function landToys(sim: Sim, S: NightState) {
-  for (const s of S.toys)
-    if (!s.heard && S.t >= s.land) {
+// A Mini Biggs has started singing here. Every mascot in earshot that is wandering, searching or hunting, and not
+// wise to it, may drop that and come: one draw each, in S.m order. With the power out the hunting ones do not, and
+// the ones that come keep looking and listening on the way (charmed).
+function sing(sim: Sim, S: NightState, x: number, z: number) {
+  for (const [i, m] of S.m.entries()) {
+    const b = brainOf(sim, i);
+    const listens = m.st === 'roam' || m.st === 'search' || (m.st === 'hunt' && !S.out);
+    if (!listens || b.home || S.t < b.wise || hypot(m.x - x, m.z - z) > TOY.hear || sim.rng() > TOY.chance) continue;
+    m.st = 'search';
+    b.song = { x, z };
+    // was and since: it has not lost a guard, so it checks no lockers (runMascot).
+    Object.assign(b, { last: b.song, timer: TOY.linger, repath: 0, tgt: null, reach: null, checks: [], was: 'search', since: S.t, wise: S.t + TOY.wise });
+  }
+}
+
+// How far p is from the line from a to b.
+function segDist(p: Point, a: Point, b: Point) {
+  const dx = b.x - a.x,
+    dz = b.z - a.z,
+    len2 = dx * dx + dz * dz,
+    k = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / len2)) : 0;
+  return hypot(p.x - (a.x + dx * k), p.z - (a.z + dz * k));
+}
+
+// The thrown Mini Biggses still in the air. One whose flight this tick passes a mascot close enough hits it: the
+// toy drops at its feet and the mascot is stunned (TOY). Only the flight past TOY.armed metres from the hand counts.
+// One that has come down, there or where it was thrown to, sings, and whatever hears it comes to look. No random
+// draws but sing()'s.
+function flyToys(sim: Sim, S: NightState, dt: number) {
+  for (const s of S.toys) {
+    if (s.heard) continue;
+    // Where it was at the last tick and where it is now.
+    const at = (t: number) => {
+      const k = Math.max(0, Math.min(1, (t - s.at) / (s.land - s.at)));
+      return { x: s.x0 + (s.x - s.x0) * k, z: s.z0 + (s.z - s.z0) * k };
+    };
+    const hand = { x: s.x0, z: s.z0 },
+      from = at(S.t - dt),
+      to = at(S.t),
+      flown = dist(hand, to),
+      touch = MASCOT_R + TOY.hit;
+    // Until it has flown TOY.armed metres it hits nothing. `armed` is the spot on its flight where that is.
+    const live = flown >= TOY.armed,
+      armed = live ? { x: s.x0 + ((to.x - s.x0) * TOY.armed) / flown, z: s.z0 + ((to.z - s.z0) * TOY.armed) / flown } : hand;
+    // The first one in its way: not one switched off on its mark, already stunned or wise to it, and with the power
+    // out not one that is after a guard. Nor one the toy was already touching before it got to `armed`: it flies on
+    // past that one.
+    let hit: Mascot | null = null;
+    for (const [i, m] of S.m.entries()) {
+      const b = brainOf(sim, i);
+      if (!live || !b.woke || m.st === 'rest' || m.st === 'stun' || S.t < b.wise) continue;
+      if (S.out && (m.st === 'hunt' || m.st === 'windup' || m.st === 'charge')) continue;
+      if (segDist(m, from, to) > touch || segDist(m, hand, armed) <= touch) continue;
+      if (!hit || dist(m, from) < dist(hit, from)) hit = m;
+    }
+    if (hit) {
+      const b = brainOf(sim, hit.i);
+      // A charge or a wind-up it knocks Stompy out of is spent, as one that ends in a wall is.
+      if (hit.st === 'windup' || hit.st === 'charge') b.cool = CHARGE_GAP;
+      hit.st = 'stun';
+      Object.assign(b, { timer: TOY.stun, wise: S.t + TOY.wise, tgt: null, reach: null, path: [] });
+      Object.assign(s, { x: hit.x, z: hit.z, land: S.t });
+      emit(S, 'bonk', { i: hit.i, by: s.by, x: hit.x, z: hit.z });
+    }
+    if (S.t >= s.land) {
       s.heard = true;
       emit(S, 'toy', { by: s.by, x: s.x, z: s.z });
-      noise(sim, S, s.x, s.z, TOY.hear, TOY.chance);
+      sing(sim, S, s.x, s.z);
     }
+  }
 }
 
 // Where to walk next.
@@ -887,7 +980,7 @@ function lockersNear(sim: Sim, at: Point | null) {
 function seenHiding(sim: Sim, S: NightState, p: Guard) {
   for (const [i, m] of S.m.entries()) {
     const b = brainOf(sim, i);
-    if (m.st === 'rest' || (b.spent && !S.out) || !b.woke) continue;
+    if (m.st === 'rest' || (b.spent && !S.out) || !b.woke || charmed(S, m, b)) continue;
     const after = COMING.includes(m.st) && b.tgt === p.id && b.lost < keepsFor(m);
     if (!after && !canSee(S, m, p)) continue;
     b.knows = p.hid;
@@ -986,10 +1079,13 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     return;
   }
 
-  // Who can it see? One turned away at a door is on its way home and looks at nobody, though walking into it still counts.
+  // Who can it see? One turned away at a door is on its way home and looks at nobody, though walking into it still
+  // counts. Nor does one taken up with a singing Mini Biggs, unless the power is out: in the dark every one of them
+  // looks, or a toy would be a second way out of it.
   let seen: Guard | null = null,
     near = 1e9;
-  const looking = !b.spent || S.out;
+  const deaf = charmed(S, m, b),
+    looking = (!b.spent || S.out) && !deaf;
   if (looking)
     for (const p of up)
       if (S.t >= p.safe && canSee(S, m, p) && dist(m, p) < near) {
@@ -1081,7 +1177,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       b.timer = rnd(sim, 4, 7);
     }
   } else if (!seen) {
-    const loud = !b.home && up.find(p => p.sp && dist(m, p) < 9);
+    const loud = !b.home && !deaf && up.find(p => p.sp && dist(m, p) < 9);
     if (loud) {
       m.st = 'search';
       b.last = { x: loud.x, z: loud.z };
@@ -1148,7 +1244,9 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   if (stare) speed = 0;
   if (m.lit && lighter) turn(m, Math.atan2(lighter.x - m.x, lighter.z - m.z), 4 * dt); // it turns to face the light
 
-  const res = speed > 0 ? goTo(S, m, b, goal, speed, dt, eager) : 'going';
+  // Close enough to a singing toy is there: it stands over it and looks about.
+  const atToy = lured(m, b) && dist(m, goal) < TOY_STAND && reaches(m.x, m.z, goal.x, goal.z, S.doors);
+  const res = atToy ? 'there' : speed > 0 ? goTo(S, m, b, goal, speed, dt, eager) : 'going';
   if (catchGuards(S, m, b)) return;
   // Free to move, within arm's reach of a guard who is staying put, and getting no nearer however it tries: they
   // are tucked in behind the furniture. It reaches in. (A mascot wedged on a prop can rock back and forth a metre
@@ -1254,7 +1352,7 @@ export function stepFloor(sim: Sim, state: State, now: number): void {
       noise(sim, S, GENERATOR.x, GENERATOR.z, 24, 0.35);
     }
   }
-  landToys(sim, S);
+  flyToys(sim, S, dt);
   if (S.dev?.freeze) return;
   for (const [i, m] of S.m.entries()) {
     if (S.phase !== 'play') break;

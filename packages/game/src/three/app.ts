@@ -162,6 +162,9 @@ function create() {
     fumble(e: EventOf<'fumble'>): void {
       if (isMe(e.x.by)) hud.say('Something is blocking the door.', 'info', 3);
     },
+    bonk(e: EventOf<'bonk'>): void {
+      if (isMe(e.x.by)) hud.say(`Bonk! ${MASC[e.x.i].name} is stunned for a few seconds.`, 'toy', 3);
+    },
     grab(e: EventOf<'grab'>): void {
       if (isMe(e.x.by)) hud.say('Mini Biggs in hand.', 'toy', 2.5);
     },

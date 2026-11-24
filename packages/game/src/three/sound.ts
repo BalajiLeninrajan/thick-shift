@@ -494,6 +494,14 @@ export function createSound() {
         sample('hit_long', { gain: 0.5 });
       });
     },
+    // A thrown Mini Biggs hitting a mascot: its squeak, and a soft thump off the costume. The song follows (toy).
+    bonk(x: EventData['bonk'], S: State, r: Rig): void {
+      at(r, S, x, () => {
+        squeak(1.5);
+        boom({ level: 0.4 });
+        sample('slam2', { rate: 0.9, gain: 0.4 }) || noise(0.2, 0.4);
+      });
+    },
     bang(key: EventData['bang'], S: State, r: Rig): void {
       at(r, S, doorAt(key), bang);
     },

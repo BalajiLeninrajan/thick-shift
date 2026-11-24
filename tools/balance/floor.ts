@@ -186,6 +186,13 @@ if (!isMainThread) {
           sum(runs, r => r.toys)
         )
       ).toFixed(2),
+      hit: (
+        sum(runs, r => r.hits) /
+        Math.max(
+          1,
+          sum(runs, r => r.toys)
+        )
+      ).toFixed(2),
     };
   };
   const table = todo.map(({ sc, runs }) => ({ sc, runs, cells: row(sc, runs) }));
@@ -229,7 +236,7 @@ torch   share of standing time with the torch on           low, dead   share wit
 dry>flat  share of torches running out that ended in a flattening within 20 s    flat dark  share of flattenings with the torch dead
 burnt   share of faults left to burn    power   mean power at the end    out%    nights the power went out    crank s  seconds cranked    door s  seconds of shut door (two doors for ten seconds is 20)
 bangs   bangs on shut doors    dock s  guard-seconds spent charging at the dock    toys/g  Mini Biggses thrown per guard per night
-lured   mascots that went to look, per one thrown`);
+lured   mascots that went to look, per one thrown    hit     mascots stunned by a direct hit, per one thrown`);
   if (opts.deaths)
     for (const { sc, runs } of todo)
       console.log(
