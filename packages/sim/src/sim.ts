@@ -964,6 +964,7 @@ function catchGuards(sim: Sim, S: NightState, m: Mascot, b: Brain) {
 // It has its hands on this guard. One busy in a breaker box, whose hands are not still shaking from the last time,
 // gets a start. Anyone else is flattened. Every catch of a guard on the floor comes through here.
 function catchOne(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
+  spendCharge(m, b);
   if (fixing(S, p) && p.fixAt >= p.shaky) startle(S, p, m, b);
   else flatten(sim, S, p, m, b);
 }
@@ -986,15 +987,16 @@ function headStart(S: NightState, p: Guard, m: Mascot, b: Brain) {
   });
   m.st = 'hunt';
 }
+// A charge that ends at a guard is spent, like one that runs out or hits a wall: Stompy waits before the next.
+function spendCharge(m: Mascot, b: Brain) {
+  if (m.st !== 'windup' && m.st !== 'charge') return;
+  b.cool = Math.max(b.cool, CHARGE_GAP);
+  b.dir = null;
+}
 // It reached a guard who was busy in a breaker box. They let go of the box, and it is after them.
 function startle(S: NightState, p: Guard, m: Mascot, b: Brain) {
   p.act = '';
   emit(S, 'startle', { i: m.i, id: p.id, x: p.x, z: p.z });
-  // A charge that ends here is spent, like one that runs out or hits a wall: Stompy waits before the next.
-  if (m.st === 'windup' || m.st === 'charge') {
-    b.cool = Math.max(b.cool, CHARGE_GAP);
-    b.dir = null;
-  }
   headStart(S, p, m, b);
 }
 

@@ -749,6 +749,32 @@ describe('a hunt', () => {
     expect(b.cool).toBeGreaterThanOrEqual(9.5); // CHARGE_GAP, 10 s, less the ticks since
     expect(b.dir).toBeNull();
   });
+
+  it("spends Stompy's charge when the charge ends in a catch", () => {
+    // Two guards in a line down the Main Hall, the far one with a torch on, and a third in the booth. Stompy is
+    // mid-charge at the near one's back with nothing left on its charge gap.
+    const { sim, S } = start(1, 3, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    const [p, q] = [defined(S.players[0], 'g0'), defined(S.players[1], 'g1')],
+      stompy = defined(S.m[STOMPY], 'Stompy'),
+      b = brainOf(sim, STOMPY);
+    Object.assign(p, { x: 19.5, z: 14.8, on: false });
+    Object.assign(q, { x: 19.5, z: 24, yaw: Math.PI / 2, on: true });
+    Object.assign(stompy, { x: 19.5, z: 13, yaw: 0, st: 'charge' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z }, timer: 2.4, cool: 0, dir: { x: 0, z: 1 } });
+    stepFloor(sim, S, 100);
+    expect([p.flat, p.flatBy, q.flat]).toEqual([true, STOMPY, false]);
+    expect(b.cool).toBeGreaterThanOrEqual(9.5); // CHARGE_GAP, 10 s, less the ticks since
+    expect(b.dir).toBeNull();
+    // The other guard is 9 m off down a clear run. It comes for them on foot: no wind-up inside the gap.
+    for (let k = 2; k <= 95; k++) {
+      stepFloor(sim, S, k * 100);
+      expect(stompy.st, `at ${S.t.toFixed(1)} s`).not.toBe('windup');
+    }
+    expect(S.evs.filter(e => e.type === 'spot' && e.x.i === STOMPY).length).toBeGreaterThan(0);
+    expect(S.evs.filter(e => e.type === 'roar')).toHaveLength(0);
+  });
 });
 
 describe('a thrown Mini Biggs', () => {
