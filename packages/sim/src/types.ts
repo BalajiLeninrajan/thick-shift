@@ -247,6 +247,8 @@ export interface Brain {
   since: number; // S.t when it took up what it is doing now
   was: MascotState | null; // what that is, as of its last think; null before the first
   noShort: number; // S.t before which it will not cut straight across to its guard again
+  park: (Point & { t: number }) | null; // where a hunt that is getting nowhere has been standing, and since when
+  shun: { id: string; until: number } | null; // the guard it gave up on, and the S.t until which it leaves them be
   near: number; // how close it has come to where it last saw its guard since it lost them
   nearAt: number; // and when it last got closer
   song: Point | null; // where the last Mini Biggs it went to was singing (lured in sim.ts)

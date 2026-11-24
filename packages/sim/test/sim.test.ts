@@ -443,6 +443,28 @@ describe('a hunt', () => {
     }
   });
 
+  it('gives up a hunt that is getting nowhere, and leaves that guard be for a while', () => {
+    // Flan in the Main Hall with the guard in plain sight across it, and something holding her where she stands.
+    const from = { x: 14, z: 18 };
+    const { sim, S, p, m, b } = stalk(FLAN, { x: 25, z: 18 }, from);
+    const step = (k: number) => {
+      Object.assign(m, from);
+      stepFloor(sim, S, k * 100);
+    };
+    for (let k = 1; k <= 70; k++) step(k);
+    expect(m.st).toBe('hunt');
+    for (let k = 71; k <= 100; k++) step(k);
+    expect(m.st).toBe('roam'); // on its way back to its mark, the building being calm
+    expect(b).toMatchObject({ tgt: null, shun: { id: 'g0' } });
+    // The guard is still in plain sight, and it does not look at them again until it has been a while.
+    const spots = () => S.evs.filter(e => e.type === 'spot').length;
+    for (let k = 101; k <= 170; k++) step(k);
+    expect(spots()).toBe(0);
+    for (let k = 171; k <= 230; k++) step(k);
+    expect(spots()).toBe(1);
+    expect(p.flat).toBe(false);
+  });
+
   it('finds its way out of the ducts if it is not Squish', () => {
     // The east end of the ducts, where one that followed a guard in used to stand facing the wall.
     const { sim, S, m, b } = stalk(FLAN, spawnPoint(0), { x: 25.18, z: 34.26 });

@@ -184,6 +184,11 @@ export const RELENT = 4.5,
   KEEP = 1.2;
 const keepsFor = (m: Mascot) => (m.i === BIGGS ? RELENT : KEEP);
 const NEAREST = 3; // seconds one that has lost its guard goes without getting closer to where it last saw them before it searches there
+// A hunt that gets nowhere: one free to move that has not left a circle of STUCK.within metres in STUCK.time seconds,
+// and is not reaching in for anyone, gives that guard up and wanders off, and does not look at them again for
+// STUCK.shun seconds. Nothing in the building should bring this on (the harness checks that every spot can be
+// reached); it is there so that a mascot the furniture has beaten walks away instead of standing there all night.
+const STUCK = { within: 1, time: 8, shun: 10 };
 // The mascots stir and settle in turns: seconds of each, before the night's heat stretches one and shrinks the other.
 const STIR: [number, number] = [28, 42],
   CALM: [number, number] = [24, 38];
@@ -392,6 +397,8 @@ const newBrain = (sim: Sim): Brain => ({
   since: 0,
   was: null,
   noShort: 0,
+  park: null,
+  shun: null,
   near: Infinity,
   nearAt: 0,
   song: null,
@@ -766,13 +773,16 @@ function flyToys(sim: Sim, S: NightState, dt: number) {
   }
 }
 
+// Has it given this guard up for now (STUCK)?
+const shuns = (S: NightState, b: Brain, p: Guard) => !!b.shun && b.shun.id === p.id && S.t < b.shun.until;
+
 // Where to walk next.
-function pickDest(sim: Sim, S: NightState, m: Mascot): Point {
+function pickDest(sim: Sim, S: NightState, m: Mascot, b: Brain): Point {
   const up = outside(S);
   let room: number | undefined;
   // In the dark they do not wander. They come to where you are, and a locker does not hide that: they stand at its
   // doors until they open them (openLockers). Sitting out the night in one ends in the dark.
-  const all = standing(S);
+  const all = standing(S).filter(p => !shuns(S, b, p));
   if (S.out && isNonEmpty(all)) {
     const p = pick(sim, all);
     return hidden(p) ? { ...hideAt(p.hid).at } : { x: p.x, z: p.z };
@@ -1030,7 +1040,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     b.was = m.st;
     b.since = S.t;
   }
-  const ductGuest = m.i === SQUISH ? up.find(p => inDucts(p) && S.t >= p.safe) : null;
+  const ductGuest = m.i === SQUISH ? up.find(p => inDucts(p) && S.t >= p.safe && !shuns(S, b, p)) : null;
 
   // Standing where it stands. A wave gets it moving, or (Squish) someone in the ducts.
   if (m.st === 'rest') {
@@ -1104,11 +1114,11 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     looking = (!b.spent || S.out) && !deaf;
   if (looking)
     for (const p of up)
-      if (S.t >= p.safe && canSee(S, m, p) && dist(m, p) < near) {
+      if (S.t >= p.safe && !shuns(S, b, p) && canSee(S, m, p) && dist(m, p) < near) {
         near = dist(m, p);
         seen = p;
       }
-  if (!seen && looking && lighter && S.t >= lighter.safe) seen = lighter; // a beam on it gives you away
+  if (!seen && looking && lighter && S.t >= lighter.safe && !shuns(S, b, lighter)) seen = lighter; // a beam on it gives you away
   // Only so many come for the guards at once. The rest stop and stare, and wait their turn.
   // Squish does not wait for anyone in its ducts.
   let stare = false;
@@ -1249,7 +1259,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       return;
     }
     if (!b.dest) {
-      b.dest = pickDest(sim, S, m);
+      b.dest = pickDest(sim, S, m, b);
       b.repath = 0;
     }
     speed = SPEED.roam;
@@ -1283,6 +1293,16 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     }
   } else if (tucked) b.reach = { id: tucked.id, d: gap, x: tucked.x, z: tucked.z, t: S.t };
   else if (!(holds(prey) && gap < F.GRAB + 1)) b.reach = null;
+  // Walking, and going nowhere (STUCK): it gives this guard up.
+  if (m.st !== 'hunt' || speed <= 0 || b.reach || !b.park || dist(m, b.park) > STUCK.within) b.park = { x: m.x, z: m.z, t: S.t };
+  else if (S.t - b.park.t > STUCK.time) {
+    if (b.tgt) b.shun = { id: b.tgt, until: S.t + STUCK.shun };
+    m.st = 'roam';
+    b.tgt = null;
+    b.dest = null;
+    b.path = [];
+    return;
+  }
   if (res === 'blocked') {
     m.st = 'siege';
     b.timer = 1.2;
