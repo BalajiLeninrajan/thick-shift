@@ -34,8 +34,8 @@
 // night about 22 points less often (78, 55, 33, then 10% of night 5s); a guard
 // alone and crews of two, four and six fall the same way with no cliffs; and
 // every strategy in the harness's second half loses. Nothing is there yet: a
-// guard alone wins 63% of night 1s and 25% of night 3s, and crews of two to six
-// win 38 to 85% of night 1s and 3 to 13% of night 3s (see the README's "Balance").
+// guard alone wins 55% of night 1s and 33% of night 3s, and crews of two to six
+// win 73 to 85% of night 1s and 8 to 35% of night 3s (see the README's "Balance").
 import { assert, defined, isNonEmpty, isPlaced } from './check.ts';
 import { BIGGS, DEFAULT_NAME, DOORS, FINAL_NIGHT, FLAN, MASC, MASCOTS, NAME_MAX, SQUISH, STOMPY } from './config.ts';
 import {
