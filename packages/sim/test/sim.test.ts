@@ -184,9 +184,12 @@ describe('adoptFloor', () => {
     defined(T.faults, "the night's faults")[3] = { k: 0, at: 0, burnt: false };
     Object.assign(g, { x: box.x, z: box.z + 1, act: 'fix' });
     delete g.fixAt;
+    // Their hands shook from a locker pull earlier in the night and have stopped since.
+    T.t = 20;
+    g.shaky = 12;
     Object.assign(defined(T.m[BIGGS], 'Biggs'), { x: box.x, z: box.z + 1.9, yaw: Math.PI });
     const { sim } = adopt(7, T);
-    expect(g.fixAt).toBe(0);
+    expect(g.fixAt).toBe(20);
     const startles = () => T.evs.filter(e => e.type === 'startle').length;
     for (let k = 1; k <= 40 && !startles() && !g.flat; k++) stepFloor(sim, T, 5000 + k * 100);
     expect(startles()).toBe(1);

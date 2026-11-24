@@ -16,8 +16,8 @@ export const DEV_OFF: Dev = { god: false, power: false, freeze: false, wake: fal
 export function joinFloor(sim: Sim, S: State, id: string, was?: Player): void {
   if (!Object.hasOwn(sim.players, id)) {
     const p = was ?? S.players.find(q => q.id === id) ?? { id, name: DEFAULT_NAME };
-    // A record kept by a build that gave no start at a breaker box has no fixAt (adoptFloor does the same).
-    if (isPlaced(p)) p.fixAt ??= 0;
+    // A record kept by a build that gave no start at a breaker box has no fixAt: now, as adoptFloor gives it.
+    if (isPlaced(p)) p.fixAt ??= S.t ?? 0;
     sim.players[id] = p;
   }
   S.players = Object.values(sim.players);

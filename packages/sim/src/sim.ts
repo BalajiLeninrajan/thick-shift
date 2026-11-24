@@ -526,8 +526,9 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
     up = standing(S),
     h = heat(S);
   sim.lastStep = now;
-  // A night saved by a build that gave no start at a breaker box has guards without fixAt.
-  for (const p of S.players) p.fixAt ??= 0;
+  // A night saved by a build that gave no start at a breaker box has guards without fixAt. Their hands go in now,
+  // as far as it knows: after any shaking that has stopped (a start is fixAt >= shaky), and not after any that has not.
+  for (const p of S.players) p.fixAt ??= S.t;
   sim.brains = S.m.map(m => {
     const b: Brain = { ...newBrain(sim), last: { x: m.x, z: m.z }, cool: m.i === STOMPY ? CHARGE_GAP : 0, noCatch: S.t + CATCH_GAP, woke: m.st !== 'rest' };
     if (m.st === 'rest') b.timer = rnd(sim, ...SPENT) * (1 - 0.5 * h);

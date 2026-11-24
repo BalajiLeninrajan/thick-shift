@@ -51,9 +51,10 @@ describe('joinFloor and leaveFloor', () => {
     assert(was, 'b is in the night');
     leaveFloor(sim, S, 'b');
     delete was.fixAt;
+    S.t = 20;
     joinFloor(sim, S, 'b', was);
     expect(sim.players.b).toBe(was);
-    expect(was.fixAt).toBe(0);
+    expect(was.fixAt).toBe(20); // no start at a box they did not have: see adoptFloor
   });
 
   it('lets someone who joins mid-night in at a spawn point on the next step', () => {
