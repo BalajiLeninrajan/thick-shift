@@ -132,7 +132,6 @@ const squeeze = (level: number): void => {
 const squeak = (level: number): void => tone(1100, 0.1, 'triangle', 0.07 * level, { to: 1500 });
 
 const rnd = (a: number, b: number): number => a + Math.random() * (b - a);
-const doorAt = (key: DoorKey): Point => rectMid(doorwayOf(key).rect);
 // Doorways between two rooms by the shortest way, a shut door counting double. FAR is "a long way".
 const FAR = 9;
 function doorwaysBetween(a: number, b: number, doors: Doors): number {
@@ -377,6 +376,17 @@ export function createSound() {
     place(e, S, p.x, p.z, true);
     into(e.in, fn);
   }
+  // Where a sound made on a booth door is heard from. The door is part of the wall between its two rooms, so from
+  // either of them it is in the room with you: half a metre out of the doorway on your side. From its middle, a shut
+  // door counted as two doorways and muffled a bang to a thump under 100 Hz that most speakers do not play.
+  function onDoor(key: DoorKey): Point {
+    const d = doorwayOf(key),
+      p = rectMid(d.rect),
+      here = roomAt(head.x, head.z);
+    if (here !== d.a && here !== d.b) return p;
+    const side = Math.sign(d.axis === 'x' ? head.x - p.x : head.z - p.z) || 1;
+    return d.axis === 'x' ? { x: p.x + side * 0.5, z: p.z } : { x: p.x, z: p.z + side * 0.5 };
+  }
   const mine = (id: string): boolean => id === game.myId;
   // Stop this guard's stinger, sounding or still to come. Its parts are
   // scheduled ahead and cannot be stopped one by one, so it plays through one gain.
@@ -502,10 +512,10 @@ export function createSound() {
       });
     },
     bang(key: EventData['bang'], S: State, r: Rig): void {
-      at(r, S, doorAt(key), bang);
+      at(r, S, onDoor(key), bang);
     },
     arrive(key: EventData['arrive'], S: State, r: Rig): void {
-      at(r, S, doorAt(key), () => {
+      at(r, S, onDoor(key), () => {
         sample(pick('creak1', 'creak2'), { gain: 1.2, rate: 0.8 });
         tone(70, 0.6, 'sawtooth', 0.05, { to: 50 });
       });
@@ -810,7 +820,7 @@ export function createSound() {
     if (doors)
       for (const k of DOORS)
         if (S.doors[k] !== doors[k])
-          at(r, S, doorAt(k), () => {
+          at(r, S, onDoor(k), () => {
             sample(S.doors[k] ? 'door_shut' : 'door_open', { gain: 1.8, rate: 0.9 }) || tone(90, 0.25, 'square', 0.3, { to: 40 });
             tone(64, 0.5, 'sawtooth', 0.15, { to: 44 });
           });
