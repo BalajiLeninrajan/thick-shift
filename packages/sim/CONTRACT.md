@@ -100,7 +100,9 @@ the test snapshots with it:
   shun, and with none it falls through to the room draw.
 - A mascot walking away from a guard it caught (`b.away`) passes the body to every `pickDest()` it makes until
   the walk is done, so a walk that jams redraws clear of the body too. In a calm it draws no rest timer until
-  the walk is done and it has gone home.
+  the walk is done and it has gone home. While a guard it flattened lies within `AWAY` of its `REST` mark it
+  does not go home: it keeps drawing through `pickDest()` with that body, and the roam pause between walks,
+  where a calm would have drawn one rest timer. It makes no draw of its own for this.
 - An expression with two draws takes them left to right.
 
 Distances come from `hypot` in `map.ts`, the plain `Math.sqrt(x * x + z * z)`, and `dist(a, b)` beside it. `Math.hypot` rounds differently in the

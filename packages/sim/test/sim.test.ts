@@ -433,10 +433,13 @@ describe('a hunt', () => {
   });
 
   it('walks away from the guard it caught before a calm sends it home', () => {
-    // Nothing is stirring, so a roamer goes home. Flan catches g0 a step and a half from her mark.
+    // Nothing is stirring, so a roamer goes home. Flan catches g0 a step and a half from her mark. g1 sits in the
+    // booth with its doors shut and the power paid for, so she has nobody else to come for.
     const { sim, S } = start(3, 2, 1);
     S.stir = false;
     S.waveAt = 1e9;
+    S.doors = { L: true, V: true, R: true };
+    S.dev = { ...DEV_OFF, power: true };
     const p = defined(S.players[0], 'g0'),
       m = defined(S.m[FLAN], 'Madame Flan'),
       b = brainOf(sim, FLAN);
@@ -454,9 +457,20 @@ describe('a hunt', () => {
       expect([m.st, b.home], `at ${S.t.toFixed(1)} s, ${dist(m, p).toFixed(1)} m off`).toEqual(['roam', false]);
     }
     expect(clear()).toBe(true);
-    // Then the calm has her: she walks back to her mark and stands there.
-    while (k <= 1200 && m.st !== 'rest') stepFloor(sim, S, k++ * 100);
+    // The calm does not have her yet. They lie within 8 m of her mark, so for as long as they do she wanders, and
+    // every place she picks to walk to is 8 m from them.
+    b.spent = true; // and one a door has turned away does not wander blind: it has no mark to wait on
+    for (const end = k + 600; k < end; ) {
+      stepFloor(sim, S, k++ * 100);
+      expect([m.st, b.home, b.spent], `at ${S.t.toFixed(1)} s`).toEqual(['roam', false, false]);
+      if (b.dest) expect(dist(b.dest, p)).toBeGreaterThanOrEqual(8);
+    }
+    // Peeled up and gone to the booth: now she walks back to her mark and stands there.
+    const q = defined(S.players[1], 'g1');
+    Object.assign(p, { flat: false, flatBy: -1, x: q.x, z: q.z });
+    for (const end = k + 600; k < end && m.st !== 'rest'; ) stepFloor(sim, S, k++ * 100);
     expect(m.st).toBe('rest');
+    expect(dist(m, REST[FLAN])).toBeLessThan(1.5);
   });
 
   it('cannot catch the guard standing beside the one it caught for 1.8 s, and can after that', () => {

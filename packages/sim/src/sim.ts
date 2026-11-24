@@ -1328,7 +1328,12 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     // One walking away from the guard it caught gets clear of them first: AWAY off and out of their room, or where it
     // was going. In the dark it is not walking away from anyone.
     if (b.away && (S.out || (dist(m, b.away) >= AWAY && roomAt(m.x, m.z) !== roomAt(b.away.x, b.away.z)))) b.away = null;
-    const settle = (!S.stir || b.spent) && !S.out && !b.away;
+    // Nor does it go home to stand by them: with a guard it flattened still on the floor within AWAY of its mark,
+    // it keeps wandering, clear of them, until they are peeled up. One a door turned away has no mark to stand on
+    // either, so it is done with that and looks about again: spent, it would wander blind for as long as they lay there.
+    const body = b.away ?? (S.out ? undefined : S.players.find(p => p.flat && p.flatBy === m.i && dist(p, REST[m.i]) < AWAY));
+    if (body && !b.away) b.spent = false;
+    const settle = (!S.stir || b.spent) && !S.out && !body;
     if (settle !== b.home) {
       b.home = settle;
       b.dest = settle ? REST[m.i] : null;
@@ -1342,7 +1347,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       return;
     }
     if (!b.dest) {
-      b.dest = pickDest(sim, S, m, b, b.away ?? undefined);
+      b.dest = pickDest(sim, S, m, b, body);
       b.repath = 0;
     }
     speed = SPEED.roam;
