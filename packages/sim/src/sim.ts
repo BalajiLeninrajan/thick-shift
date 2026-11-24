@@ -150,10 +150,11 @@ const BANG_BOX: Record<DoorKey, number> = { L: 5, R: 7, V: 6 };
 // ducts. Stompy walks until it has a straight run, then charges. All but Biggs
 // run out of breath on a long hunt and slow down for a while (TIRE). With the
 // power out every one of them moves `out` times as fast and none of them tires.
-// Squish then outruns a sprinting guard on any night. Biggs is just short of a
-// sprint until night 4 and Stompy until night 5 (KEEN and RAMP below set the
-// night), and Flan outruns one only while nobody watches her. A sprint does not
-// last, so the crank is still the only way out. (Untuned against the harness.)
+// Squish then outruns a sprinting guard on any night. With no ceiling burnt,
+// Biggs is just short of a sprint until night 4 and Stompy until night 5 (KEEN
+// and RAMP below set the night), and Flan outruns one only while nobody watches
+// her. A sprint does not last, so the crank is still the only way out. (Untuned
+// against the harness.)
 const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6] satisfies PerMascot<number>, unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15, out: 2 };
 const KEEN: [number, number] = [0.78, 0.025]; // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
@@ -253,7 +254,9 @@ const LOCKER_NOISE: [number, number] = [6, 0.5],
 // door or on its way home does not listen.
 // A throw that hits a mascot does more (flyToys()). A toy whose flight passes within `hit` metres of one's edge stops
 // and drops at its feet, and that mascot is stunned for `stun` seconds, whatever it was doing, a charge included.
-// Only one standing switched off on its mark is missed. The toy sings where it dropped for the others to hear.
+// One standing switched off on its mark is missed, and so is one banging on a booth door, which a song does not turn
+// either. Nor does a toy hit through a wall or a shut door: the mascot has to be in reach of where the toy passes.
+// The toy sings where it dropped for the others to hear.
 // The toy has to have flown `armed` metres before it touches the mascot: one that reaches it sooner flies on past
 // and lands and sings as any other, so a guard about to be caught cannot stun their way out with a throw at their
 // own feet.
@@ -526,7 +529,7 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
     const b: Brain = { ...newBrain(sim), last: { x: m.x, z: m.z }, cool: m.i === STOMPY ? CHARGE_GAP : 0, noCatch: S.t + CATCH_GAP, woke: m.st !== 'rest' };
     if (m.st === 'rest') b.timer = rnd(sim, ...SPENT) * (1 - 0.5 * h);
     const prey = up.reduce<Guard | null>((a, p) => (!a || dist(m, p) < dist(m, a) ? p : a), null);
-    if (m.st === 'hunt' && prey) Object.assign(b, { tgt: prey.id, last: { x: prey.x, z: prey.z } });
+    if (m.st === 'hunt' && prey) Object.assign(b, { tgt: prey.id, last: { x: prey.x, z: prey.z }, saw: { x: prey.x, z: prey.z } });
     else if (['hunt', 'windup', 'charge', 'siege'].includes(m.st)) {
       m.st = 'search';
       b.timer = rnd(sim, 3, 6);
@@ -753,14 +756,15 @@ function sing(sim: Sim, S: NightState, x: number, z: number) {
   }
 }
 
-// How far p is from the line from a to b.
-function segDist(p: Point, a: Point, b: Point) {
+// The point on the line from a to b that is nearest p, and how far p is from the line.
+function segNear(p: Point, a: Point, b: Point): Point {
   const dx = b.x - a.x,
     dz = b.z - a.z,
     len2 = dx * dx + dz * dz,
     k = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / len2)) : 0;
-  return hypot(p.x - (a.x + dx * k), p.z - (a.z + dz * k));
+  return { x: a.x + dx * k, z: a.z + dz * k };
 }
+const segDist = (p: Point, a: Point, b: Point) => dist(p, segNear(p, a, b));
 
 // The thrown Mini Biggses still in the air. One whose flight this tick passes a mascot close enough hits it: the
 // toy drops at its feet and the mascot is stunned (TOY). Only the flight past TOY.armed metres from the hand counts.
@@ -782,15 +786,16 @@ function flyToys(sim: Sim, S: NightState, dt: number) {
     // Until it has flown TOY.armed metres it hits nothing. `armed` is the spot on its flight where that is.
     const live = flown >= TOY.armed,
       armed = live ? { x: s.x0 + ((to.x - s.x0) * TOY.armed) / flown, z: s.z0 + ((to.z - s.z0) * TOY.armed) / flown } : hand;
-    // The first one in its way: not one switched off on its mark, already stunned or wise to it, and with the power
-    // out not one that is after a guard. Nor one the toy was already touching before it got to `armed`: it flies on
-    // past that one.
+    // The first one in its way: not one switched off on its mark, banging on a door, already stunned or wise to it,
+    // and with the power out not one that is after a guard. Nor one the toy was already touching before it got to
+    // `armed`: it flies on past that one. Nor one with a wall or a shut door between it and the toy.
     let hit: Mascot | null = null;
     for (const [i, m] of S.m.entries()) {
       const b = brainOf(sim, i);
-      if (!live || !b.woke || m.st === 'rest' || m.st === 'stun' || S.t < b.wise) continue;
+      if (!live || !b.woke || m.st === 'rest' || m.st === 'stun' || m.st === 'siege' || S.t < b.wise) continue;
       if (S.out && (m.st === 'hunt' || m.st === 'windup' || m.st === 'charge')) continue;
-      if (segDist(m, from, to) > touch || segDist(m, hand, armed) <= touch) continue;
+      const at = segNear(m, from, to);
+      if (dist(m, at) > touch || segDist(m, hand, armed) <= touch || !reaches(at.x, at.z, m.x, m.z, S.doors)) continue;
       if (!hit || dist(m, from) < dist(hit, from)) hit = m;
     }
     if (hit) {

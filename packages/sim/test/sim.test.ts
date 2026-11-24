@@ -7,6 +7,7 @@ import {
   BATTERY_SPOTS,
   BOOTH,
   BOXES,
+  DOORWAYS,
   DUCTS,
   dist,
   HIDES,
@@ -611,9 +612,10 @@ describe('a hunt', () => {
   });
 
   it('gives up a hunt that is getting nowhere, and leaves that guard be for a while', () => {
-    // Flan in the Main Hall with the guard in plain sight across it, and something holding her where she stands.
+    // Flan in the Main Hall with the guard in plain sight across it (9 m, inside SIGHT.lit), and something holding
+    // her where she stands.
     const from = { x: 14, z: 18 };
-    const { sim, S, p, m, b } = stalk(FLAN, { x: 25, z: 18 }, from);
+    const { sim, S, p, m, b } = stalk(FLAN, { x: 23, z: 18 }, from);
     const step = (k: number) => {
       Object.assign(m, from);
       stepFloor(sim, S, k * 100);
@@ -693,9 +695,10 @@ describe('a hunt', () => {
 
   it('gives the same start when it reaches over to a guard at a box it cannot get nearer to', () => {
     const { sim, S, p, m } = busy();
-    // Two metres off, out of touch and inside its reach, and it has stood this far from them for two seconds.
+    // Two metres off, out of touch and inside its reach. It began reaching two seconds ago from as near as it has
+    // got (1.5 m), so the step it takes this tick does not count as getting nearer.
     m.z = p.z - 2;
-    brainOf(sim, FLAN).reach = { id: p.id, d: 2, x: p.x, z: p.z, t: S.t - 2 };
+    brainOf(sim, FLAN).reach = { id: p.id, d: 1.5, x: p.x, z: p.z, t: S.t - 2 };
     stepFloor(sim, S, 100);
     expect(dist(m, p)).toBeGreaterThan(1.25); // not a touch: it reached over
     expect(S.evs.filter(e => e.type === 'startle')).toHaveLength(1);
@@ -858,6 +861,42 @@ describe('a thrown Mini Biggs', () => {
     Object.assign(defined(S.m[0], 'Big Biggs'), along(6), { st: 'rest' });
     expect(lob()).toMatchObject(to);
     expect(S.evs.some(e => e.type === 'bonk')).toBe(false);
+  });
+
+  it('misses one banging on a booth door', () => {
+    const { sim, S, to, lob, along } = thrower();
+    const m = defined(S.m[0], 'Big Biggs');
+    Object.assign(m, along(6), { st: 'siege' });
+    Object.assign(brainOf(sim, 0), { key: 'L', timer: 1 });
+    expect(lob()).toMatchObject(to);
+    expect(m.st).toBe('siege');
+    expect(S.evs.some(e => e.type === 'bonk')).toBe(false);
+  });
+
+  it('does not hit a mascot through a shut door', () => {
+    // Thrown west across the booth at the left door, from 4.6 m off, at Biggs standing right behind the door.
+    const door = defined(
+      DOORWAYS.find(d => d.key === 'L'),
+      'the left door'
+    );
+    const [x0, z0, x1, z1] = door.rect,
+      z = (z0 + z1) / 2;
+    for (const shut of [true, false]) {
+      const { sim, S, p } = thrower();
+      const m = defined(S.m[0], 'Big Biggs');
+      Object.assign(p, { x: x1 + 4.6, z });
+      Object.assign(m, { x: x0 - 0.2, z, st: 'roam' });
+      S.doors.L = shut;
+      actFloor(sim, S, 'g0', { t: 'throw', yaw: -Math.PI / 2, d: TOY.range });
+      for (let k = 1; k <= 20; k++) stepFloor(sim, S, k * 100);
+      expect(defined(S.toys[0], 'the toy').heard).toBe(true);
+      // It may still hear the song through the door, which is another matter.
+      expect(
+        S.evs.some(e => e.type === 'bonk'),
+        shut ? 'door shut' : 'door open'
+      ).toBe(!shut);
+      expect(m.st === 'stun').toBe(!shut);
+    }
   });
 
   it('sings a hunting mascot off its guard, but not one charging, wise to it or hunting in the dark', () => {
