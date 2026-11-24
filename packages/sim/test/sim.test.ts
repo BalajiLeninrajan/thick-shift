@@ -582,6 +582,20 @@ describe('a hunt', () => {
     expect(S.t).toBeLessThan(1.5); // as soon as it may touch them, not after another start
   });
 
+  it('does not open a locker on a guard until 1.8 s after its last catch', () => {
+    const { sim, S, p } = hiding();
+    brainOf(sim, FLAN).noCatch = 1.8;
+    const found = () => S.evs.some(e => e.type === 'found');
+    let k = 1;
+    while (S.t < 1.65) {
+      stepFloor(sim, S, k++ * 100);
+      expect([found(), p.hid], `at ${S.t.toFixed(1)} s`).toEqual([false, 0]);
+    }
+    for (const end = k + 3; k < end; k++) stepFloor(sim, S, k * 100);
+    expect(found()).toBe(true);
+    expect(p).toMatchObject({ hid: -1, flat: false });
+  });
+
   // A night-1 guard standing still with the torch off, and one mascot already hunting them from `from`, the rest
   // kept on their marks. Stompy never charges.
   function stalk(i: MascotIndex, guard: Point, from: Point) {
@@ -706,6 +720,76 @@ describe('a hunt', () => {
     expect(p.flat).toBe(false);
   });
 
+  // A hunt of `seconds` with the hunter put back at `from` before every step, the guard in plain sight 9 m off with
+  // their torch on and pointed away. Returns how far each step took it.
+  function onTheSpot(i: MascotIndex, seconds: number, set?: (S: NightState) => void) {
+    const from = { x: 14, z: 18 };
+    const { sim, S, p, m, b } = stalk(i, { x: 23, z: 18 }, from);
+    p.on = true;
+    set?.(S);
+    const steps: number[] = [];
+    for (let k = 1; k <= seconds * 10; k++) {
+      Object.assign(m, from);
+      b.park = null; // it is put back every step, and is not to be taken for a hunt going nowhere (STUCK)
+      stepFloor(sim, S, k * 100);
+      steps.push(dist(m, from));
+    }
+    expect(m.st).toBe('hunt');
+    return { b, first: defined(steps[1], 'its second step'), last: defined(steps.at(-1), 'its last step') };
+  }
+
+  it('never tires Big Biggs, who does not run', () => {
+    // Twelve seconds: half as long again as empties anyone else's breath (TIRE.run, 8 s).
+    const flan = onTheSpot(FLAN, 12);
+    expect(flan.b.winded).toBe(true);
+    expect(flan.last / flan.first).toBeCloseTo(0.6, 2);
+    const biggs = onTheSpot(BIGGS, 12);
+    expect(biggs.b).toMatchObject({ puff: 1, winded: false });
+    expect(biggs.last).toBeCloseTo(biggs.first, 9);
+  });
+
+  it('tires nothing with the power out', () => {
+    const flan = onTheSpot(FLAN, 12, S => {
+      S.dev = { ...DEV_OFF, god: true }; // all four come in the dark, and the night is to last the twelve seconds
+      S.out = true;
+      S.power = 0;
+    });
+    expect(flan.b).toMatchObject({ puff: 1, winded: false });
+    expect(flan.last).toBeCloseTo(flan.first, 9);
+  });
+
+  it('costs Stompy no breath to charge', () => {
+    const from = { x: 19.5, z: 13 };
+    const { sim, S, m, b } = stalk(STOMPY, { x: 19.5, z: 24 }, from);
+    Object.assign(m, { st: 'charge', yaw: 0 });
+    Object.assign(b, { timer: 2.4, dir: { x: 0, z: 1 }, puff: 0.5 });
+    for (let k = 1; k <= 10; k++) stepFloor(sim, S, k * 100);
+    expect(m.st).toBe('charge');
+    expect(dist(m, from)).toBeGreaterThan(6); // a second at 7 m/s
+    expect(b.puff).toBeCloseTo(0.6, 9); // and a second of the ten that fill it
+    expect(b.winded).toBe(false);
+  });
+
+  it('does not reach over for a guard until 1.8 s after its last catch', () => {
+    // The corner past the trestle table again. Flan has got as near as she can and begun to reach.
+    const { sim, S, p, m, b } = stalk(FLAN, { x: 26.6, z: 11.86 }, { x: 24.3, z: 13.8 });
+    let k = 1;
+    while (k <= 60 && !b.reach) stepFloor(sim, S, k++ * 100);
+    const reach = defined(b.reach, 'the reach she has begun');
+    // She has been reaching long enough (GRAB_TIME, 1.2 s), and caught someone else this instant.
+    reach.t = S.t - 2;
+    const free = S.t + 1.8;
+    b.noCatch = free;
+    while (S.t < free - 0.15) {
+      stepFloor(sim, S, k++ * 100);
+      expect(p.flat, `at ${S.t.toFixed(1)} s`).toBe(false);
+    }
+    for (const end = k + 15; k < end && !p.flat; k++) stepFloor(sim, S, k * 100);
+    expect(p).toMatchObject({ flat: true, flatBy: FLAN });
+    expect(S.t).toBeGreaterThanOrEqual(free - 1e-9);
+    expect(dist(m, p)).toBeGreaterThan(F.CATCH);
+  });
+
   it('finds its way out of the ducts if it is not Squish', () => {
     // The east end of the ducts, where one that followed a guard in used to stand facing the wall.
     const { sim, S, m, b } = stalk(FLAN, spawnPoint(0), { x: 25.18, z: 34.26 });
@@ -819,6 +903,84 @@ describe('a hunt', () => {
     }
     expect(S.evs.filter(e => e.type === 'spot' && e.x.i === STOMPY).length).toBeGreaterThan(0);
     expect(S.evs.filter(e => e.type === 'roar')).toHaveLength(0);
+  });
+});
+
+describe('a crew', () => {
+  // Night 1 for n guards with nothing stirring and no fault due.
+  function quiet(n: number) {
+    const { sim, S } = start(1, n, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    sim.nextFault = 1e9;
+    return { sim, S };
+  }
+  // What one step of a tenth of a second takes off the power, over what a night with nothing wrong takes (the
+  // lights, 0.005).
+  function spent(n: number, set: (sim: Sim, S: NightState) => void) {
+    const { sim, S } = quiet(n);
+    set(sim, S);
+    stepFloor(sim, S, 100);
+    return 100 - S.power - 0.005;
+  }
+  const faults = (k: number) => (_sim: Sim, S: NightState) => {
+    for (let i = 0; i < k; i++) S.faults[i] = { k: 0, at: 0, burnt: false };
+  };
+
+  it('gets a fault half as often again for each guard past the first', () => {
+    // With every draw 0.5 the gap to the next fault is the usual one: 50 s alone at midnight on night 1.
+    const gap = (n: number) => {
+      const { sim, S } = quiet(n);
+      sim.rng = () => 0.5;
+      sim.nextFault = 0;
+      stepFloor(sim, S, 100);
+      expect(S.faults.filter(Boolean)).toHaveLength(1);
+      return sim.nextFault;
+    };
+    const alone = gap(1);
+    expect(alone).toBeCloseTo(50, 1);
+    expect(alone / gap(2)).toBeCloseTo(1.5, 9);
+    expect(alone / gap(4)).toBeCloseTo(2.5, 9);
+  });
+
+  it('pays two thirds of a shut door as two and two fifths as four, and all of it alone', () => {
+    const doors = (n: number) => spent(n, (_sim, S) => Object.assign(S.doors, { L: true, V: true, R: true }));
+    expect(doors(1)).toBeCloseTo(3 * 0.18 * 0.1, 9); // DRAIN.door a second for each, as it always was
+    expect(doors(2) / doors(1)).toBeCloseTo(2 / 3, 6);
+    expect(doors(4) / doors(1)).toBeCloseTo(2 / 5, 6);
+  });
+
+  it('pays for a bang on a door the same way', () => {
+    // Flan at the booth's left door, shut, with her next bang due. What the shut door itself draws is taken off.
+    const bang = (n: number) => {
+      const shut = (_sim: Sim, S: NightState) => {
+        S.doors.L = true;
+      };
+      const all = spent(n, (sim, S) => {
+        shut(sim, S);
+        Object.assign(defined(S.m[FLAN], 'Madame Flan'), { x: 13.6, z: 40.5, yaw: Math.PI / 2, st: 'siege' });
+        Object.assign(brainOf(sim, FLAN), { woke: true, key: 'L', timer: 0, was: 'siege' });
+      });
+      return all - spent(n, shut);
+    };
+    // BANG_COST is 2.5. A fault the bang breaks leaks a ten-thousandth of a point in the step.
+    expect(bang(1)).toBeCloseTo(2.5, 2);
+    expect(bang(2)).toBeCloseTo((2.5 * 2) / 3, 2);
+    expect(bang(4)).toBeCloseTo((2.5 * 2) / 5, 2);
+  });
+
+  it("has two and a half open faults for a lone guard's one before they pile up", () => {
+    const one = spent(1, faults(1));
+    expect(one).toBeGreaterThan(0);
+    // Alone, each open fault past the first makes all of them leak FAULT.pile (0.4) more, as it always did.
+    expect(spent(1, faults(2))).toBeCloseTo(2 * 1.4 * one, 9);
+    expect(spent(1, faults(3))).toBeCloseTo(3 * 1.8 * one, 9);
+    // Four guards share a leak, and get two and a half faults for a lone guard's one. Two open are within that;
+    // five are twice it, and pile like a lone guard's two.
+    const each = spent(4, faults(1));
+    expect(each).toBeCloseTo(one / 4, 9);
+    expect(spent(4, faults(2))).toBeCloseTo(2 * each, 9);
+    expect(spent(4, faults(5))).toBeCloseTo(5 * 1.4 * each, 9);
   });
 });
 
