@@ -160,11 +160,11 @@ const KEEN: [number, number] = [0.78, 0.025]; // the share of those speeds they 
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
 const LIT_SPEED = [0, 0.2, 0.4] as const;
 const ROT = { night: 0.12, hour: 0.066, ire: 0.25 };
-// What a bang on a shut door adds to m.ire, and the seconds in a torch beam that add 1. Tuned so torchlight is what
-// rots them: on night 1, about 25 s of beam on one mascot brings out stage 1 and 35 to 50 s stage 2, so a guard who
-// lights up everything sees two of them at stage 2 before 6 AM (and the torch holds those two less well).
+// What a bang on a shut door adds to m.ire, and the seconds in a torch beam that add 1. Torchlight is what rots them:
+// on night 1, about 40 s of beam on one mascot at midnight brings out stage 1 and 80 s stage 2, less later in the
+// night. At 18 it was 25 s and 35 to 50 s, which rotted them faster than players liked.
 const BANG_IRE = 0.1,
-  GLARE_PER_IRE = 18;
+  GLARE_PER_IRE = 30;
 const FLAT_BAT = 0.5; // what is left of a torch its guard was flattened on top of
 // Metres one that has just caught a guard puts between the body and where it wanders next, so it does not stand over
 // them waiting for whoever comes to peel them up. It makes that walk before a calm sends it home (b.away).
