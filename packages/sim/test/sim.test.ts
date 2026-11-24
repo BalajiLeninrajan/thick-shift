@@ -2,7 +2,7 @@
 // night up from S alone (adoptFloor), starting the run again (restartFloor) and a guard's actions (actFloor).
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
-import { FLAN } from '../src/config.ts';
+import { FLAN, STOMPY } from '../src/config.ts';
 import { BATTERY_SPOTS, BOXES, dist, HIDES, PANELS, REST, spawnPoint, TOY_BOX } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
 import { DEV_OFF } from '../src/session.ts';
@@ -367,5 +367,84 @@ describe('a hunt', () => {
     for (let k = 2; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
     expect(p.flat).toBe(true);
     expect(S.t).toBeLessThan(1.5); // as soon as it may touch them, not after another start
+  });
+
+  // A guard with their hands in breaker box 0, which has a fault, and Madame Flan a step behind them, hunting.
+  function busy() {
+    const { sim, S } = start(1, 1, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    const box = defined(BOXES[0], 'box 0'),
+      p = defined(S.players[0], 'g0'),
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
+    S.faults[0] = { k: 0, at: 0, burnt: false };
+    // The box is set in a wall: the guard stands a metre in front of it, and Flan comes up behind them.
+    Object.assign(p, { x: box.x, z: box.z - 1, on: false });
+    const hands = (act: 'fix' | '') => actFloor(sim, S, 'g0', { t: 'p', x: p.x, z: p.z, yaw: 0, pitch: 0, on: false, sp: false, act });
+    hands('fix');
+    Object.assign(m, { x: p.x, z: p.z - 0.8, st: 'hunt' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z } });
+    return { sim, S, p, m, hands };
+  }
+
+  it('breaks off a fix when it reaches the guard, and gives them a split second before it can touch them', () => {
+    const { sim, S, p, m } = busy();
+    stepFloor(sim, S, 100);
+    expect(S.evs.filter(e => e.type === 'startle')).toHaveLength(1);
+    expect(p).toMatchObject({ act: '', flat: false });
+    expect(S.faults[0]).toMatchObject({ burnt: false }); // the fault is as it was
+    expect(m.st).toBe('hunt');
+    for (let k = 2; k <= 6; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(false); // 0.6 s on, standing still within reach
+    for (let k = 7; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(true); // and then it has them
+  });
+
+  it('gives no second start to a guard who puts their hands straight back in the box', () => {
+    const { sim, S, p, hands } = busy();
+    stepFloor(sim, S, 100);
+    hands('');
+    hands('fix');
+    for (let k = 2; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(true);
+    expect(S.t).toBeLessThan(1.5);
+    expect(S.evs.filter(e => e.type === 'startle')).toHaveLength(1);
+  });
+
+  it('gives no start to a guard who only says their hands are in a box', () => {
+    const { sim, S, p } = busy();
+    S.faults[0] = null;
+    stepFloor(sim, S, 100);
+    expect(p.flat).toBe(true);
+  });
+
+  it('gives the same start when it reaches over to a guard at a box it cannot get nearer to', () => {
+    const { sim, S, p, m } = busy();
+    // Two metres off, out of touch and inside its reach, and it has stood this far from them for two seconds.
+    m.z = p.z - 2;
+    brainOf(sim, FLAN).reach = { id: p.id, d: 2, x: p.x, z: p.z, t: S.t - 2 };
+    stepFloor(sim, S, 100);
+    expect(dist(m, p)).toBeGreaterThan(1.25); // not a touch: it reached over
+    expect(S.evs.filter(e => e.type === 'startle')).toHaveLength(1);
+    expect(p).toMatchObject({ act: '', flat: false });
+  });
+
+  it("spends Stompy's charge when the charge ends at a guard with their hands in a box", () => {
+    const { sim, S, p } = busy();
+    const flan = defined(S.m[FLAN], 'Madame Flan'),
+      stompy = defined(S.m[STOMPY], 'Stompy'),
+      b = brainOf(sim, STOMPY);
+    Object.assign(flan, { ...REST[FLAN], st: 'rest' });
+    brainOf(sim, FLAN).woke = false;
+    // Mid-charge, straight at the guard's back from just out of touch, with nothing left on its charge gap.
+    Object.assign(stompy, { x: p.x, z: p.z - 1.8, yaw: 0, st: 'charge' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z }, timer: 2.4, cool: 0, dir: { x: 0, z: 1 } });
+    stepFloor(sim, S, 100);
+    expect(S.evs.filter(e => e.type === 'startle')).toHaveLength(1);
+    expect(p.flat).toBe(false);
+    expect(stompy.st).toBe('hunt');
+    expect(b.cool).toBeGreaterThanOrEqual(9.5); // CHARGE_GAP, 10 s, less the ticks since
+    expect(b.dir).toBeNull();
   });
 });

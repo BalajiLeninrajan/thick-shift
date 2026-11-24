@@ -474,6 +474,11 @@ export function createSound() {
       into(r.mascots[x.i].e.in, SPOT[x.i]);
       if (mine(x.id)) sample('hit_long', { gain: 0.3, rate: 1.2 }); // it is you it has seen
     },
+    // Caught at a breaker box: its own noise, and the same hit as when it first sees you.
+    startle(x: EventData['startle'], _S: State, r: Rig): void {
+      into(r.mascots[x.i].e.in, SPOT[x.i]);
+      if (mine(x.id)) sample('hit_long', { gain: 0.3, rate: 1.2 });
+    },
     roar(x: EventData['roar'], _S: State, r: Rig): void {
       into(r.mascots[x.i].e.in, () => {
         sample('scare_growl', { rate: 0.75, gain: 1 }) || noise(1, 0.6, { band: 300 });

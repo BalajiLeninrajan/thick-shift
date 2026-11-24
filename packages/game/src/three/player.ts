@@ -476,6 +476,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     resume,
     call,
     watchNext,
+    letGo,
     // Put the guard where the room says they are: the start of a night, or after joining.
     reset(mine: Player): void {
       letGo();

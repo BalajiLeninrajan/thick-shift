@@ -51,11 +51,16 @@ export interface Guard extends Joined {
   flatBy: MascotIndex | -1; // the mascot that flattened them, or -1
   sp: boolean; // sprinting
   act: GuardAct;
-  safe: number; // S.t before which no mascot can see or flatten them: just after a peel, or a mascot opening their locker
+  // S.t before which no mascot can see or flatten them: just after a peel, a mascot opening their locker, or one
+  // catching them at a breaker box
+  safe: number;
   callAt: number; // S.t before which their next call for help is ignored
   hid: number; // the locker (HIDES index) they are in, or -1
-  shaky: number; // S.t before which getting into a locker is loud: just after a mascot pulled them out of one
+  // S.t before which their hands shake: just after a mascot pulled them out of a locker or caught them at a breaker
+  // box. Getting into a locker is loud, and a mascot that reaches them at either gives no second start.
+  shaky: number;
   inAt: number; // S.t they got into the locker they are in
+  fixAt: number; // S.t they last put their hands in a breaker box
   toy: boolean; // holding their Mini Biggs
 }
 // A guard in S.players at any time: a guard who joined after the night began has only their id and name until the
@@ -144,6 +149,7 @@ export interface EventData {
   flat: { id: string; by: MascotIndex; x: number; z: number };
   spot: { i: MascotIndex; id: string; x: number; z: number };
   found: { i: MascotIndex; id: string; h: number; x: number; z: number }; // h: the locker
+  startle: { i: MascotIndex; id: string; x: number; z: number }; // caught at a breaker box, and let run
   check: { i: MascotIndex; h: number; x: number; z: number };
   crash: { x: number; z: number };
   bang: DoorKey;

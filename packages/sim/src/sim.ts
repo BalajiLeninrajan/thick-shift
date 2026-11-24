@@ -198,6 +198,9 @@ const RAMP = [0, 1, 2, 3.15, 4.3] as const;
 // that locker has them at once, or stepping straight back in would start the same moment over. Nothing tells the
 // guard this. Not tuned: the balance harness's `hides`
 // scenarios only show that a guard who uses lockers does about as well as one who does not, and sitting in one loses.
+// A guard caught with their hands in a breaker box gets the same: the fix is broken off, they have ESCAPE.head
+// seconds to run, and their hands shake for ESCAPE.shaky after. Shaking hands earn no second start, at a box or in
+// a locker, so the fix has to have begun after the shaking stopped. The harness's `stand at a box` scenarios lose.
 const SNIFF = { near: 1.6, time: 3 };
 const ESCAPE = { head: 0.6, shaky: 8 };
 // One that loses the guard it was hunting checks the lockers near where it last knew they were: each within
@@ -386,6 +389,7 @@ function placeGuard(p: Player, i: number): asserts p is Guard {
     hid: -1,
     shaky: 0,
     inAt: 0,
+    fixAt: 0,
     toy: true,
   });
 }
@@ -783,10 +787,36 @@ function endNight(S: NightState, by: MascotIndex | -1) {
 function catchGuards(S: NightState, m: Mascot, b: Brain) {
   for (const p of outside(S))
     if (S.t >= p.safe && dist(m, p) < F.CATCH && reaches(m.x, m.z, p.x, p.z, S.doors)) {
-      flatten(S, p, m, b);
+      catchOne(S, p, m, b);
       return true;
     }
   return false;
+}
+// It has its hands on this guard. One busy in a breaker box, whose hands are not still shaking from the last time,
+// gets a start. Anyone else is flattened. Every catch of a guard on the floor comes through here.
+function catchOne(S: NightState, p: Guard, m: Mascot, b: Brain) {
+  if (fixing(S, p) && p.fixAt >= p.shaky) startle(S, p, m, b);
+  else flatten(S, p, m, b);
+}
+// Hands in a breaker box: the client says so, and there is an open fault in reach to have them in.
+const fixing = (S: NightState, p: Guard) => p.act === 'fix' && BOXES.some((box, i) => S.faults[i] && dist(p, box) < F.REACH);
+// A split second's start on the mascot that has just reached them, as openLockers gives a guard it pulls out.
+function headStart(S: NightState, p: Guard, m: Mascot, b: Brain) {
+  p.safe = Math.max(p.safe, S.t + ESCAPE.head);
+  p.shaky = S.t + ESCAPE.shaky;
+  Object.assign(b, { tgt: p.id, last: { x: p.x, z: p.z }, lost: 0, near: Infinity, notice: ESCAPE.head, home: false, repath: 0, path: [] });
+  m.st = 'hunt';
+}
+// It reached a guard who was busy in a breaker box. They let go of the box, and it is after them.
+function startle(S: NightState, p: Guard, m: Mascot, b: Brain) {
+  p.act = '';
+  emit(S, 'startle', { i: m.i, id: p.id, x: p.x, z: p.z });
+  // A charge that ends here is spent, like one that runs out or hits a wall: Stompy waits before the next.
+  if (m.st === 'windup' || m.st === 'charge') {
+    b.cool = Math.max(b.cool, CHARGE_GAP);
+    b.dir = null;
+  }
+  headStart(S, p, m, b);
 }
 
 // It has seen this guard. The first time, it stops and stares before it comes.
@@ -838,10 +868,7 @@ function openLockers(S: NightState, m: Mascot, b: Brain, dt: number) {
   }
   // Out on the floor in front of the doors, with a split second's start on it.
   p.hid = -1;
-  p.safe = Math.max(p.safe, S.t + ESCAPE.head);
-  p.shaky = S.t + ESCAPE.shaky;
-  Object.assign(b, { tgt: p.id, last: { x: p.x, z: p.z }, lost: 0, near: Infinity, notice: ESCAPE.head, home: false, repath: 0, path: [] });
-  m.st = 'hunt';
+  headStart(S, p, m, b);
   return true;
 }
 
@@ -1132,7 +1159,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     holds = (p: Guard | null) => !!p && !!r && r.id === p.id && dist(p, r) <= 0.5;
   if (tucked && r && holds(tucked) && near >= r.d - 0.3) {
     if (S.t - r.t > GRAB_TIME) {
-      flatten(S, tucked, m, b);
+      catchOne(S, tucked, m, b);
       return;
     }
   } else if (tucked) b.reach = { id: tucked.id, d: near, x: tucked.x, z: tucked.z, t: S.t };
@@ -1267,7 +1294,9 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
     p.on = !!a.on && p.bat > 0 && !p.flat;
     p.ph = !!a.ph && p.bat > 0 && !p.flat; // the phone up, reading the map
     p.sp = !!a.sp && !p.flat && !p.ph;
-    p.act = p.flat ? '' : ['crank', 'charge', 'fix'].includes(a.act) ? a.act : ''; // fix: hands in a breaker box
+    const act = p.flat ? '' : ['crank', 'charge', 'fix'].includes(a.act) ? a.act : ''; // fix: hands in a breaker box
+    if (act === 'fix' && p.act !== 'fix') p.fixAt = S.t;
+    p.act = act;
     return;
   }
   if (a.t === 'call') {

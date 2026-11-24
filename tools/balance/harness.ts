@@ -514,6 +514,8 @@ function walk(S: NightState, bot: Bot, goal: Point, sprint?: boolean, face?: num
 function act(S: NightState, bot: Bot): void {
   const w = bot.want,
     before = { x: bot.x, z: bot.z };
+  // Caught at a breaker box and let run: the sim broke the fix off, and its minigame starts over.
+  if (bot.act === 'fix' && guardOf(bot).act !== 'fix') bot.holding = null;
   bot.sp = false;
   bot.act = '';
   let goal = w.goal,
@@ -1166,6 +1168,19 @@ const DEGENERATE = {
       bot.want.use = hideUse(i, h.at);
     },
   }),
+  // Hands in the nearest box with an open fault, never finishing and never leaving, for the start a mascot gives a
+  // guard it catches there.
+  box: (): Policy => ({
+    skill: SKILL.competent,
+    think(S, bot) {
+      const at = nearest(
+          bot,
+          M.BOXES.filter((_, i) => S.faults[i])
+        ),
+        i = at ? M.BOXES.indexOf(at) : -1;
+      if (at) bot.want.use = { what: 'fix', i, at, hold: Infinity, key: `fix${i}` };
+    },
+  }),
   // Crank the generator and nothing else, torch on whatever turns up.
   cranker: (): Policy => ({
     skill: SKILL.competent,
@@ -1571,4 +1586,6 @@ bad('x4 sit in the ducts', 4, all(DEGENERATE.hole({ x: 20, z: 34.75, dx: 1.2 }))
 bad('x2 stand in the vent doorway', 2, all(DEGENERATE.hole({ x: 22.9, z: 36.25, dx: 0, dz: 0.2 })));
 bad('x1 sit in a locker all night', 1, all(DEGENERATE.locker()));
 bad('x4 sit in lockers all night', 4, all(DEGENERATE.locker()));
+bad('x1 stand at a box, hands in', 1, all(DEGENERATE.box()));
+bad('x4 stand at a box, hands in', 4, all(DEGENERATE.box()));
 bad('x2 stand in the duct mouth', 2, all(DEGENERATE.hole({ x: 15.9, z: 33.25, dx: 0, dz: 0.2 })));
