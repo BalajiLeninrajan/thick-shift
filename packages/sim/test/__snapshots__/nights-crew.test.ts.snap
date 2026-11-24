@@ -2,85 +2,85 @@
 
 exports[`crew nights > crew of 2 competent n2, seed 1 1`] = `
 {
-  "burnt": 4,
-  "events": "arrive 1, bang 3, bat 1, bonk 1, burn 4, call 4, calm 6, check 1, crash 1, door 48, fault 15, fix 10, flat 1, fumble 1, grab 4, hour 6, roar 1, spot 15, stir 7, toy 6, win 1",
-  "eventsDigest": "f2615851e1ee8909",
+  "burnt": 2,
+  "events": "bat 1, bonk 1, burn 2, call 3, calm 2, door 16, fault 5, fix 4, flat 2, grab 2, hour 2, scare 1, spot 4, stir 3, toy 4",
+  "eventsDigest": "dc8393c04f88c9b4",
   "failures": [],
-  "fixed": 10,
-  "flats": 1,
-  "outcome": "win",
+  "fixed": 4,
+  "flats": 2,
+  "outcome": "dead",
   "peels": 0,
-  "power": "5.624",
-  "stateDigest": "a3352b3b2c091464",
-  "t": "420.000",
-  "ticks": 4200,
+  "power": "66.646",
+  "stateDigest": "d936db192b795f7d",
+  "t": "182.400",
+  "ticks": 1824,
 }
 `;
 
 exports[`crew nights > crew of 3 competent n4, seed 1 1`] = `
 {
-  "burnt": 9,
-  "events": "arrive 3, bang 9, bat 1, burn 9, call 37, calm 3, check 1, crash 1, door 25, fault 14, fix 4, flat 3, fumble 1, hour 3, out 1, roar 1, scare 1, spot 13, stir 4, toy 3",
-  "eventsDigest": "5cdb1bb6c30aea63",
+  "burnt": 7,
+  "events": "arrive 4, bang 16, bat 1, burn 7, call 76, calm 4, crash 1, door 35, fault 18, fix 6, flat 3, fumble 1, hour 3, out 1, roar 2, scare 1, spot 16, stir 5, toy 3",
+  "eventsDigest": "50998a7699caddb2",
   "failures": [],
-  "fixed": 4,
+  "fixed": 6,
   "flats": 3,
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "e1ee97862a928566",
-  "t": "248.100",
-  "ticks": 2481,
+  "stateDigest": "9bd11956dad3f350",
+  "t": "275.800",
+  "ticks": 2758,
 }
 `;
 
 exports[`crew nights > crew of 4 careless n1, seed 1 1`] = `
 {
   "burnt": 0,
-  "events": "bat 2, call 39, calm 1, fault 6, fix 2, flat 4, hour 1, scare 1, spot 6, stir 2",
-  "eventsDigest": "ca4268eeb8e8c9df",
+  "events": "bat 3, call 30, calm 1, fault 6, fix 5, flat 6, hour 1, peel 2, scare 1, spot 10, stir 2",
+  "eventsDigest": "d60df2eb298dd82e",
   "failures": [],
-  "fixed": 2,
-  "flats": 4,
+  "fixed": 5,
+  "flats": 6,
   "outcome": "dead",
-  "peels": 0,
-  "power": "92.138",
-  "stateDigest": "9a72af7765c6445d",
-  "t": "129.100",
-  "ticks": 1291,
+  "peels": 2,
+  "power": "92.903",
+  "stateDigest": "a680e64413d2d42b",
+  "t": "136.800",
+  "ticks": 1368,
 }
 `;
 
 exports[`crew nights > crew of 4 competent n5, seed 2 1`] = `
 {
   "burnt": 10,
-  "events": "arrive 4, bang 16, bat 2, bonk 3, burn 10, call 88, calm 3, check 3, crash 1, door 29, fault 17, fix 5, flat 7, grab 2, hour 3, out 1, peel 3, roar 2, scare 1, spot 17, stir 4, toy 6",
-  "eventsDigest": "f5bb33b4bc6b1867",
+  "events": "arrive 3, bang 12, bat 4, bonk 5, burn 10, call 78, calm 4, check 1, crash 3, door 38, fault 24, fix 12, flat 6, fumble 1, grab 4, hour 4, out 1, peel 2, roar 5, scare 1, spot 35, stir 5, toy 8",
+  "eventsDigest": "62dae083c63d2697",
   "failures": [],
-  "fixed": 5,
-  "flats": 7,
+  "fixed": 12,
+  "flats": 6,
   "outcome": "dead",
-  "peels": 3,
+  "peels": 2,
   "power": "0.000",
-  "stateDigest": "73d7119c3bde4f7d",
-  "t": "259.800",
-  "ticks": 2598,
+  "stateDigest": "11546d2c56a0efec",
+  "t": "335.700",
+  "ticks": 3357,
 }
 `;
 
 exports[`crew nights > crew of 6 competent n1, seed 3 1`] = `
 {
-  "burnt": 5,
-  "events": "bat 5, bonk 5, burn 5, call 77, calm 3, check 2, door 23, fault 20, fix 14, flat 8, grab 7, hour 4, peel 2, scare 1, spot 24, stir 4, toy 12",
-  "eventsDigest": "0177f34d6f2a364a",
+  "burnt": 11,
+  "events": "arrive 4, bang 12, bat 10, bonk 8, burn 11, call 49, calm 5, check 2, door 54, fault 32, fix 29, flat 1, fumble 5, grab 9, hour 6, peel 1, spot 31, stir 6, toy 13, win 1",
+  "eventsDigest": "fb7708a1c859482f",
   "failures": [],
-  "fixed": 14,
-  "flats": 8,
-  "outcome": "dead",
-  "peels": 2,
-  "power": "63.904",
-  "stateDigest": "502fe8ef0192a20a",
-  "t": "281.000",
-  "ticks": 2810,
+  "fixed": 29,
+  "flats": 1,
+  "outcome": "win",
+  "peels": 1,
+  "power": "65.995",
+  "stateDigest": "583b314a42d2359f",
+  "t": "420.000",
+  "ticks": 4200,
 }
 `;
