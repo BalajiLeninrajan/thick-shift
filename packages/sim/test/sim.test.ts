@@ -634,6 +634,33 @@ describe('a hunt', () => {
     expect(p.flat).toBe(false);
   });
 
+  it('does not count the time it stood banging on a door as getting nowhere', () => {
+    // Flan in the West Hall after a guard in the booth, who stands beside the left door where its wall hides them.
+    // The booth's doors are shut.
+    const { sim, S, p, m, b } = stalk(FLAN, { x: 15.6, z: 37.2 }, { x: 11, z: 40.5 });
+    Object.assign(S.doors, { L: true, V: true, R: true });
+    let k = 1;
+    while (k <= 30 && m.st !== 'siege') stepFloor(sim, S, k++ * 100);
+    expect([m.st, b.key]).toEqual(['siege', 'L']);
+    // She is kept banging for ten seconds, longer than a hunt may get nowhere (STUCK.time, 8 s).
+    for (const end = k + 100; k < end; k++) {
+      b.bangs = 0;
+      stepFloor(sim, S, k * 100);
+    }
+    expect(m.st).toBe('siege');
+    // The door opens on nobody she can see. A step later the guard walks into the doorway with their torch on.
+    S.doors.L = false;
+    stepFloor(sim, S, k++ * 100);
+    expect(m.st).toBe('hunt');
+    Object.assign(p, { x: 18, z: 40.5, on: true });
+    for (const end = k + 10; k < end; k++) {
+      stepFloor(sim, S, k * 100);
+      expect(m.st, `at ${S.t.toFixed(1)} s`).toBe('hunt');
+      expect(b).toMatchObject({ tgt: 'g0', shun: null });
+    }
+    expect(p.flat).toBe(false);
+  });
+
   it('finds its way out of the ducts if it is not Squish', () => {
     // The east end of the ducts, where one that followed a guard in used to stand facing the wall.
     const { sim, S, m, b } = stalk(FLAN, spawnPoint(0), { x: 25.18, z: 34.26 });

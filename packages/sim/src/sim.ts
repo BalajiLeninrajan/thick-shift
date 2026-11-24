@@ -1104,6 +1104,9 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     b.checks = m.st === 'search' && b.was === 'hunt' ? lockersNear(sim, b.last) : m.st === 'search' ? b.checks : [];
     b.was = m.st;
     b.since = S.t;
+    // Getting nowhere (STUCK) is timed from here: what it stood through banging on a door or winding up is not held
+    // against the hunt that follows.
+    b.park = null;
   }
   const ductGuest = m.i === SQUISH ? up.find(p => inDucts(p) && S.t >= p.safe && !shuns(S, b, p)) : null;
 
