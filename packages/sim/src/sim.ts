@@ -167,12 +167,14 @@ const STARE = 5; // seconds one waiting its turn stands and stares before it goe
 const CHARGE_GAP = 10; // seconds before Stompy can charge again
 export const WINDUP = { time: 1.5, commit: 0.5 }; // Stompy's wind-up before a charge, and how much of it at the end is spent not turning
 const SEARCH_MAX = 14; // seconds one spends looking for what it heard or lost before it gives that up
-// How far a mascot sees a guard, in metres: one with their torch on, one in a lit room with it off, and one in a dark
-// room with it off. Past `near` metres it only sees within `cone` radians either side of the way it faces, and closer
-// than that it notices a guard behind it too. Walls and shut doors block all of it (sees). The first two were 17 and
-// 12, which spotted a guard from across a hall. Picked by hand to let a guard get closer, not tuned against the
-// harness, which they barely move.
-const SIGHT = { torch: 10, lit: 7.5, dark: 5, near: 2.5, cone: 1.2 };
+// How far a mascot sees a guard, in metres. `torch` is for a guard with their torch on, `lit` for one in a lit room
+// with it off and `dark` for one in a dark room with it off. Past `near` metres it only sees within `cone` radians
+// either side of the way it faces, and closer than that it notices a guard behind it too. Walls and shut doors block
+// all of it (sees). The first two were 17 and 12, which spotted a guard from across a hall. They are 14 and 10 so that
+// a guard can get closer, and no shorter because a mascot at the bend of either side hall should see a torch in the
+// booth, which is about 14.5 m from the bend: at 10 and 7.5 it saw nothing in there. Picked by hand, not tuned
+// against the harness.
+const SIGHT = { torch: 14, lit: 10, dark: 5, near: 2.5, cone: 1.2 };
 const NOTICE = 1.2; // seconds a mascot stands and stares after spotting a guard, before it moves
 // Seconds a mascot keeps knowing where its guard is after losing sight of them: Biggs, and the rest. Biggs's also
 // covers a guard stepping into a locker: get in within this long of leaving his sight and he knows which one. It was 8
