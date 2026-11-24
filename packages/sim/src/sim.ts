@@ -821,6 +821,12 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
     const fits = walkable(goal.x, goal.z, MASCOT_R, S.doors) && (ducts || roomAt(goal.x, goal.z) !== DUCTS);
     const to = fits ? goal : (standNear(goal.x, goal.z, MASCOT_R, S.doors, ducts) ?? goal);
     const r = route(m.x, m.z, to.x, to.z, { doors: S.doors, ducts });
+    // It asks again while it walks, and from a step past a waypoint the answer can begin by sending it back there:
+    // clear() looks every 0.35 m, so a line that brushes the corner of a prop is clear from one end and not from a
+    // step along it. If the new way goes through the point it was already making for, it carries on to that.
+    const [was] = b.path,
+      on = was ? r.path.findIndex(q => dist(q, was) < 0.01) : -1;
+    if (on > 0) r.path.splice(0, on);
     b.path = r.path;
     b.key = r.blocked || null;
     b.repath = eager ? 0.35 : 1.5;

@@ -405,6 +405,14 @@ describe('a hunt', () => {
     }
   });
 
+  it('does not turn back to a waypoint it has just passed', () => {
+    // Backstage, the corner behind the crate. The way from the middle of the room brushes the costume rack, and a
+    // mascot that asked again a step along it was sent back to the middle every time.
+    const { sim, S, p } = stalk(STOMPY, { x: 39.62, z: 2.16 }, { x: 34, z: 6.5 });
+    expect(until(sim, S, p, 20)).toBeLessThan(8);
+    expect(p.flat).toBe(true);
+  });
+
   // A guard with their hands in breaker box 0, which has a fault, and Madame Flan a step behind them, hunting.
   function busy() {
     const { sim, S } = start(1, 1, 1);
