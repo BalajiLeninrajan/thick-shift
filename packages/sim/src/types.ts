@@ -250,7 +250,7 @@ export interface Brain {
   park: (Point & { t: number }) | null; // where a hunt that is getting nowhere has been standing, and since when
   away: Point | null; // where the guard it has just caught lies, while it is walking away from them
   shun: { id: string; until: number } | null; // the guard it gave up on, and the S.t until which it leaves them be
-  barred: number; // S.t before which Squish does not pick the booth, after a shut door turned it away (BARRED)
+  barred: number; // S.t before which it does not wander to the booth, after a shut door turned it away (BARRED)
   noCatch: number; // S.t before which it will not catch another guard, having just caught one
   near: number; // how close it has come to where it last saw its guard since it lost them
   nearAt: number; // and when it last got closer

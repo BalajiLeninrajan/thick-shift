@@ -214,8 +214,9 @@ const STUCK = { within: 1, time: 8, shun: 10 };
 const STIR: [number, number] = [28, 42],
   CALM: [number, number] = [24, 38];
 const SPENT: [number, number] = [18, 30]; // seconds one stays put after a shut door has turned it away
-// Seconds after a shut door turned it away before Squish picks the booth to wander to again. Without it, opening
-// the vent once it had gone brought it straight back: home, SPENT, then the booth again, half a minute round.
+// Seconds after a shut door turned it away before one picks the booth to wander to again (pickDest). Without it,
+// opening the vent once Squish had gone brought it straight back: home, SPENT, then the booth again, half a minute
+// round.
 const BARRED = 60;
 // How many nights' worth of wear each night has had, for rot, heat, speed and power drain. Night 5 counts for more
 // than one step past night 4: with a plain 4, a crew of three won 18% of night 5s against a target of 10.
@@ -329,6 +330,8 @@ const pack = (S: NightState) => (S.out ? 4 : 1 + Math.floor(heat(S) * 1.2 + (S.p
 const roster = (S: NightState) => (S.out ? 4 : 2 + Math.floor(heat(S) * 3.3 + (S.players.length - 1) * 0.75));
 // The states in which a mascot is coming for a guard.
 export const COMING: readonly MascotState[] = ['hunt', 'windup', 'charge'];
+// How many are taking a turn against the guards (pack): coming for one, or banging on a booth door.
+const onGuards = (S: NightState) => S.m.filter(o => COMING.includes(o.st) || o.st === 'siege').length;
 const inDucts = (p: Guard) => !p.flat && roomAt(p.x, p.z) === DUCTS;
 // When each mascot first comes out, by MASC index: hours of the run (six to a night), and how many hours sooner
 // for each guard past the first. Alone, Squish turns up at 3 AM on night 1. Stompy turns up on night 2 for every
@@ -847,6 +850,8 @@ function pickDest(sim: Sim, S: NightState, m: Mascot, b: Brain, body?: Point): P
     else if (sim.rng() < 0.25 + 0.5 * heat(S)) {
       const p = pick(sim, up);
       room = roomAt(p.x, p.z);
+      // Nor does anything else wander back to a booth whose door has just turned it away.
+      if (room === BOOTH && S.t < b.barred) room = undefined;
     }
   }
   // Walking away from a body, a room is no good if the body is in it or its middle is within AWAY of the body.
@@ -1198,10 +1203,12 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
         seen = p;
       }
   if (!seen && looking && lighter && S.t >= lighter.safe && !shuns(S, b, lighter)) seen = lighter; // a beam on it gives you away
-  // Only so many come for the guards at once. The rest stop and stare, and wait their turn.
+  // Only so many come for the guards at once. The rest stop and stare, and wait their turn. One banging on a booth
+  // door takes a turn too: without it, every one a shut door held gave its turn to the next, and a crew in the booth
+  // had all four at its doors.
   // Squish does not wait for anyone in its ducts.
   let stare = false;
-  if (seen && (m.st === 'hunt' || S.m.filter(o => COMING.includes(o.st)).length < pack(S))) {
+  if (seen && (m.st === 'hunt' || onGuards(S) < pack(S))) {
     near = dist(m, seen);
     spot(S, m, b, seen);
   } else if (ductGuest && looking) {
@@ -1399,6 +1406,15 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     return;
   }
   if (res === 'blocked') {
+    // One that was only wandering bangs on the door only if the pack has a turn for it. Otherwise the shut door
+    // turns it away and it wanders somewhere else: wanderers sent to the booth by pickDest used to start banging
+    // whatever the pack said, and a crew in the booth found all four at its doors.
+    if (m.st !== 'hunt' && onGuards(S) >= pack(S)) {
+      b.dest = null;
+      b.path = [];
+      b.barred = S.t + BARRED;
+      return;
+    }
     m.st = 'siege';
     b.timer = 1.2;
     b.bangs = 0;
