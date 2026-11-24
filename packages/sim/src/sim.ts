@@ -143,10 +143,13 @@ const BANG_BOX: Record<DoorKey, number> = { L: 5, R: 7, V: 6 };
 // than a walking guard and never stops coming. Flan crawls while a guard is
 // looking at her and runs when nobody is. Squish is quick, quicker in the
 // ducts. Stompy walks until it has a straight run, then charges. With the power
-// out every one of them moves `out` times as fast, which outruns a sprinting
-// guard: the crank is the only way out. (Untuned against the harness.)
+// out every one of them moves `out` times as fast. Squish then outruns a
+// sprinting guard on any night. Biggs is just short of a sprint until night 4
+// and Stompy until night 5 (KEEN and RAMP below set the night), and Flan
+// outruns one only while nobody watches her. A sprint does not last, so the
+// crank is still the only way out. (Untuned against the harness.)
 const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6] satisfies PerMascot<number>, unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15, out: 2 };
-const KEEN: [number, number] = [0.8, 0.04]; // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
+const KEEN: [number, number] = [0.78, 0.025]; // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
 const LIT_SPEED = [0, 0.2, 0.4] as const;
 const ROT = { night: 0.12, hour: 0.066, ire: 0.25 };

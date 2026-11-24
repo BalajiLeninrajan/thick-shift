@@ -848,6 +848,8 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   }
   // How fast it comes with the torch on it and without. Light on it once it is close enough to matter (every second
   // of light rots it), eyes on it either way: Flan slows for that alone.
+  // The paces are a guard's guess, a little over each one's SPEED.hunt and not scaled by KEEN: the bots expect them
+  // quicker than they come on a lit floor, so slowing the mascots does not also sharpen the bots' timing.
   const speed = (k: Memory) => {
     const base = k.i === 0 ? 2.8 : k.i === 1 ? 2.6 : 3.8;
     return bot.bat > 0 && k === h ? Math.max(0.3, base * defined(LIT_PACE[k.rot], 'the pace for a rot')) : base;
