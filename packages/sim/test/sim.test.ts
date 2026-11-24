@@ -382,6 +382,35 @@ describe('a hunt', () => {
     expect(near).toBe(0); // from 8 s on, for the rest of half a minute
   });
 
+  it('cannot catch the guard standing beside the one it caught for 1.8 s, and can after that', () => {
+    const { sim, S } = start(3, 3, 1);
+    S.stir = true;
+    S.waveAt = 1e9;
+    const [p, q] = [defined(S.players[0], 'g0'), defined(S.players[1], 'g1')],
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
+    // Both within her reach, a metre from her. g2 is in the booth, so the night goes on.
+    Object.assign(p, { x: 19.5, z: 18, yaw: 0, pitch: 0 });
+    Object.assign(q, { x: 20.3, z: 18, yaw: 0, pitch: 0 });
+    Object.assign(m, { x: 19.9, z: 18.9, yaw: Math.PI, st: 'hunt' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z } });
+    stepFloor(sim, S, 100);
+    expect([p.flat, q.flat]).toEqual([true, false]);
+    expect(b.noCatch).toBeCloseTo(S.t + 1.8, 12);
+    expect(S.m.map(o => brainOf(sim, o.i).noCatch > 0)).toEqual(S.m.map(o => o.i === FLAN)); // hers alone
+    const first = S.t;
+    let second = 0;
+    for (let k = 2; k <= 60 && !second; k++) {
+      stepFloor(sim, S, k * 100);
+      // Nothing else is about, so she is the one in reach of g1 the whole window.
+      if (S.t < first + 1.8) expect([q.flat, dist(m, q) < 1.25], `at ${S.t.toFixed(1)} s`).toEqual([false, true]);
+      if (q.flat) second = S.t;
+    }
+    expect(q.flatBy).toBe(FLAN);
+    expect(second - first).toBeGreaterThanOrEqual(1.8);
+    expect(second - first).toBeLessThan(2.5);
+  });
+
   it('has somewhere to walk away to wherever a guard is caught', () => {
     // pickDest wants a room that is not the booth, the ducts, the body's or the one the mascot stands in, with its
     // middle 8 m or more from the body.

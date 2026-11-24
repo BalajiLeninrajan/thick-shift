@@ -164,6 +164,9 @@ const FLAT_BAT = 0.5; // what is left of a torch its guard was flattened on top 
 // Metres one that has just caught a guard puts between the body and where it wanders next, so it does not stand over
 // them waiting for whoever comes to peel them up.
 const AWAY = 8;
+// Seconds before one that has just caught a guard can catch another. Without it a crew standing together goes down in
+// one go: the guard beside the one it caught is already in reach, and nothing holds it still any more.
+const CATCH_GAP = 1.8;
 const GRAB_TIME = 1.2; // seconds a mascot stuck behind furniture takes to reach over it
 const STARE = 5; // seconds one waiting its turn stands and stares before it goes back to what it was doing
 const CHARGE_GAP = 10; // seconds before Stompy can charge again
@@ -407,6 +410,7 @@ const newBrain = (sim: Sim): Brain => ({
   noShort: 0,
   park: null,
   shun: null,
+  noCatch: 0,
   near: Infinity,
   nearAt: 0,
   song: null,
@@ -493,15 +497,16 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
 // object restarts (after a deploy, say) and has only the S it saved, and when a page loses its room mid-night and
 // carries on solo. Each mascot keeps its place and state, except the ones that need what was lost (a charge's
 // heading, a besieged door): those look round where they stand. One on a hunt goes after the nearest guard.
-// What is lost errs toward the crew: Stompy waits out a full gap before it charges, and one standing where it
-// stands stays put as long as one a door turned away would. now: as for stepFloor.
+// What is lost errs toward the crew: Stompy waits out a full gap before it charges, every one of them waits out
+// CATCH_GAP as if it had just caught a guard, and one standing where it stands stays put as long as one a door
+// turned away would. now: as for stepFloor.
 export function adoptFloor(sim: Sim, state: State, now: number): void {
   const S = state as NightState,
     up = standing(S),
     h = heat(S);
   sim.lastStep = now;
   sim.brains = S.m.map(m => {
-    const b: Brain = { ...newBrain(sim), last: { x: m.x, z: m.z }, cool: m.i === STOMPY ? CHARGE_GAP : 0, woke: m.st !== 'rest' };
+    const b: Brain = { ...newBrain(sim), last: { x: m.x, z: m.z }, cool: m.i === STOMPY ? CHARGE_GAP : 0, noCatch: S.t + CATCH_GAP, woke: m.st !== 'rest' };
     if (m.st === 'rest') b.timer = rnd(sim, ...SPENT) * (1 - 0.5 * h);
     const prey = up.reduce<Guard | null>((a, p) => (!a || dist(m, p) < dist(m, a) ? p : a), null);
     if (m.st === 'hunt' && prey) Object.assign(b, { tgt: prey.id, last: { x: prey.x, z: prey.z } });
@@ -904,7 +909,7 @@ function flatten(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
   // It does not sit on what it caught or wait there for whoever comes to peel them up. It goes back to wandering,
   // somewhere else first, and it still comes for any guard it sees on the way.
   m.st = 'roam';
-  Object.assign(b, { tgt: null, path: [], repath: 0, timer: 0, home: false, reach: null });
+  Object.assign(b, { tgt: null, path: [], repath: 0, timer: 0, home: false, reach: null, noCatch: S.t + CATCH_GAP });
   if (!standing(S).length) {
     b.dest = null;
     return endNight(S, m.i);
@@ -918,8 +923,10 @@ function endNight(S: NightState, by: MascotIndex | -1) {
   emit(S, 'scare');
 }
 
-// Touching is being within F.CATCH with no wall between: a table between does not save anyone.
+// Touching is being within F.CATCH with no wall between: a table between does not save anyone. One that has just
+// caught a guard touches nobody for CATCH_GAP.
 function catchGuards(sim: Sim, S: NightState, m: Mascot, b: Brain) {
+  if (S.t < b.noCatch) return false;
   for (const p of outside(S))
     if (S.t >= p.safe && dist(m, p) < F.CATCH && reaches(m.x, m.z, p.x, p.z, S.doors)) {
       catchOne(sim, S, p, m, b);
@@ -991,6 +998,7 @@ function nextCheck(m: Mascot, b: Brain) {
 
 // It stands outside an occupied locker: one that knows who is in there opens it at once, any other after SNIFF.time.
 function openLockers(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
+  if (S.t < b.noCatch) return false; // it has just caught a guard: it opens nothing yet
   const p = standing(S).find(
     q => hidden(q) && S.t >= q.safe && dist(m, hideAt(q.hid).at) < SNIFF.near && reaches(m.x, m.z, hideAt(q.hid).at.x, hideAt(q.hid).at.z, S.doors)
   );
@@ -1310,7 +1318,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   const r = b.reach,
     holds = (p: Guard | null) => !!p && !!r && r.id === p.id && dist(p, r) <= 0.5;
   if (tucked && r && holds(tucked) && gap >= r.d - 0.3) {
-    if (S.t - r.t > GRAB_TIME) {
+    if (S.t - r.t > GRAB_TIME && S.t >= b.noCatch) {
       catchOne(sim, S, tucked, m, b);
       return;
     }
