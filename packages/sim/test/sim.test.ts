@@ -879,6 +879,26 @@ describe('a hunt', () => {
     expect(b.dir).toBeNull();
   });
 
+  it('lets Stompy charge on through a guard nothing can catch (dev god mode)', () => {
+    const { sim, S } = start(1, 1, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    S.dev = { ...DEV_OFF, god: true };
+    const p = defined(S.players[0], 'g0'),
+      stompy = defined(S.m[STOMPY], 'Stompy'),
+      b = brainOf(sim, STOMPY);
+    Object.assign(p, { x: 19.5, z: 14.8, on: false });
+    Object.assign(stompy, { x: 19.5, z: 13, yaw: 0, st: 'charge' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z }, timer: 2.4, cool: 0, dir: { x: 0, z: 1 } });
+    stepFloor(sim, S, 100);
+    expect(p.flat).toBe(false);
+    expect(stompy.st).toBe('charge'); // still charging, and the next step needs the heading it had
+    for (let k = 2; k <= 100; k++) stepFloor(sim, S, k * 100);
+    expect([S.phase, p.flat]).toEqual(['play', false]);
+    expect(S.t).toBeCloseTo(10, 6);
+    expect(stompy.st).not.toBe('charge'); // the charge ended as any other does
+  });
+
   it("spends Stompy's charge when the charge ends in a catch", () => {
     // Two guards in a line down the Main Hall, the far one with a torch on, and a third in the booth. Stompy is
     // mid-charge at the near one's back with nothing left on its charge gap.

@@ -932,6 +932,7 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
 
 function flatten(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
   if (S.dev?.god) return;
+  spendCharge(m, b);
   Object.assign(p, { flat: true, on: false, ph: false, flatBy: m.i, act: '', hid: -1 });
   recordFlat(S, [p.name, m.i]);
   emit(S, 'flat', { id: p.id, by: m.i, x: p.x, z: p.z });
@@ -968,7 +969,6 @@ function catchGuards(sim: Sim, S: NightState, m: Mascot, b: Brain) {
 // It has its hands on this guard. One busy in a breaker box, whose hands are not still shaking from the last time,
 // gets a start. Anyone else is flattened. Every catch of a guard on the floor comes through here.
 function catchOne(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
-  spendCharge(m, b);
   if (fixing(S, p) && p.fixAt >= p.shaky) startle(S, p, m, b);
   else flatten(sim, S, p, m, b);
 }
@@ -992,6 +992,8 @@ function headStart(S: NightState, p: Guard, m: Mascot, b: Brain) {
   m.st = 'hunt';
 }
 // A charge that ends at a guard is spent, like one that runs out or hits a wall: Stompy waits before the next.
+// startle() and flatten() call it once the catch has landed. Under the dev god mode none does, and Stompy charges on
+// with its heading.
 function spendCharge(m: Mascot, b: Brain) {
   if (m.st !== 'windup' && m.st !== 'charge') return;
   b.cool = Math.max(b.cool, CHARGE_GAP);
@@ -999,6 +1001,7 @@ function spendCharge(m: Mascot, b: Brain) {
 }
 // It reached a guard who was busy in a breaker box. They let go of the box, and it is after them.
 function startle(S: NightState, p: Guard, m: Mascot, b: Brain) {
+  spendCharge(m, b);
   p.act = '';
   emit(S, 'startle', { i: m.i, id: p.id, x: p.x, z: p.z });
   headStart(S, p, m, b);
