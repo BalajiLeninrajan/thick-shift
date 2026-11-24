@@ -164,6 +164,12 @@ const STARE = 5; // seconds one waiting its turn stands and stares before it goe
 const CHARGE_GAP = 10; // seconds before Stompy can charge again
 export const WINDUP = { time: 1.5, commit: 0.5 }; // Stompy's wind-up before a charge, and how much of it at the end is spent not turning
 const SEARCH_MAX = 14; // seconds one spends looking for what it heard or lost before it gives that up
+// How far a mascot sees a guard, in metres: one with their torch on, one in a lit room with it off, and one in a dark
+// room with it off. Past `near` metres it only sees within `cone` radians either side of the way it faces, and closer
+// than that it notices a guard behind it too. Walls and shut doors block all of it (sees). The first two were 17 and
+// 12, which spotted a guard from across a hall. Picked by hand to let a guard get closer, not tuned against the
+// harness, which they barely move.
+const SIGHT = { torch: 10, lit: 7.5, dark: 5, near: 2.5, cone: 1.2 };
 const NOTICE = 0.7; // seconds a mascot stands and stares after spotting a guard, before it moves
 // Seconds a mascot keeps knowing where its guard is after losing sight of them: Biggs, and the rest.
 const RELENT = 8,
@@ -613,10 +619,10 @@ const watchedBy = (S: NightState, p: Guard, m: Mascot) =>
 
 function canSee(S: NightState, m: Mascot, p: Guard) {
   const d = dist(m, p);
-  // A lit torch shows from across a hall. With the building dark and yours off, it has to be close.
-  const range = p.on ? 17 : !darkRoom(S, roomAt(p.x, p.z)) ? 12 : 5;
+  // A lit torch shows furthest. With the room dark and the torch off, the guard has to be close.
+  const range = p.on ? SIGHT.torch : darkRoom(S, roomAt(p.x, p.z)) ? SIGHT.dark : SIGHT.lit;
   if (d > range) return false;
-  if (d > 2.5 && Math.abs(angDiff(Math.atan2(p.x - m.x, p.z - m.z), m.yaw)) > 1.2) return false;
+  if (d > SIGHT.near && Math.abs(angDiff(Math.atan2(p.x - m.x, p.z - m.z), m.yaw)) > SIGHT.cone) return false;
   return sees(m.x, m.z, p.x, p.z, S.doors);
 }
 
