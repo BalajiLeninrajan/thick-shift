@@ -2,11 +2,11 @@
 
 exports[`adoptFloor > carries the night on from there the same way every time 1`] = `
 {
-  "events": "fault 1, flat 2, scare 1, spot 2, stir 1",
+  "events": "fault 1, flat 2, scare 1, spot 1, stir 1",
   "phase": "dead",
-  "power": "98.082",
-  "state": "2d6908e9388c99a5",
-  "t": "30.200",
+  "power": "98.234",
+  "state": "798380bd9ccf3484",
+  "t": "28.400",
 }
 `;
 
@@ -26,7 +26,7 @@ exports[`adoptFloor > gives each mascot the timers a seeded stream says 1`] = `
   },
   {
     "cool": 0,
-    "st": "feast",
+    "st": "stun",
     "tgt": null,
     "timer": 2.703,
   },
@@ -47,7 +47,7 @@ exports[`adoptFloor > gives each mascot the timers a seeded stream says 2`] = `
     24.589,
     44.621,
   ],
-  "nextFault": 10.416,
+  "nextFault": 12.152,
 }
 `;
 

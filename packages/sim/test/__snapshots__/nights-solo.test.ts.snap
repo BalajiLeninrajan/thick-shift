@@ -3,101 +3,101 @@
 exports[`solo nights > solo careless n3, seed 1 1`] = `
 {
   "burnt": 0,
-  "events": "calm 1, fault 2, fix 2, flat 1, hour 1, scare 1, spot 1, stir 1",
-  "eventsDigest": "0bc0e103ee5eb8b4",
+  "events": "fault 1, fix 1, flat 1, scare 1, spot 1, stir 1",
+  "eventsDigest": "c4910a0129feef44",
   "failures": [],
-  "fixed": 2,
+  "fixed": 1,
   "flats": 1,
   "outcome": "dead",
   "peels": 0,
-  "power": "95.304",
-  "stateDigest": "c19ed3759eaf93e1",
-  "t": "73.900",
-  "ticks": 739,
+  "power": "97.144",
+  "stateDigest": "ea57a9ffb08243cb",
+  "t": "45.200",
+  "ticks": 452,
 }
 `;
 
 exports[`solo nights > solo competent n1, seed 1 1`] = `
 {
-  "burnt": 2,
-  "events": "arrive 1, bang 3, bat 3, burn 2, calm 5, door 10, fault 8, fix 7, flat 1, hour 5, scare 1, spot 5, stir 5, toy 1",
-  "eventsDigest": "a6c1884486be0b9d",
+  "burnt": 0,
+  "events": "bat 3, bonk 1, calm 5, check 1, door 12, fault 9, fix 8, grab 1, hour 6, spot 7, stir 6, toy 2, win 1",
+  "eventsDigest": "c6715e7a6e7c76d9",
   "failures": [],
-  "fixed": 7,
-  "flats": 1,
-  "outcome": "dead",
+  "fixed": 8,
+  "flats": 0,
+  "outcome": "win",
   "peels": 0,
-  "power": "28.043",
-  "stateDigest": "e7d2c06a8033ffc9",
-  "t": "359.000",
-  "ticks": 3590,
+  "power": "51.075",
+  "stateDigest": "dca5f739c7433ff4",
+  "t": "420.000",
+  "ticks": 4200,
 }
 `;
 
 exports[`solo nights > solo competent n3, seed 2 1`] = `
 {
-  "burnt": 0,
-  "events": "arrive 2, bang 8, calm 1, door 8, fault 4, fix 4, flat 1, hour 1, roar 1, scare 1, spot 2, stir 2",
-  "eventsDigest": "f433a11a0f5996eb",
+  "burnt": 1,
+  "events": "arrive 1, bang 4, bat 2, bonk 2, burn 1, calm 4, check 1, crash 1, door 6, fault 9, fix 9, flat 1, grab 1, hour 4, roar 1, scare 1, spot 10, stir 5, toy 2",
+  "eventsDigest": "600c132c73f7f652",
   "failures": [],
-  "fixed": 4,
+  "fixed": 9,
   "flats": 1,
   "outcome": "dead",
   "peels": 0,
-  "power": "57.175",
-  "stateDigest": "7905ca9401197047",
-  "t": "128.000",
-  "ticks": 1280,
+  "power": "46.384",
+  "stateDigest": "ec2880291ae31130",
+  "t": "297.400",
+  "ticks": 2974,
 }
 `;
 
 exports[`solo nights > solo competent n5, seed 3 1`] = `
 {
   "burnt": 0,
-  "events": "fault 1, fix 1, flat 1, scare 1, spot 1, stir 1",
-  "eventsDigest": "275d424f511d6b24",
+  "events": "bat 1, bonk 1, calm 1, door 1, fault 1, fix 1, flat 1, scare 1, spot 3, stir 1, toy 1",
+  "eventsDigest": "94cd5101031e5add",
   "failures": [],
   "fixed": 1,
   "flats": 1,
   "outcome": "dead",
   "peels": 0,
-  "power": "97.304",
-  "stateDigest": "a499da62cc78f047",
-  "t": "37.300",
-  "ticks": 373,
+  "power": "91.325",
+  "stateDigest": "756965943ea0b7b6",
+  "t": "63.500",
+  "ticks": 635,
 }
 `;
 
 exports[`solo nights > solo competent, hides n3, seed 5 1`] = `
 {
-  "burnt": 1,
-  "events": "arrive 1, bang 4, bat 4, burn 1, calm 6, check 3, door 17, fault 11, fix 10, hour 6, spot 6, stir 6, toy 1, win 1",
-  "eventsDigest": "1dc3d4d17b7eb5da",
+  "burnt": 0,
+  "events": "bonk 1, calm 1, fault 2, fix 2, flat 1, scare 1, spot 2, stir 1, toy 1",
+  "eventsDigest": "9ee82d4ab433bc75",
   "failures": [],
-  "fixed": 10,
-  "flats": 0,
-  "outcome": "win",
+  "fixed": 2,
+  "flats": 1,
+  "outcome": "dead",
   "peels": 0,
-  "power": "33.777",
-  "stateDigest": "e88d90905a16b6bc",
-  "t": "420.000",
-  "ticks": 4200,
+  "power": "95.796",
+  "stateDigest": "92d430751bb88c75",
+  "t": "67.300",
+  "ticks": 673,
 }
 `;
 
 exports[`solo nights > solo expert n5, seed 2 1`] = `
 {
-  "burnt": 1,
-  "events": "burn 1, calm 3, check 3, door 19, fault 5, fix 3, flat 1, hour 3, scare 1, spot 7, stir 3, toy 1",
-  "eventsDigest": "0be871d24014ae4a",
+  "burnt": 3,
+  "events": "arrive 1, bang 4, burn 3, calm 2, check 1, door 21, fault 5, fix 3, flat 1, hour 2, scare 1, spot 7, stir 3, toy 1",
+  "eventsDigest": "f86c56dc1e26355a",
   "failures": [],
   "fixed": 3,
   "flats": 1,
   "outcome": "dead",
   "peels": 0,
-  "power": "51.422",
-  "stateDigest": "19a570581229a66a",
-  "t": "215.800",
-  "ticks": 2158,
+  "power": "12.562",
+  "stateDigest": "5a7589a74cfe56d5",
+  "t": "203.600",
+  "ticks": 2036,
 }
 `;
