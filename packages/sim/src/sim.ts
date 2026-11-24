@@ -171,8 +171,10 @@ const SEARCH_MAX = 14; // seconds one spends looking for what it heard or lost b
 // harness, which they barely move.
 const SIGHT = { torch: 10, lit: 7.5, dark: 5, near: 2.5, cone: 1.2 };
 const NOTICE = 1.2; // seconds a mascot stands and stares after spotting a guard, before it moves
-// Seconds a mascot keeps knowing where its guard is after losing sight of them: Biggs, and the rest.
-const RELENT = 8,
+// Seconds a mascot keeps knowing where its guard is after losing sight of them: Biggs, and the rest. Biggs's also
+// covers a guard stepping into a locker: get in within this long of leaving his sight and he knows which one. It was 8
+// until the game was eased. The balance harness's win rates did not move with it.
+export const RELENT = 4.5,
   KEEP = 1.2;
 const keepsFor = (m: Mascot) => (m.i === BIGGS ? RELENT : KEEP);
 const NEAREST = 3; // seconds one that has lost its guard goes without getting closer to where it last saw them before it searches there
@@ -184,9 +186,9 @@ const SPENT: [number, number] = [18, 30]; // seconds one stays put after a shut 
 // than one step past night 4: with a plain 4, a crew of three won 18% of night 5s against a target of 10.
 const RAMP = [0, 1, 2, 3.15, 4.3] as const;
 // Lockers (HIDES in map.ts). A mascot that saw a guard step in, or was hunting them and still knew where they were
-// (the same few seconds it keeps after losing sight round a corner, eight for Biggs), opens that locker when it gets
-// there. Any other that stands within SNIFF.near of an occupied locker for SNIFF.time seconds opens it anyway, so
-// a locker is for getting out of sight, not for waiting out the night. The doors are heard: LOCKER_NOISE is
+// (the same few seconds it keeps after losing sight round a corner, four and a half for Biggs), opens that locker
+// when it gets there. Any other that stands within SNIFF.near of an occupied locker for SNIFF.time seconds opens it
+// anyway, so a locker is for getting out of sight, not for waiting out the night. The doors are heard: LOCKER_NOISE is
 // [metres, chance], as for noise(). A guard it pulls out is not caught there: it stands for ESCAPE.head seconds, and
 // nothing can touch them in that time, so they have a moment to run. For ESCAPE.shaky seconds after that their hands
 // shake: getting into a locker bangs its doors (LOCKER_DIN, heard across most of the building), and whatever opens

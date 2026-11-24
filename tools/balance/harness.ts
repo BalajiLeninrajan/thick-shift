@@ -18,12 +18,14 @@ import {
   F,
   faultLeft,
   isPlaced,
+  KEEP,
   landing,
   lightsF,
   MASC,
   MASCOTS,
   newSim,
   newState,
+  RELENT,
   STAMINA,
   seeded,
   startFloorNight,
@@ -863,10 +865,11 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
     return false;
   }
   const r = race(S, bot, hs, speed);
-  // Out of sight of everything it knows about for long enough that nothing still knows where it is (eight seconds of
-  // Biggs), with a free locker close by and the lights on: in, if this guard hides at all.
+  // Out of sight of everything it knows about for long enough that nothing still knows where it is (RELENT for Biggs,
+  // KEEP for the rest, and a little over), with a free locker close by and the lights on: in, if this guard hides at
+  // all.
   if (known(S, bot, 4).some(k => k.st !== 'rest' && M.sees(k.x, k.z, bot.x, bot.z, S.doors))) st.seenAt = S.t;
-  const lostThem = S.t - (st.seenAt ?? -99) > (hs.some(k => k.i === 0) ? 8.5 : 2);
+  const lostThem = S.t - (st.seenAt ?? -99) > (hs.some(k => k.i === 0) ? RELENT + 0.5 : KEEP + 0.8);
   const locker = bot.policy.hides && lightsF(S) && (st.hideCool === undefined || st.hideCool <= S.t) && lostThem && freeLocker(S, bot, 5);
   if (locker) {
     w.use = locker;
