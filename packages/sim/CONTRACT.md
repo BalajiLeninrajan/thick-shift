@@ -93,7 +93,14 @@ the test snapshots with it:
   mascot, in `S.m` order, only after the state, home, `wise` and distance tests pass, and draws no timer;
   `flyToys()` (a direct hit) draws nothing; `lockersNear()` draws
   only for lockers within `CHECK.near`; `pickDest()` draws for Squish's booth
-  chance only when a guard is in the booth, and for the crank chance only when `S.crank`.
+  chance only when a guard is in the booth, and for the crank chance only when `S.crank`; `flatten()` draws
+  through `pickDest()` only if a guard is still standing (and never under the dev god mode, which catches
+  nobody); `pickDest()` with a body rejects a room within `AWAY` of it and draws another, and draws a point up
+  to eight times until one is `AWAY` clear; its power-out pick is over the standing guards the mascot does not
+  shun, and with none it falls through to the room draw.
+- A mascot walking away from a guard it caught (`b.away`) passes the body to every `pickDest()` it makes until
+  the walk is done, so a walk that jams redraws clear of the body too. In a calm it draws no rest timer until
+  the walk is done and it has gone home.
 - An expression with two draws takes them left to right.
 
 Distances come from `hypot` in `map.ts`, the plain `Math.sqrt(x * x + z * z)`, and `dist(a, b)` beside it. `Math.hypot` rounds differently in the
