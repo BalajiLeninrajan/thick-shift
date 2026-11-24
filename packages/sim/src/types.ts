@@ -51,11 +51,16 @@ export interface Guard extends Joined {
   flatBy: MascotIndex | -1; // the mascot that flattened them, or -1
   sp: boolean; // sprinting
   act: GuardAct;
-  safe: number; // S.t before which no mascot can see or flatten them: just after a peel, or a mascot opening their locker
+  // S.t before which no mascot can see or flatten them: just after a peel, a mascot opening their locker, or one
+  // catching them at a breaker box
+  safe: number;
   callAt: number; // S.t before which their next call for help is ignored
   hid: number; // the locker (HIDES index) they are in, or -1
-  shaky: number; // S.t before which getting into a locker is loud: just after a mascot pulled them out of one
+  // S.t before which their hands shake: just after a mascot pulled them out of a locker or caught them at a breaker
+  // box. Getting into a locker is loud, and a mascot that reaches them at either gives no second start.
+  shaky: number;
   inAt: number; // S.t they got into the locker they are in
+  fixAt: number; // S.t they last put their hands in a breaker box
   toy: boolean; // holding their Mini Biggs
 }
 // A guard in S.players at any time: a guard who joined after the night began has only their id and name until the
@@ -63,9 +68,9 @@ export interface Guard extends Joined {
 export type Player = Joined & Partial<Omit<Guard, keyof Joined>>;
 
 // What a mascot is doing. rest: standing on its mark, switched off. roam: walking somewhere. search: going to look at
-// something it heard or lost. hunt: after a guard. windup and charge: Stompy's run. stun: Stompy after hitting a wall.
-// feast: sitting on a guard it flattened. siege: banging on a shut booth door.
-export type MascotState = 'rest' | 'roam' | 'search' | 'hunt' | 'windup' | 'charge' | 'stun' | 'feast' | 'siege';
+// something it heard or lost. hunt: after a guard. windup and charge: Stompy's run. stun: Stompy after hitting a wall,
+// or any of them hit by a thrown Mini Biggs. siege: banging on a shut booth door.
+export type MascotState = 'rest' | 'roam' | 'search' | 'hunt' | 'windup' | 'charge' | 'stun' | 'siege';
 
 // The cast, by their place in MASC (config.ts): Big Biggs, Madame Flan, Squish, Stompy. Every table kept per mascot
 // is a PerMascot, so reading one by a MascotIndex always finds an entry.
@@ -94,7 +99,8 @@ export interface Fault {
 }
 
 // A thrown Mini Biggs that nobody has picked up. by: the thrower's id. x0, z0: where it left the hand. x, z: where
-// it lands. at: S.t when it was thrown. land: S.t when it lands. heard: it has sung.
+// it lands. at: S.t when it was thrown. land: S.t when it lands. heard: it has sung. One that hits a mascot on the way
+// comes down at its feet there and then: x, z and land change to that.
 export interface Toy {
   id: number;
   by: string;
@@ -144,8 +150,10 @@ export interface EventData {
   flat: { id: string; by: MascotIndex; x: number; z: number };
   spot: { i: MascotIndex; id: string; x: number; z: number };
   found: { i: MascotIndex; id: string; h: number; x: number; z: number }; // h: the locker
+  startle: { i: MascotIndex; id: string; x: number; z: number }; // caught at a breaker box, and let run
   check: { i: MascotIndex; h: number; x: number; z: number };
   crash: { x: number; z: number };
+  bonk: { i: MascotIndex; by: string; x: number; z: number }; // a thrown Mini Biggs hit mascot i
   bang: DoorKey;
   arrive: DoorKey;
   roar: { i: MascotIndex; x: number; z: number };
@@ -232,14 +240,24 @@ export interface Brain {
   notice: number;
   stared: number;
   reach: Reach | null;
+  saw: Point | null; // where it last saw the guard it is after, which is not always where it last knew they were
   knows: number; // the locker it saw a guard step into, or -1
   sniff: number;
   checks: number[]; // the lockers it means to look in
   since: number; // S.t when it took up what it is doing now
   was: MascotState | null; // what that is, as of its last think; null before the first
   noShort: number; // S.t before which it will not cut straight across to its guard again
+  park: (Point & { t: number }) | null; // where a hunt that is getting nowhere has been standing, and since when
+  away: Point | null; // where the guard it has just caught lies, while it is walking away from them
+  shun: { id: string; until: number } | null; // the guard it gave up on, and the S.t until which it leaves them be
+  noCatch: number; // S.t before which it will not catch another guard, having just caught one
   near: number; // how close it has come to where it last saw its guard since it lost them
   nearAt: number; // and when it last got closer
+  song: Point | null; // where the last Mini Biggs it went to was singing (lured in sim.ts)
+  wise: number; // S.t before which a Mini Biggs does nothing to it
+  puff: number; // its breath for running, 0 to 1 (TIRE in sim.ts)
+  ran: boolean; // it ran on its last step, which costs breath on this one
+  winded: boolean; // out of breath, and slow until enough of it is back
 }
 
 /* ---------- the wire ---------- */

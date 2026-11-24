@@ -18,12 +18,14 @@ import {
   F,
   faultLeft,
   isPlaced,
+  KEEP,
   landing,
   lightsF,
   MASC,
   MASCOTS,
   newSim,
   newState,
+  RELENT,
   STAMINA,
   seeded,
   startFloorNight,
@@ -126,13 +128,16 @@ interface BotState extends DoorTimes {
   cranking?: boolean;
   topUp?: boolean;
   lureAt?: number;
+  threwAt?: Each<number>; // when this guard last threw a Mini Biggs at or for each mascot
   hidFor?: number;
   leg?: number;
 }
 // react: seconds before something perceived is acted on. fov: half-angle of what counts as in front.
 // torch: 'always' on outside the booth, 'thrifty' the same but keeps the last of it (reserve) for holding something off.
-// toy: throws their Mini Biggs to draw a wanderer off their way, while the torch has the battery to spare (spare: what has
-// to be left in it after the throw), and goes back to pick it up once nothing is about.
+// toy: throws their Mini Biggs where its song will draw a wanderer or a hunter off their way, while the torch has
+// the battery to spare (spare: what has to be left in it after the throw), and straight at one coming that is far
+// enough off for a hit to stun it (BONK), or at Stompy winding up or charging, on whatever battery is left. Goes back
+// to pick it up once nothing is about.
 // alert: how near something coming has to be before they do anything about it. beam: seconds away it is when the torch goes on it.
 // topsUp: picks up a battery they pass whenever the torch is not full, not only once it is low. crankEarly: how much
 // sooner (in power) they start cranking between waves.
@@ -512,6 +517,8 @@ function walk(S: NightState, bot: Bot, goal: Point, sprint?: boolean, face?: num
 function act(S: NightState, bot: Bot): void {
   const w = bot.want,
     before = { x: bot.x, z: bot.z };
+  // Caught at a breaker box and let run: the sim broke the fix off, and its minigame starts over.
+  if (bot.act === 'fix' && guardOf(bot).act !== 'fix') bot.holding = null;
   bot.sp = false;
   bot.act = '';
   let goal = w.goal,
@@ -807,7 +814,7 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
       ? bot.mem.filter((k): k is Memory => !!k && k.st === 'rest' && S.t - k.t < 30 && dist(bot, k) < 10 && mayWake(S, k.i))
       : [];
   const hs = known(S, bot)
-    .filter(h => (COMING.includes(h.st) && dist(bot, h) < sk.alert) || (MOVING.includes(h.st) && h.how !== 'map' && dist(bot, h) < 6))
+    .filter(h => (COMING.includes(h.st) && dist(bot, h) < sk.alert) || ((MOVING.includes(h.st) || h.st === 'stun') && h.how !== 'map' && dist(bot, h) < 6))
     .concat(waking)
     .sort((a, b) => dist(bot, a) - dist(bot, b));
   const [h] = hs;
@@ -818,9 +825,16 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   st.chased ??= S.t;
   const d = dist(bot, h),
     sight = M.sees(bot.x, bot.z, h.x, h.z, S.doors);
+  const booth = inBooth(bot),
+    canHole = sk.doors && lightsF(S),
+    holing = booth && canHole && !hs.some(inBooth);
+  // Something coming that is close but still far enough off to hit (bonk() says no to one nearer), or Stompy lining
+  // up: a Mini Biggs straight at it stuns it. Not from the booth at one outside, which a door will stop: stunned in
+  // the doorway, it would keep the door from shutting. Anything else coming or wandering close, or already too near
+  // to hit: one thrown away from here may take it off.
+  const close = d < BONK.max || h.st === 'windup' || h.st === 'charge';
+  if (!(COMING.includes(h.st) && close && !holing && bonk(S, bot, h, 0))) lure(S, bot, targetOf(objective) || bot);
   // Stompy winding up or already coming: get out of its line.
-  // Something wandering close that is not after anyone yet: a Mini Biggs thrown away from here may take it off.
-  if (!COMING.includes(h.st)) lure(S, bot, targetOf(objective) || bot);
   const stompy =
     sk.dodges &&
     known(S, bot, 1.5).find(
@@ -846,6 +860,9 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   }
   // How fast it comes with the torch on it and without. Light on it once it is close enough to matter (every second
   // of light rots it), eyes on it either way: Flan slows for that alone.
+  // The paces are a guard's guess, a little over each one's SPEED.hunt and not scaled by KEEN: the bots expect them
+  // quicker than they come on a lit floor, so slowing the mascots does not also sharpen the bots' timing. They are
+  // top paces too: a guard cannot tell a winded one (TIRE) from a fresh one, so they plan for the fresh one.
   const speed = (k: Memory) => {
     const base = k.i === 0 ? 2.8 : k.i === 1 ? 2.6 : 3.8;
     return bot.bat > 0 && k === h ? Math.max(0.3, base * defined(LIT_PACE[k.rot], 'the pace for a rot')) : base;
@@ -855,18 +872,17 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   if (beam) w.on = true;
   if (sight && d < 16) w.face = ang(bot, h);
   const eta = (d - F.CATCH) / (beam ? speed(h) : unlit);
-  const booth = inBooth(bot),
-    canHole = sk.doors && lightsF(S);
   // In the booth with it outside: the doors are the answer. With it inside: out by another door.
-  if (booth && canHole && !hs.some(inBooth)) {
+  if (holing) {
     st.holed = S.t + 3;
     return false;
   }
   const r = race(S, bot, hs, speed);
-  // Out of sight of everything it knows about for long enough that nothing still knows where it is (eight seconds of
-  // Biggs), with a free locker close by and the lights on: in, if this guard hides at all.
+  // Out of sight of everything it knows about for long enough that nothing still knows where it is (RELENT for Biggs,
+  // KEEP for the rest, and a little over), with a free locker close by and the lights on: in, if this guard hides at
+  // all.
   if (known(S, bot, 4).some(k => k.st !== 'rest' && M.sees(k.x, k.z, bot.x, bot.z, S.doors))) st.seenAt = S.t;
-  const lostThem = S.t - (st.seenAt ?? -99) > (hs.some(k => k.i === 0) ? 8.5 : 2);
+  const lostThem = S.t - (st.seenAt ?? -99) > (hs.some(k => k.i === 0) ? RELENT + 0.5 : KEEP + 0.8);
   const locker = bot.policy.hides && lightsF(S) && (st.hideCool === undefined || st.hideCool <= S.t) && lostThem && freeLocker(S, bot, 5);
   if (locker) {
     w.use = locker;
@@ -1010,15 +1026,47 @@ const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => 
   },
 });
 
-// Mini Biggs. The nearest thing this guard can see wandering or searching (not after anyone): throw one where it will
-// hear it sing, and where walking to it takes it away from the guard and from where the guard is going (to). Sixteen
-// ways round are tried. Only with skill.spare of the battery left after it.
+// A guard does not see which mascots are wise to a Mini Biggs (TOY.wise), only what they threw themselves: no second
+// one at or for the same mascot until the first has worn off.
+const fresh = (S: NightState, bot: Bot, h: Memory) => S.t - (bot.state.threwAt?.[h.i] ?? -99) > TOY.wise;
+function threw(S: NightState, bot: Bot, h: Memory, gap: number): void {
+  const st = bot.state;
+  st.threwAt ??= [-99, -99, -99, -99];
+  st.threwAt[h.i] = S.t;
+  st.lureAt = S.t + gap;
+}
+// How far off something coming has to be for a guard to throw a Mini Biggs straight at it, in metres. A toy stuns
+// only what it first touches TOY.armed metres or more from the hand, and it touches a mascot at the mascot's edge
+// plus TOY.hit, so `min` is that and 1.2 m more for the ground the mascot covers while the toy is in the air. Nearer
+// than `min` a straight throw sails past, and the guard throws for the song. Past `max` an honest guard does not
+// bother: the torch and the song do more for the battery, since a hit buys TOY.stun seconds and the mascot wakes
+// still facing them.
+const BONK = { min: TOY.armed + M.MASCOT_R + TOY.hit + 1.2, max: TOY.armed + M.MASCOT_R + TOY.hit + 4 };
+// Mini Biggs, straight at a mascot this guard can see, to stun it. Only with `floor` of the battery left after it,
+// and only at one at least BONK.min away. Returns whether one was thrown.
+function bonk(S: NightState, bot: Bot, h: Memory, floor: number): boolean {
+  const me = guardOf(bot);
+  if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < floor || S.t < (bot.state.lureAt || 0) || !fresh(S, bot, h)) return false;
+  if (h.how === 'map' || h.st === 'stun' || dist(me, h) < BONK.min || dist(me, h) > TOY.range - 2 || !M.sees(me.x, me.z, h.x, h.z, S.doors)) return false;
+  const yaw = ang(me, h);
+  // Nothing may stop it short of the mascot.
+  if (dist(me, landing(S, me.x, me.z, yaw, TOY.range)) < dist(me, h) - 0.5) return false;
+  threw(S, bot, h, 2);
+  actFloor(sim, S, bot.id, { t: 'throw', yaw, d: TOY.range });
+  return true;
+}
+
+// Mini Biggs. The nearest thing this guard can see wandering, searching or (with the lights on) hunting: throw one
+// where it will hear it sing, and where walking to it takes it away from the guard and from where the guard is going
+// (to). Sixteen ways round are tried. Only with skill.spare of the battery left after it.
 function lure(S: NightState, bot: Bot, to: Point): void {
   const me = guardOf(bot),
     st = bot.state;
   if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < bot.skill.spare || S.t < (st.lureAt || 0)) return;
-  const wandering = known(S, bot, 1.5).filter(k => k.how !== 'map' && (k.st === 'roam' || k.st === 'search') && dist(bot, k) < 14);
-  const h = nearest(bot, wandering);
+  const listening = known(S, bot, 1.5).filter(
+    k => k.how !== 'map' && (k.st === 'roam' || k.st === 'search' || (k.st === 'hunt' && lightsF(S))) && dist(bot, k) < 14 && fresh(S, bot, k)
+  );
+  const h = nearest(bot, listening);
   if (!h) return;
   let best: { yaw: number; d: number; score: number } | null = null;
   for (let k = 0; k < 16; k++) {
@@ -1030,7 +1078,7 @@ function lure(S: NightState, bot: Bot, to: Point): void {
     if (!best || score > best.score) best = { yaw, d: dist(me, at) + 0.05, score }; // a hair over, so the sim's own steps reach the same spot
   }
   if (!best) return;
-  st.lureAt = S.t + 6; // and give that one time to work before throwing another
+  threw(S, bot, h, 6); // and give that one time to work before throwing another
   actFloor(sim, S, bot.id, { t: 'throw', yaw: best.yaw, d: best.d });
 }
 
@@ -1087,6 +1135,36 @@ const DEGENERATE = {
       }
       if (bot.bat < 0.9) w.use = CHARGE;
       else w.goal = BOOTH_MID;
+    },
+  }),
+  // Toy spam. Everyone stays in the booth by the carton with the doors open and throws a Mini Biggs at whatever
+  // comes near: straight at it when it is far enough off to stun, for it to follow when it is not. Empty hands take
+  // the nearest one off the floor or the next out of the carton, and the dock pays for the throws. Nobody fixes
+  // anything.
+  spam: (): Policy => ({
+    skill: SKILL.competent,
+    think(S, bot) {
+      const w = bot.want,
+        me = guardOf(bot);
+      w.on = !lightsF(S);
+      const about = known(S, bot).filter(k => k.st !== 'stun');
+      const h = nearest(bot, about);
+      if (h && dist(bot, h) < TOY.range) {
+        w.face = ang(bot, h);
+        w.on = true;
+        if (!bonk(S, bot, h, 0)) lure(S, bot, BOOTH_MID);
+      }
+      if (!me.toy) {
+        const t = nearest(
+          bot,
+          S.toys.filter(t => S.t > t.land && dist(bot, t) < 8 && !about.some(k => dist(k, t) < 4))
+        );
+        if (t) w.use = { what: 'toy', id: t.id, at: t, stand: t, hold: 0.2, key: `toy${t.id}` };
+        else if (S.toyBox > 0) w.use = CARTON;
+        if (w.use) return;
+      }
+      if (bot.bat < 0.9 && lightsF(S)) w.use = CHARGE;
+      else w.goal = front(M.TOY_BOX);
     },
   }),
   // Stand at the dock with the torch on and the charge lead in, and shine at whatever comes in.
@@ -1159,6 +1237,19 @@ const DEGENERATE = {
         order = M.HIDES.map((h, i) => ({ h, i })).sort((a, b) => dist(spawn, a.h.at) - dist(spawn, b.h.at));
       const { h, i } = defined(order[bot.i % order.length], 'a locker');
       bot.want.use = hideUse(i, h.at);
+    },
+  }),
+  // Hands in the nearest box with an open fault, never finishing and never leaving, for the start a mascot gives a
+  // guard it catches there.
+  box: (): Policy => ({
+    skill: SKILL.competent,
+    think(S, bot) {
+      const at = nearest(
+          bot,
+          M.BOXES.filter((_, i) => S.faults[i])
+        ),
+        i = at ? M.BOXES.indexOf(at) : -1;
+      if (at) bot.want.use = { what: 'fix', i, at, hold: Infinity, key: `fix${i}` };
     },
   }),
   // Crank the generator and nothing else, torch on whatever turns up.
@@ -1297,6 +1388,7 @@ export interface Outcome {
   charging: number;
   toys: number;
   lured: number;
+  hits: number;
 }
 // How play() reports: trace 1 prints the night's events, 2 also where everyone is each second (brains: and what each
 // mascot is thinking). onStep is called with the state after every step, for the tests.
@@ -1390,6 +1482,7 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
     charging: 0,
     toys: 0,
     lured: 0,
+    hits: 0,
   };
   const fail = (what: string) => {
     if (out.failures.length < 60) out.failures.push(`${sc.name}: seed ${seed}: ${what}`);
@@ -1484,7 +1577,8 @@ export function play(sc: Scenario, seed: number, { trace = 0, brains = false, on
         else if (e.type === 'toy') {
           out.toys++;
           out.lured += S.m.filter(m => m.st === 'search' && brainOf(sim, m.i).last?.x === e.x.x && brainOf(sim, m.i).last?.z === e.x.z).length;
-        } else if (e.type === 'out') out.outs++;
+        } else if (e.type === 'bonk') out.hits++;
+        else if (e.type === 'out') out.outs++;
       }
 
     // Softlocks.
@@ -1554,6 +1648,8 @@ const bad = (name: string, n: number, guard: Scenario['guard']) => {
 bad('x4 turtle: doors shut, nobody moves', 4, all(DEGENERATE.turtle()));
 bad('x1 turtle', 1, all(DEGENERATE.turtle()));
 bad('x4 turtle, toys at the doors', 4, all(DEGENERATE.turtle(true)));
+bad('x4 toy spam from the booth', 4, all(DEGENERATE.spam()));
+bad('x1 toy spam from the booth', 1, all(DEGENERATE.spam()));
 bad('x4 one cranks, three hide', 4, i => (i ? DEGENERATE.turtle() : DEGENERATE.cranker()));
 bad('x4 corner with torches', 4, all(DEGENERATE.corner({ x: 1, z: 12.5, look: Math.PI / 4 })));
 bad('x4 booth corner with torches', 4, all(DEGENERATE.corner({ x: 15.8, z: 42.6, look: Math.PI * 0.75 })));
@@ -1566,4 +1662,6 @@ bad('x4 sit in the ducts', 4, all(DEGENERATE.hole({ x: 20, z: 34.75, dx: 1.2 }))
 bad('x2 stand in the vent doorway', 2, all(DEGENERATE.hole({ x: 22.9, z: 36.25, dx: 0, dz: 0.2 })));
 bad('x1 sit in a locker all night', 1, all(DEGENERATE.locker()));
 bad('x4 sit in lockers all night', 4, all(DEGENERATE.locker()));
+bad('x1 stand at a box, hands in', 1, all(DEGENERATE.box()));
+bad('x4 stand at a box, hands in', 4, all(DEGENERATE.box()));
 bad('x2 stand in the duct mouth', 2, all(DEGENERATE.hole({ x: 15.9, z: 33.25, dx: 0, dz: 0.2 })));

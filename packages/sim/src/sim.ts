@@ -19,8 +19,9 @@
 // still, less so the more it has rotted, and the torch runs down. Touch a
 // mascot and you are flattened, and stay on the floor until another guard
 // peels you up. Everyone flat at once ends the night. A guard can step into a
-// locker to get out of sight. A mascot that saw them go in pulls them out, one
-// that lost them nearby checks the lockers, and one that lingers sniffs them out.
+// locker to get out of sight. Only a mascot that saw them go in knows which one
+// and pulls them out. One that lost them nearby may check a locker, and one that
+// lingers at the doors sniffs them out.
 // A guard can also throw a Mini Biggs, a plush keyring with a voice box, which
 // sings on a bar of the torch's battery where it lands, and a mascot wandering
 // nearby goes to see whose birthday it is.
@@ -32,9 +33,9 @@
 // target: a competent crew of three survives night 1 every time and each later
 // night about 22 points less often (78, 55, 33, then 10% of night 5s); a guard
 // alone and crews of two, four and six fall the same way with no cliffs; and
-// every strategy in the harness's second half loses. Since the clocks became
-// faults a guard alone is near that and crews fall faster from night 3 (see the
-// README's "Balance on the floor").
+// every strategy in the harness's second half loses. Nothing is there yet: a
+// guard alone wins 55% of night 1s and 33% of night 3s, and crews of two to six
+// win 68 to 90% of night 1s and 3 to 33% of night 3s (see the README's "Balance").
 import { assert, defined, isNonEmpty, isPlaced } from './check.ts';
 import { BIGGS, DEFAULT_NAME, DOORS, FINAL_NIGHT, FLAN, MASC, MASCOTS, NAME_MAX, SQUISH, STOMPY } from './config.ts';
 import {
@@ -62,6 +63,7 @@ import {
   sees,
   slide,
   spawnPoint,
+  standNear,
   TOY_BOX,
   walkable,
 } from './map.ts';
@@ -120,21 +122,24 @@ export const F = {
   RESTART: 14, // with the power out, the crank has to put this much back before anything works again
 };
 // Percent of building power per second, and per event. Tuned so a competent guard alone ends night 5 near half
-// power and a crew of four near 15%, losing the power on half its nights and winning under half as often if
-// nobody cranks, and so a crew that shuts the doors and stays in is dead soon after 2 AM.
+// power, and so a crew that shuts the doors and stays in is dead by about 3 AM. A crew pays less for each shut door,
+// each bang and each torch on the dock (crewDraw): it has more guards in the booth and more mascots at its doors
+// than a guard alone, and at the full price doors and bangs took 55 to 60 points of a crew of four's night 1
+// against a lone guard's 13, which put the power out on 85% of its nights.
 const DRAIN = { base: 0.02, lights: 0.03, door: 0.18, charge: 0.48 }; // charge: four times the old rate, to match the dock's 4x speed, so a full torch still costs the same power
 const WEAR = 0.07; // everything draws this much more for each night after the first
 const CRANK = 0.7,
   BANG_COST = 2.5;
 // Faults (breakOut, stepFaults, drainPower). A guard alone gets one every `every` seconds on night 1 at midnight, a
-// little sooner each night and hour; each guard past the first adds `crew` of that again. An open one leaks leak[0]
+// little sooner each night and hour; each guard past the first adds `crew` of that again (at 0.75 a crew of four
+// left a third of its faults to burn on night 1 against a lone guard's eighth). An open one leaks leak[0]
 // percent a second, rising to leak[1] over `ripen` seconds, and after `dark` seconds its room's lights go. Past
 // `scar` seconds it burns `cap` points of ceiling a second, which the crank cannot put back. Leaks and burns are
 // shared by the guards (crewShare), and both grow by `pile` for every fault open past what the crew can be expected
 // to have on its hands (see drainPower). With the power out the open faults eat outLeak times their leak out of
 // what the crank puts back. A bang on a booth door breaks one in the room outside it `bang` of the time.
 // Tuned against the harness so that ignoring them, or leaving them to one guard while the rest stay in, loses.
-const FAULT = { every: 50, crew: 0.75, first: 18, leak: [0.01, 0.06] as const, ripen: 50, scar: 65, cap: 0.2, dark: 25, bang: 0.35, outLeak: 3, pile: 0.4 };
+const FAULT = { every: 50, crew: 0.5, first: 18, leak: [0.01, 0.06] as const, ripen: 50, scar: 65, cap: 0.2, dark: 25, bang: 0.35, outLeak: 3, pile: 0.4 };
 // How many points of ceiling count as an hour's worth of neglect, for the night's heat and the mascots' speed.
 const CAP_SCALE = 25;
 // The box nearest each booth door from outside, for the bang that breaks one.
@@ -142,11 +147,16 @@ const BANG_BOX: Record<DoorKey, number> = { L: 5, R: 7, V: 6 };
 // Metres per second. Hunt speed is per mascot, by MASC index. Biggs is slower
 // than a walking guard and never stops coming. Flan crawls while a guard is
 // looking at her and runs when nobody is. Squish is quick, quicker in the
-// ducts. Stompy walks until it has a straight run, then charges. With the power
-// out every one of them moves `out` times as fast, which outruns a sprinting
-// guard: the crank is the only way out. (Untuned against the harness.)
+// ducts. Stompy walks until it has a straight run, then charges. All but Biggs
+// run out of breath on a long hunt and slow down for a while (TIRE). With the
+// power out every one of them moves `out` times as fast and none of them tires.
+// Squish then outruns a sprinting guard on any night. With no ceiling burnt,
+// Biggs is just short of a sprint until night 4 and Stompy until night 5 (KEEN
+// and RAMP below set the night), and Flan outruns one only while nobody watches
+// her. A sprint does not last, so the crank is still the only way out. (Untuned
+// against the harness.)
 const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6] satisfies PerMascot<number>, unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15, out: 2 };
-const KEEN: [number, number] = [0.8, 0.04]; // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
+const KEEN: [number, number] = [0.78, 0.025]; // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
 const LIT_SPEED = [0, 0.2, 0.4] as const;
 const ROT = { night: 0.12, hour: 0.066, ire: 0.25 };
@@ -156,20 +166,50 @@ const ROT = { night: 0.12, hour: 0.066, ire: 0.25 };
 const BANG_IRE = 0.1,
   GLARE_PER_IRE = 18;
 const FLAT_BAT = 0.5; // what is left of a torch its guard was flattened on top of
-// Seconds one sits on the guard it caught. It then looks round for whoever comes to peel them up rather than going
-// home, so a catch is no breather for the rest of a crew: when it went home, four guards won most of night 5.
-const FEAST = 3.5;
+// Metres one that has just caught a guard puts between the body and where it wanders next, so it does not stand over
+// them waiting for whoever comes to peel them up. It makes that walk before a calm sends it home (b.away).
+const AWAY = 8;
+// Seconds before one that has just caught a guard can catch another. Without it a crew standing together goes down in
+// one go: the guard beside the one it caught is already in reach, and nothing holds it still any more.
+const CATCH_GAP = 1.8;
 const GRAB_TIME = 1.2; // seconds a mascot stuck behind furniture takes to reach over it
 const STARE = 5; // seconds one waiting its turn stands and stares before it goes back to what it was doing
 const CHARGE_GAP = 10; // seconds before Stompy can charge again
 export const WINDUP = { time: 1.5, commit: 0.5 }; // Stompy's wind-up before a charge, and how much of it at the end is spent not turning
+// A mascot's breath for running, as a guard has STAMINA. One that moves faster than it searches is running: any hunt
+// but Biggs's. `run` seconds of that empty a full breath, and `rest` seconds of anything slower fill it again
+// (roaming, searching, standing, stunned, or held in a torch beam). Out of breath it is winded: it hunts at `winded`
+// of its speed, which is slower than a guard walks, until its breath is back to `back`. That takes six seconds, and
+// what it has then lasts under five, so a guard who keeps moving away from one gets clear of it in the end.
+// Biggs never runs: he is slower than a walking guard already, and never stopping is all he has. Stompy's charge
+// costs nothing (CHARGE_GAP spaces those out), and with the power out nothing tires: the crank is the only way out.
+// The harness's guards stand and hold a hunter in the torch more than they run from it, so its table hardly moves
+// with these: what they are worth is to a guard who runs.
+const TIRE = { run: 8, rest: 10, winded: 0.6, back: 0.6 };
 const SEARCH_MAX = 14; // seconds one spends looking for what it heard or lost before it gives that up
-const NOTICE = 0.7; // seconds a mascot stands and stares after spotting a guard, before it moves
-// Seconds a mascot keeps knowing where its guard is after losing sight of them: Biggs, and the rest.
-const RELENT = 8,
+// How far a mascot sees a guard, in metres. `torch` is for a guard with their torch on, `lit` for one in a lit room
+// with it off and `dark` for one in a dark room with it off. Past `near` metres it only sees within `cone` radians
+// either side of the way it faces, and closer than that it notices a guard behind it too. Walls and shut doors block
+// all of it (sees). The first two were 17 and 12, which spotted a guard from across a hall. They are 14 and 10 so that
+// a guard can get closer, and no shorter because a mascot at the bend of either side hall should see a torch in the
+// booth, which is about 14.5 m from the bend: at 10 and 7.5 it saw nothing in there. Picked by hand, not tuned
+// against the harness.
+const SIGHT = { torch: 14, lit: 10, dark: 5, near: 2.5, cone: 1.2 };
+const NOTICE = 1.2; // seconds a mascot stands and stares after spotting a guard, before it moves
+// Seconds a mascot keeps knowing where its guard is after losing sight of them: Biggs, and the rest. Biggs's also
+// covers a guard stepping into a locker: get in within this long of leaving his sight and he knows which one. It was 8
+// until the game was eased. The balance harness's win rates did not move with it.
+export const RELENT = 4.5,
   KEEP = 1.2;
+// Every state a mascot can be in. A saved night may hold one an older build had (adoptFloor).
+const STATES: readonly string[] = ['rest', 'roam', 'search', 'hunt', 'windup', 'charge', 'stun', 'siege'] satisfies MascotState[];
 const keepsFor = (m: Mascot) => (m.i === BIGGS ? RELENT : KEEP);
 const NEAREST = 3; // seconds one that has lost its guard goes without getting closer to where it last saw them before it searches there
+// A hunt that gets nowhere: one free to move that has not left a circle of STUCK.within metres in STUCK.time seconds,
+// and is not reaching in for anyone, gives that guard up and wanders off, and does not look at them again for
+// STUCK.shun seconds. Nothing in the building should bring this on (the harness checks that every spot can be
+// reached); it is there so that a mascot the furniture has beaten walks away instead of standing there all night.
+const STUCK = { within: 1, time: 8, shun: 10 };
 // The mascots stir and settle in turns: seconds of each, before the night's heat stretches one and shrinks the other.
 const STIR: [number, number] = [28, 42],
   CALM: [number, number] = [24, 38];
@@ -177,22 +217,29 @@ const SPENT: [number, number] = [18, 30]; // seconds one stays put after a shut 
 // How many nights' worth of wear each night has had, for rot, heat, speed and power drain. Night 5 counts for more
 // than one step past night 4: with a plain 4, a crew of three won 18% of night 5s against a target of 10.
 const RAMP = [0, 1, 2, 3.15, 4.3] as const;
-// Lockers (HIDES in map.ts). A mascot that saw a guard step in, or was hunting them and still knew where they were
-// (the same few seconds it keeps after losing sight round a corner, eight for Biggs), opens that locker when it gets
-// there. Any other that stands within SNIFF.near of an occupied locker for SNIFF.time seconds opens it anyway, so
-// a locker is for getting out of sight, not for waiting out the night. The doors are heard: LOCKER_NOISE is
+// Lockers (HIDES in map.ts). A mascot that saw a guard step in opens that locker when it gets there. Seeing is all
+// that gives a locker away: one that was hunting them and lost sight before they stepped in, however close behind,
+// goes to where it last saw them and searches from there (CHECK). When it also knew where they went round the corner
+// (keepsFor), a guard could turn a corner, step in and be pulled straight out. Any other that stands within
+// SNIFF.near of an occupied locker for SNIFF.time seconds opens it anyway, so a locker is for getting out of sight,
+// not for waiting out the night. The doors are heard: LOCKER_NOISE is
 // [metres, chance], as for noise(). A guard it pulls out is not caught there: it stands for ESCAPE.head seconds, and
 // nothing can touch them in that time, so they have a moment to run. For ESCAPE.shaky seconds after that their hands
 // shake: getting into a locker bangs its doors (LOCKER_DIN, heard across most of the building), and whatever opens
 // that locker has them at once, or stepping straight back in would start the same moment over. Nothing tells the
 // guard this. Not tuned: the balance harness's `hides`
 // scenarios only show that a guard who uses lockers does about as well as one who does not, and sitting in one loses.
+// A guard caught with their hands in a breaker box gets the same: the fix is broken off, they have ESCAPE.head
+// seconds to run, and their hands shake for ESCAPE.shaky after. Shaking hands earn no second start, at a box or in
+// a locker, so the fix has to have begun after the shaking stopped. The harness's `stand at a box` scenarios lose.
 const SNIFF = { near: 1.6, time: 3 };
 const ESCAPE = { head: 0.6, shaky: 8 };
 // One that loses the guard it was hunting checks the lockers near where it last knew they were: each within
 // CHECK.near metres of that spot, nearest first, with CHECK.chance, at most CHECK.most of them. It walks to the
-// doors and opens them, empty or not. The way to beat it is to get further than that.
-const CHECK = { near: 8, chance: 0.5, most: 2 };
+// doors and opens them, empty or not. The way to beat it is to get further than that. At 8 metres, even odds and two
+// lockers, the one round the corner (most often the nearest) was opened about half the time, so breaking sight and
+// stepping in was a coin flip.
+const CHECK = { near: 6, chance: 0.3, most: 1 };
 const LOCKER_NOISE: [number, number] = [6, 0.5],
   LOCKER_DIN: [number, number] = [24, 1];
 // Mini Biggs: a palm-sized plush of Big Biggs on a keyring, from the gift shop, with a voice box that sings "Happy
@@ -200,14 +247,36 @@ const LOCKER_NOISE: [number, number] = [6, 0.5],
 // ago, so a guard tops it up from the torch: a throw costs `cost` of the battery (one of the five bars on the HUD)
 // and needs that much left. It is thrown along the guard's view, no further than `range` metres, and flies at `speed`
 // metres a second over the furniture until a wall or a shut door stops it. Where it lands it sings for `sing`
-// seconds, which is a noise() of `hear` metres at `chance`: whatever is wandering or searching nearby goes to look,
-// and whatever is already after a guard does not, so it buys a way past, not a way out. Then it lies there (S.toys)
-// until a guard with empty hands picks it up, which means walking to where the mascots were sent. The cost was set
-// against the harness, whose competent and expert guards throw theirs at a wanderer in their way while they have the
-// battery to spare and go back for it once things are quiet. Light spent on a song is light not holding a mascot off.
+// seconds, and the mascots put that first (sing()): each one within `hear` metres that is wandering, searching or
+// hunting drops what it was doing, `chance` of the time, and walks to the toy. On the way and for the `linger`
+// seconds it stands over it, it sees and hears nothing else, though walking into it still gets a guard flattened.
+// So a song ends a chase as well as clearing a corridor. One that is winding up, charging, stunned, banging on a
+// door or on its way home does not listen.
+// A throw that hits a mascot does more (flyToys()). A toy whose flight passes within `hit` metres of one's edge stops
+// and drops at its feet, and that mascot is stunned for `stun` seconds, whatever it was doing, a charge included.
+// One standing switched off on its mark is missed, and so is one banging on a booth door, which a song does not turn
+// either. Nor does a toy hit through a wall or a shut door: the mascot has to be in reach of where the toy passes.
+// The toy sings where it dropped for the others to hear.
+// The toy has to have flown `armed` metres before it touches the mascot: one that reaches it sooner flies on past
+// and lands and sings as any other, so a guard about to be caught cannot stun their way out with a throw at their
+// own feet.
+// With the power out a toy does less, so that the crank is still the only way out of the dark. One that is hunting,
+// winding up or charging does not turn for a song, and a thrown toy sails past it. One that is wandering or
+// searching still goes to a song, but with its eyes and ears open, as it would to any noise: it hunts the guard it
+// sees on the way.
+// For `wise` seconds after a song takes it or a toy hits it, a mascot falls for neither: a thrown one sails past it
+// and a song does not turn it. That is what stops a crew with a carton keeping one stunned all night: at most `stun`
+// seconds in every `wise`.
+// Then the toy lies there (S.toys) until a guard with empty hands picks it up, which means walking to where the
+// mascots were sent. The cost was set against the harness, whose competent and expert guards throw theirs at
+// whatever is coming for them, or at a wanderer in their way, while they have the battery to spare, and go back for
+// it once things are quiet. Light spent on a song is light not holding a mascot off.
 // A carton of them from the gift shop sits in the booth (TOY_BOX in map.ts) with `box` in it at clock-in, shared by
 // the crew and not restocked until the next night (S.toyBox), so a throw need not mean the walk back for it.
-export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3, box: 6 };
+export const TOY = { cost: 0.2, range: 14, speed: 11, hear: 12, chance: 0.9, sing: 3, box: 6, linger: 4, hit: 0.3, armed: 4, stun: 5, wise: 15 };
+// How near a mascot going to a singing toy has to get to count as standing over it. A toy can lie closer to a wall
+// than a mascot fits.
+const TOY_STAND = 1.5;
 
 const OPEN = (): Doors => ({ L: false, V: false, R: false });
 // The night's random numbers, all drawn from sim.rng (CONTRACT.md).
@@ -349,14 +418,24 @@ const newBrain = (sim: Sim): Brain => ({
   notice: 0,
   stared: 0,
   reach: null,
+  saw: null,
   knows: -1,
   sniff: 0,
   checks: [],
   since: 0,
   was: null,
   noShort: 0,
+  park: null,
+  away: null,
+  shun: null,
+  noCatch: 0,
   near: Infinity,
   nearAt: 0,
+  song: null,
+  wise: 0,
+  puff: 1,
+  ran: false,
+  winded: false,
 });
 
 // Sets every Guard field at once (isPlaced relies on that).
@@ -375,6 +454,7 @@ function placeGuard(p: Player, i: number): asserts p is Guard {
     hid: -1,
     shaky: 0,
     inAt: 0,
+    fixAt: 0,
     toy: true,
   });
 }
@@ -438,22 +518,28 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
 // object restarts (after a deploy, say) and has only the S it saved, and when a page loses its room mid-night and
 // carries on solo. Each mascot keeps its place and state, except the ones that need what was lost (a charge's
 // heading, a besieged door): those look round where they stand. One on a hunt goes after the nearest guard.
-// What is lost errs toward the crew: Stompy waits out a full gap before it charges, and one standing where it
-// stands stays put as long as one a door turned away would. now: as for stepFloor.
+// What is lost errs toward the crew: Stompy waits out a full gap before it charges, every one of them waits out
+// CATCH_GAP as if it had just caught a guard, and one standing where it stands stays put as long as one a door
+// turned away would. now: as for stepFloor.
 export function adoptFloor(sim: Sim, state: State, now: number): void {
   const S = state as NightState,
     up = standing(S),
     h = heat(S);
   sim.lastStep = now;
+  // A night saved by a build that gave no start at a breaker box has guards without fixAt. Their hands go in now,
+  // as far as it knows: after any shaking that has stopped (a start is fixAt >= shaky), and not after any that has not.
+  for (const p of S.players) p.fixAt ??= S.t;
   sim.brains = S.m.map(m => {
-    const b: Brain = { ...newBrain(sim), last: { x: m.x, z: m.z }, cool: m.i === STOMPY ? CHARGE_GAP : 0, woke: m.st !== 'rest' };
+    const b: Brain = { ...newBrain(sim), last: { x: m.x, z: m.z }, cool: m.i === STOMPY ? CHARGE_GAP : 0, noCatch: S.t + CATCH_GAP, woke: m.st !== 'rest' };
     if (m.st === 'rest') b.timer = rnd(sim, ...SPENT) * (1 - 0.5 * h);
     const prey = up.reduce<Guard | null>((a, p) => (!a || dist(m, p) < dist(m, a) ? p : a), null);
-    if (m.st === 'hunt' && prey) Object.assign(b, { tgt: prey.id, last: { x: prey.x, z: prey.z } });
+    if (m.st === 'hunt' && prey) Object.assign(b, { tgt: prey.id, last: { x: prey.x, z: prey.z }, saw: { x: prey.x, z: prey.z } });
     else if (['hunt', 'windup', 'charge', 'siege'].includes(m.st)) {
       m.st = 'search';
       b.timer = rnd(sim, 3, 6);
-    } else if (m.st === 'feast' || m.st === 'stun') b.timer = rnd(sim, 1, 3);
+    } else if (m.st === 'stun') b.timer = rnd(sim, 1, 3);
+    // A night saved by a build whose mascots sat on the guard they caught ('feast'): it wanders off, as one does now.
+    else if (!STATES.includes(m.st)) m.st = 'roam';
     return b;
   });
   // Batteries taken are back in 30 to 50 s. How long ago these went is lost, so they come back any time in that.
@@ -481,7 +567,10 @@ export const faultLeft = (S: NightState, f: { at: number }): number => FAULT.sca
 const boxAt = (i: number) => defined(BOXES[i], `box ${i}`);
 const hideAt = (h: number) => defined(HIDES[h], `locker ${h}`);
 const crewRate = (S: NightState) => 1 + FAULT.crew * (Math.max(1, S.players.length) - 1),
-  crewShare = (S: NightState) => 1 / Math.max(1, S.players.length);
+  crewShare = (S: NightState) => 1 / Math.max(1, S.players.length),
+  // What a crew pays of a lone guard's price for a shut door or a bang on one: all of it alone, two thirds for two,
+  // two fifths for four. A torch on the dock is priced the same way in drainPower.
+  crewDraw = (S: NightState) => 2 / (Math.max(1, S.players.length) + 1);
 const leakOf = (S: NightState, f: { at: number }) => (FAULT.leak[0] + (FAULT.leak[1] - FAULT.leak[0]) * Math.min(1, (S.t - f.at) / FAULT.ripen)) * crewShare(S);
 
 // A fault breaks out in a box nobody is standing at; or, from a bang, in the box by that door.
@@ -520,11 +609,13 @@ function drainPower(S: NightState, dt: number) {
   // One handle: a second guard at the generator adds nothing.
   S.crank = S.players.some(p => p.act === 'crank' && near(p, GENERATOR));
   for (const p of charging) p.bat = Math.min(1, p.bat + F.CHARGE * dt);
-  // Shorts compound: each open fault past one, and one more for every two guards past the first, makes all of them
-  // leak and burn FAULT.pile more, so a crew that keeps on top of them pays little and one that lets them pile up
-  // (one guard doing the rounds for three who stay in, say) pays a lot.
+  // Shorts compound: each open fault past one makes all of them leak and burn FAULT.pile more, so a crew that keeps
+  // on top of them pays little and one that lets them pile up (one guard doing the rounds for three who stay in, say)
+  // pays a lot. A crew's count is divided by how many times a lone guard's faults it gets (crewRate), so four guards
+  // with five open pay what one guard pays with two. (The allowance was one more fault for every two guards past the
+  // first, which fell behind the rate: a crew of four spent 19 points of night 1 on this against a lone guard's 2.)
   const open = S.faults.filter(Boolean).length,
-    pile = 1 + FAULT.pile * Math.max(0, open - 1 - Math.floor((S.players.length - 1) / 2));
+    pile = 1 + FAULT.pile * Math.max(0, open / crewRate(S) - 1);
   const leaks = S.faults.reduce((sum, f) => sum + (f ? leakOf(S, f) : 0), 0) * pile;
   // A fault left too long burns out ceiling, power or no power.
   const burning = S.faults.filter(f => f?.burnt).length;
@@ -549,8 +640,8 @@ function drainPower(S: NightState, dt: number) {
     }
   } else {
     // A bigger crew has more torches to charge from the same supply, so each draws less: two guards' worth at most.
-    const drain =
-      (DRAIN.base + DRAIN.lights + DRAIN.door * shut + (DRAIN.charge * charging.length * 2) / (S.players.length + 1)) * (1 + WEAR * late(S)) + leaks;
+    const doors = DRAIN.door * shut * crewDraw(S);
+    const drain = (DRAIN.base + DRAIN.lights + doors + (DRAIN.charge * charging.length * 2) / (S.players.length + 1)) * (1 + WEAR * late(S)) + leaks;
     // A bang on a door can take the last of it between ticks, crank turning or not.
     if (S.power > 0) S.power = Math.max(0, Math.min(S.cap, S.power + ((S.crank ? CRANK : 0) - drain) * dt));
     if (S.power <= 0) {
@@ -613,18 +704,28 @@ const watchedBy = (S: NightState, p: Guard, m: Mascot) =>
 
 function canSee(S: NightState, m: Mascot, p: Guard) {
   const d = dist(m, p);
-  // A lit torch shows from across a hall. With the building dark and yours off, it has to be close.
-  const range = p.on ? 17 : !darkRoom(S, roomAt(p.x, p.z)) ? 12 : 5;
+  // A lit torch shows furthest. With the room dark and the torch off, the guard has to be close.
+  const range = p.on ? SIGHT.torch : darkRoom(S, roomAt(p.x, p.z)) ? SIGHT.dark : SIGHT.lit;
   if (d > range) return false;
-  if (d > 2.5 && Math.abs(angDiff(Math.atan2(p.x - m.x, p.z - m.z), m.yaw)) > 1.2) return false;
-  return sees(m.x, m.z, p.x, p.z, S.doors);
+  if (d > SIGHT.near && Math.abs(angDiff(Math.atan2(p.x - m.x, p.z - m.z), m.yaw)) > SIGHT.cone) return false;
+  // What it could reach over it can see over: within arm's reach only a wall or a shut door hides a guard.
+  return d < F.GRAB ? reaches(m.x, m.z, p.x, p.z, S.doors) : sees(m.x, m.z, p.x, p.z, S.doors);
 }
 
-// Something made a sound here. Mascots that are out, not on their way home and not already after someone may come and look.
+// Is it going to a singing Mini Biggs, or standing over one? b.song is the spot the song gave it to look at, and it
+// is lured for as long as that is still the very spot it is looking for: anything else that sends it somewhere gives
+// b.last a new one.
+const lured = (m: Mascot, b: Brain) => m.st === 'search' && !!b.song && b.last === b.song;
+// And does the toy have all its attention, so that it sees and hears nothing else? Not with the power out: a song
+// in the dark is only a noise to go and look at.
+const charmed = (S: NightState, m: Mascot, b: Brain) => lured(m, b) && !S.out;
+
+// Something made a sound here. Mascots that are out, not on their way home, not already after someone and not taken
+// up with a Mini Biggs (charmed) may come and look.
 function noise(sim: Sim, S: NightState, x: number, z: number, radius: number, chance: number) {
   for (const [i, m] of S.m.entries()) {
     const b = brainOf(sim, i);
-    if (!['roam', 'search'].includes(m.st) || b.home || hypot(m.x - x, m.z - z) > radius || sim.rng() > chance) continue;
+    if (!['roam', 'search'].includes(m.st) || b.home || charmed(S, m, b) || hypot(m.x - x, m.z - z) > radius || sim.rng() > chance) continue;
     m.st = 'search';
     b.last = { x, z };
     b.timer = rnd(sim, 3, 6);
@@ -644,23 +745,92 @@ export function landing(S: State, x: number, z: number, yaw: number, d: number):
   return { x: x + sx * k, z: z + sz * k };
 }
 
-// A thrown Mini Biggs that has just come down sings where it lands, and whatever hears it comes to look.
-function landToys(sim: Sim, S: NightState) {
-  for (const s of S.toys)
-    if (!s.heard && S.t >= s.land) {
-      s.heard = true;
-      emit(S, 'toy', { by: s.by, x: s.x, z: s.z });
-      noise(sim, S, s.x, s.z, TOY.hear, TOY.chance);
-    }
+// A Mini Biggs has started singing here. Every mascot in earshot that is wandering, searching or hunting, and not
+// wise to it, may drop that and come: one draw each, in S.m order. With the power out the hunting ones do not, and
+// the ones that come keep looking and listening on the way (charmed).
+function sing(sim: Sim, S: NightState, x: number, z: number) {
+  for (const [i, m] of S.m.entries()) {
+    const b = brainOf(sim, i);
+    const listens = m.st === 'roam' || m.st === 'search' || (m.st === 'hunt' && !S.out);
+    if (!listens || b.home || S.t < b.wise || hypot(m.x - x, m.z - z) > TOY.hear || sim.rng() > TOY.chance) continue;
+    m.st = 'search';
+    b.song = { x, z };
+    // was and since: it has not lost a guard, so it checks no lockers (runMascot).
+    Object.assign(b, { last: b.song, timer: TOY.linger, repath: 0, tgt: null, reach: null, checks: [], was: 'search', since: S.t, wise: S.t + TOY.wise });
+  }
 }
 
-// Where to walk next.
-function pickDest(sim: Sim, S: NightState, m: Mascot): Point {
+// The point on the line from a to b that is nearest p, and how far p is from the line.
+function segNear(p: Point, a: Point, b: Point): Point {
+  const dx = b.x - a.x,
+    dz = b.z - a.z,
+    len2 = dx * dx + dz * dz,
+    k = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / len2)) : 0;
+  return { x: a.x + dx * k, z: a.z + dz * k };
+}
+const segDist = (p: Point, a: Point, b: Point) => dist(p, segNear(p, a, b));
+
+// The thrown Mini Biggses still in the air. One whose flight this tick passes a mascot close enough hits it: the
+// toy drops at its feet and the mascot is stunned (TOY). Only the flight past TOY.armed metres from the hand counts.
+// One that has come down, there or where it was thrown to, sings, and whatever hears it comes to look. No random
+// draws but sing()'s.
+function flyToys(sim: Sim, S: NightState, dt: number) {
+  for (const s of S.toys) {
+    if (s.heard) continue;
+    // Where it was at the last tick and where it is now.
+    const at = (t: number) => {
+      const k = Math.max(0, Math.min(1, (t - s.at) / (s.land - s.at)));
+      return { x: s.x0 + (s.x - s.x0) * k, z: s.z0 + (s.z - s.z0) * k };
+    };
+    const hand = { x: s.x0, z: s.z0 },
+      from = at(S.t - dt),
+      to = at(S.t),
+      flown = dist(hand, to),
+      touch = MASCOT_R + TOY.hit;
+    // Until it has flown TOY.armed metres it hits nothing. `armed` is the spot on its flight where that is.
+    const live = flown >= TOY.armed,
+      armed = live ? { x: s.x0 + ((to.x - s.x0) * TOY.armed) / flown, z: s.z0 + ((to.z - s.z0) * TOY.armed) / flown } : hand;
+    // The first one in its way: not one switched off on its mark, banging on a door, already stunned or wise to it,
+    // and with the power out not one that is after a guard. Nor one the toy was already touching before it got to
+    // `armed`: it flies on past that one. Nor one with a wall or a shut door between it and the toy.
+    let hit: Mascot | null = null;
+    for (const [i, m] of S.m.entries()) {
+      const b = brainOf(sim, i);
+      if (!live || !b.woke || m.st === 'rest' || m.st === 'stun' || m.st === 'siege' || S.t < b.wise) continue;
+      if (S.out && (m.st === 'hunt' || m.st === 'windup' || m.st === 'charge')) continue;
+      const at = segNear(m, from, to);
+      if (dist(m, at) > touch || segDist(m, hand, armed) <= touch || !reaches(at.x, at.z, m.x, m.z, S.doors)) continue;
+      if (!hit || dist(m, from) < dist(hit, from)) hit = m;
+    }
+    if (hit) {
+      const b = brainOf(sim, hit.i);
+      // A charge or a wind-up it knocks Stompy out of is spent, as one that ends in a wall is.
+      if (hit.st === 'windup' || hit.st === 'charge') b.cool = CHARGE_GAP;
+      hit.st = 'stun';
+      Object.assign(b, { timer: TOY.stun, wise: S.t + TOY.wise, tgt: null, reach: null, path: [] });
+      Object.assign(s, { x: hit.x, z: hit.z, land: S.t });
+      emit(S, 'bonk', { i: hit.i, by: s.by, x: hit.x, z: hit.z });
+    }
+    if (S.t >= s.land) {
+      s.heard = true;
+      emit(S, 'toy', { by: s.by, x: s.x, z: s.z });
+      sing(sim, S, s.x, s.z);
+    }
+  }
+}
+
+// Has it given this guard up for now (STUCK)?
+const shuns = (S: NightState, b: Brain, p: Guard) => !!b.shun && b.shun.id === p.id && S.t < b.shun.until;
+
+// Where to walk next. body: the guard it has just flattened, if this is the walk away from them. That walk ends in
+// another room and at least AWAY from them. (In the dark it goes to a guard still standing, as ever.)
+function pickDest(sim: Sim, S: NightState, m: Mascot, b: Brain, body?: Point): Point {
+  const clearOf = (at: Point) => !body || dist(at, body) >= AWAY;
   const up = outside(S);
   let room: number | undefined;
   // In the dark they do not wander. They come to where you are, and a locker does not hide that: they stand at its
   // doors until they open them (openLockers). Sitting out the night in one ends in the dark.
-  const all = standing(S);
+  const all = standing(S).filter(p => !shuns(S, b, p));
   if (S.out && isNonEmpty(all)) {
     const p = pick(sim, all);
     return hidden(p) ? { ...hideAt(p.hid).at } : { x: p.x, z: p.z };
@@ -674,16 +844,18 @@ function pickDest(sim: Sim, S: NightState, m: Mascot): Point {
       room = roomAt(p.x, p.z);
     }
   }
-  if (room == null || room < 0 || (room === DUCTS && m.i !== SQUISH)) {
-    const rooms = ROOMS3.map((_, i) => i).filter(i => i !== BOOTH && (i !== DUCTS || m.i === SQUISH) && i !== roomAt(m.x, m.z));
-    assert(isNonEmpty(rooms), 'there is a room to wander to'); // eight outside the booth, and it stands in one at most
+  // Walking away from a body, a room is no good if the body is in it or its middle is within AWAY of the body.
+  const far = (i: number) => !body || (i !== roomAt(body.x, body.z) && clearOf(roomCentre(i)));
+  if (room == null || room < 0 || (room === DUCTS && m.i !== SQUISH) || !far(room)) {
+    const rooms = ROOMS3.map((_, i) => i).filter(i => i !== BOOTH && (i !== DUCTS || m.i === SQUISH) && i !== roomAt(m.x, m.z) && far(i));
+    assert(isNonEmpty(rooms), 'there is a room to wander to'); // eight outside the booth; it stands in one at most, and no body is near them all
     room = pick(sim, rooms);
   }
   const [x0, z0, x1, z1] = pick(sim, defined(ROOMS3[room], `room ${room}`).rects);
   for (let tries = 0; tries < 8; tries++) {
     const x = rnd(sim, x0 + 1, x1 - 1),
       z = rnd(sim, z0 + 1, z1 - 1);
-    if (walkable(x, z, MASCOT_R + 0.2)) return { x, z };
+    if (walkable(x, z, MASCOT_R + 0.2) && clearOf({ x, z })) return { x, z };
   }
   return roomCentre(room);
 }
@@ -704,25 +876,37 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
     return 'there';
   }
   if (b.repath <= 0 || !b.path.length) {
-    const r = route(m.x, m.z, goal.x, goal.z, { doors: S.doors, ducts: m.i === SQUISH });
+    // The ducts are Squish's. The others find their way through them only with the power out, when they come to
+    // wherever the guards are, and to get back out if they have followed one in.
+    const ducts = m.i === SQUISH || S.out || roomAt(m.x, m.z) === DUCTS;
+    // A goal that is no place for a mascot (a guard tucked in behind the furniture, or in the ducts): it makes for
+    // the nearest place to it that is, and whatever is still between them it reaches over (see tucked).
+    const fits = walkable(goal.x, goal.z, MASCOT_R, S.doors) && (ducts || roomAt(goal.x, goal.z) !== DUCTS);
+    const to = fits ? goal : (standNear(goal.x, goal.z, MASCOT_R, S.doors, ducts) ?? goal);
+    const r = route(m.x, m.z, to.x, to.z, { doors: S.doors, ducts });
+    // It asks again while it walks, and from a step past a waypoint the answer can begin by sending it back there:
+    // clear() looks every 0.35 m, so a line that brushes the corner of a prop is clear from one end and not from a
+    // step along it. If the new way goes through the point it was already making for, it carries on to that.
+    const [was] = b.path,
+      on = was ? r.path.findIndex(q => dist(q, was) < 0.01) : -1;
+    if (on > 0) r.path.splice(0, on);
     b.path = r.path;
     b.key = r.blocked || null;
     b.repath = eager ? 0.35 : 1.5;
     if (!r.path.length && !r.blocked) return 'nowhere';
-    // The last few metres to a guard tucked somewhere a mascot does not fit: straight at them, not back to the
-    // nearest waypoint every time it asks again. Whatever stops it short, it reaches over (see tucked). Not straight
-    // after that line jammed it: a gap a guard fits through and it does not would hold it there for good.
-    if (eager && r.path.length > 1 && !r.blocked && dist(m, goal) < 4 && b.noShort <= S.t && clear(m.x, m.z, goal.x, goal.z, PLAYER_R, S.doors))
+    // The last few metres to a guard it can walk right up to: straight at them, not back to the nearest waypoint
+    // every time it asks again. Not straight after that line jammed it: a gap a guard fits through and it does not
+    // would hold it there for good.
+    if (eager && fits && r.path.length > 1 && !r.blocked && dist(m, goal) < 4 && b.noShort <= S.t && clear(m.x, m.z, goal.x, goal.z, PLAYER_R, S.doors))
       b.path = [goal];
   }
   // Near enough a waypoint counts as there, but only if the way on is clear from here: a prop can stand close
-  // beside the line between two waypoints. The last leg is to wherever the guard is, which may be no place for a
-  // mascot, so it only has to be clear for a guard; and standing on the waypoint counts whatever is ahead.
+  // beside the line between two waypoints. Standing on the waypoint counts whatever is ahead. The end of the way
+  // it walks right up to: that is as near its goal as it gets. (Short of a shut door, near enough will do.)
   const passed = () => {
     const [here, after] = b.path;
-    return (
-      !!here && dist(m, here) < 0.6 && (!after || dist(m, here) < 0.1 || clear(m.x, m.z, after.x, after.z, b.path.length === 2 ? PLAYER_R : MASCOT_R, S.doors))
-    );
+    if (!here || dist(m, here) >= 0.6) return false;
+    return dist(m, here) < 0.1 || (after ? clear(m.x, m.z, after.x, after.z, MASCOT_R, S.doors) : !!b.key);
   };
   while (passed()) b.path.shift();
   const next = b.path[0];
@@ -747,19 +931,23 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
   return 'going';
 }
 
-function flatten(S: NightState, p: Guard, m: Mascot, b: Brain) {
+function flatten(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
   if (S.dev?.god) return;
+  spendCharge(m, b);
   Object.assign(p, { flat: true, on: false, ph: false, flatBy: m.i, act: '', hid: -1 });
   recordFlat(S, [p.name, m.i]);
   emit(S, 'flat', { id: p.id, by: m.i, x: p.x, z: p.z });
   p.bat *= FLAT_BAT;
-  // It sits on what it caught, then stays and looks round for whoever comes to peel them up.
-  m.st = 'feast';
-  b.timer = FEAST;
-  b.tgt = null;
-  b.path = [];
-  b.last = { x: p.x, z: p.z };
-  if (!standing(S).length) endNight(S, m.i);
+  // It does not sit on what it caught or wait there for whoever comes to peel them up. It goes back to wandering,
+  // somewhere else first, and it still comes for any guard it sees on the way.
+  m.st = 'roam';
+  Object.assign(b, { tgt: null, path: [], repath: 0, timer: 0, home: false, reach: null, noCatch: S.t + CATCH_GAP });
+  if (!standing(S).length) {
+    b.dest = null;
+    return endNight(S, m.i);
+  }
+  b.away = { x: p.x, z: p.z };
+  b.dest = pickDest(sim, S, m, b, b.away);
 }
 function endNight(S: NightState, by: MascotIndex | -1) {
   S.phase = 'dead';
@@ -768,14 +956,56 @@ function endNight(S: NightState, by: MascotIndex | -1) {
   emit(S, 'scare');
 }
 
-// Touching is being within F.CATCH with no wall between: a table between does not save anyone.
-function catchGuards(S: NightState, m: Mascot, b: Brain) {
+// Touching is being within F.CATCH with no wall between: a table between does not save anyone. One that has just
+// caught a guard touches nobody for CATCH_GAP.
+function catchGuards(sim: Sim, S: NightState, m: Mascot, b: Brain) {
+  if (S.t < b.noCatch) return false;
   for (const p of outside(S))
     if (S.t >= p.safe && dist(m, p) < F.CATCH && reaches(m.x, m.z, p.x, p.z, S.doors)) {
-      flatten(S, p, m, b);
+      catchOne(sim, S, p, m, b);
       return true;
     }
   return false;
+}
+// It has its hands on this guard. One busy in a breaker box, whose hands are not still shaking from the last time,
+// gets a start. Anyone else is flattened. Every catch of a guard on the floor comes through here.
+function catchOne(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
+  if (fixing(S, p) && p.fixAt >= p.shaky) startle(S, p, m, b);
+  else flatten(sim, S, p, m, b);
+}
+// Hands in a breaker box: the client says so, and there is an open fault in reach to have them in.
+const fixing = (S: NightState, p: Guard) => p.act === 'fix' && BOXES.some((box, i) => S.faults[i] && dist(p, box) < F.REACH);
+// A split second's start on the mascot that has just reached them, as openLockers gives a guard it pulls out.
+function headStart(S: NightState, p: Guard, m: Mascot, b: Brain) {
+  p.safe = Math.max(p.safe, S.t + ESCAPE.head);
+  p.shaky = S.t + ESCAPE.shaky;
+  Object.assign(b, {
+    tgt: p.id,
+    last: { x: p.x, z: p.z },
+    saw: { x: p.x, z: p.z },
+    lost: 0,
+    near: Infinity,
+    notice: ESCAPE.head,
+    home: false,
+    repath: 0,
+    path: [],
+  });
+  m.st = 'hunt';
+}
+// A charge that ends at a guard is spent, like one that runs out or hits a wall: Stompy waits before the next.
+// startle() and flatten() call it once the catch has landed. Under the dev god mode none does, and Stompy charges on
+// with its heading.
+function spendCharge(m: Mascot, b: Brain) {
+  if (m.st !== 'windup' && m.st !== 'charge') return;
+  b.cool = Math.max(b.cool, CHARGE_GAP);
+  b.dir = null;
+}
+// It reached a guard who was busy in a breaker box. They let go of the box, and it is after them.
+function startle(S: NightState, p: Guard, m: Mascot, b: Brain) {
+  spendCharge(m, b);
+  p.act = '';
+  emit(S, 'startle', { i: m.i, id: p.id, x: p.x, z: p.z });
+  headStart(S, p, m, b);
 }
 
 // It has seen this guard. The first time, it stops and stares before it comes.
@@ -789,6 +1019,7 @@ function spot(S: NightState, m: Mascot, b: Brain, p: Guard) {
   m.st = 'hunt';
   b.tgt = p.id;
   b.last = { x: p.x, z: p.z };
+  b.saw = { x: p.x, z: p.z };
   b.lost = 0;
   b.near = Infinity;
 }
@@ -803,7 +1034,8 @@ function nextCheck(m: Mascot, b: Brain) {
 }
 
 // It stands outside an occupied locker: one that knows who is in there opens it at once, any other after SNIFF.time.
-function openLockers(S: NightState, m: Mascot, b: Brain, dt: number) {
+function openLockers(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
+  if (S.t < b.noCatch) return false; // it has just caught a guard: it opens nothing yet
   const p = standing(S).find(
     q => hidden(q) && S.t >= q.safe && dist(m, hideAt(q.hid).at) < SNIFF.near && reaches(m.x, m.z, hideAt(q.hid).at.x, hideAt(q.hid).at.z, S.doors)
   );
@@ -822,15 +1054,12 @@ function openLockers(S: NightState, m: Mascot, b: Brain, dt: number) {
   b.sniff = 0;
   // They banged their way in, shaking: no start on it this time.
   if (p.inAt < p.shaky) {
-    flatten(S, p, m, b);
+    flatten(sim, S, p, m, b);
     return true;
   }
   // Out on the floor in front of the doors, with a split second's start on it.
   p.hid = -1;
-  p.safe = Math.max(p.safe, S.t + ESCAPE.head);
-  p.shaky = S.t + ESCAPE.shaky;
-  Object.assign(b, { tgt: p.id, last: { x: p.x, z: p.z }, lost: 0, near: Infinity, notice: ESCAPE.head, home: false, repath: 0, path: [] });
-  m.st = 'hunt';
+  headStart(S, p, m, b);
   return true;
 }
 
@@ -844,14 +1073,12 @@ function lockersNear(sim: Sim, at: Point | null) {
     .map(c => c.i);
 }
 
-// A guard stepped into a locker. Whatever could see them do it knows where they are; whatever was hunting them and
-// still knew where they were (b.lost under its keeping time) does too.
+// A guard stepped into a locker. Whatever could see them do it knows where they are, and nothing else does.
 function seenHiding(sim: Sim, S: NightState, p: Guard) {
   for (const [i, m] of S.m.entries()) {
     const b = brainOf(sim, i);
-    if (m.st === 'rest' || (b.spent && !S.out) || !b.woke) continue;
-    const after = COMING.includes(m.st) && b.tgt === p.id && b.lost < keepsFor(m);
-    if (!after && !canSee(S, m, p)) continue;
+    if (m.st === 'rest' || (b.spent && !S.out) || !b.woke || charmed(S, m, b)) continue;
+    if (!canSee(S, m, p)) continue;
     b.knows = p.hid;
     if (m.st === 'roam' || m.st === 'search') {
       m.st = 'search';
@@ -877,13 +1104,23 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   m.lit = !!lighter;
   if (lighter) m.ire += dt / GLARE_PER_IRE;
   b.cool -= dt;
+  // Its breath: spent if it ran on the last step, coming back if it did not.
+  b.puff = Math.max(0, Math.min(1, b.puff + (b.ran ? -dt / TIRE.run : dt / TIRE.rest)));
+  b.ran = false;
+  if (b.puff <= 0) b.winded = true;
+  else if (b.puff >= TIRE.back) b.winded = false;
   if (m.st !== b.was) {
     // It has just lost the guard it was after: which lockers it will look in.
     b.checks = m.st === 'search' && b.was === 'hunt' ? lockersNear(sim, b.last) : m.st === 'search' ? b.checks : [];
     b.was = m.st;
     b.since = S.t;
+    // Getting nowhere (STUCK) is timed from here: what it stood through banging on a door or winding up is not held
+    // against the hunt that follows.
+    b.park = null;
+    // Anything but wandering ends its walk away from the guard it caught.
+    if (m.st !== 'roam') b.away = null;
   }
-  const ductGuest = m.i === SQUISH ? up.find(p => inDucts(p) && S.t >= p.safe) : null;
+  const ductGuest = m.i === SQUISH ? up.find(p => inDucts(p) && S.t >= p.safe && !shuns(S, b, p)) : null;
 
   // Standing where it stands. A wave gets it moving, or (Squish) someone in the ducts.
   if (m.st === 'rest') {
@@ -896,19 +1133,13 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     }
     return;
   }
-  // States that run on a timer and ignore everything else.
-  if (m.st === 'feast' || m.st === 'stun') {
+  // Knocked silly: it runs on a timer and ignores everything else.
+  if (m.st === 'stun') {
     b.timer -= dt;
     if (b.timer > 0) return;
-    if (m.st === 'feast') {
-      m.st = 'search';
-      b.timer = rnd(sim, 4, 7);
-      b.repath = 0;
-    } else {
-      m.st = 'roam';
-      b.dest = null;
-      b.home = false;
-    }
+    m.st = 'roam';
+    b.dest = null;
+    b.home = false;
     b.path = [];
     return;
   }
@@ -929,12 +1160,12 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     const dir = defined(b.dir, "Stompy's heading");
     const from = { x: m.x, z: m.z };
     let got = slide(m, dir.x * SPEED.charge * dt, dir.z * SPEED.charge * dt, MASCOT_R, S.doors);
-    // The vent is too low for it: charging into the ducts is charging into a wall. (Only Squish can find its way out of them.)
+    // The vent is too low for it: charging into the ducts is charging into a wall.
     if (roomAt(m.x, m.z) === DUCTS) {
       Object.assign(m, from);
       got = 0;
     }
-    if (catchGuards(S, m, b)) return;
+    if (catchGuards(sim, S, m, b)) return;
     b.timer -= dt;
     if (got < 0.5) {
       m.st = 'stun';
@@ -948,17 +1179,20 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     return;
   }
 
-  // Who can it see? One turned away at a door is on its way home and looks at nobody, though walking into it still counts.
+  // Who can it see? One turned away at a door is on its way home and looks at nobody, though walking into it still
+  // counts. Nor does one taken up with a singing Mini Biggs, unless the power is out: in the dark every one of them
+  // looks, or a toy would be a second way out of it.
   let seen: Guard | null = null,
     near = 1e9;
-  const looking = !b.spent || S.out;
+  const deaf = charmed(S, m, b),
+    looking = (!b.spent || S.out) && !deaf;
   if (looking)
     for (const p of up)
-      if (S.t >= p.safe && canSee(S, m, p) && dist(m, p) < near) {
+      if (S.t >= p.safe && !shuns(S, b, p) && canSee(S, m, p) && dist(m, p) < near) {
         near = dist(m, p);
         seen = p;
       }
-  if (!seen && looking && lighter && S.t >= lighter.safe) seen = lighter; // a beam on it gives you away
+  if (!seen && looking && lighter && S.t >= lighter.safe && !shuns(S, b, lighter)) seen = lighter; // a beam on it gives you away
   // Only so many come for the guards at once. The rest stop and stare, and wait their turn.
   // Squish does not wait for anyone in its ducts.
   let stare = false;
@@ -982,7 +1216,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     const key = defined(b.key, 'the door it is banging on');
     const door = DOORWAYS.find(d => d.key === key);
     if (door) turn(m, Math.atan2((door.rect[0] + door.rect[2]) / 2 - m.x, (door.rect[1] + door.rect[3]) / 2 - m.z), 5 * dt);
-    if (catchGuards(S, m, b)) return;
+    if (catchGuards(sim, S, m, b)) return;
     if (!S.doors[key]) {
       m.st = b.tgt ? 'hunt' : 'roam';
       b.repath = 0;
@@ -994,7 +1228,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     m.ire += BANG_IRE;
     b.bangs++;
     if (sim.rng() < FAULT.bang) breakOut(sim, S, BANG_BOX[key]);
-    if (!S.dev?.power) S.power = Math.max(0, S.power - BANG_COST);
+    if (!S.dev?.power) S.power = Math.max(0, S.power - BANG_COST * crewDraw(S));
     b.timer = rnd(sim, 1.6, 3);
     if (b.bangs >= 3 + (S.night > 2 ? 1 : 0)) {
       m.st = 'roam';
@@ -1019,9 +1253,10 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       b.timer = Math.max(b.timer, 1.5);
     }
   }
-  if (looking && openLockers(S, m, b, dt)) return;
+  if (looking && openLockers(sim, S, m, b, dt)) return;
 
-  // A hunt does not tire. It ends when the guard is caught, shut out behind a door (siege) or lost from sight.
+  // A hunt slows when the mascot is out of breath (TIRE), and ends when the guard is caught, shut out behind a door
+  // (siege) or lost from sight.
   if (!seen && m.st === 'hunt') {
     const tp = S.players.find(p => p.id === b.tgt);
     b.lost += dt;
@@ -1029,7 +1264,11 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     if (tp && hidden(tp) && b.knows === tp.hid) {
       b.last = { ...hideAt(tp.hid).at };
       b.lost = 0;
-    } else if (tp && !tp.flat && !hidden(tp) && b.lost < keepsFor(m)) {
+    } else if (tp && hidden(tp)) {
+      // They got into one out of its sight. It does not know which: following them round the corner would walk it to
+      // the doors, so it goes back to where it last saw them.
+      if (b.saw && b.last !== b.saw) Object.assign(b, { last: b.saw, near: Infinity, repath: 0 });
+    } else if (tp && !tp.flat && b.lost < keepsFor(m)) {
       b.last = { x: tp.x, z: tp.z }; // it knows which way you went round the corner
       b.near = Infinity;
     }
@@ -1043,7 +1282,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       b.timer = rnd(sim, 4, 7);
     }
   } else if (!seen) {
-    const loud = !b.home && up.find(p => p.sp && dist(m, p) < 9);
+    const loud = !b.home && !deaf && up.find(p => p.sp && dist(m, p) < 9);
     if (loud) {
       m.st = 'search';
       b.last = { x: loud.x, z: loud.z };
@@ -1074,6 +1313,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       speed = SPEED.hunt[m.i] * angry;
       if (m.i === FLAN && !up.some(p => watchedBy(S, p, m))) speed = SPEED.unwatched * angry;
       if (m.i === SQUISH && roomAt(m.x, m.z) === DUCTS) speed *= SPEED.ducts;
+      if (b.winded && !S.out) speed *= TIRE.winded;
     }
   } else if (m.st === 'search' && S.t - b.since > SEARCH_MAX) {
     m.st = 'roam';
@@ -1085,7 +1325,15 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   } else {
     // Between waves they walk back to where they stand. So does one that has been turned away at a door, and
     // it stays there a while. With the power out nothing goes home.
-    const settle = (!S.stir || b.spent) && !S.out;
+    // One walking away from the guard it caught gets clear of them first: AWAY off and out of their room, or where it
+    // was going. In the dark it is not walking away from anyone.
+    if (b.away && (S.out || (dist(m, b.away) >= AWAY && roomAt(m.x, m.z) !== roomAt(b.away.x, b.away.z)))) b.away = null;
+    // Nor does it go home to stand by them: with a guard it flattened still on the floor within AWAY of its mark,
+    // it keeps wandering, clear of them, until they are peeled up. One a door turned away has no mark to stand on
+    // either, so it is done with that and looks about again: spent, it would wander blind for as long as they lay there.
+    const body = b.away ?? (S.out ? undefined : S.players.find(p => p.flat && p.flatBy === m.i && dist(p, REST[m.i]) < AWAY));
+    if (body && !b.away) b.spent = false;
+    const settle = (!S.stir || b.spent) && !S.out && !body;
     if (settle !== b.home) {
       b.home = settle;
       b.dest = settle ? REST[m.i] : null;
@@ -1099,7 +1347,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       return;
     }
     if (!b.dest) {
-      b.dest = pickDest(sim, S, m);
+      b.dest = pickDest(sim, S, m, b, body);
       b.repath = 0;
     }
     speed = SPEED.roam;
@@ -1108,24 +1356,42 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   if (S.out) speed *= SPEED.out;
   if (m.lit) speed *= defined(LIT_SPEED[m.rot], 'a rot stage'); // rot is 0, 1 or 2
   if (stare) speed = 0;
+  b.ran = !b.winded && !S.out && m.i !== BIGGS && speed > SPEED.search * angry;
   if (m.lit && lighter) turn(m, Math.atan2(lighter.x - m.x, lighter.z - m.z), 4 * dt); // it turns to face the light
 
-  const res = speed > 0 ? goTo(S, m, b, goal, speed, dt, eager) : 'going';
-  if (catchGuards(S, m, b)) return;
+  // Close enough to a singing toy is there: it stands over it and looks about.
+  const atToy = lured(m, b) && dist(m, goal) < TOY_STAND && reaches(m.x, m.z, goal.x, goal.z, S.doors);
+  const res = atToy ? 'there' : speed > 0 ? goTo(S, m, b, goal, speed, dt, eager) : 'going';
+  if (catchGuards(sim, S, m, b)) return;
+  // The guard it is hunting, while it knows where they are: in sight, or out of it for less time than it keeps them
+  // in mind. Stepping behind a prop does not start a reach over, or lose one that has begun.
+  const tp = m.st === 'hunt' ? S.players.find(p => p.id === b.tgt) : undefined;
+  const prey = tp && !tp.flat && !hidden(tp) && S.t >= tp.safe && (seen === tp || b.lost < keepsFor(m)) ? tp : null,
+    gap = prey ? dist(m, prey) : Infinity;
   // Free to move, within arm's reach of a guard who is staying put, and getting no nearer however it tries: they
   // are tucked in behind the furniture. It reaches in. (A mascot wedged on a prop can rock back and forth a metre
   // looking for a way round, so this goes by the gap between them, not by whether it has moved.)
-  const tucked = m.st === 'hunt' && speed > 0 && seen && near < F.GRAB && reaches(m.x, m.z, seen.x, seen.z, S.doors) ? seen : null;
-  // Rocking back out of arm's reach for a moment does not start it over, while the guard it means stays put in sight.
+  const tucked = speed > 0 && prey && gap < F.GRAB && reaches(m.x, m.z, prey.x, prey.z, S.doors) ? prey : null;
+  // Rocking back out of arm's reach for a moment does not start it over, while the guard it means stays put.
   const r = b.reach,
     holds = (p: Guard | null) => !!p && !!r && r.id === p.id && dist(p, r) <= 0.5;
-  if (tucked && r && holds(tucked) && near >= r.d - 0.3) {
-    if (S.t - r.t > GRAB_TIME) {
-      flatten(S, tucked, m, b);
+  if (tucked && r && holds(tucked) && gap >= r.d - 0.3) {
+    if (S.t - r.t > GRAB_TIME && S.t >= b.noCatch) {
+      catchOne(sim, S, tucked, m, b);
       return;
     }
-  } else if (tucked) b.reach = { id: tucked.id, d: near, x: tucked.x, z: tucked.z, t: S.t };
-  else if (!(m.st === 'hunt' && holds(seen) && near < F.GRAB + 1)) b.reach = null;
+  } else if (tucked) b.reach = { id: tucked.id, d: gap, x: tucked.x, z: tucked.z, t: S.t };
+  else if (!(holds(prey) && gap < F.GRAB + 1)) b.reach = null;
+  // Walking, and going nowhere (STUCK): it gives this guard up.
+  if (m.st !== 'hunt' || speed <= 0 || b.reach || !b.park || dist(m, b.park) > STUCK.within) b.park = { x: m.x, z: m.z, t: S.t };
+  else if (S.t - b.park.t > STUCK.time) {
+    if (b.tgt) b.shun = { id: b.tgt, until: S.t + STUCK.shun };
+    m.st = 'roam';
+    b.tgt = null;
+    b.dest = null;
+    b.path = [];
+    return;
+  }
   if (res === 'blocked') {
     m.st = 'siege';
     b.timer = 1.2;
@@ -1154,6 +1420,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
   }
   if (res === 'there') {
     if (m.st === 'roam') {
+      b.away = null;
       b.timer -= dt;
       if (b.timer <= 0) {
         b.dest = null;
@@ -1216,7 +1483,7 @@ export function stepFloor(sim: Sim, state: State, now: number): void {
       noise(sim, S, GENERATOR.x, GENERATOR.z, 24, 0.35);
     }
   }
-  landToys(sim, S);
+  flyToys(sim, S, dt);
   if (S.dev?.freeze) return;
   for (const [i, m] of S.m.entries()) {
     if (S.phase !== 'play') break;
@@ -1256,7 +1523,9 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
     p.on = !!a.on && p.bat > 0 && !p.flat;
     p.ph = !!a.ph && p.bat > 0 && !p.flat; // the phone up, reading the map
     p.sp = !!a.sp && !p.flat && !p.ph;
-    p.act = p.flat ? '' : ['crank', 'charge', 'fix'].includes(a.act) ? a.act : ''; // fix: hands in a breaker box
+    const act = p.flat ? '' : ['crank', 'charge', 'fix'].includes(a.act) ? a.act : ''; // fix: hands in a breaker box
+    if (act === 'fix' && p.act !== 'fix') p.fixAt = S.t;
+    p.act = act;
     return;
   }
   if (a.t === 'call') {

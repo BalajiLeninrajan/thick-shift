@@ -10,7 +10,7 @@ How the night simulation is called, and the rules its callers rely on. `src/sim.
 | `@thick-shift/sim` | `src/index.ts` | everything below, the night and the session included |
 | `@thick-shift/sim/check` | `src/check.ts` | `assert`, `defined`, `isNonEmpty`, `isPlaced`, `isNight` |
 | `@thick-shift/sim/config` | `src/config.ts` | `FINAL_NIGHT`, `DOORS`, `STAMINA`, `DEFAULT_NAME`, `NAME_MAX`, `MASC`, the mascots by name |
-| `@thick-shift/sim/map` | `src/map.ts` | rooms, doorways, fixtures, the footprint (`SIZE_X`, `SIZE_Z`), `dist`, `angDiff`, `rectMid`, `doorwayOf`, `walkable`, `slide`, `clear`, `sees`, `reaches`, `glimpses`, `roomAt`, `route`, `nav`, `walls`, `slabs`, ... |
+| `@thick-shift/sim/map` | `src/map.ts` | rooms, doorways, fixtures, the footprint (`SIZE_X`, `SIZE_Z`), `dist`, `angDiff`, `rectMid`, `doorwayOf`, `walkable`, `slide`, `clear`, `sees`, `reaches`, `glimpses`, `standNear`, `roomAt`, `route`, `nav`, `walls`, `slabs`, ... |
 | `@thick-shift/sim/dressing` | `src/dressing.ts` | `FOOT`, `GEN_BACK`, `DRESSING`, `obstacles` |
 | `@thick-shift/sim/data` | `src/data.ts` | `LAMPS`, `DEAD_TUBES`, `TUBE`, `GREEN`, `STAGE` |
 | `@thick-shift/sim/types` | `src/types.ts` | `State`, `NightState`, `Guard`, `Mascot`, `SimEvent`, `Brain`, `Action`, the wire messages (`Command`, `StateMessage`, `CloseCode`), `Rng` |
@@ -88,9 +88,21 @@ the test snapshots with it:
 - The night's battery spots are shuffled Fisher-Yates:
   `for (let i = spots.length - 1; i > 0; i--) { const j = (sim.rng() * (i + 1)) | 0; swap(i, j); }`
 - Fault kinds are `(sim.rng() * F.FIX.length) | 0`.
-- Some draws sit behind a short-circuit: `noise()` draws only after the state, home and distance
-  tests pass; `lockersNear()` draws only for lockers within `CHECK.near`; `pickDest()` draws for Squish's booth
-  chance only when a guard is in the booth, and for the crank chance only when `S.crank`.
+- Some draws sit behind a short-circuit: `noise()` draws only after the state, home, charmed and distance
+  tests pass (`charmed()`: taken up with a Mini Biggs, power on); `sing()` (a Mini Biggs's song) draws once per
+  mascot, in `S.m` order, only after the state, home, `wise` and distance tests pass, and draws no timer;
+  `flyToys()` (a direct hit) draws nothing; `lockersNear()` draws
+  only for lockers within `CHECK.near`; `pickDest()` draws for Squish's booth
+  chance only when a guard is in the booth, and for the crank chance only when `S.crank`; `flatten()` draws
+  through `pickDest()` only if a guard is still standing (and never under the dev god mode, which catches
+  nobody); `pickDest()` with a body rejects a room within `AWAY` of it and draws another, and draws a point up
+  to eight times until one is `AWAY` clear; its power-out pick is over the standing guards the mascot does not
+  shun, and with none it falls through to the room draw.
+- A mascot walking away from a guard it caught (`b.away`) passes the body to every `pickDest()` it makes until
+  the walk is done, so a walk that jams redraws clear of the body too. In a calm it draws no rest timer until
+  the walk is done and it has gone home. While a guard it flattened lies within `AWAY` of its `REST` mark it
+  does not go home: it keeps drawing through `pickDest()` with that body, and the roam pause between walks,
+  where a calm would have drawn one rest timer. It makes no draw of its own for this.
 - An expression with two draws takes them left to right.
 
 Distances come from `hypot` in `map.ts`, the plain `Math.sqrt(x * x + z * z)`, and `dist(a, b)` beside it. `Math.hypot` rounds differently in the

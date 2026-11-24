@@ -153,8 +153,17 @@ function create() {
       if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker. Run!`, 'hide', 3);
       else hud.say(`${MASC[e.x.i].name} found ${guard(e.x.id)?.name || 'someone'} in a locker ${where(e.x)}.`, 'hide', 6);
     },
+    // Caught with hands in a breaker box: the room has broken the fix off, so the panel shuts with it.
+    startle(e: EventOf<'startle'>): void {
+      if (!isMe(e.x.id)) return;
+      player.letGo();
+      hud.say(`${MASC[e.x.i].name} is on you. Run!`, 'hide', 3);
+    },
     fumble(e: EventOf<'fumble'>): void {
       if (isMe(e.x.by)) hud.say('Something is blocking the door.', 'info', 3);
+    },
+    bonk(e: EventOf<'bonk'>): void {
+      if (isMe(e.x.by)) hud.say(`Bonk! ${MASC[e.x.i].name} is stunned for a few seconds.`, 'toy', 3);
     },
     grab(e: EventOf<'grab'>): void {
       if (isMe(e.x.by)) hud.say('Mini Biggs in hand.', 'toy', 2.5);
