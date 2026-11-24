@@ -214,6 +214,9 @@ const STUCK = { within: 1, time: 8, shun: 10 };
 const STIR: [number, number] = [28, 42],
   CALM: [number, number] = [24, 38];
 const SPENT: [number, number] = [18, 30]; // seconds one stays put after a shut door has turned it away
+// Seconds after a shut door turned it away before Squish picks the booth to wander to again. Without it, opening
+// the vent once it had gone brought it straight back: home, SPENT, then the booth again, half a minute round.
+const BARRED = 60;
 // How many nights' worth of wear each night has had, for rot, heat, speed and power drain. Night 5 counts for more
 // than one step past night 4: with a plain 4, a crew of three won 18% of night 5s against a target of 10.
 const RAMP = [0, 1, 2, 3.15, 4.3] as const;
@@ -428,6 +431,7 @@ const newBrain = (sim: Sim): Brain => ({
   park: null,
   away: null,
   shun: null,
+  barred: 0,
   noCatch: 0,
   near: Infinity,
   nearAt: 0,
@@ -836,8 +840,9 @@ function pickDest(sim: Sim, S: NightState, m: Mascot, b: Brain, body?: Point): P
     return hidden(p) ? { ...hideAt(p.hid).at } : { x: p.x, z: p.z };
   }
   if (isNonEmpty(up)) {
-    // Squish goes for whoever is sitting in the booth, by the vent if it is open.
-    if (m.i === SQUISH && up.some(p => roomAt(p.x, p.z) === BOOTH) && sim.rng() < 0.6) room = BOOTH;
+    // Squish goes for whoever is sitting in the booth, by the vent if it is open: more often as the night gets
+    // worse, and not for a while after a shut door turned it away.
+    if (m.i === SQUISH && S.t >= b.barred && up.some(p => roomAt(p.x, p.z) === BOOTH) && sim.rng() < 0.25 + 0.35 * heat(S)) room = BOOTH;
     else if (S.crank && sim.rng() < 0.5) room = GENERATOR.room;
     else if (sim.rng() < 0.25 + 0.5 * heat(S)) {
       const p = pick(sim, up);
@@ -1238,6 +1243,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       b.bangs = 0;
       b.timer = 0;
       b.spent = true;
+      b.barred = S.t + BARRED;
     }
     return;
   }

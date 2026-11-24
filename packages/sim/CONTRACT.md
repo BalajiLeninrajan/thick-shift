@@ -93,7 +93,7 @@ the test snapshots with it:
   mascot, in `S.m` order, only after the state, home, `wise` and distance tests pass, and draws no timer;
   `flyToys()` (a direct hit) draws nothing; `lockersNear()` draws
   only for lockers within `CHECK.near`; `pickDest()` draws for Squish's booth
-  chance only when a guard is in the booth, and for the crank chance only when `S.crank`; `flatten()` draws
+  chance only when a guard is in the booth and `b.barred` has passed, and for the crank chance only when `S.crank`; `flatten()` draws
   through `pickDest()` only if a guard is still standing (and never under the dev god mode, which catches
   nobody); `pickDest()` with a body rejects a room within `AWAY` of it and draws another, and draws a point up
   to eight times until one is `AWAY` clear; its power-out pick is over the standing guards the mascot does not
