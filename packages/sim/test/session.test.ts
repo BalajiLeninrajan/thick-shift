@@ -42,6 +42,20 @@ describe('joinFloor and leaveFloor', () => {
     expect(S.players.map(p => p.id)).toEqual(['b']);
   });
 
+  it('fills in what a record kept by an older build does not have', () => {
+    // A guard who left mid-night before the start at a breaker box was added comes back with no fixAt.
+    const { sim, S } = room('a', 'b');
+    commandFloor(sim, S, 'a', { t: 'go' });
+    night(S);
+    const was = sim.players.b;
+    assert(was, 'b is in the night');
+    leaveFloor(sim, S, 'b');
+    delete was.fixAt;
+    joinFloor(sim, S, 'b', was);
+    expect(sim.players.b).toBe(was);
+    expect(was.fixAt).toBe(0);
+  });
+
   it('lets someone who joins mid-night in at a spawn point on the next step', () => {
     const { sim, S } = room('a');
     commandFloor(sim, S, 'a', { t: 'go' });

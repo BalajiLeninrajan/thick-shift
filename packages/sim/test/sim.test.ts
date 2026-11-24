@@ -175,6 +175,24 @@ describe('adoptFloor', () => {
     for (let k = 1; k <= 50; k++) stepFloor(sim, T, 5000 + k * 100); // and the night goes on
   });
 
+  it('gives a guard saved by a build that kept no fixAt their start at a breaker box', () => {
+    // Builds before the start at a box had no p.fixAt. g0 was mid-fix at box 3 when the night was saved, with Biggs
+    // a step behind them.
+    const T = savedState();
+    const g = defined(T.players[0], 'g0'),
+      box = defined(BOXES[3], 'box 3');
+    defined(T.faults, "the night's faults")[3] = { k: 0, at: 0, burnt: false };
+    Object.assign(g, { x: box.x, z: box.z + 1, act: 'fix' });
+    delete g.fixAt;
+    Object.assign(defined(T.m[BIGGS], 'Biggs'), { x: box.x, z: box.z + 1.9, yaw: Math.PI });
+    const { sim } = adopt(7, T);
+    expect(g.fixAt).toBe(0);
+    const startles = () => T.evs.filter(e => e.type === 'startle').length;
+    for (let k = 1; k <= 40 && !startles() && !g.flat; k++) stepFloor(sim, T, 5000 + k * 100);
+    expect(startles()).toBe(1);
+    expect(g).toMatchObject({ act: '', flat: false });
+  });
+
   it('walks a searching mascot to where it lost the guard when it means to check a locker that is not there', () => {
     // adoptFloor turns mascot 1's lost charge into a search. Point its next check past the end of HIDES: it skips
     // the check and heads for b.last, as it would with no checks left.
