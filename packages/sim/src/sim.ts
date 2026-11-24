@@ -155,7 +155,9 @@ const BANG_BOX: Record<DoorKey, number> = { L: 5, R: 7, V: 6 };
 // and RAMP below set the night), and Flan outruns one only while nobody watches
 // her. A sprint does not last, so the crank is still the only way out. (Untuned
 // against the harness.)
-const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6] satisfies PerMascot<number>, unwatched: 4.2, ducts: 1.4, charge: 7, dark: 1.15, out: 2 };
+// With the lights on, an unwatched Flan is slower than a walking guard on night 1 and short of a sprint on night 5,
+// dark rooms and burnt ceiling included. At 4.2 she outran a walk from night 1 and nearly matched a sprint late on.
+const SPEED = { roam: 1.5, search: 2.3, hunt: [2.7, 2.4, 3.6, 2.6] satisfies PerMascot<number>, unwatched: 3.5, ducts: 1.4, charge: 7, dark: 1.15, out: 2 };
 const KEEN: [number, number] = [0.78, 0.025]; // the share of those speeds they manage on night 1, and what each later night adds (with ROT and heat, the night-5 targets)
 // How much of its speed a mascot keeps in a torch beam, by rot stage.
 const LIT_SPEED = [0, 0.2, 0.4] as const;
