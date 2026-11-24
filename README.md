@@ -145,7 +145,7 @@ Each is a different problem:
 
 - Big Biggs is slower than a walking guard, hunts half as long again as the others, and keeps knowing where his guard is for four and a half seconds after losing sight of them. He cannot be shaken round a corner, only outwalked.
 - Madame Flan crawls while any guard is looking her way and runs when nobody is, faster than a guard can walk. The torch is not needed to slow her. Turning your back is the mistake.
-- Squish is quicker than a walk and the only one that fits the ducts, where it is quicker still. It comes for whoever is sitting in the booth, by the vent if it is open, and it gets up for anyone who goes into the ducts, at any hour of any night.
+- Squish is quicker than a walk and the only one that goes into the ducts with the lights on, where it is quicker still. (With the power out the others find their way through them too.) It comes for whoever is sitting in the booth, by the vent if it is open, and it gets up for anyone who goes into the ducts, at any hour of any night.
 - Stompy walks slowly until it sees a guard down a clear run from more than six metres off. Its sight ends the window, so that is up to 14 metres at a guard with their torch on and 10 at one in a lit room with it off, and one in a dark room with it off is never charged. Then it roars, winds up for a second and a half, and charges in a straight line at more than twice a guard's walk. It does not steer and a torch does not stop it. If it hits a wall it is stunned for four seconds. Step out of the line, or do not be in a corridor.
 
 Alone, Biggs and Flan are there from night 1, Squish from 3 AM that night and Stompy from night 4 (`WAKE`). Each extra guard brings them two hours sooner. They are slowest on night 1 (`KEEN`).

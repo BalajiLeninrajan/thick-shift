@@ -815,7 +815,9 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
     return 'there';
   }
   if (b.repath <= 0 || !b.path.length) {
-    const ducts = m.i === SQUISH;
+    // The ducts are Squish's. The others find their way through them only with the power out, when they come to
+    // wherever the guards are, and to get back out if they have followed one in.
+    const ducts = m.i === SQUISH || S.out || roomAt(m.x, m.z) === DUCTS;
     // A goal that is no place for a mascot (a guard tucked in behind the furniture, or in the ducts): it makes for
     // the nearest place to it that is, and whatever is still between them it reaches over (see tucked).
     const fits = walkable(goal.x, goal.z, MASCOT_R, S.doors) && (ducts || roomAt(goal.x, goal.z) !== DUCTS);
@@ -1073,7 +1075,7 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     const dir = defined(b.dir, "Stompy's heading");
     const from = { x: m.x, z: m.z };
     let got = slide(m, dir.x * SPEED.charge * dt, dir.z * SPEED.charge * dt, MASCOT_R, S.doors);
-    // The vent is too low for it: charging into the ducts is charging into a wall. (Only Squish can find its way out of them.)
+    // The vent is too low for it: charging into the ducts is charging into a wall.
     if (roomAt(m.x, m.z) === DUCTS) {
       Object.assign(m, from);
       got = 0;

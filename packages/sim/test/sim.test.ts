@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
 import { FLAN, MASCOTS, STOMPY } from '../src/config.ts';
-import { BATTERY_SPOTS, BOXES, dist, HIDES, MASCOT_R, PANELS, PLAYER_R, REST, spawnPoint, TOY_BOX, walkable } from '../src/map.ts';
+import { BATTERY_SPOTS, BOXES, DUCTS, dist, HIDES, MASCOT_R, PANELS, PLAYER_R, REST, roomAt, spawnPoint, TOY_BOX, walkable } from '../src/map.ts';
 import { seeded } from '../src/random.ts';
 import { DEV_OFF } from '../src/session.ts';
 import { actFloor, adoptFloor, brainOf, F, landing, newSim, newState, restartFloor, type Sim, startFloorNight, stepFloor, TOY } from '../src/sim.ts';
@@ -411,6 +411,15 @@ describe('a hunt', () => {
     const { sim, S, p } = stalk(STOMPY, { x: 39.62, z: 2.16 }, { x: 34, z: 6.5 });
     expect(until(sim, S, p, 20)).toBeLessThan(8);
     expect(p.flat).toBe(true);
+  });
+
+  it('finds its way out of the ducts if it is not Squish', () => {
+    // The east end of the ducts, where one that followed a guard in used to stand facing the wall.
+    const { sim, S, m, b } = stalk(FLAN, spawnPoint(0), { x: 25.18, z: 34.26 });
+    Object.assign(m, { st: 'roam' });
+    Object.assign(b, { tgt: null, last: null });
+    for (let k = 1; k <= 100; k++) stepFloor(sim, S, k * 100);
+    expect(roomAt(m.x, m.z)).not.toBe(DUCTS); // on its way back to its mark
   });
 
   // A guard with their hands in breaker box 0, which has a fault, and Madame Flan a step behind them, hunting.
