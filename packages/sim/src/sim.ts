@@ -901,7 +901,10 @@ function goTo(S: NightState, m: Mascot, b: Brain, goal: Point, speed: number, dt
     // the nearest place to it that is, and whatever is still between them it reaches over (see tucked).
     const fits = walkable(goal.x, goal.z, MASCOT_R, S.doors) && (ducts || roomAt(goal.x, goal.z) !== DUCTS);
     const to = fits ? goal : (standNear(goal.x, goal.z, MASCOT_R, S.doors, ducts) ?? goal);
-    const r = route(m.x, m.z, to.x, to.z, { doors: S.doors, ducts });
+    // One after a guard in the booth makes for the door between them. Shut, it bangs on it (siege): it does not go
+    // round to another door that may be open, which made shutting one on it do nothing but send it the long way.
+    const direct = eager && roomAt(goal.x, goal.z) === BOOTH && roomAt(m.x, m.z) !== BOOTH;
+    const r = route(m.x, m.z, to.x, to.z, { doors: S.doors, ducts, direct });
     // It asks again while it walks, and from a step past a waypoint the answer can begin by sending it back there:
     // clear() looks every 0.35 m, so a line that brushes the corner of a prop is clear from one end and not from a
     // step along it. If the new way goes through the point it was already making for, it carries on to that.
