@@ -710,6 +710,17 @@ describe('a hunt', () => {
     expect(p.flat).toBe(false);
   });
 
+  it('bangs on the booth door shut on it, and does not go round to one that is open', () => {
+    // Flan in the West Hall after a guard in the booth. Only the left door is shut: the right one is open, the long way round.
+    const { sim, S, m, b } = stalk(FLAN, { x: 15.6, z: 37.2 }, { x: 11, z: 40.5 });
+    S.doors.L = true;
+    const from = S.evId;
+    for (let k = 1; k <= 30 && m.st !== 'siege'; k++) stepFloor(sim, S, k * 100);
+    expect([m.st, b.key]).toEqual(['siege', 'L']);
+    for (let k = 31; k <= 60; k++) stepFloor(sim, S, k * 100);
+    expect(S.evs.filter(e => e.id > from && e.type === 'bang').map(e => e.x)).toContain('L');
+  });
+
   it('does not count the time it stood banging on a door as getting nowhere', () => {
     // Flan in the West Hall after a guard in the booth, who stands beside the left door where its wall hides them.
     // The booth's doors are shut.
