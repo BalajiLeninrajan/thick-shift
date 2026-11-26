@@ -11,7 +11,11 @@
   "assets": { "binding": "ASSETS", "run_worker_first": ["/", "/index.html"] },
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
-  "vars": { "DISCORD_CLIENT_ID": "1572848365811663080" },
-  // Keep the Worker's and the rooms' logs, so a night that went wrong can be looked at afterwards.
-  "observability": { "enabled": true }
+  // POSTHOG_KEY is the balajileninrajan.dev PostHog project's public token, for the rooms' events (worker/posthog.ts
+  // in packages/game).
+  "vars": { "DISCORD_CLIENT_ID": "1572848365811663080", "POSTHOG_KEY": "phc_zSX6drBG3mEQYboqHpWNu9L7AW3ZzRPhFGoS68asCHQz" },
+  // Keep the Worker's and the rooms' console output and exceptions, so a night that went wrong can be looked at
+  // afterwards. Invocation logs are off: each guard's position message (about 12 a second) is its own invocation of
+  // the room, and logging every one filled the account's Workers Logs quota.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }

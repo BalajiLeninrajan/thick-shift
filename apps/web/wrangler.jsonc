@@ -6,5 +6,7 @@
   // reach the Worker, which only answers /room/CODE (see worker/index.ts).
   "main": "./worker/index.ts",
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  // The balajileninrajan.dev PostHog project's public token, for the rooms' events (packages/game/worker/posthog.ts).
+  "vars": { "POSTHOG_KEY": "phc_zSX6drBG3mEQYboqHpWNu9L7AW3ZzRPhFGoS68asCHQz" }
 }
