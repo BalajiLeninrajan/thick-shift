@@ -905,7 +905,7 @@ export function createSound() {
         muffle(want || undefined);
       }
     },
-    // For ?debug (see the README): what is sounding.
+    // For ?debug (see docs/internals.md): what is sounding.
     stats: () => ({ voices: voices(), loops: sources, emitters: rig ? rig.mascots.length + POOL + 2 + rig.guards.size : 0 }),
   };
 }

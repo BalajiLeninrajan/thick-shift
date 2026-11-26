@@ -133,7 +133,7 @@ function playSlice(src: AudioBufferSourceNode, tail: AudioNode, t0: number, end:
 
 /* ---------- recordings ---------- */
 
-// All CC0. Sources are listed in the README.
+// All CC0. Sources are listed in the README and docs/internals.md.
 const FILES = [
   'door_shut',
   'door_open',
