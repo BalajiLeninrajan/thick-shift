@@ -126,6 +126,7 @@ export interface RouteOptions {
   doors?: Doors | undefined;
   ducts?: boolean | undefined;
   r?: number | undefined;
+  direct?: boolean | undefined; // take the shortest way as if every door were open, and stop at the first shut one on it
 }
 // What route() answers. blocked: the key of the shut door the route stops in front of.
 export interface Route {
@@ -656,7 +657,7 @@ function nearestNode(x: number, z: number, doors: Doors | undefined, ducts: bool
 // the ducts. opts.r: the walker's radius, a mascot's unless given. Returns
 // { path, blocked } where blocked is the key of the shut door the route stops
 // in front of, when there is no open way. An empty path with nothing blocked
-// means there is no way at all.
+// means there is no way at all. opts.direct: no going round a shut door by another way.
 export function route(ax: number, az: number, bx: number, bz: number, opts: RouteOptions = {}): Route {
   const { nodes, links } = nav(),
     r = opts.r || MASCOT_R;
@@ -714,21 +715,18 @@ export function route(ax: number, az: number, bx: number, bz: number, opts: Rout
     for (let next = path[1]; next && clear(ax, az, next.x, next.z, r, opts.doors); next = path[1]) path.shift();
     return path;
   };
-  let found = search(true),
-    blocked: DoorKey | undefined;
+  let found = opts.direct ? null : search(true);
   if (!found) {
     found = search(false);
     if (!found) return { path: [] };
     const { ids, via } = found;
-    // Stop at the near side of the first shut door on the way.
+    // Stop at the near side of the first shut door on the way. Never at k = 0, where via[from] is null. Without
+    // direct, search(true) failed, so there is one.
     const stop = ids.findIndex((id, k) => {
       const key = via[id]?.key;
       return k > 0 && key && opts.doors?.[key];
     });
-    // stop is found and above 0: search(true) failed, so this route crosses a shut door, and never at k = 0, where
-    // via[from] is null.
-    blocked = via[defined(ids[stop], 'the shut door on the way')]?.key;
-    return { path: skipPassed(ids.slice(0, stop).map(point)), blocked };
+    if (stop > 0) return { path: skipPassed(ids.slice(0, stop).map(point)), blocked: via[defined(ids[stop], 'the shut door on the way')]?.key };
   }
   const path = found.ids.map(point);
   path.push({ x: bx, z: bz });
