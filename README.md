@@ -6,7 +6,7 @@ Play alone or with friends, in a browser or in a Discord voice channel.
 
 ## Play in a browser
 
-Go to [thick-shift.balajileninrajan.dev](https://thick-shift.balajileninrajan.dev). Press **Host a night** and send your friends the link or the four-letter room code from the lobby. Start the night on your own to play solo.
+Go to [thickshift.balajileninrajan.dev](https://thickshift.balajileninrajan.dev). Press **Host a night** and send your friends the link or the four-letter room code from the lobby. Start the night on your own to play solo.
 
 ## Play in Discord
 
