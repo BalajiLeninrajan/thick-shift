@@ -4,8 +4,9 @@
 // its own guard. An app's Worker hands requests to toRoom() and exports Room as its Durable Object.
 import { DurableObject } from 'cloudflare:workers';
 import { adoptFloor, commandFloor, joinFloor, leaveFloor, newSim, newState, type Sim, stepFloor } from '@thick-shift/sim';
-import type { CloseCode, Player, State, StateMessage } from '@thick-shift/sim/types';
+import type { CloseCode, Phase, Player, State, StateMessage } from '@thick-shift/sim/types';
 import { CLOSE, type Mode, PROTOCOL, parse, TICK_MS } from '../src/protocol';
+import { capture, captureException, type PostHogEnv } from './posthog';
 
 const SAVE_TICKS = 20; // how often a night in play is saved, in ticks: every 2 s
 const FORGET_MS = 5 * 60_000; // how long a room with nobody in it keeps its night, for guards who lost their connection
@@ -18,8 +19,8 @@ const MAX_MESSAGE = 2000; // characters. A guard's commands are tiny.
 // platform, such as d- and a Discord Activity's instance id (apps/discord).
 const ROOM = /^\/room\/([A-Z]{4}|[a-z]-[\w-]{1,80})$/;
 
-// The bindings toRoom() needs from an app's Worker (its wrangler.jsonc).
-export interface RoomEnv {
+// The bindings toRoom() needs from an app's Worker (its wrangler.jsonc). The PostHog ones are optional.
+export interface RoomEnv extends PostHogEnv {
   ROOMS: DurableObjectNamespace;
 }
 
@@ -60,9 +61,17 @@ export class Room extends DurableObject<RoomEnv> {
   away = new Map<string, Player>();
   loop: ReturnType<typeof setInterval> | null = null;
   ticks = 0;
+  // The phase PostHog last heard about, so a night's start and end each go out once (notice).
+  phase: Phase | null = null;
+  // The host the room's guards came in on, which tells this site's events apart from the others' in PostHog. Kept in
+  // storage, since a room woken from sleep runs its night before any guard's request has come in.
+  host = '';
+  // Errors PostHog has already heard about from this instance. One in tick would otherwise go out ten times a second.
+  reported = new Set<string>();
 
   constructor(ctx: DurableObjectState, env: RoomEnv) {
     super(ctx, env);
+    this.host = ctx.storage.kv.get<string>('host') ?? '';
     const S = ctx.storage.kv.get<State>('S');
     if (S) this.restore(S, ctx.storage.kv.get<Player[]>('away') ?? []);
   }
@@ -74,6 +83,7 @@ export class Room extends DurableObject<RoomEnv> {
     const now = Date.now(),
       sim = newSim({ rng: Math.random, now });
     this.night = { sim, S };
+    this.phase = S.phase;
     this.away = new Map(away.map(p => [p.id, p]));
     this.lost.clear();
     // Pages have seen events numbered past the last save, so number the new ones after anything they can have seen.
@@ -131,7 +141,9 @@ export class Room extends DurableObject<RoomEnv> {
     // A new night: nobody has one here, or someone starting a room under a code whose night everyone has left.
     if (!this.night || (mode === 'make' && !others)) {
       this.stop();
+      if (this.night?.S.phase === 'play') this.track('night_ended', { outcome: 'abandoned' });
       this.night = { sim: newSim({ rng: Math.random, now: Date.now() }), S: newState(url.pathname.match(ROOM)?.[1] ?? '') };
+      this.phase = this.night.S.phase;
       this.away.clear();
       this.lost.clear();
     }
@@ -145,6 +157,10 @@ export class Room extends DurableObject<RoomEnv> {
       }
     }
 
+    if (url.host !== this.host) {
+      this.host = url.host;
+      this.ctx.storage.kv.put('host', this.host);
+    }
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ id } satisfies Attachment);
     this.enter(id);
@@ -160,8 +176,9 @@ export class Room extends DurableObject<RoomEnv> {
     if (typeof msg !== 'string' || msg.length > MAX_MESSAGE || !this.night) return;
     const { sim, S } = this.night,
       c = parse(msg);
-    if (commandFloor(sim, S, att(ws).id, c)) {
+    if (this.caught('message', () => commandFloor(sim, S, att(ws).id, c))) {
       this.away.clear();
+      this.notice();
       this.changed();
     }
     // A night in play goes out on the next tick. Between nights, anything but a position goes out now.
@@ -209,9 +226,11 @@ export class Room extends DurableObject<RoomEnv> {
       return;
     }
     this.stop();
+    if (this.night?.S.phase === 'play') this.track('night_ended', { outcome: 'abandoned' });
     this.night = null;
     this.away.clear();
     this.lost.clear();
+    this.host = ''; // deleteAll takes the stored one with it
     await this.ctx.storage.deleteAll();
   }
 
@@ -233,7 +252,8 @@ export class Room extends DurableObject<RoomEnv> {
     }
     const now = Date.now();
     for (const [id, until] of this.lost) if (now > until) this.out(id);
-    stepFloor(night.sim, night.S, now);
+    this.caught('tick', () => stepFloor(night.sim, night.S, now));
+    this.notice();
     this.send();
     if (night.S.phase !== 'play') {
       // The night is over, so anyone still lost is out of it.
@@ -258,6 +278,39 @@ export class Room extends DurableObject<RoomEnv> {
       } catch {
         /* closing */
       }
+  }
+
+  /* ---------- PostHog ---------- */
+
+  // A night started or ended since PostHog last heard. Between nights the phase is lobby, win, dead or won.
+  notice(): void {
+    const S = this.night?.S;
+    if (!S || S.phase === this.phase) return;
+    const was = this.phase;
+    this.phase = S.phase;
+    if (S.phase === 'play') this.track('night_started', {});
+    else if (was === 'play') this.track('night_ended', { outcome: S.phase, killer: S.killer });
+  }
+
+  track(event: string, properties: Record<string, unknown>): void {
+    const S = this.night?.S;
+    const night = S && { night: S.night, guards: S.players.length, seconds: Math.round(S.t), deaths: S.deaths };
+    this.ctx.waitUntil(capture(this.env, this.ctx.id.toString(), event, { $host: this.host, ...night, ...properties }));
+  }
+
+  // Runs f, and tells PostHog if it throws before letting the error go on as before.
+  caught<T>(where: string, f: () => T): T {
+    try {
+      return f();
+    } catch (e) {
+      const S = this.night?.S,
+        seen = `${where} ${e instanceof Error ? e.message : String(e)}`;
+      if (!this.reported.has(seen)) {
+        this.reported.add(seen);
+        this.ctx.waitUntil(captureException(this.env, this.ctx.id.toString(), e, { $host: this.host, where, phase: S?.phase, night: S?.night }));
+      }
+      throw e;
+    }
   }
 
   // allowUnconfirmed: the state goes out without waiting for the write. Losing the last save to a crash costs two
