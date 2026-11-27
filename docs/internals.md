@@ -50,7 +50,7 @@ apps/
     wrangler.jsonc      the Worker's name and its Durable Object
   discord/              the Discord Activity (below), laid out like web/
     src/boot.ts         the same, but loads src/activity.ts inside Discord
-    src/activity.ts     the sign-in, the room and the Activity's title screen and invite
+    src/activity.ts     the sign-in, the room and the Activity's title screen and lobby line
     worker/index.ts     the rooms, the Discord sign-in and the CDN pass-through
     terms.html, privacy.html  two more pages in the build, served at /terms and /privacy
 tools/
