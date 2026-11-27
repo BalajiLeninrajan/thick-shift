@@ -282,9 +282,12 @@ const perceivable = (S: NightState, p: Point, m: Point & { st: MascotState }) =>
 
 function perceive(S: NightState, bot: Bot): void {
   // At the desk with the power on: what the camera they are on shows. They flip to the next one every CAM_DWELL seconds.
-  const cam = bot.skill.cams && lightsF(S) && dist(bot, DESK_STAND) < 1 ? M.CAMS[Math.floor(S.t / CAM_DWELL) % M.CAMS.length] : undefined;
+  // In the booth with the power on, the wall map shows when something is in the ducts.
+  const cam = bot.skill.cams && lightsF(S) && dist(bot, DESK_STAND) < 1 ? M.CAMS[Math.floor(S.t / CAM_DWELL) % M.CAMS.length] : undefined,
+    sensor = bot.skill.cams && lightsF(S) && inBooth(bot);
   for (const m of S.m) {
-    const how = sense(S, bot, m) || (cam && m.st !== 'rest' && M.camSees(cam, m, M.MASCOT_R, S.doors) ? 'cams' : null);
+    const screen = (cam && M.camSees(cam, m, M.MASCOT_R, S.doors)) || (sensor && M.roomAt(m.x, m.z) === M.DUCTS),
+      how = sense(S, bot, m) || (screen && m.st !== 'rest' ? 'cams' : null);
     if (!how) continue;
     const old = bot.mem[m.i];
     bot.mem[m.i] = { i: m.i, x: m.x, z: m.z, st: m.st, rot: m.rot, lit: m.lit, t: S.t, since: old && S.t - old.t < 1.5 ? old.since : S.t, how };
@@ -583,6 +586,8 @@ function act(S: NightState, bot: Bot): void {
     if (bot.rested > STAMINA.rest) bot.stam = Math.min(1, bot.stam + STAMINA.gain * DT);
   }
   bot.on = !!w.on && bot.bat > 0;
+  // Standing at the desk with nothing else to do is watching the cameras, which the room gives a start for, as at a box.
+  if (!bot.act && !u && bot.skill.cams && lightsF(S) && dist(bot, DESK_STAND) < 1) bot.act = 'cams';
   bot.still = dist(bot, before) < 0.01 && goal && dist(bot, goal) > 3 ? bot.still + DT : 0;
   actFloor(sim, S, bot.id, { t: 'p', x: bot.x, z: bot.z, yaw: bot.yaw, pitch: 0, on: bot.on, sp: bot.sp, act: bot.act });
 }

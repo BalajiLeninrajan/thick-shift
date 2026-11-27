@@ -213,17 +213,15 @@ export interface Cam extends Point {
   y: number;
   look: Point;
 }
-// Numbered for the keys that pick them (1 to 9, then 0). The ducts have none.
+// Numbered for the keys that pick them. Where the mascots stand, the middle of the building, the Snack Bar's way into
+// the ducts, and the last stretch of hall outside each side door. The Arcade, the Kitchen, the long halls and the
+// ducts have none: a motion sensor in the ducts (cams.ts) stands in for one there.
 export const CAMS: Cam[] = [
   { room: 0, name: 'Stage', x: 26.6, z: 10.6, y: 4.8, look: { x: 16, z: 3 } },
   { room: 1, name: 'Backstage', x: 41.6, z: 10.6, y: 3.45, look: { x: 32, z: 3 } },
-  { room: 2, name: 'Arcade', x: 0.4, z: 11.9, y: 3.45, look: { x: 8, z: 22 } },
   { room: 3, name: 'Main Hall', x: 26.6, z: 11.9, y: 4, look: { x: 15, z: 22 } },
-  { room: 4, name: 'Kitchen', x: 27.9, z: 11.9, y: 3.25, look: { x: 38, z: 22 } },
   { room: 6, name: 'Snack Bar', x: 30.6, z: 25.9, y: 3.25, look: { x: 17, z: 31 } },
-  { room: 5, name: 'West Hall', x: 5.6, z: 25.9, y: 2.85, look: { x: 4, z: 40 } },
   { room: 5, name: 'West Corner', x: 2.4, z: 42.1, y: 2.85, look: { x: 14.5, z: 40.5 } },
-  { room: 7, name: 'East Hall', x: 36.4, z: 25.9, y: 2.85, look: { x: 38, z: 40 } },
   { room: 7, name: 'East Corner', x: 39.6, z: 42.1, y: 2.85, look: { x: 27.5, z: 40.5 } },
 ];
 // What a camera's picture takes in: half its width as an angle off where it looks, and how far into the dark it shows.

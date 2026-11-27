@@ -7,6 +7,7 @@ import {
   BATTERY_SPOTS,
   BOOTH,
   BOXES,
+  DESK,
   DOORWAYS,
   DUCTS,
   dist,
@@ -887,6 +888,37 @@ describe('a hunt', () => {
     expect(dist(m, p)).toBeGreaterThan(1.25); // not a touch: it reached over
     expect(S.evs.filter(e => e.type === 'startle')).toHaveLength(1);
     expect(p).toMatchObject({ act: '', flat: false });
+  });
+
+  // A guard sitting at the camera desk, and Madame Flan a step behind them, hunting. near: whether they are at the desk.
+  function watching(near = true) {
+    const { sim, S } = start(1, 1, 1);
+    S.stir = false;
+    S.waveAt = 1e9;
+    const p = defined(S.players[0], 'g0'),
+      m = defined(S.m[FLAN], 'Madame Flan'),
+      b = brainOf(sim, FLAN);
+    Object.assign(p, near ? { x: DESK.x, z: DESK.z + 0.9, on: false } : { x: 21, z: 42.5, on: false });
+    actFloor(sim, S, 'g0', { t: 'p', x: p.x, z: p.z, yaw: Math.PI, pitch: 0, on: false, sp: false, act: 'cams' });
+    Object.assign(m, { x: p.x, z: p.z + 0.8, st: 'hunt' });
+    Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z } });
+    return { sim, S, p, m };
+  }
+
+  it('gives a guard caught at the camera desk the same split second as one at a box', () => {
+    const { sim, S, p, m } = watching();
+    stepFloor(sim, S, 100);
+    expect(S.evs.filter(e => e.type === 'startle')).toHaveLength(1);
+    expect(p).toMatchObject({ act: '', flat: false });
+    expect(m.st).toBe('hunt');
+    for (let k = 7; k <= 20 && !p.flat; k++) stepFloor(sim, S, k * 100);
+    expect(p.flat).toBe(true);
+  });
+
+  it('gives no start to a guard who says they are at the cameras away from the desk', () => {
+    const { sim, S, p } = watching(false);
+    stepFloor(sim, S, 100);
+    expect(p.flat).toBe(true);
   });
 
   it("spends Stompy's charge when the charge ends at a guard with their hands in a box", () => {

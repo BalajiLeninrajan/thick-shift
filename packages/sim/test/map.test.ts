@@ -246,7 +246,7 @@ describe('routes', () => {
 
 describe('cameras', () => {
   it('hangs each camera inside its room, under the ceiling, looking into the same room', () => {
-    expect(M.CAMS.length).toBeLessThanOrEqual(10); // the number keys 1 to 9, then 0
+    expect(M.CAMS.length).toBeLessThanOrEqual(9); // the number keys 1 to 9
     for (const c of M.CAMS) {
       const room = defined(M.ROOMS3[c.room], `room ${c.room}`);
       expect(M.roomAt(c.x, c.z), c.name).toBe(c.room);

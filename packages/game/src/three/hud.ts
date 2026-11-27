@@ -11,7 +11,7 @@
 import { clockF, F, faultLeft, TOY } from '@thick-shift/sim';
 import { defined, isNight, isNonEmpty, isPlaced } from '@thick-shift/sim/check';
 import { FINAL_NIGHT, MASC } from '@thick-shift/sim/config';
-import { angDiff, BOXES, CHARGER, dist, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
+import { angDiff, BOXES, CAMS, CHARGER, dist, GENERATOR, ROOMS3, roomAt, route } from '@thick-shift/sim/map';
 import type { Guard, NightState, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
 import { getVolume, setVolume } from '../audio';
 import { query } from '../dom';
@@ -141,7 +141,7 @@ const CONTROLS: Record<'keys' | 'touch' | 'pad', ControlGroup[]> = {
     [
       'At the camera desk',
       [
-        ['Change camera', ['1–0', 'A D', 'Click']],
+        ['Change camera', [`1–${CAMS.length}`, 'A D', 'Click']],
         ['Get up', ['E', 'Esc']],
       ],
     ],

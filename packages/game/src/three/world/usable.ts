@@ -7,7 +7,7 @@ import { lightsF } from '@thick-shift/sim';
 import { isNight, isPlaced } from '@thick-shift/sim/check';
 import { DOORS } from '@thick-shift/sim/config';
 import { GEN_BACK } from '@thick-shift/sim/dressing';
-import { BATTERY_SPOTS, BOOTH, BOXES, CAMS, CHARGER, DOOR_H, DOORWAYS, doorwayOf, GENERATOR, PANELS, ROOMS3, roomAt, WALL_MAP } from '@thick-shift/sim/map';
+import { BATTERY_SPOTS, BOOTH, BOXES, CHARGER, DOOR_H, DOORWAYS, DUCTS, doorwayOf, GENERATOR, PANELS, ROOMS3, roomAt, WALL_MAP } from '@thick-shift/sim/map';
 import type { DoorKey, NightState, Point, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { WorldParts } from '../../types';
@@ -78,8 +78,9 @@ async function upgrade(group: THREE.Object3D, name: string, lamp?: THREE.Materia
   return model;
 }
 
-// The floor plan on the booth wall: a dot for every guard and a red lamp for
-// every open fault. No mascots: those are on the cameras at the desk below it
+// The floor plan on the booth wall: a dot for every guard, a red lamp for
+// every open fault, and the ducts in red while their motion sensor has
+// something. No mascots: those are on the cameras at the desk below it
 // (cams.ts). It needs the power.
 function wallMap(scene: THREE.Scene): (S: NightState, t: number) => void {
   const W = 820,
@@ -115,9 +116,10 @@ function wallMap(scene: THREE.Scene): (S: NightState, t: number) => void {
       c.translate(ox, oy);
       c.strokeStyle = '#3d7a4c';
       c.lineWidth = 2;
-      for (const room of ROOMS3)
+      const motion = S.m.some(m => roomAt(m.x, m.z) === DUCTS);
+      for (const [r, room] of ROOMS3.entries())
         for (const [x0, z0, x1, z1] of room.rects) {
-          c.fillStyle = '#12261a';
+          c.fillStyle = r === DUCTS && motion && t % 1 < 0.5 ? '#7a1c22' : '#12261a';
           c.fillRect(x0 * k, z0 * k, (x1 - x0) * k, (z1 - z0) * k);
           c.strokeRect(x0 * k, z0 * k, (x1 - x0) * k, (z1 - z0) * k);
         }
@@ -145,7 +147,8 @@ function wallMap(scene: THREE.Scene): (S: NightState, t: number) => void {
       c.font = '20px monospace';
       c.fillStyle = '#7fbf8a';
       c.fillText(`POWER    ${Math.ceil(S.power)}%`, 400, 86);
-      c.fillText(`CAMERAS  ${CAMS.length} AT DESK`, 400, 114);
+      c.fillStyle = motion ? '#f38ba8' : '#7fbf8a';
+      c.fillText(motion ? 'DUCTS    MOTION' : 'DUCTS    CLEAR', 400, 114);
       c.fillStyle = due.length ? '#f38ba8' : '#7fbf8a';
       c.fillText(due.length ? 'FAULTS' : 'NO FAULTS', 400, 160);
       due.forEach((cl, i) => {

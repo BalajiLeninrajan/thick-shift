@@ -161,6 +161,9 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-cams-map { position: relative; aspect-ratio: 42 / 44; }
 .ts-f-cams-map svg { display: block; width: 100%; height: 100%; fill: color-mix(in srgb, var(--green) 10%, transparent); stroke: color-mix(in srgb, var(--green) 55%, transparent); stroke-width: .25; }
 .ts-f-cams-map circle { fill: var(--text); stroke: none; }
+.ts-f-cams-duct { display: none; padding: 3px 8px; border-radius: 5px; background: color-mix(in srgb, var(--red) 24%, transparent); color: var(--red); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; animation: ts-blink .8s steps(2, jump-none) infinite; }
+.ts-f-cams.is-motion .ts-f-cams-duct { display: block; }
+.ts-f-cams.is-motion .is-ducts { fill: color-mix(in srgb, var(--red) 55%, transparent); stroke: var(--red); animation: ts-blink .8s steps(2, jump-none) infinite; }
 .ts-f-cam { position: absolute; display: grid; place-items: center; width: 24px; height: 24px; margin: -12px 0 0 -12px; padding: 0; border: 1px solid var(--overlay-1); border-radius: 5px; background: var(--surface-0); color: var(--text); font: 700 12px/1 var(--mono); cursor: pointer; }
 .ts-f-cam:hover { border-color: var(--green); }
 .ts-f-cam.is-on { border-color: var(--green); background: var(--green); color: var(--crust); }
@@ -169,7 +172,7 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-cams-foot .btn { gap: 6px; white-space: nowrap; }
 .ts-fhud[data-touch="true"] :is(.ts-f-cams-keys, .ts-f-cams .ts-key) { display: none; }
 @media (max-height: 500px) { .ts-f-cams-box { width: min(230px, 36cqw); padding: 8px; gap: 6px; } .ts-f-cam { width: 20px; height: 20px; margin: -10px 0 0 -10px; font-size: 11px; } }
-@media (prefers-reduced-motion: reduce) { .ts-f-rec, .ts-f-cams-dead { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .ts-f-rec, .ts-f-cams-dead, .ts-f-cams-duct, .ts-f-cams .is-ducts { animation: none; } }
 
 .ts-tk-breaker { display: flex; gap: 12px; }
 .ts-tk-switch { all: unset; cursor: pointer; display: grid; justify-items: center; gap: 6px; width: 52px; padding: 8px 0; border-radius: 8px; background: var(--surface-0); border: 2px solid transparent; }

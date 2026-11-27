@@ -45,6 +45,7 @@ import {
   BOXES,
   CHARGER,
   clear,
+  DESK,
   DOORWAYS,
   DUCTS,
   dist,
@@ -241,9 +242,9 @@ const RAMP = [0, 1, 2, 3.15, 4.3] as const;
 // that locker has them at once, or stepping straight back in would start the same moment over. Nothing tells the
 // guard this. Not tuned: the balance harness's `hides`
 // scenarios only show that a guard who uses lockers does about as well as one who does not, and sitting in one loses.
-// A guard caught with their hands in a breaker box gets the same: the fix is broken off, they have ESCAPE.head
-// seconds to run, and their hands shake for ESCAPE.shaky after. Shaking hands earn no second start, at a box or in
-// a locker, so the fix has to have begun after the shaking stopped. The harness's `stand at a box` scenarios lose.
+// A guard caught with their hands in a breaker box, or sitting at the camera desk, gets the same: they let go, they
+// have ESCAPE.head seconds to run, and their hands shake for ESCAPE.shaky after. Shaking hands earn no second start,
+// at a box, the desk or a locker, so the fix or the watching has to have begun after the shaking stopped. The harness's `stand at a box` scenarios lose.
 const SNIFF = { near: 1.6, time: 3 };
 const ESCAPE = { head: 0.6, shaky: 8 };
 // One that loses the guard it was hunting checks the lockers near where it last knew they were: each within
@@ -988,14 +989,16 @@ function catchGuards(sim: Sim, S: NightState, m: Mascot, b: Brain) {
     }
   return false;
 }
-// It has its hands on this guard. One busy in a breaker box, whose hands are not still shaking from the last time,
-// gets a start. Anyone else is flattened. Every catch of a guard on the floor comes through here.
+// It has its hands on this guard. One busy in a breaker box or at the camera desk, whose hands are not still shaking
+// from the last time, gets a start. Anyone else is flattened. Every catch of a guard on the floor comes through here.
 function catchOne(sim: Sim, S: NightState, p: Guard, m: Mascot, b: Brain) {
-  if (fixing(S, p) && p.fixAt >= p.shaky) startle(S, p, m, b);
+  if (busy(S, p) && p.fixAt >= p.shaky) startle(S, p, m, b);
   else flatten(sim, S, p, m, b);
 }
-// Hands in a breaker box: the client says so, and there is an open fault in reach to have them in.
-const fixing = (S: NightState, p: Guard) => p.act === 'fix' && BOXES.some((box, i) => S.faults[i] && dist(p, box) < F.REACH);
+// Hands in a breaker box, with an open fault in reach to have them in, or sitting at the camera desk, with it in reach.
+// The client says which.
+const busy = (S: NightState, p: Guard) =>
+  (p.act === 'fix' && BOXES.some((box, i) => S.faults[i] && dist(p, box) < F.REACH)) || (p.act === 'cams' && dist(p, DESK) < F.REACH);
 // A split second's start on the mascot that has just reached them, as openLockers gives a guard it pulls out.
 function headStart(S: NightState, p: Guard, m: Mascot, b: Brain) {
   p.safe = Math.max(p.safe, S.t + ESCAPE.head);
@@ -1021,7 +1024,7 @@ function spendCharge(m: Mascot, b: Brain) {
   b.cool = Math.max(b.cool, CHARGE_GAP);
   b.dir = null;
 }
-// It reached a guard who was busy in a breaker box. They let go of the box, and it is after them.
+// It reached a guard who was busy in a breaker box or at the camera desk. They let go, and it is after them.
 function startle(S: NightState, p: Guard, m: Mascot, b: Brain) {
   spendCharge(m, b);
   p.act = '';
@@ -1552,8 +1555,8 @@ export function actFloor(sim: Sim, state: State, pid: string, a: Action): void {
     p.on = !!a.on && p.bat > 0 && !p.flat;
     p.ph = !!a.ph && p.bat > 0 && !p.flat; // the phone up, reading the map
     p.sp = !!a.sp && !p.flat && !p.ph;
-    const act = p.flat ? '' : ['crank', 'charge', 'fix'].includes(a.act) ? a.act : ''; // fix: hands in a breaker box
-    if (act === 'fix' && p.act !== 'fix') p.fixAt = S.t;
+    const act = p.flat ? '' : ['crank', 'charge', 'fix', 'cams'].includes(a.act) ? a.act : ''; // fix: hands in a breaker box; cams: at the desk
+    if ((act === 'fix' || act === 'cams') && p.act !== act) p.fixAt = S.t;
     p.act = act;
     return;
   }

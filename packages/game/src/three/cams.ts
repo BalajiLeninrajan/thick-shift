@@ -7,10 +7,12 @@
 // The feed is the only place a mascot far off shows: the wall map and the
 // phone leave them out, but for the phone's few metres (minimap.ts). Over
 // the feed go the camera's name and a plan of the building with a button
-// for each camera, to click or tap. Each camera is a small housing in its
-// corner with a red light, so a guard walking past can see it.
+// for each camera, to click or tap. The ducts have a motion sensor instead
+// of a camera: while anything is in them it beeps and lights them red on the
+// plan. Each camera is a small housing in its corner with a red light, so a
+// guard walking past can see it.
 
-import { CAMS, DESK, dist, ROOMS3, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
+import { CAMS, DESK, DUCTS, dist, ROOMS3, roomAt, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { noise, tone } from '../audio';
@@ -26,6 +28,7 @@ const PAN = { angle: 0.12, period: 14 }; // each camera sweeps this many radians
 const STATIC_MS = 260; // how long a change of camera is snow
 const EXPOSURE = 7; // the camera's gain: far brighter than the eye in the dark, and noisier for it
 const AIM_Y = 0.9; // the height each camera points at
+const BEEP_MS = 1200; // the duct sensor's beep, this often while something is in there
 const BUTTON_IN = 3.5; // metres from a camera toward what it looks at, where its button goes on the plan
 
 const FRAG = `
@@ -110,7 +113,9 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
 
   // The plan with a dot for the desk and a button for each camera. A button sits a few metres along the camera's view
   // into its room rather than on the camera, so the three that share the corner by the Main Hall stay apart.
-  const rooms = ROOMS3.flatMap(r => r.rects.map(([x0, z0, x1, z1]) => `<rect x="${x0}" y="${z0}" width="${x1 - x0}" height="${z1 - z0}"/>`)).join('');
+  const rooms = ROOMS3.flatMap((r, i) =>
+    r.rects.map(([x0, z0, x1, z1]) => `<rect${i === DUCTS ? ' class="is-ducts"' : ''} x="${x0}" y="${z0}" width="${x1 - x0}" height="${z1 - z0}"/>`)
+  ).join('');
   const buttons = CAMS.map((c, i) => {
     const d = Math.max(0.01, dist(c, c.look)),
       x = c.x + ((c.look.x - c.x) / d) * BUTTON_IN,
@@ -123,8 +128,9 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
   panel.innerHTML = `<div class="ts-f-cams-dead">No signal</div>
     <div class="ts-f-cams-box">
       <div class="ts-f-cams-head"><i class="ts-f-rec"></i><b></b><span></span></div>
+      <div class="ts-f-cams-duct" role="status">Motion in the ducts</div>
       <div class="ts-f-cams-map"><svg viewBox="0 0 ${SIZE_X} ${SIZE_Z}" aria-hidden="true">${rooms}<circle cx="${DESK.x}" cy="${DESK.z}" r="0.9"/></svg>${buttons}</div>
-      <div class="ts-f-cams-foot"><span class="ts-f-cams-keys"><kbd class="ts-key">1–0</kbd><kbd class="ts-key">A D</kbd> camera</span><button class="btn btn-ghost is-sm" data-cams="up"><kbd class="ts-key">E</kbd><span>Get up</span></button></div>
+      <div class="ts-f-cams-foot"><span class="ts-f-cams-keys"><kbd class="ts-key">1–${CAMS.length}</kbd><kbd class="ts-key">A D</kbd> camera</span><button class="btn btn-ghost is-sm" data-cams="up"><kbd class="ts-key">E</kbd><span>Get up</span></button></div>
     </div>`;
   root.append(panel);
   const label = query(panel, '.ts-f-cams-head b'),
@@ -141,7 +147,8 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
     else player.pickCam(Number(b.dataset.cam));
   });
 
-  let shown = -1,
+  let beepAt = 0,
+    shown = -1,
     drawn = 0,
     w = 0,
     h = 0;
@@ -195,6 +202,13 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
         for (const [i, b] of btns.entries()) b.classList.toggle('is-on', i === me.cam);
       }
       dead.hidden = power;
+      // The ducts have no camera, only a motion sensor: the plan's ducts and a line over it go red, and it beeps.
+      const motion = power && S.m.some(m => roomAt(m.x, m.z) === DUCTS);
+      panel.classList.toggle('is-motion', motion);
+      if (motion && now >= beepAt) {
+        tone(1250, 0.07, 'square', 0.04);
+        beepAt = now + BEEP_MS;
+      }
       mat.uniforms.uDead.value = power ? 0 : 1;
       mat.uniforms.uStatic.value = Math.max(0.03, 1 - (now - me.camAt) / STATIC_MS);
       mat.uniforms.uTime.value = t % 600;

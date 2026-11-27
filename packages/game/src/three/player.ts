@@ -242,11 +242,11 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     me.camAt = performance.now();
   }
   const stepCam = (d: number): void => pickCam((me.cam + d + CAMS.length) % CAMS.length);
-  // At the desk: the number keys pick a camera (1 to 9, then 0), A and D or the arrows step through them, and Esc or X
-  // gets up. Returns whether the key was one of those.
+  // At the desk: the number keys pick a camera, A and D or the arrows step through them, and Esc or X gets up.
+  // Returns whether the key was one of those.
   function camKey(code: string): boolean {
     const n = /^(?:Digit|Numpad)(\d)$/.exec(code)?.[1];
-    if (n !== undefined) pickCam((Number(n) + 9) % 10);
+    if (n !== undefined) pickCam(Number(n) - 1);
     else if (code === 'KeyA' || code === 'ArrowLeft') stepCam(-1);
     else if (code === 'KeyD' || code === 'ArrowRight') stepCam(1);
     else if (code === 'Escape' || code === 'KeyX') stand();
@@ -627,6 +627,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
           }
           if (!me.task) me.target = findTarget(S, mine);
           use(S, dt);
+          if (me.cam >= 0) me.act = 'cams'; // the room gives a guard caught at the desk a start, as at a breaker box
           if (locker) {
             // Standing still in the dark: the torch is off and the breath comes back.
             me.on = me.sp = false;
