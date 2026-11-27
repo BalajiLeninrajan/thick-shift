@@ -243,3 +243,30 @@ describe('routes', () => {
     expect([...new Set(rooms(M.route(20, 30, 21, 40.5).path))]).toEqual([6, 4, 7, M.BOOTH]);
   });
 });
+
+describe('cameras', () => {
+  it('hangs each camera inside its room, under the ceiling, looking into the same room', () => {
+    expect(M.CAMS.length).toBeLessThanOrEqual(9); // the number keys 1 to 9
+    for (const c of M.CAMS) {
+      const room = defined(M.ROOMS3[c.room], `room ${c.room}`);
+      expect(M.roomAt(c.x, c.z), c.name).toBe(c.room);
+      expect(M.roomAt(c.look.x, c.look.z), c.name).toBe(c.room);
+      expect(c.y, c.name).toBeLessThan(room.h);
+      expect(M.walkable(c.x, c.z, 0.04, null, true), c.name).toBe(true);
+    }
+    expect(M.CAMS.some(c => c.room === M.DUCTS || c.room === M.BOOTH)).toBe(false);
+  });
+
+  it('shows what is in front of a camera and in range, and not what is behind it or through a wall', () => {
+    const stage = defined(M.CAMS[0], 'the stage camera'),
+      corner = defined(
+        M.CAMS.find(c => c.name === 'West Corner'),
+        'the west corner camera'
+      );
+    expect(M.camSees(stage, M.REST[0], M.MASCOT_R)).toBe(true);
+    expect(M.camSees(stage, { x: 35, z: 18 }, M.MASCOT_R)).toBe(false); // the Kitchen, through the wall
+    expect(M.camSees(corner, { x: 13.5, z: 40.5 }, M.MASCOT_R)).toBe(true); // outside the left door
+    expect(M.camSees(corner, { x: 4, z: 28 }, M.MASCOT_R)).toBe(false); // up the hall, behind it
+    expect(M.camSees(corner, { x: 17, z: 40.5 }, M.MASCOT_R, L_SHUT)).toBe(false); // in the booth, past a shut door
+  });
+});

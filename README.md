@@ -1,6 +1,6 @@
 # Thick Shift
 
-Co-op night-shift horror in first person. You're a guard at the Mascot Depot. Walk the building with a torch, fix the wiring before it burns, crank the generator, and keep the very large retired mascots off you until 6 AM. Survive five nights.
+Co-op night-shift horror in first person. You're a guard at the Mascot Depot. Walk the building with a torch, watch the security cameras, fix the wiring before it burns, crank the generator, and keep the very large retired mascots off you until 6 AM. Survive five nights.
 
 Play alone or with friends, in a browser or in a Discord voice channel.
 

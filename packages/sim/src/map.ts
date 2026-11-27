@@ -204,6 +204,29 @@ export const CHARGER: Fixture = { room: 9, x: 21, z: 43.95, face: Math.PI };
 // The gift shop's carton of Mini Biggses (TOY.box in sim.ts), on the floor in the corner by the coat rack.
 export const TOY_BOX: Fixture = { room: 9, x: 25.6, z: 43.45, face: Math.PI };
 export const WALL_MAP: Fixture = { room: 9, x: 18.5, z: 36.55, face: 0 };
+// The front edge of the booth's desk, under its monitors. A guard stands here to watch the cameras.
+export const DESK: Fixture = { room: 9, x: 20.35, z: 37.7, face: 0 };
+// A security camera, high in a corner of its room and aimed at look. name: the label on its feed.
+export interface Cam extends Point {
+  room: number;
+  name: string;
+  y: number;
+  look: Point;
+}
+// Numbered for the keys that pick them. Where the mascots stand, the middle of the building, the Snack Bar's way into
+// the ducts, and the last stretch of hall outside each side door. The Arcade, the Kitchen, the long halls and the
+// ducts have none: a motion sensor in the ducts (cams.ts) stands in for one there.
+export const CAMS: Cam[] = [
+  { room: 0, name: 'Stage', x: 26.6, z: 10.6, y: 4.8, look: { x: 16, z: 3 } },
+  { room: 1, name: 'Backstage', x: 41.6, z: 10.6, y: 3.45, look: { x: 32, z: 3 } },
+  { room: 3, name: 'Main Hall', x: 26.6, z: 11.9, y: 4, look: { x: 15, z: 22 } },
+  { room: 6, name: 'Snack Bar', x: 30.6, z: 25.9, y: 3.25, look: { x: 17, z: 31 } },
+  { room: 5, name: 'West Corner', x: 2.4, z: 42.1, y: 2.85, look: { x: 14.5, z: 40.5 } },
+  { room: 7, name: 'East Corner', x: 39.6, z: 42.1, y: 2.85, look: { x: 27.5, z: 40.5 } },
+];
+// What a camera's picture takes in: half its width as an angle off where it looks, and how far into the dark it shows.
+export const CAM_HALF = 0.8,
+  CAM_RANGE = 22;
 // The button for each booth door, on the wall inside the booth beside it.
 export const PANELS: Record<DoorKey, Point & { face: number }> = {
   L: { x: 15.05, z: 38.6, face: Math.PI / 2 },
@@ -372,6 +395,14 @@ export function glimpses(ax: number, az: number, bx: number, bz: number, r: numb
       if (clear(ax, az, bx + ux * o, bz + uz * o, 0.04, doors, true)) return true;
     }
   return false;
+}
+// Is any of a body of radius r standing at p in camera c's picture? Within its width and range, and glimpsed past
+// the walls and shut doors. The game draws the real picture; this is the same question for the balance harness.
+export function camSees(c: Cam, p: Point, r: number, doors?: Doors | null): boolean {
+  const d = dist(c, p);
+  if (d > CAM_RANGE) return false;
+  const off = Math.abs(angDiff(Math.atan2(p.x - c.x, p.z - c.z), Math.atan2(c.look.x - c.x, c.look.z - c.z)));
+  return off - Math.atan2(r, d) < CAM_HALF && glimpses(c.x, c.z, p.x, p.z, r, doors);
 }
 
 // Where a body of radius r gets nearest to (x, z) with nothing but furniture between: the place a mascot walks to

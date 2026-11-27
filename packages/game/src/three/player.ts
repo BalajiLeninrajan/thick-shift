@@ -3,11 +3,28 @@
 // (a 'p' action); everything else about the guard comes back in S.
 // Keyboard (WASD to walk, and arrow keys to look for anyone without a mouse), mouse and gamepad are read here. Touch is in touch.ts, which
 // drives the same guard through pad, look(), toggleTorch(), togglePhone(), toggleZoom() and throwToy().
+// At the camera desk the guard sits still and the keys change camera (cams.ts draws the feed and its buttons).
 
 import { F, TOY } from '@thick-shift/sim';
 import { assert, defined, isNight, isPlaced } from '@thick-shift/sim/check';
 import { DOORS, STAMINA } from '@thick-shift/sim/config';
-import { angDiff, BATTERY_SPOTS, BOXES, CHARGER, dist, EYE, GENERATOR, HIDES, PANELS, PLAYER_R, slide, TOY_BOX, walkable } from '@thick-shift/sim/map';
+import {
+  angDiff,
+  BATTERY_SPOTS,
+  BOXES,
+  CAMS,
+  CHARGER,
+  DESK,
+  dist,
+  EYE,
+  GENERATOR,
+  HIDES,
+  PANELS,
+  PLAYER_R,
+  slide,
+  TOY_BOX,
+  walkable,
+} from '@thick-shift/sim/map';
 import type { DoorKey, Guard, NightState, Player, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { unlockAudio } from '../audio';
@@ -102,6 +119,8 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     dry: 0,
     empty: 0,
     hid: -1,
+    cam: -1,
+    camAt: 0,
   };
   const keys = new Set<string>();
   // Keys a breaker box took, each until it comes up. Their repeats never reach keys, even once the box has shut.
@@ -122,6 +141,9 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     gpWas: boolean[] = [];
   let keysLive = false,
     arrowHeld = 0; // keysLive: playing on the keyboard alone, so there is no pointer to lock
+  // The camera last watched, to come back to, and whether the pointer was locked when the guard sat down.
+  let lastCam = 0,
+    relock = false;
   function letGo(): void {
     if (me.task) {
       me.task = null;
@@ -146,7 +168,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
 
   const playing = (): boolean => game.S?.phase === 'play';
   function toggleTorch(): void {
-    if (playing() && !me.flat && me.hid < 0) {
+    if (playing() && !me.flat && me.hid < 0 && me.cam < 0) {
       me.on = !me.on;
       unlockAudio();
     }
@@ -154,7 +176,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   // The phone runs on the torch's battery, so a dead battery will not raise it.
   const charged = (): boolean => (myPlayer(currentState())?.bat ?? 1) > 0; // only after playing()
   function togglePhone(): void {
-    if (playing() && !me.flat && !me.paused && (me.ph || charged())) me.ph = !me.ph;
+    if (playing() && !me.flat && !me.paused && me.cam < 0 && (me.ph || charged())) me.ph = !me.ph;
   }
   // The minimap between what is round the guard and the whole building. Only with the phone up.
   function toggleZoom(): void {
@@ -165,7 +187,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   // up again before the next throw. The room works out where it comes down (landing in sim.ts) and takes the
   // battery. Not from a locker, and not with both hands in a breaker box.
   function throwToy(): void {
-    if (!playing() || me.flat || me.paused || me.hid >= 0 || me.task) return;
+    if (!playing() || me.flat || me.paused || me.hid >= 0 || me.task || me.cam >= 0) return;
     const now = performance.now(),
       mine = myPlayer(currentState()); // playing() checked game.S
     if (!mine?.toy) {
@@ -185,7 +207,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
 
   // Turn the view right and down by this many radians at sensitivity 1.
   function turn(right: number, down: number): void {
-    if (me.paused) return;
+    if (me.paused || me.cam >= 0) return;
     me.yaw -= right * prefs.sens;
     me.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, me.pitch - down * prefs.sens * (prefs.invert ? -1 : 1)));
   }
@@ -194,7 +216,42 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   // Chrome refuses to lock again for a second after Esc. Then the click-to-play state is what shows.
   function resume(): void {
     me.paused = false;
-    if (!me.touch && !mouseLocked) canvas.requestPointerLock?.()?.catch?.(() => {});
+    if (!me.touch && !mouseLocked && me.cam < 0) canvas.requestPointerLock?.()?.catch?.(() => {});
+  }
+
+  // Down at the camera desk, on the camera watched last. The mouse comes free to click the cameras, the torch goes
+  // off and the phone down: both hands are on the desk.
+  function sit(): void {
+    me.cam = lastCam;
+    me.camAt = performance.now();
+    me.on = me.ph = false;
+    me.sp = false;
+    relock = mouseLocked;
+    if (mouseLocked) document.exitPointerLock();
+  }
+  // Up from the desk, taking the mouse back if it was locked before they sat down.
+  function stand(): void {
+    if (me.cam < 0) return;
+    me.cam = -1;
+    if (relock && !me.touch && !mouseLocked) canvas.requestPointerLock?.()?.catch?.(() => {});
+  }
+  // Camera i of CAMS, while at the desk. A change of picture brings a burst of static.
+  function pickCam(i: number): void {
+    if (me.cam < 0 || me.paused || i < 0 || i >= CAMS.length || i === me.cam) return;
+    me.cam = lastCam = i;
+    me.camAt = performance.now();
+  }
+  const stepCam = (d: number): void => pickCam((me.cam + d + CAMS.length) % CAMS.length);
+  // At the desk: the number keys pick a camera, A and D or the arrows step through them, and Esc or X gets up.
+  // Returns whether the key was one of those.
+  function camKey(code: string): boolean {
+    const n = /^(?:Digit|Numpad)(\d)$/.exec(code)?.[1];
+    if (n !== undefined) pickCam(Number(n) - 1);
+    else if (code === 'KeyA' || code === 'ArrowLeft') stepCam(-1);
+    else if (code === 'KeyD' || code === 'ArrowRight') stepCam(1);
+    else if (code === 'Escape' || code === 'KeyX') stand();
+    else return false;
+    return true;
   }
   function pause(): void {
     me.paused = true;
@@ -244,6 +301,12 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       me.pad = false;
       return;
     }
+    if (me.cam >= 0 && camKey(e.code)) {
+      e.preventDefault();
+      keysLive = true;
+      me.pad = false;
+      return;
+    }
     if (e.code === 'Escape' && !mouseLocked) {
       pause();
       return;
@@ -268,6 +331,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   });
   canvas.addEventListener('click', () => {
     unlockAudio();
+    if (me.cam >= 0) return; // the feed is under the cursor: cams.ts has the buttons
     if (!mouseLocked) resume();
     else toggleTorch();
   });
@@ -285,7 +349,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     if (was && !mouseLocked) {
       keys.clear();
       if (me.task) letGo();
-      else if (playing()) me.paused = true;
+      else if (playing() && me.cam < 0) me.paused = true; // sitting down at the desk lets the mouse go on purpose
     }
   });
   addEventListener('mousemove', e => {
@@ -332,6 +396,12 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       gp.stick = stick;
       turn(axis(2) * GP.look * dt, axis(3) * GP.look * dt);
       task.pad(DPAD.find(([b]) => hit(b))?.[1] ?? flick, down(GP.use), !!gpWas[GP.use], hit(GP.phone));
+    } else if (gpLive && !me.paused && me.cam >= 0) {
+      // At the desk: the d-pad or the shoulders step through the cameras, A or B gets up.
+      if (hit(14) || hit(GP.sprint)) stepCam(-1);
+      if (hit(15) || hit(GP.watch)) stepCam(1);
+      if (hit(GP.phone)) stand();
+      gp.use = down(GP.use);
     } else if (gpLive && !me.paused) {
       Object.assign(gp, { fwd: -axis(1), strafe: axis(0), sprint: down(GP.sprint), use: down(GP.use) });
       turn(axis(2) * GP.look * dt, axis(3) * GP.look * dt);
@@ -350,6 +420,8 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   function findTarget(S: NightState, mine: Guard): Target | null {
     // In a locker the one thing in reach is the way out.
     if (mine.hid >= 0) return { what: 'hide', i: mine.hid, at: defined(HIDES[mine.hid], `locker ${mine.hid}`).at, label: 'Step out of the locker', hold: 0 };
+    // At the desk, the same: getting up.
+    if (me.cam >= 0) return { what: 'cams', at: DESK, label: 'Get up from the cameras', hold: 0 };
     const list: Target[] = [];
     // S.faults has one entry per box.
     for (const [i, at] of BOXES.entries()) {
@@ -365,6 +437,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       if (p.flat && p.id !== game.myId) list.push({ what: 'peel', id: p.id, at: p, label: `Peel ${p.name} off the floor`, hold: F.PEEL_HOLD });
     list.push({ what: 'crank', at: GENERATOR, label: S.power >= 100 ? 'The generator is full' : 'Crank the generator', hold: S.power >= 100 ? 0 : -1 });
     if (S.power > 0 && mine.bat < 1) list.push({ what: 'charge', at: CHARGER, label: 'Charge the torch', hold: -1 });
+    if (S.power > 0) list.push({ what: 'cams', at: DESK, label: 'Watch the cameras', hold: 0 });
     // Any Mini Biggs on the floor, into empty hands.
     if (!mine.toy) for (const t of S.toys) if (S.t >= t.land) list.push({ what: 'toy', id: t.id, at: t, label: 'Pick up the Mini Biggs', hold: 0 });
     // The booth's carton, while it has any left.
@@ -435,8 +508,11 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     if (usedTap) return;
     me.hold += dt;
     if (me.hold >= t.hold) {
-      // A full generator is a tap target that does nothing, so it sends nothing.
-      if (t.what !== 'crank' && t.what !== 'charge') send({ t: 'use', what: t.what, i: t.i, k: t.k, id: t.id });
+      // The desk is this browser's alone. A full generator is a tap target that does nothing, so it sends nothing.
+      if (t.what === 'cams') {
+        if (me.cam >= 0) stand();
+        else sit();
+      } else if (t.what !== 'crank' && t.what !== 'charge') send({ t: 'use', what: t.what, i: t.i, k: t.k, id: t.id });
       me.hold = 0;
       usedTap = true;
     }
@@ -454,7 +530,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       sinceSprint = 0;
     } else rest(dt);
     me.moving = 0;
-    if (!len || me.act === 'crank' || me.task) return;
+    if (!len || me.act === 'crank' || me.task || me.cam >= 0) return;
     const speed = ((me.sp ? F.SPRINT : F.WALK * (me.ph ? F.PHONE_WALK : 1)) * Math.min(1, len) * dt) / len;
     const sin = Math.sin(me.yaw),
       cos = Math.cos(me.yaw);
@@ -477,6 +553,8 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     call,
     watchNext,
     letGo,
+    pickCam,
+    stand,
     // Put the guard where the room says they are: the start of a night, or after joining.
     reset(mine: Player): void {
       letGo();
@@ -493,6 +571,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
         paused: false,
         watch: null,
         hid: -1,
+        cam: -1,
       });
     },
     update(S: State, dt: number, now: number): void {
@@ -522,10 +601,11 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       // The screens between nights need the mouse back.
       if (S.phase !== 'play') {
         me.paused = false;
+        me.cam = -1;
         letGo();
         if (mouseLocked) document.exitPointerLock();
       }
-      me.locked = (mouseLocked || me.touch || gpLive || keysLive) && !me.paused;
+      me.locked = (mouseLocked || me.touch || gpLive || keysLive || me.cam >= 0) && !me.paused;
       if (!S.players.some(p => p.id === me.watch && !p.flat) || !me.flat) me.watch = null;
       if (S.phase === 'play' && isNight(S)) {
         if (me.flat || me.paused) {
@@ -536,6 +616,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
           me.moving = 0;
           if (me.flat) {
             me.on = me.ph = false;
+            me.cam = -1;
             letGo();
           }
         } else {
@@ -546,6 +627,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
           }
           if (!me.task) me.target = findTarget(S, mine);
           use(S, dt);
+          if (me.cam >= 0) me.act = 'cams'; // the room gives a guard caught at the desk a start, as at a breaker box
           if (locker) {
             // Standing still in the dark: the torch is off and the breath comes back.
             me.on = me.sp = false;

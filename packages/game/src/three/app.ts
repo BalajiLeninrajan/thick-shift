@@ -13,6 +13,7 @@ import type { EventOf } from '../types';
 import { createActors } from './actors';
 import { createPhone } from './actors/phone';
 import { loadActor, loadJSON } from './assets';
+import { createCams } from './cams';
 import { createHud, where } from './hud';
 import { createOutlines } from './outline';
 import { createPlayer, prefs, TORCH_FULL } from './player';
@@ -55,6 +56,7 @@ function create() {
   const post = createPost(renderer, player.torch);
   player.torch.map = world.torchCookie();
   const phone = createPhone(camera); // in the left hand, with the minimap on its screen
+  const cams = createCams(scene, root, player); // the booth's cameras, and the frame while a guard watches them
   const slats = createSlats(scene); // the locker doors, drawn behind the hands
   let last = performance.now(),
     lastT = 1e9,
@@ -153,10 +155,12 @@ function create() {
       if (isMe(e.x.id)) hud.say(`${MASC[e.x.i].name} opened the locker. Run!`, 'hide', 3);
       else hud.say(`${MASC[e.x.i].name} found ${guard(e.x.id)?.name || 'someone'} in a locker ${where(e.x)}.`, 'hide', 6);
     },
-    // Caught with hands in a breaker box: the room has broken the fix off, so the panel shuts with it.
+    // Caught with hands in a breaker box or at the camera desk: the room has broken it off, so the panel shuts, or they
+    // are up from the desk.
     startle(e: EventOf<'startle'>): void {
       if (!isMe(e.x.id)) return;
       player.letGo();
+      player.stand();
       hud.say(`${MASC[e.x.i].name} is on you. Run!`, 'hide', 3);
     },
     fumble(e: EventOf<'fumble'>): void {
@@ -216,18 +220,23 @@ function create() {
         }
       player.update(S, dt, now);
       spectate(S, dt);
+      // At the desk the frame is the camera being watched, until something catches them there.
+      const watching = player.me.cam >= 0 && !actors.scare.active,
+        eye = watching ? cams.camera : camera;
+      cams.update(S, player.me, watching, now, camera.position);
       const dread = dreadF(S);
       fear = threat();
       fog.density = FOG + FOG_DREAD * dread;
-      world.update(S, t, dt, camera, player.torch.intensity / TORCH_FULL, dread, fear);
-      actors.sync(S, dt, player.me, player.torch); // also runs the catch, which takes the camera
+      world.update(S, t, dt, eye, watching ? 0 : player.torch.intensity / TORCH_FULL, dread, fear);
+      actors.sync(S, dt, player.me, player.torch, eye); // also runs the catch, which takes the camera
       // The end card (ui.ts) waits until LINGER_S after the catch is over, however long a slow machine takes over it.
       if (actors.scare.active) client.holdUntil = Math.max(client.holdUntil, now + LINGER_S * 1000);
       phone.update(S, player.me, dt, now, actors.scare.active);
       slats.update(S, player.me, dt, actors.scare.active);
       sound.update(S, player.me, dt);
       hud.update(S, player.me, actors.scare.active);
-      post.render(scene, camera, now, fear, dread, world.stop, outlines.pick(S, player.me, t));
+      if (watching) cams.render(renderer, canvas, player.torch, now);
+      else post.render(scene, camera, now, fear, dread, world.stop, outlines.pick(S, player.me, t));
       actors.after();
     },
     // The threat this frame's tick worked out, for the heartbeat (main.ts).

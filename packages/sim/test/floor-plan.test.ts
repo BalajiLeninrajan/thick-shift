@@ -60,6 +60,7 @@ describe('the floor plan', () => {
       [M.GENERATOR, 'the generator'],
       [M.CHARGER, 'the charger'],
       [M.WALL_MAP, 'the wall map'],
+      [M.DESK, 'the camera desk'],
       ...Object.entries(M.PANELS).map(([k, p]): [Point & { face: number }, string] => [p, `door button ${k}`]),
     ];
     for (const [c, name] of onWalls) {

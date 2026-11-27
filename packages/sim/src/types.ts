@@ -29,8 +29,9 @@ export type Doors = Record<DoorKey, boolean>;
 // 'lobby' until a guard starts night 1, then 'play'. A night ends in 'win', 'dead' or, after the last one, 'won'.
 export type Phase = 'lobby' | 'play' | 'win' | 'dead' | 'won';
 
-// What a guard's hands are on while they hold the use key: the generator's crank, the charging dock, or a breaker box.
-export type GuardAct = '' | 'crank' | 'charge' | 'fix';
+// What a guard's hands are on: the generator's crank or the charging dock while they hold the use key, a breaker box,
+// or the camera desk while they sit at it.
+export type GuardAct = '' | 'crank' | 'charge' | 'fix' | 'cams';
 
 // A guard as they join the room (joinFloor), before their first night places them.
 export interface Joined {
@@ -60,7 +61,7 @@ export interface Guard extends Joined {
   // box. Getting into a locker is loud, and a mascot that reaches them at either gives no second start.
   shaky: number;
   inAt: number; // S.t they got into the locker they are in
-  fixAt: number; // S.t they last put their hands in a breaker box
+  fixAt: number; // S.t they last put their hands in a breaker box or sat down at the camera desk
   toy: boolean; // holding their Mini Biggs
 }
 // A guard in S.players at any time: a guard who joined after the night began has only their id and name until the

@@ -3,11 +3,13 @@
 // turns with them, so what is ahead is up. Zoomed out it is the whole
 // building with north up. It shows rooms and doorways, the booth doors that
 // are shut, the guards (a cross for a flat one), the open faults,
-// the generator and the charger, spare batteries, and every mascot that is
-// off its mark, as the booth's wall map does.
+// the generator and the charger, and spare batteries. A mascot shows only
+// within PHONE_NEAR of the guard, inside a faint ring; further off, the
+// booth's cameras (cams.ts) are the way to find one.
 
 import { defined, isPlaced } from '@thick-shift/sim/check';
-import { BATTERY_SPOTS, BOXES, CHARGER, DOORWAYS, GENERATOR, ROOMS3, roomAt, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
+import { PHONE_NEAR } from '@thick-shift/sim/config';
+import { BATTERY_SPOTS, BOXES, CHARGER, DOORWAYS, dist, GENERATOR, ROOMS3, roomAt, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import type { Me } from '../types';
@@ -30,6 +32,7 @@ const INK = {
   dock: '#5cc8ff',
   bat: '#fff07a',
   mascot: '#ff3b30',
+  near: 'rgba(157, 245, 168, 0.28)',
   text: '#9df5a8',
 };
 
@@ -51,7 +54,8 @@ export function createMinimap() {
   };
 
   // The building and what is in it, in metres, under whatever transform is set. k: pixels per metre, for sizes.
-  function plan(S: State, myId: string, k: number, t: number): void {
+  // me: where the guard is, for the mascots near enough to show.
+  function plan(S: State, me: Me, myId: string, k: number, t: number): void {
     const px = 1 / k; // one pixel, in metres
     c.fillStyle = INK.room;
     for (const room of ROOMS3) for (const [x0, z0, x1, z1] of room.rects) c.fillRect(x0, z0, x1 - x0, z1 - z0);
@@ -79,10 +83,17 @@ export function createMinimap() {
       const spot = defined(BATTERY_SPOTS[i], `battery spot ${i}`);
       box(spot.x, spot.z, 3 * px, INK.bat);
     }
-    // Mascots off their marks: a blip with a ring that grows.
+    // How far the phone picks mascots up, and those inside it: a blip with a ring that grows.
+    c.strokeStyle = INK.near;
+    c.lineWidth = 1.5 * px;
+    c.setLineDash([4 * px, 4 * px]);
+    c.beginPath();
+    c.arc(me.x, me.z, PHONE_NEAR, 0, 7);
+    c.stroke();
+    c.setLineDash([]);
     const ring = (t % 900) / 900;
     for (const m of S.m)
-      if (m.st !== 'rest') {
+      if (dist(m, me) < PHONE_NEAR) {
         dot(m.x, m.z, 5 * px, INK.mascot);
         c.strokeStyle = INK.mascot;
         c.lineWidth = 1.5 * px;
@@ -145,7 +156,7 @@ export function createMinimap() {
           oy = top + 2;
         c.translate(ox, oy);
         c.scale(k, k);
-        plan(S, myId, k, now);
+        plan(S, me, myId, k, now);
         c.restore();
         // On the plan yaw 0 (south) is down the screen.
         arrow(ox + me.x * k, oy + me.z * k, Math.PI - me.yaw);
@@ -160,7 +171,7 @@ export function createMinimap() {
         c.rotate(me.yaw - Math.PI);
         c.scale(NEAR, NEAR);
         c.translate(-me.x, -me.z);
-        plan(S, myId, NEAR, now);
+        plan(S, me, myId, NEAR, now);
         c.restore();
         arrow(cx, cy, 0);
         // North (-z), turned the same way, at the edge of the picture.
