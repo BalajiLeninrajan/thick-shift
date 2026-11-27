@@ -12,14 +12,12 @@ import { game, platform } from '@thick-shift/game/state';
 import type { Invite, OverlayScreen } from '@thick-shift/game/types';
 import { card, esc, guardName, INTRO, messageScreen } from '@thick-shift/game/ui';
 
-let sdk: DiscordSDK | null = null;
 const discord = { room: '', name: '' }; // both '' until Discord answers
 
 async function connect(): Promise<void> {
   const { clientId } = await fetch('/api/discord/config').then(r => r.json() as Promise<{ clientId: string }>);
   if (!clientId) throw new Error('DISCORD_CLIENT_ID is not set on the Worker.');
   const ds = new DiscordSDK(clientId);
-  sdk = ds;
   await ds.ready();
   const room = `d-${ds.instanceId.replace(/[^\w-]/g, '').slice(0, 80)}`;
   discord.name = await signIn(ds, clientId);
@@ -63,15 +61,9 @@ function titleScreen(): OverlayScreen {
   };
 }
 
-// Everyone in the channel is already in the room, so the lobby offers Discord's invite instead of a code.
+// Everyone in the channel is already in the room, so the lobby says so instead of showing a code.
 const invite = (): Invite => ({
-  html: '<p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel joins this night.</p><div class="cn-cluster"><button class="btn btn-secondary" id="inv">Invite someone</button></div>',
-  wire() {
-    byId('inv').onclick = () =>
-      sdk?.commands.openInviteDialog().catch(() => {
-        /* closed, or not allowed in this channel */
-      });
-  },
+  html: '<p class="cn-meta cn-m-0">Everyone who opens Thick Shift in this channel joins this night.</p>',
 });
 
 platform.fixedRoom = true;
