@@ -4,6 +4,11 @@
 // blown up with grain, scan lines, a rolling bar and a burst of static on
 // every change of camera. With the power out every feed is static.
 //
+// Each room's camera takes in the whole room from its corner and holds still.
+// The two halls bend round a corner no one picture covers, so their cameras
+// turn to follow a mascot in the hall, and sweep between its arms while
+// there is none.
+//
 // The feed is the only place a mascot far off shows: the wall map and the
 // phone leave them out, but for the phone's few metres (minimap.ts). Over
 // the feed go the camera's name and a plan of the building with a button
@@ -12,7 +17,7 @@
 // plan. Each camera is a small housing in its corner with a red light, so a
 // guard walking past can see it.
 
-import { CAMS, DESK, DUCTS, dist, ROOMS3, roomAt, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
+import { angDiff, CAM_HALF, CAMS, DESK, DUCTS, dist, ROOMS3, roomAt, SIZE_X, SIZE_Z } from '@thick-shift/sim/map';
 import type { State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
 import { noise, tone } from '../audio';
@@ -23,8 +28,9 @@ import { roomsSeenFrom } from './world/sight';
 
 const FEED_H = 240; // the picture's height in pixels: a camera from the nineties
 const FEED_MS = 66; // a new picture this often, about fifteen a second
-const FOV = 60; // degrees, top to bottom; CAM_HALF in map.ts is about half its width on a wide screen
-const PAN = { angle: 0.12, period: 14 }; // each camera sweeps this many radians either way, this many seconds a sweep
+// A hall camera's turn: the most radians a second it turns, and the seconds of a sweep from one arm to the other and
+// back while nothing is in the hall. How far it may turn is pan in map.ts.
+const PAN = { rate: 1.4, period: 12 };
 const STATIC_MS = 260; // how long a change of camera is snow
 const EXPOSURE = 7; // the camera's gain: far brighter than the eye in the dark, and noisier for it
 const AIM_Y = 0.9; // the height each camera points at
@@ -95,7 +101,7 @@ function housing(scene: THREE.Scene, led: THREE.MeshBasicMaterial): THREE.Group[
 }
 
 export function createCams(scene: THREE.Scene, root: HTMLElement, player: PlayerHandle) {
-  const camera = new THREE.PerspectiveCamera(FOV, 16 / 9, 0.1, 40);
+  const camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 40); // fit() sets the height of the view from its width
   scene.add(camera);
   const feed = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
   const mat = new THREE.ShaderMaterial({
@@ -130,7 +136,7 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
       <div class="ts-f-cams-head"><i class="ts-f-rec"></i><b></b><span></span></div>
       <div class="ts-f-cams-duct" role="status">Motion in the ducts</div>
       <div class="ts-f-cams-map"><svg viewBox="0 0 ${SIZE_X} ${SIZE_Z}" aria-hidden="true">${rooms}<circle cx="${DESK.x}" cy="${DESK.z}" r="0.9"/></svg>${buttons}</div>
-      <div class="ts-f-cams-foot"><span class="ts-f-cams-keys"><kbd class="ts-key">1–${CAMS.length}</kbd><kbd class="ts-key">A D</kbd> camera</span><button class="btn btn-ghost is-sm" data-cams="up"><kbd class="ts-key">E</kbd><span>Get up</span></button></div>
+      <div class="ts-f-cams-foot"><span class="ts-f-cams-keys"><kbd class="ts-key">1–${CAMS.length}</kbd><kbd class="ts-key">Arrows</kbd> camera</span><button class="btn btn-ghost is-sm" data-cams="up"><kbd class="ts-key">E</kbd><span>Get up</span></button></div>
     </div>`;
   root.append(panel);
   const label = query(panel, '.ts-f-cams-head b'),
@@ -147,6 +153,29 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
     else player.pickCam(Number(b.dataset.cam));
   });
 
+  // Where each camera points, as a yaw on the floor (Math.atan2(dx, dz)); only a hall camera's ever moves.
+  const base = CAMS.map(c => Math.atan2(c.look.x - c.x, c.look.z - c.z)),
+    yaws = [...base];
+  // Where hall camera i wants to point: at the mascot in its hall nearest to where it points now, or along its sweep.
+  function aim(S: State, i: number, t: number): number {
+    const c = CAMS[i],
+      at = base[i] ?? 0,
+      now = yaws[i] ?? at;
+    if (!c?.pan) return at;
+    let best = Infinity,
+      want = at + Math.sin((t / PAN.period) * Math.PI * 2) * c.pan;
+    for (const m of S.m) {
+      if (roomAt(m.x, m.z) !== c.room) continue;
+      const y = Math.atan2(m.x - c.x, m.z - c.z),
+        off = Math.abs(angDiff(y, now));
+      if (off < best) {
+        best = off;
+        want = y;
+      }
+    }
+    return at + THREE.MathUtils.clamp(angDiff(want, at), -c.pan, c.pan);
+  }
+
   let beepAt = 0,
     shown = -1,
     drawn = 0,
@@ -160,15 +189,18 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
     w = fw;
     h = FEED_H;
     feed.setSize(w, h);
+    // The width is fixed, CAM_HALF either way, so every screen sees the whole room.
     camera.aspect = aspect;
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(CAM_HALF) / aspect));
     camera.updateProjectionMatrix();
   }
 
   return {
     camera,
     // Once a frame, before the world and the actors are brought up to date. on: the guard is watching (and not being
-    // caught). Puts the camera where me.cam is, sweeping, and keeps the overlay and the wall lights in step.
-    update(S: State, me: Me, on: boolean, now: number, eye: THREE.Vector3): void {
+    // caught). Puts the camera where me.cam is, turning a hall camera after what is in its hall, and keeps the overlay
+    // and the wall lights in step.
+    update(S: State, me: Me, on: boolean, now: number, eye: THREE.Vector3, dt: number): void {
       const t = now / 1000,
         power = S.power > 0;
       led.color.setHex(power && t % 2 < 1.4 ? 0xff2a1a : 0x1a0505);
@@ -181,13 +213,15 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
       }
       const c = CAMS[me.cam];
       if (!c) return;
-      const sweep = Math.sin(((t + me.cam * 3.1) / PAN.period) * Math.PI * 2) * PAN.angle,
-        dx = c.look.x - c.x,
-        dz = c.look.z - c.z,
-        cos = Math.cos(sweep),
-        sin = Math.sin(sweep);
+      // Just switched to: it is already on what it wants, behind the static.
+      const want = aim(S, me.cam, t),
+        was = yaws[me.cam] ?? want,
+        turn = shown === me.cam ? THREE.MathUtils.clamp(angDiff(want, was), -PAN.rate * dt, PAN.rate * dt) : angDiff(want, was),
+        yaw = was + turn,
+        far = dist(c, c.look);
+      yaws[me.cam] = yaw;
       camera.position.set(c.x, c.y, c.z);
-      camera.lookAt(c.x + dx * cos + dz * sin, AIM_Y, c.z - dx * sin + dz * cos);
+      camera.lookAt(c.x + Math.sin(yaw) * far, AIM_Y, c.z + Math.cos(yaw) * far);
       camera.updateMatrixWorld();
       if (shown !== me.cam) {
         // A click and a hiss on every change but the first picture after sitting down.

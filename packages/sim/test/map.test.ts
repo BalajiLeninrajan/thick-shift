@@ -257,16 +257,47 @@ describe('cameras', () => {
     expect(M.CAMS.some(c => c.room === M.DUCTS || c.room === M.BOOTH)).toBe(false);
   });
 
-  it('shows what is in front of a camera and in range, and not what is behind it or through a wall', () => {
+  it('has a camera in every room outside the booth and the ducts, and sees the whole of it', () => {
+    for (const [ri, room] of M.ROOMS3.entries()) {
+      if (ri === M.DUCTS || ri === M.BOOTH) continue;
+      const cams = M.CAMS.filter(c => c.room === ri);
+      expect(cams.length, room.name).toBe(1);
+      const cam = defined(cams[0], room.name);
+      // Every place a mascot's middle can be, on a half-metre grid.
+      for (const [x0, z0, x1, z1] of room.rects)
+        for (let x = x0 + M.MASCOT_R; x <= x1 - M.MASCOT_R; x += 0.5)
+          for (let z = z0 + M.MASCOT_R; z <= z1 - M.MASCOT_R; z += 0.5)
+            if (M.roomAt(x, z) === ri) expect(M.camSees(cam, { x, z }, M.MASCOT_R), `${cam.name} at ${x}, ${z}`).toBe(true);
+    }
+  });
+
+  it('pans only in the halls, where one view cannot take in both arms', () => {
+    expect(M.CAMS.filter(c => c.pan).map(c => c.name)).toEqual(['West Hall', 'East Hall']);
+  });
+
+  it('shows nothing through a wall or a shut door', () => {
     const stage = defined(M.CAMS[0], 'the stage camera'),
-      corner = defined(
-        M.CAMS.find(c => c.name === 'West Corner'),
-        'the west corner camera'
+      west = defined(
+        M.CAMS.find(c => c.name === 'West Hall'),
+        'the west hall camera'
       );
     expect(M.camSees(stage, M.REST[0], M.MASCOT_R)).toBe(true);
     expect(M.camSees(stage, { x: 35, z: 18 }, M.MASCOT_R)).toBe(false); // the Kitchen, through the wall
-    expect(M.camSees(corner, { x: 13.5, z: 40.5 }, M.MASCOT_R)).toBe(true); // outside the left door
-    expect(M.camSees(corner, { x: 4, z: 28 }, M.MASCOT_R)).toBe(false); // up the hall, behind it
-    expect(M.camSees(corner, { x: 17, z: 40.5 }, M.MASCOT_R, L_SHUT)).toBe(false); // in the booth, past a shut door
+    expect(M.camSees(west, { x: 17, z: 40.5 }, M.MASCOT_R, L_SHUT)).toBe(false); // in the booth, past a shut door
+  });
+
+  it('moves to the camera that lies the way of an arrow key on the plan', () => {
+    const at = (name: string): number => M.CAMS.findIndex(c => c.name === name),
+      toward = (from: string, dx: number, dz: number): string | undefined => M.CAMS[M.camToward(at(from), dx, dz)]?.name;
+    expect(toward('East Hall', 0, -1)).toBe('Kitchen');
+    expect(toward('East Hall', -1, 0)).toBe('Snack Bar');
+    expect(toward('East Hall', 1, 0)).toBe('East Hall'); // nothing that way
+    expect(toward('Kitchen', 0, 1)).toBe('East Hall');
+    expect(toward('Main Hall', 0, -1)).toBe('Stage');
+    expect(toward('Main Hall', 0, 1)).toBe('Snack Bar');
+    expect(toward('Snack Bar', -1, 0)).toBe('West Hall');
+    expect(toward('Arcade', 1, 0)).toBe('Main Hall');
+    expect(toward('West Hall', 0, -1)).toBe('Arcade');
+    expect(toward('Stage', 1, 0)).toBe('Backstage');
   });
 });

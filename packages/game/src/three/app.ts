@@ -223,7 +223,7 @@ function create() {
       // At the desk the frame is the camera being watched, until something catches them there.
       const watching = player.me.cam >= 0 && !actors.scare.active,
         eye = watching ? cams.camera : camera;
-      cams.update(S, player.me, watching, now, camera.position);
+      cams.update(S, player.me, watching, now, camera.position, dt);
       const dread = dreadF(S);
       fear = threat();
       fog.density = FOG + FOG_DREAD * dread;

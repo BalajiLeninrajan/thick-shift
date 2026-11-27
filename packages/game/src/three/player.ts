@@ -14,6 +14,7 @@ import {
   BOXES,
   CAMS,
   CHARGER,
+  camToward,
   DESK,
   dist,
   EYE,
@@ -51,9 +52,21 @@ const PITCH_MAX = 1.45;
 const ARROW = { turn: 2.2, tilt: 1.4 },
   ARROW_RAMP = 0.35;
 const GAME_KEYS = /^(Key[WASDEFQCRG]|Arrow|Shift|Space)/;
+// At the camera desk, a key's or a d-pad button's way on the plan, as (dx, dz): up is north, toward the Stage.
+const CAM_WAYS: Partial<Record<string, [number, number]>> = {
+  ArrowUp: [0, -1],
+  KeyW: [0, -1],
+  ArrowDown: [0, 1],
+  KeyS: [0, 1],
+  ArrowLeft: [-1, 0],
+  KeyA: [-1, 0],
+  ArrowRight: [1, 0],
+  KeyD: [1, 0],
+};
 // A standard-mapping gamepad: left stick walks, right stick looks.
 const GP = { use: 0, phone: 1, torch: 2, call: 3, sprint: 4, watch: 5, toss: 7, pause: 9, zoom: 12, dead: 0.18, look: 2.8 }; // look: radians per second at full tilt
-// The d-pad at a breaker box: its buttons (left, right, up, down), and the [dx, dy] each chooses by.
+// The d-pad at a breaker box and at the camera desk: its buttons (left, right, up, down), and the [dx, dy] each
+// chooses by.
 const DPAD: [button: number, dir: [number, number]][] = [
   [14, [-1, 0]],
   [15, [1, 0]],
@@ -242,13 +255,15 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     me.camAt = performance.now();
   }
   const stepCam = (d: number): void => pickCam((me.cam + d + CAMS.length) % CAMS.length);
-  // At the desk: the number keys pick a camera, A and D or the arrows step through them, and Esc or X gets up.
-  // Returns whether the key was one of those.
+  // The camera whose room lies that way on the plan (up is north, -z), if there is one.
+  const moveCam = (dx: number, dz: number): void => pickCam(camToward(me.cam, dx, dz));
+  // At the desk: the number keys pick a camera, the arrows or WASD move to the next room that way on the plan, and Esc
+  // or X gets up. Returns whether the key was one of those.
   function camKey(code: string): boolean {
-    const n = /^(?:Digit|Numpad)(\d)$/.exec(code)?.[1];
+    const n = /^(?:Digit|Numpad)(\d)$/.exec(code)?.[1],
+      way = CAM_WAYS[code];
     if (n !== undefined) pickCam(Number(n) - 1);
-    else if (code === 'KeyA' || code === 'ArrowLeft') stepCam(-1);
-    else if (code === 'KeyD' || code === 'ArrowRight') stepCam(1);
+    else if (way) moveCam(...way);
     else if (code === 'Escape' || code === 'KeyX') stand();
     else return false;
     return true;
@@ -397,9 +412,11 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       turn(axis(2) * GP.look * dt, axis(3) * GP.look * dt);
       task.pad(DPAD.find(([b]) => hit(b))?.[1] ?? flick, down(GP.use), !!gpWas[GP.use], hit(GP.phone));
     } else if (gpLive && !me.paused && me.cam >= 0) {
-      // At the desk: the d-pad or the shoulders step through the cameras, A or B gets up.
-      if (hit(14) || hit(GP.sprint)) stepCam(-1);
-      if (hit(15) || hit(GP.watch)) stepCam(1);
+      // At the desk: the d-pad moves round the plan as the arrows do, the shoulders step through the cameras in
+      // order, and A or B gets up.
+      for (const [b, way] of DPAD) if (hit(b)) moveCam(...way);
+      if (hit(GP.sprint)) stepCam(-1);
+      if (hit(GP.watch)) stepCam(1);
       if (hit(GP.phone)) stand();
       gp.use = down(GP.use);
     } else if (gpLive && !me.paused) {
