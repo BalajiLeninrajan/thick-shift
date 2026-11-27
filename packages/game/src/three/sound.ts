@@ -10,9 +10,9 @@
 
 import { COMING, lightsF } from '@thick-shift/sim';
 import { defined, isPlaced } from '@thick-shift/sim/check';
-import { DOORS, perMascot } from '@thick-shift/sim/config';
-import { BOXES, CHARGER, DOORWAYS, DUCTS, dist, doorwayOf, EYE, GENERATOR, PANELS, ROOMS3, rectMid, roomAt, sees } from '@thick-shift/sim/map';
-import type { DoorKey, Doors, EventData, EventType, Mascot, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
+import { DOORS, GREG, perMascot } from '@thick-shift/sim/config';
+import { angDiff, BOXES, CHARGER, DOORWAYS, DUCTS, dist, doorwayOf, EYE, GENERATOR, PANELS, ROOMS3, rectMid, roomAt, sees } from '@thick-shift/sim/map';
+import type { DoorKey, Doors, EventData, EventType, Mascot, MascotState, NonEmpty, PerMascot, Point, State } from '@thick-shift/sim/types';
 import { bang, boom, type Engine, into, live, muffle, noise, oneOf, pick, roomFor, sample, shriek, song, tone, voices, whiteFor } from '../audio';
 import { game, myPlayer } from '../state';
 import type { EventOf, Me } from '../types';
@@ -45,7 +45,7 @@ const BREATH: PerMascot<{ hz: number; q: number; rate: number; level: number; sh
   { hz: 260, q: 1.2, rate: 0.28, level: 0.5, sharp: 2 }, // Biggs: slow and deep
   { hz: 900, q: 3, rate: 0.4, level: 0.16, sharp: 2 }, // Flan: a thin wheeze
   { hz: 420, q: 6, rate: 0.7, level: 0.3, sharp: 3 }, // Squish: quick, through something wet
-  { hz: 180, q: 1, rate: 0.45, level: 0.6, sharp: 6 }, // Stompy: snorts
+  { hz: 180, q: 1, rate: 0.45, level: 0.6, sharp: 6 }, // Greg: snorts
 ];
 const GROWL_RATE: PerMascot<number> = [0.7, 1.3, 1.1, 0.85]; // how each one's voice is pitched
 
@@ -94,10 +94,12 @@ const MASCOT_STEP: PerMascot<(m: Mascot) => void> = [
       tone(170, 0.09, 'sine', 0.3, { to: 70 });
     }
   },
-  // Stompy: hooves. At a charge they come five a second.
+  // Greg: hooves. At a charge they come five a second and land like sledgehammers.
   m => {
-    sample('knock2', { rate: 0.55, gain: m.st === 'charge' ? 0.8 : 0.5 }) || tone(120, 0.08, 'square', 0.3, { to: 60 });
-    boom({ from: 80, to: 40, level: m.st === 'charge' ? 0.55 : 0.35 });
+    const charge = m.st === 'charge';
+    sample('knock2', { rate: charge ? 0.45 : 0.55, gain: charge ? 1 : 0.5 }) || tone(120, 0.08, 'square', 0.3, { to: 60 });
+    boom(charge ? { from: 70, to: 26, level: 0.85 } : { from: 80, to: 40, level: 0.35 });
+    if (charge) sample('thud', { rate: rnd(0.45, 0.55), gain: 0.5, lowpass: 700 });
   },
 ];
 // What each does the moment it sees a guard.
@@ -178,6 +180,10 @@ interface MascotVoice {
   creak: number;
   strain: number;
   glup: number;
+  st: MascotState; // its state the last frame, to catch Greg leaving the wind-up
+  far: number; // metres from this guard the last frame, to tell it closing in from going past
+  passed: boolean; // Greg's charge has gone past this guard
+  grunt: number; // seconds to Greg's next grunt in a charge
 }
 // Another guard's emitter and footstep count.
 interface GuardVoice {
@@ -331,8 +337,35 @@ export function createSound() {
     const mascots = perMascot((i): MascotVoice => {
       const e = emitter(0.2),
         band = filter('bandpass', BREATH[i].hz, BREATH[i].q);
-      return { e, band, breath: loop(e.in, hiss, band), x: null, z: 0, walked: 0, phase: Math.random() * 6, lit: false, creak: 0, strain: 0, glup: 2 };
+      return {
+        e,
+        band,
+        breath: loop(e.in, hiss, band),
+        x: null,
+        z: 0,
+        walked: 0,
+        phase: Math.random() * 6,
+        lit: false,
+        creak: 0,
+        strain: 0,
+        glup: 2,
+        st: 'rest',
+        far: FAR,
+        passed: false,
+        grunt: 0,
+      };
     });
+    // Greg's bellow, from the wind-up to the end of a charge. Two saws 3.5 Hz apart beat against each other through
+    // a resonant low-pass, over a sine you feel in the chest. The hiss through a band is the air: it rises as Greg
+    // rears and drops to a roar when it goes. rush() rides all of it.
+    const growl = osc('sawtooth', 41),
+      growl2 = osc('sawtooth', 44.5),
+      sub = osc('sine', 29),
+      throat = filter('lowpass', 260, 5),
+      snout = filter('bandpass', 180, 2.5),
+      gregIn = mascots[GREG].e.in;
+    growl2.connect(throat);
+    sub.connect(throat);
     const gen = emitter(0.25),
       charger = emitter(0.15);
     const whine = osc('sawtooth', 45),
@@ -348,6 +381,12 @@ export function createSound() {
       mascots,
       gen,
       charger,
+      growl,
+      growl2,
+      throat,
+      snout,
+      bellow: loop(gregIn, growl, throat),
+      gust: loop(gregIn, hiss, snout),
       whine,
       buzz,
       mains,
@@ -488,12 +527,21 @@ export function createSound() {
       into(r.mascots[x.i].e.in, SPOT[x.i]);
       if (mine(x.id)) sample('hit_long', { gain: 0.3, rate: 1.2 });
     },
-    roar(x: EventData['roar'], _S: State, r: Rig): void {
+    // Greg rearing for a charge. It paws the floor twice and snorts, and roars over the top with the same roar an
+    // octave down under it. rush() takes over from here: the air rising, the launch, the run.
+    roar(x: EventData['roar'], S: State, r: Rig): void {
       into(r.mascots[x.i].e.in, () => {
-        sample('scare_growl', { rate: 0.75, gain: 1 }) || noise(1, 0.6, { band: 300 });
-        sample('far_growl2', { rate: 0.6, gain: 0.5 });
-        boom({ level: 0.5 });
+        for (const at of [0, 0.55]) {
+          noise(0.3, 0.5, { band: 1100, band2: 160, q: 1.4, at }); // a hoof scraped back over the floor
+          sample('knock2', { rate: 0.4, gain: 0.6, at: at + 0.24 });
+          noise(0.2, 0.6, { band: 340, band2: 170, q: 1.2, attack: 0.02, at: at + 0.1 }); // the snort
+        }
+        sample('scare_growl', { rate: 0.7, gain: 1.2 }) || noise(1, 0.6, { band: 300 });
+        sample('scare_growl', { rate: 0.38, len: 0.8, gain: 0.9, lowpass: 600 });
+        boom({ from: 50, to: 25, level: 0.7 });
       });
+      // It is you it has lined up on.
+      if (inLine(S, x.i, 17)) sample('hit_long', { gain: 0.5, rate: 0.75 });
     },
     crash(x: EventData['crash'], S: State, r: Rig): void {
       at(r, S, x, () => {
@@ -678,6 +726,73 @@ export function createSound() {
         if (far < 14 && !busy) into(v.e.in, () => tone(300, 0.09, 'sine', 0.2, { to: 140 }));
       }
     }
+  }
+
+  // Whether mascot i is facing this guard, within `range` metres, with nothing in the way. For Greg that is a guard
+  // in the line of its charge.
+  function inLine(S: State, i: number, range: number): boolean {
+    const m = S.m[i];
+    if (!m) return false;
+    const far = dist(m, head);
+    return (
+      far < range && Math.abs(angDiff(Math.atan2(head.x - m.x, head.z - m.z), m.yaw)) < Math.atan2(1.2, far) + 0.08 && sees(m.x, m.z, head.x, head.z, S.doors)
+    );
+  }
+
+  // Greg's charge, as it sounds from here. Through the wind-up the bellow swells and the air rises to a shriek of
+  // breath. On the launch it bellows and slams down, and through the run the bellow is pitched by how fast it is
+  // closing on you, grunts every half second, and opens up and gets louder the nearer it is, more so if you are in
+  // its line. If it goes past you, it goes past with a rush of air. A wall, a toy or a catch cuts it dead.
+  function rush(S: State, r: Rig, dt: number): void {
+    const m = S.m[GREG],
+      v = r.mascots[GREG];
+    if (!m) return;
+    const far = dist(m, head),
+      closing = dt > 0 ? (v.far - far) / dt : 0,
+      mine = inLine(S, GREG, 20);
+    if (m.st === 'windup') {
+      if (v.st !== 'windup') v.passed = false;
+      aim(r.bellow.gain, 0.4, 0.5);
+      aim(r.growl.frequency, 34, 0.6);
+      aim(r.growl2.frequency, 37.5, 0.6);
+      aim(r.throat.frequency, 320, 0.4);
+      aim(r.gust.gain, 0.5, 0.5);
+      aim(r.snout.frequency, 1700, 0.5);
+    } else if (m.st === 'charge') {
+      if (v.st === 'windup')
+        into(v.e.in, () => {
+          sample('scare_growl', { rate: 0.55, len: 1.6, gain: 1.4 }) || noise(1, 0.7, { band: 260 });
+          boom({ from: 55, to: 22, level: 1 });
+          sample('slam2', { rate: 0.4, gain: 0.7 });
+        });
+      // Doppler, more or less: up to a fifth higher while it closes at full tilt, lower once it is past.
+      const shift = 1 + Math.max(-0.15, Math.min(0.2, closing / 40)),
+        near = Math.max(0, 14 - far) / 14;
+      aim(r.bellow.gain, 0.7 + near * 0.5 + (mine ? 0.3 : 0), 0.06);
+      aim(r.growl.frequency, 46 * shift, 0.1);
+      aim(r.growl2.frequency, 49.5 * shift, 0.1);
+      aim(r.throat.frequency, 300 + near * 900, 0.08);
+      aim(r.gust.gain, 0.45 + near * 0.4, 0.08);
+      aim(r.snout.frequency, 480 * shift, 0.1);
+      v.grunt -= dt;
+      if (v.grunt <= 0 && far < HEAR) {
+        v.grunt = rnd(0.4, 0.55);
+        into(v.e.in, () => sample('far_growl1', { from: rnd(0, 0.3), len: 0.45, rate: rnd(0.42, 0.5) * shift, gain: 0.6 + near * 0.4 }));
+      }
+      if (!v.passed && v.far < 3.5 && far > v.far) {
+        v.passed = true;
+        into(v.e.in, () => {
+          noise(0.7, 0.8, { band: 2200, band2: 260, q: 0.9, attack: 0.05 });
+          boom({ from: 70, to: 30, level: 0.6 });
+        });
+      }
+    } else if (v.st === 'windup' || v.st === 'charge') {
+      // Over: cut, not faded, so the silence after a crash is part of it.
+      aim(r.bellow.gain, 0, 0.03);
+      aim(r.gust.gain, 0, 0.03);
+    }
+    v.st = m.st;
+    v.far = far;
   }
 
   function otherGuards(S: State, r: Rig): void {
@@ -893,6 +1008,7 @@ export function createSound() {
       faults(S, dt, r);
       throws(S, r);
       for (const m of S.m) mascot(S, m, r.mascots[m.i], dt);
+      rush(S, r, dt);
       otherGuards(S, r);
       self(me, myPlayer(S)?.bat ?? 1, dt);
       for (const e of fresh) play(e.type, e.x, S, r);

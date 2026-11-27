@@ -116,7 +116,7 @@ interface BotState extends DoorTimes {
   stirred?: boolean;
   stirAt?: number;
   chased?: number | null;
-  dodge?: { side: 1 | -1; at: number }; // the side stepped to out of Stompy's way, and when
+  dodge?: { side: 1 | -1; at: number }; // the side stepped to out of Greg's way, and when
   holed?: number;
   seenAt?: number;
   hideCool?: number;
@@ -136,7 +136,7 @@ interface BotState extends DoorTimes {
 // torch: 'always' on outside the booth, 'thrifty' the same but keeps the last of it (reserve) for holding something off.
 // toy: throws their Mini Biggs where its song will draw a wanderer or a hunter off their way, while the torch has
 // the battery to spare (spare: what has to be left in it after the throw), and straight at one coming that is far
-// enough off for a hit to stun it (BONK), or at Stompy winding up or charging, on whatever battery is left. Goes back
+// enough off for a hit to stun it (BONK), or at Greg winding up or charging, on whatever battery is left. Goes back
 // to pick it up once nothing is about.
 // alert: how near something coming has to be before they do anything about it. beam: seconds away it is when the torch goes on it.
 // topsUp: picks up a battery they pass whenever the torch is not full, not only once it is low. crankEarly: how much
@@ -231,7 +231,7 @@ const BOOTH_MID = { x: 21, z: 40.5 };
 const DESK_STAND = { x: M.DESK.x + Math.sin(M.DESK.face) * 0.9, z: M.DESK.z + Math.cos(M.DESK.face) * 0.9 },
   CAM_DWELL = 1.5;
 // A guard's guess at whether a resting mascot wakes this night. Rougher than the sim's rule (WAKE in sim.ts), on
-// purpose: Squish sleeps through a solo night 1, and Stompy through any night 1.
+// purpose: Squish sleeps through a solo night 1, and Greg through any night 1.
 const mayWake = (S: NightState, i: MascotIndex) => (i === 3 ? S.night > 1 : i !== 2 || S.night + S.players.length > 2);
 // How fast a mascot comes with a torch on it, as a share of its pace, by its rot.
 const LIT_PACE = [0.05, 0.3, 0.5];
@@ -837,21 +837,21 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
   const booth = inBooth(bot),
     canHole = sk.doors && lightsF(S),
     holing = booth && canHole && !hs.some(inBooth);
-  // Something coming that is close but still far enough off to hit (bonk() says no to one nearer), or Stompy lining
+  // Something coming that is close but still far enough off to hit (bonk() says no to one nearer), or Greg lining
   // up: a Mini Biggs straight at it stuns it. Not from the booth at one outside, which a door will stop: stunned in
   // the doorway, it would keep the door from shutting. Anything else coming or wandering close, or already too near
   // to hit: one thrown away from here may take it off.
   const close = d < BONK.max || h.st === 'windup' || h.st === 'charge';
   if (!(COMING.includes(h.st) && close && !holing && bonk(S, bot, h, 0))) lure(S, bot, targetOf(objective) || bot);
-  // Stompy winding up or already coming: get out of its line.
-  const stompy =
+  // Greg winding up or already coming: get out of its line.
+  const greg =
     sk.dodges &&
     known(S, bot, 1.5).find(
       k => k.i === 3 && (k.st === 'windup' || k.st === 'charge') && ((st.dodge && S.t - st.dodge.at < 3) || M.sees(bot.x, bot.z, k.x, k.z, S.doors))
     );
-  if (stompy) {
+  if (greg) {
     // Sideways, to whichever side has more room, and the same side until it has gone past.
-    const line = ang(stompy, bot),
+    const line = ang(greg, bot),
       room = (s: number) => {
         let d = 0;
         while (d < 4 && M.walkable(bot.x + Math.sin(line + s * 1.57) * (d + 0.5), bot.z + Math.cos(line + s * 1.57) * (d + 0.5), M.PLAYER_R, S.doors)) d += 0.5;

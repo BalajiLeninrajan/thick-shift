@@ -1,4 +1,4 @@
-# The pieces Stompy is made of. Each function builds meshes with procedural
+# The pieces Greg is made of. Each function builds meshes with procedural
 # materials and registers them on a Rig as named parts with pivots; build.py
 # decides where they go at each stage and runs the bake and export.
 import math

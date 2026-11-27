@@ -1,4 +1,4 @@
-# Stompy, the rhino mascot: three GLBs, one per rot stage, and rhino.json.
+# Greg, the rhino mascot: three GLBs, one per rot stage, and rhino.json.
 #
 #   tools/models/bl tools/models/rhino/build.py            all three stages
 #   tools/models/bl tools/models/rhino/build.py -- 2       one stage
