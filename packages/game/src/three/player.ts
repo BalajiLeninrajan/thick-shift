@@ -250,7 +250,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   }
   // Camera i of CAMS, while at the desk. A change of picture brings a burst of static.
   function pickCam(i: number): void {
-    if (me.cam < 0 || me.paused || i < 0 || i >= CAMS.length || i === me.cam) return;
+    if (me.cam < 0 || me.paused || !Number.isInteger(i) || i < 0 || i >= CAMS.length || i === me.cam) return;
     me.cam = lastCam = i;
     me.camAt = performance.now();
   }
