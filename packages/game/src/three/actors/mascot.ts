@@ -38,7 +38,7 @@ function clearAhead(x: number, z: number, yaw: number, max: number, doors: State
   return Infinity;
 }
 
-// The scuttle, Stompy's bridge on hands and feet. rate: gait cycles a second at a standstill, more for each metre a
+// The scuttle, Greg's bridge on hands and feet. rate: gait cycles a second at a standstill, more for each metre a
 // second, and the most it manages (two steps a cycle, so a charge is some 14 steps a second). splay: how far a limb
 // in the air swings out. jerk: the spasm through every limb as it goes, and the tremble when it stands. buckle: the
 // share of steps on which a planted limb gives way under it.
@@ -155,7 +155,7 @@ export class Mascot {
   hop = 0;
   st: MascotState = 'rest';
   stT = 0; // seconds in st, since this client saw it change
-  slump = 0; // Stompy's worm folded over after a crash, 0 to 1 (styles.ts's worm keeps it)
+  slump = 0; // Greg's worm folded over after a crash, 0 to 1 (styles.ts's worm keeps it)
   knock = { x: 0, z: 0, far: 0, d: 0 }; // bounced back off a wall, see BOUNCE: which way, how far it goes, how far it is now
   look = { y: 0, p: 0, r: 0, ty: 0, tp: 0, tr: 0, left: 0, n: 0 }; // the worm looking about on a hunt (styles.ts)
   room = Infinity; // metres clear in front of it, out to style.ahead (Infinity past that), so the worm keeps out of walls

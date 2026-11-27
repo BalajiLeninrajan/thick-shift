@@ -29,7 +29,7 @@ MAX = 1024
 # tall and no longer reads. The guard carries the same atlas, but only its badge and patches, which
 # look the same at 1024.
 #
-# The three colour maps are faces that lost detail in the catch close-up. Stompy's stage 1 horn fills
+# The three colour maps are faces that lost detail in the catch close-up. Greg's stage 1 horn fills
 # a third of that frame and its dark streaks smeared, and the hippo's muzzle lost its fur grain at
 # stages 0 and 1. Their normal maps are capped: the grain is in the colour.
 # These three were judged on the committed draws. A rebuild draws a new face, so look at it in the

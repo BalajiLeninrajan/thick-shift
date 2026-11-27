@@ -37,7 +37,7 @@
 // guard alone wins 55% of night 1s and 33% of night 3s, and crews of two to six
 // win 68 to 90% of night 1s and 3 to 33% of night 3s (see "Balance" in docs/internals.md).
 import { assert, defined, isNonEmpty, isPlaced } from './check.ts';
-import { BIGGS, DEFAULT_NAME, DOORS, FINAL_NIGHT, FLAN, MASC, MASCOTS, NAME_MAX, SQUISH, STOMPY } from './config.ts';
+import { BIGGS, DEFAULT_NAME, DOORS, FINAL_NIGHT, FLAN, GREG, MASC, MASCOTS, NAME_MAX, SQUISH } from './config.ts';
 import {
   angDiff,
   BATTERY_SPOTS,
@@ -148,11 +148,11 @@ const BANG_BOX: Record<DoorKey, number> = { L: 5, R: 7, V: 6 };
 // Metres per second. Hunt speed is per mascot, by MASC index. Biggs is slower
 // than a walking guard and never stops coming. Flan crawls while a guard is
 // looking at her and runs when nobody is. Squish is a little quicker than
-// Biggs, and quicker again in the ducts. Stompy walks until it has a straight run, then charges. All but Biggs
+// Biggs, and quicker again in the ducts. Greg walks until it has a straight run, then charges. All but Biggs
 // run out of breath on a long hunt and slow down for a while (TIRE). With the
 // power out every one of them moves `out` times as fast and none of them tires.
 // Squish then outruns a sprinting guard on any night. With no ceiling burnt,
-// Biggs is just short of a sprint until night 4 and Stompy until night 5 (KEEN
+// Biggs is just short of a sprint until night 4 and Greg until night 5 (KEEN
 // and RAMP below set the night), and Flan outruns one only while nobody watches
 // her. A sprint does not last, so the crank is still the only way out. (Untuned
 // against the harness.)
@@ -179,14 +179,14 @@ const AWAY = 8;
 const CATCH_GAP = 1.8;
 const GRAB_TIME = 1.2; // seconds a mascot stuck behind furniture takes to reach over it
 const STARE = 5; // seconds one waiting its turn stands and stares before it goes back to what it was doing
-const CHARGE_GAP = 10; // seconds before Stompy can charge again
-export const WINDUP = { time: 1.5, commit: 0.5 }; // Stompy's wind-up before a charge, and how much of it at the end is spent not turning
+const CHARGE_GAP = 10; // seconds before Greg can charge again
+export const WINDUP = { time: 1.5, commit: 0.5 }; // Greg's wind-up before a charge, and how much of it at the end is spent not turning
 // A mascot's breath for running, as a guard has STAMINA. One that moves faster than it searches is running: any hunt
 // but Biggs's. `run` seconds of that empty a full breath, and `rest` seconds of anything slower fill it again
 // (roaming, searching, standing, stunned, or held in a torch beam). Out of breath it is winded: it hunts at `winded`
 // of its speed, which is slower than a guard walks, until its breath is back to `back`. That takes six seconds, and
 // what it has then lasts under five, so a guard who keeps moving away from one gets clear of it in the end.
-// Biggs never runs: he is slower than a walking guard already, and never stopping is all he has. Stompy's charge
+// Biggs never runs: he is slower than a walking guard already, and never stopping is all he has. Greg's charge
 // costs nothing (CHARGE_GAP spaces those out), and with the power out nothing tires: the crank is the only way out.
 // The harness's guards stand and hold a hunter in the torch more than they run from it, so its table hardly moves
 // with these: what they are worth is to a guard who runs.
@@ -343,7 +343,7 @@ export const COMING: readonly MascotState[] = ['hunt', 'windup', 'charge'];
 const onGuards = (S: NightState) => S.m.filter(o => COMING.includes(o.st) || o.st === 'siege').length;
 const inDucts = (p: Guard) => !p.flat && roomAt(p.x, p.z) === DUCTS;
 // When each mascot first comes out, by MASC index: hours of the run (six to a night), and how many hours sooner
-// for each guard past the first. Alone, Squish turns up at 3 AM on night 1. Stompy turns up on night 2 for every
+// for each guard past the first. Alone, Squish turns up at 3 AM on night 1. Greg turns up on night 2 for every
 // crew: at 4 AM alone, 2:24 for three, midnight for six. When it waited for night 3 or 4, night 2 played like
 // night 1 and the night it woke was a cliff. With the power out they are all up, and anyone in its ducts wakes
 // Squish early. Woken, it still waits on its mark for a wave to get it moving.
@@ -534,7 +534,7 @@ export function startFloorNight(sim: Sim, state: State, n: number): asserts stat
 // object restarts (after a deploy, say) and has only the S it saved, and when a page loses its room mid-night and
 // carries on solo. Each mascot keeps its place and state, except the ones that need what was lost (a charge's
 // heading, a besieged door): those look round where they stand. One on a hunt goes after the nearest guard.
-// What is lost errs toward the crew: Stompy waits out a full gap before it charges, every one of them waits out
+// What is lost errs toward the crew: Greg waits out a full gap before it charges, every one of them waits out
 // CATCH_GAP as if it had just caught a guard, and one standing where it stands stays put as long as one a door
 // turned away would. now: as for stepFloor.
 export function adoptFloor(sim: Sim, state: State, now: number): void {
@@ -546,7 +546,7 @@ export function adoptFloor(sim: Sim, state: State, now: number): void {
   // as far as it knows: after any shaking that has stopped (a start is fixAt >= shaky), and not after any that has not.
   for (const p of S.players) p.fixAt ??= S.t;
   sim.brains = S.m.map(m => {
-    const b: Brain = { ...newBrain(sim), last: { x: m.x, z: m.z }, cool: m.i === STOMPY ? CHARGE_GAP : 0, noCatch: S.t + CATCH_GAP, woke: m.st !== 'rest' };
+    const b: Brain = { ...newBrain(sim), last: { x: m.x, z: m.z }, cool: m.i === GREG ? CHARGE_GAP : 0, noCatch: S.t + CATCH_GAP, woke: m.st !== 'rest' };
     if (m.st === 'rest') b.timer = rnd(sim, ...SPENT) * (1 - 0.5 * h);
     const prey = up.reduce<Guard | null>((a, p) => (!a || dist(m, p) < dist(m, a) ? p : a), null);
     if (m.st === 'hunt' && prey) Object.assign(b, { tgt: prey.id, last: { x: prey.x, z: prey.z }, saw: { x: prey.x, z: prey.z } });
@@ -820,7 +820,7 @@ function flyToys(sim: Sim, S: NightState, dt: number) {
     }
     if (hit) {
       const b = brainOf(sim, hit.i);
-      // A charge or a wind-up it knocks Stompy out of is spent, as one that ends in a wall is.
+      // A charge or a wind-up it knocks Greg out of is spent, as one that ends in a wall is.
       if (hit.st === 'windup' || hit.st === 'charge') b.cool = CHARGE_GAP;
       hit.st = 'stun';
       Object.assign(b, { timer: TOY.stun, wise: S.t + TOY.wise, tgt: null, reach: null, path: [] });
@@ -1016,8 +1016,8 @@ function headStart(S: NightState, p: Guard, m: Mascot, b: Brain) {
   });
   m.st = 'hunt';
 }
-// A charge that ends at a guard is spent, like one that runs out or hits a wall: Stompy waits before the next.
-// startle() and flatten() call it once the catch has landed. Under the dev god mode none does, and Stompy charges on
+// A charge that ends at a guard is spent, like one that runs out or hits a wall: Greg waits before the next.
+// startle() and flatten() call it once the catch has landed. Under the dev god mode none does, and Greg charges on
 // with its heading.
 function spendCharge(m: Mascot, b: Brain) {
   if (m.st !== 'windup' && m.st !== 'charge') return;
@@ -1180,8 +1180,8 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
     return;
   }
   if (m.st === 'charge') {
-    // Stompy does not steer and does not stop for a torch.
-    const dir = defined(b.dir, "Stompy's heading");
+    // Greg does not steer and does not stop for a torch.
+    const dir = defined(b.dir, "Greg's heading");
     const from = { x: m.x, z: m.z };
     let got = slide(m, dir.x * SPEED.charge * dt, dir.z * SPEED.charge * dt, MASCOT_R, S.doors);
     // The vent is too low for it: charging into the ducts is charging into a wall.
@@ -1326,8 +1326,8 @@ function runMascot(sim: Sim, S: NightState, m: Mascot, b: Brain, dt: number) {
       turn(m, Math.atan2(goal.x - m.x, goal.z - m.z), 5 * dt);
       speed = 0;
     }
-    // Stompy: with a clear run at you, it winds up and charges.
-    else if (m.i === STOMPY && seen && b.cool <= 0 && near > 6 && near < 16 && clear(m.x, m.z, seen.x, seen.z, MASCOT_R, S.doors)) {
+    // Greg: with a clear run at you, it winds up and charges.
+    else if (m.i === GREG && seen && b.cool <= 0 && near > 6 && near < 16 && clear(m.x, m.z, seen.x, seen.z, MASCOT_R, S.doors)) {
       m.st = 'windup';
       b.timer = WINDUP.time;
       emit(S, 'roar', { i: m.i, x: m.x, z: m.z });

@@ -2,7 +2,7 @@
 // night up from S alone (adoptFloor), starting the run again (restartFloor) and a guard's actions (actFloor).
 import { describe, expect, it } from 'vitest';
 import { assert, defined } from '../src/check.ts';
-import { BIGGS, FLAN, MASCOTS, STOMPY } from '../src/config.ts';
+import { BIGGS, FLAN, GREG, MASCOTS } from '../src/config.ts';
 import {
   BATTERY_SPOTS,
   BOOTH,
@@ -117,12 +117,12 @@ describe('adoptFloor', () => {
   function savedState() {
     const { S } = start(5, 2, 3);
     const T = JSON.parse(JSON.stringify(S)) as State;
-    const [biggs, flan, squish, stompy] = T.m;
-    assert(biggs && flan && squish && stompy, 'the night has all four mascots');
+    const [biggs, flan, squish, greg] = T.m;
+    assert(biggs && flan && squish && greg, 'the night has all four mascots');
     biggs.st = 'hunt';
     flan.st = 'charge';
     squish.st = 'stun';
-    stompy.st = 'rest';
+    greg.st = 'rest';
     T.bats = (T.bats as number[]).slice(0, 1);
     return T;
   }
@@ -144,7 +144,7 @@ describe('adoptFloor', () => {
     expect(sim.brains[1]).toMatchObject({ tgt: null, last: { x: REST[1].x, z: REST[1].z }, woke: true });
     expect(sim.brains[2]?.woke).toBe(true);
     expect(sim.brains[3]?.woke).toBe(false);
-    expect(sim.brains[3]?.cool).toBeGreaterThan(0); // Stompy waits a full gap before it charges
+    expect(sim.brains[3]?.cool).toBeGreaterThan(0); // Greg waits a full gap before it charges
     // Five batteries for two guards, one lying about: four due back, in 5 to 50 s, soonest first.
     expect(sim.batTimers).toHaveLength(4);
     expect([...sim.batTimers].sort((a, b) => a - b)).toEqual(sim.batTimers);
@@ -158,7 +158,7 @@ describe('adoptFloor', () => {
 
   it('gives each mascot the timers a seeded stream says', () => {
     // The idle night below ends before most of these timers play out, so pin them here: the search timer for the
-    // lost charge, the stun timer, the rest timer and Stompy's full charge gap (CHARGE_GAP, 10 s).
+    // lost charge, the stun timer, the rest timer and Greg's full charge gap (CHARGE_GAP, 10 s).
     const { sim, T } = adopt(7);
     const r = (v: number) => Math.round(v * 1000) / 1000;
     expect(sim.brains[3]?.cool).toBe(10);
@@ -615,7 +615,7 @@ describe('a hunt', () => {
   });
 
   // A night-1 guard standing still with the torch off, and one mascot already hunting them from `from`, the rest
-  // kept on their marks. Stompy never charges.
+  // kept on their marks. Greg never charges.
   function stalk(i: MascotIndex, guard: Point, from: Point) {
     const { sim, S } = start(1, 1, 1);
     S.stir = false;
@@ -653,13 +653,13 @@ describe('a hunt', () => {
   it('does not turn back to a waypoint it has just passed', () => {
     // Backstage, the corner behind the crate. The way from the middle of the room brushes the costume rack, and a
     // mascot that asked again a step along it was sent back to the middle every time.
-    const { sim, S, p } = stalk(STOMPY, { x: 39.62, z: 2.16 }, { x: 34, z: 6.5 });
+    const { sim, S, p } = stalk(GREG, { x: 39.62, z: 2.16 }, { x: 34, z: 6.5 });
     expect(until(sim, S, p, 20)).toBeLessThan(8);
     expect(p.flat).toBe(true);
   });
 
   it('keeps reaching for a guard a prop hides each time it rocks back', () => {
-    // The Kitchen's south-east corner, behind the locker. Stompy is put by turns where it can reach them and a step
+    // The Kitchen's south-east corner, behind the locker. Greg is put by turns where it can reach them and a step
     // back, out of reach and with the locker in the way of its eyes, as one wedged on the locker rocked.
     const guard = { x: 41.63, z: 24.02 },
       near = { x: 40.65, z: 22.22 },
@@ -667,7 +667,7 @@ describe('a hunt', () => {
     expect(dist(near, guard)).toBeLessThan(F.GRAB);
     expect(dist(back, guard)).toBeGreaterThan(F.GRAB);
     expect(sees(back.x, back.z, guard.x, guard.z)).toBe(false);
-    const { sim, S, p, m } = stalk(STOMPY, guard, near);
+    const { sim, S, p, m } = stalk(GREG, guard, near);
     const t = until(sim, S, p, 20, k => Object.assign(m, k % 8 < 4 ? near : back));
     expect(p.flat).toBe(true);
     expect(t).toBeLessThan(4);
@@ -787,9 +787,9 @@ describe('a hunt', () => {
     expect(flan.last).toBeCloseTo(flan.first, 9);
   });
 
-  it('costs Stompy no breath to charge', () => {
+  it('costs Greg no breath to charge', () => {
     const from = { x: 19.5, z: 13 };
-    const { sim, S, m, b } = stalk(STOMPY, { x: 19.5, z: 24 }, from);
+    const { sim, S, m, b } = stalk(GREG, { x: 19.5, z: 24 }, from);
     Object.assign(m, { st: 'charge', yaw: 0 });
     Object.assign(b, { timer: 2.4, dir: { x: 0, z: 1 }, puff: 0.5 });
     for (let k = 1; k <= 10; k++) stepFloor(sim, S, k * 100);
@@ -921,67 +921,67 @@ describe('a hunt', () => {
     expect(p.flat).toBe(true);
   });
 
-  it("spends Stompy's charge when the charge ends at a guard with their hands in a box", () => {
+  it("spends Greg's charge when the charge ends at a guard with their hands in a box", () => {
     const { sim, S, p } = busy();
     const flan = defined(S.m[FLAN], 'Madame Flan'),
-      stompy = defined(S.m[STOMPY], 'Stompy'),
-      b = brainOf(sim, STOMPY);
+      greg = defined(S.m[GREG], 'Greg'),
+      b = brainOf(sim, GREG);
     Object.assign(flan, { ...REST[FLAN], st: 'rest' });
     brainOf(sim, FLAN).woke = false;
     // Mid-charge, straight at the guard's back from just out of touch, with nothing left on its charge gap.
-    Object.assign(stompy, { x: p.x, z: p.z - 1.8, yaw: 0, st: 'charge' });
+    Object.assign(greg, { x: p.x, z: p.z - 1.8, yaw: 0, st: 'charge' });
     Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z }, timer: 2.4, cool: 0, dir: { x: 0, z: 1 } });
     stepFloor(sim, S, 100);
     expect(S.evs.filter(e => e.type === 'startle')).toHaveLength(1);
     expect(p.flat).toBe(false);
-    expect(stompy.st).toBe('hunt');
+    expect(greg.st).toBe('hunt');
     expect(b.cool).toBeGreaterThanOrEqual(9.5); // CHARGE_GAP, 10 s, less the ticks since
     expect(b.dir).toBeNull();
   });
 
-  it('lets Stompy charge on through a guard nothing can catch (dev god mode)', () => {
+  it('lets Greg charge on through a guard nothing can catch (dev god mode)', () => {
     const { sim, S } = start(1, 1, 1);
     S.stir = false;
     S.waveAt = 1e9;
     S.dev = { ...DEV_OFF, god: true };
     const p = defined(S.players[0], 'g0'),
-      stompy = defined(S.m[STOMPY], 'Stompy'),
-      b = brainOf(sim, STOMPY);
+      greg = defined(S.m[GREG], 'Greg'),
+      b = brainOf(sim, GREG);
     Object.assign(p, { x: 19.5, z: 14.8, on: false });
-    Object.assign(stompy, { x: 19.5, z: 13, yaw: 0, st: 'charge' });
+    Object.assign(greg, { x: 19.5, z: 13, yaw: 0, st: 'charge' });
     Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z }, timer: 2.4, cool: 0, dir: { x: 0, z: 1 } });
     stepFloor(sim, S, 100);
     expect(p.flat).toBe(false);
-    expect(stompy.st).toBe('charge'); // still charging, and the next step needs the heading it had
+    expect(greg.st).toBe('charge'); // still charging, and the next step needs the heading it had
     for (let k = 2; k <= 100; k++) stepFloor(sim, S, k * 100);
     expect([S.phase, p.flat]).toEqual(['play', false]);
     expect(S.t).toBeCloseTo(10, 6);
-    expect(stompy.st).not.toBe('charge'); // the charge ended as any other does
+    expect(greg.st).not.toBe('charge'); // the charge ended as any other does
   });
 
-  it("spends Stompy's charge when the charge ends in a catch", () => {
-    // Two guards in a line down the Main Hall, the far one with a torch on, and a third in the booth. Stompy is
+  it("spends Greg's charge when the charge ends in a catch", () => {
+    // Two guards in a line down the Main Hall, the far one with a torch on, and a third in the booth. Greg is
     // mid-charge at the near one's back with nothing left on its charge gap.
     const { sim, S } = start(1, 3, 1);
     S.stir = false;
     S.waveAt = 1e9;
     const [p, q] = [defined(S.players[0], 'g0'), defined(S.players[1], 'g1')],
-      stompy = defined(S.m[STOMPY], 'Stompy'),
-      b = brainOf(sim, STOMPY);
+      greg = defined(S.m[GREG], 'Greg'),
+      b = brainOf(sim, GREG);
     Object.assign(p, { x: 19.5, z: 14.8, on: false });
     Object.assign(q, { x: 19.5, z: 24, yaw: Math.PI / 2, on: true });
-    Object.assign(stompy, { x: 19.5, z: 13, yaw: 0, st: 'charge' });
+    Object.assign(greg, { x: 19.5, z: 13, yaw: 0, st: 'charge' });
     Object.assign(b, { woke: true, tgt: p.id, last: { x: p.x, z: p.z }, timer: 2.4, cool: 0, dir: { x: 0, z: 1 } });
     stepFloor(sim, S, 100);
-    expect([p.flat, p.flatBy, q.flat]).toEqual([true, STOMPY, false]);
+    expect([p.flat, p.flatBy, q.flat]).toEqual([true, GREG, false]);
     expect(b.cool).toBeGreaterThanOrEqual(9.5); // CHARGE_GAP, 10 s, less the ticks since
     expect(b.dir).toBeNull();
     // The other guard is 9 m off down a clear run. It comes for them on foot: no wind-up inside the gap.
     for (let k = 2; k <= 95; k++) {
       stepFloor(sim, S, k * 100);
-      expect(stompy.st, `at ${S.t.toFixed(1)} s`).not.toBe('windup');
+      expect(greg.st, `at ${S.t.toFixed(1)} s`).not.toBe('windup');
     }
-    expect(S.evs.filter(e => e.type === 'spot' && e.x.i === STOMPY).length).toBeGreaterThan(0);
+    expect(S.evs.filter(e => e.type === 'spot' && e.x.i === GREG).length).toBeGreaterThan(0);
     expect(S.evs.filter(e => e.type === 'roar')).toHaveLength(0);
   });
 });
@@ -1241,12 +1241,12 @@ describe('a thrown Mini Biggs', () => {
 
   it('sings a hunting mascot off its guard, but not one charging, wise to it or hunting in the dark', () => {
     const { sim, S, p, to, lob } = thrower();
-    const [biggs, flan, squish, stompy] = S.m;
-    assert(biggs && flan && squish && stompy, 'the four mascots');
+    const [biggs, flan, squish, greg] = S.m;
+    assert(biggs && flan && squish && greg, 'the four mascots');
     // All within earshot of where it lands, clear of its flight.
     const beside = { x: to.x + (3 * (p.z - to.z)) / dist(p, to), z: to.z - (3 * (p.x - to.x)) / dist(p, to) };
     for (const m of [biggs, flan, squish]) Object.assign(m, beside, { st: 'hunt' });
-    Object.assign(stompy, beside, { st: 'charge' });
+    Object.assign(greg, beside, { st: 'charge' });
     for (const i of [0, 1, 2]) Object.assign(brainOf(sim, i), { tgt: 'g0', last: { x: p.x, z: p.z } });
     brainOf(sim, 2).wise = 1e9;
     lob();

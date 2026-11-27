@@ -45,7 +45,7 @@ const BREATH: PerMascot<{ hz: number; q: number; rate: number; level: number; sh
   { hz: 260, q: 1.2, rate: 0.28, level: 0.5, sharp: 2 }, // Biggs: slow and deep
   { hz: 900, q: 3, rate: 0.4, level: 0.16, sharp: 2 }, // Flan: a thin wheeze
   { hz: 420, q: 6, rate: 0.7, level: 0.3, sharp: 3 }, // Squish: quick, through something wet
-  { hz: 180, q: 1, rate: 0.45, level: 0.6, sharp: 6 }, // Stompy: snorts
+  { hz: 180, q: 1, rate: 0.45, level: 0.6, sharp: 6 }, // Greg: snorts
 ];
 const GROWL_RATE: PerMascot<number> = [0.7, 1.3, 1.1, 0.85]; // how each one's voice is pitched
 
@@ -94,7 +94,7 @@ const MASCOT_STEP: PerMascot<(m: Mascot) => void> = [
       tone(170, 0.09, 'sine', 0.3, { to: 70 });
     }
   },
-  // Stompy: hooves. At a charge they come five a second.
+  // Greg: hooves. At a charge they come five a second.
   m => {
     sample('knock2', { rate: 0.55, gain: m.st === 'charge' ? 0.8 : 0.5 }) || tone(120, 0.08, 'square', 0.3, { to: 60 });
     boom({ from: 80, to: 40, level: m.st === 'charge' ? 0.55 : 0.35 });

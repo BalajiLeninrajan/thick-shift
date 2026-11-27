@@ -181,10 +181,10 @@ const HEAD: Head = { yaw: 0.6, pitch: 0.3, rate: 4, step: 0, eye: 0.5, twitch: 0
 // How far a joint may turn before the mesh opens, from each model's notes. The poses ask for what they want and are held to this.
 const LIMIT: Limit = { arm: 2.6, out: 1, fore: 1.3 };
 
-// How far in front of the body Stompy's worm gets (metres, the furthest of its links and lips), by the pivots worm()
+// How far in front of the body Greg's worm gets (metres, the furthest of its links and lips), by the pivots worm()
 // is fitted to: at rest, at lance and slump 0, 0.2, ... 1 (slump's is the most it has reached on the way down, so it
 // only grows), and how much less per unit of coil. With a wall closer than that it is crushed back, lance and slump
-// giving way first and coil taking up the rest, so as Stompy runs out of room the worm folds back off the wall
+// giving way first and coil taking up the rest, so as Greg runs out of room the worm folds back off the wall
 // instead of into it.
 const REACH = {
   rest: 0.82,
@@ -271,7 +271,7 @@ const TUNING: Record<MascotKey, PerStage<Tuning>> = {
       chains: { 1: spine },
     },
   ],
-  // Stompy.
+  // Greg.
   rhino: [
     {
       gait: { max: 0.44, knee: 0.25, hipRoll: 0.065, hipYaw: 0.2, arm: 0.35 },
@@ -419,7 +419,7 @@ function spine(a: Mascot, links: NonEmpty<Part>, ch: Channels, dt: number): void
   }
 }
 
-// Stompy's worm. A slow travelling sway and a swallowing pulse; the upper links
+// Greg's worm. A slow travelling sway and a swallowing pulse; the upper links
 // turn the mouth to whoever it is looking at. Three shapes lay over that, each
 // one angle per link from the belly (extra_1) to the mouth (extra_1_13), fitted
 // to rhino_2's rest pivots (the worm stands up out of the arch and hooks over)
@@ -443,7 +443,7 @@ const along = (t: readonly number[], w: number): number => {
   return (t[i] ?? 0) + ((t[i + 1] ?? 0) - (t[i] ?? 0)) * (f - i);
 };
 // A crash throws the body back off the wall: this far (or as far as there is room behind it) over `time` seconds. Only
-// the picture moves, the sim leaves Stompy where it hit, so once it moves off it closes the gap by `settle` of every
+// the picture moves, the sim leaves Greg where it hit, so once it moves off it closes the gap by `settle` of every
 // metre it goes, which never has it going backwards. mascot.ts does this.
 export const BOUNCE = { back: 0.9, time: 0.2, settle: 0.5 };
 // The worm looking about on a hunt (`swivel`): how long it holds a look (seconds), how far it turns (radians, either

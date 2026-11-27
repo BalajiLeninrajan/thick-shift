@@ -154,7 +154,7 @@ if (!isMainThread) {
       end: Math.round(mean(r => r.t)),
       'flat/g': (flats / n / sc.n).toFixed(2),
       peel: share(r => r.peels, flats),
-      'B F S St %': MASCOTS.map(i => share(r => r.by[i], flats)).join(' '),
+      'B F S G %': MASCOTS.map(i => share(r => r.by[i], flats)).join(' '),
       'warn s': median(warn).toFixed(1),
       '<1.5s': `${pct(warn.filter(x => x < 1.5).length, warn.length)}%`,
       hunted: `${share(r => r.hunted, stood)}%`,
@@ -229,7 +229,7 @@ if (!isMainThread) {
   console.log(`
 win%    nights survived to 6 AM            end     mean second the night ended (420 is 6 AM)
 flat/g  flattenings per guard per night    peel    share of flattened guards who were peeled up
-B F S St share of flattenings by Biggs, Flan, Squish, Stompy
+B F S G share of flattenings by Biggs, Flan, Squish, Greg
 warn s  median seconds between a mascot being there to see or hear and it catching the guard; <1.5s is the share with less
 hunted  share of standing time with something after you    calms   stretches of 20 s or more with nothing after anyone, per night
 torch   share of standing time with the torch on           low, dead   share with it under a quarter, and flat; dry/g is how often it ran out per guard
