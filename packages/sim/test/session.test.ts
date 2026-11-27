@@ -15,6 +15,10 @@ function room(...ids: string[]): { sim: Sim; S: State } {
   for (const id of ids) joinFloor(sim, S, id);
   return { sim, S };
 }
+// Everyone in the room presses for the next night.
+function allGo(sim: Sim, S: State): void {
+  for (const p of [...S.players]) commandFloor(sim, S, p.id, { t: 'go' });
+}
 function night(S: State): asserts S is NightState {
   assert(isNight(S), 'a night has started');
 }
@@ -31,7 +35,7 @@ describe('joinFloor and leaveFloor', () => {
 
   it('gives a guard S still has their record back, place and all', () => {
     const { sim, S } = room('a', 'b');
-    commandFloor(sim, S, 'a', { t: 'go' });
+    allGo(sim, S);
     night(S);
     const was = S.players.find(p => p.id === 'b');
     assert(was, 'b is in the night');
@@ -45,7 +49,7 @@ describe('joinFloor and leaveFloor', () => {
   it('fills in what a record kept by an older build does not have', () => {
     // A guard who left mid-night before the start at a breaker box was added comes back with no fixAt.
     const { sim, S } = room('a', 'b');
-    commandFloor(sim, S, 'a', { t: 'go' });
+    allGo(sim, S);
     night(S);
     const was = sim.players.b;
     assert(was, 'b is in the night');
@@ -90,12 +94,80 @@ describe("commandFloor's go", () => {
     expect([S.phase, S.night, S.deaths]).toEqual(['play', 1, 0]);
   });
 
-  it('does nothing during a night, so two guards pressing at once start it once', () => {
-    const { sim, S } = room('a', 'b');
+  it('does nothing during a night, so a press that arrives late starts nothing', () => {
+    const { sim, S } = room('a');
     commandFloor(sim, S, 'a', { t: 'go' });
     S.t = 50;
-    commandFloor(sim, S, 'b', { t: 'go' });
+    commandFloor(sim, S, 'a', { t: 'go' });
     expect([S.phase, S.night, S.t]).toEqual(['play', 1, 50]);
+  });
+});
+
+describe("commandFloor's go and wait in a crew", () => {
+  it('starts the night only once everyone is ready, and clears who was', () => {
+    const { sim, S } = room('a', 'b', 'c');
+    expect(commandFloor(sim, S, 'a', { t: 'go' })).toBe(false);
+    expect(commandFloor(sim, S, 'b', { t: 'go' })).toBe(false);
+    expect(S.phase).toBe('lobby');
+    expect(S.players.map(p => !!p.ready)).toEqual([true, true, false]);
+    expect(commandFloor(sim, S, 'c', { t: 'go' })).toBe(true);
+    expect([S.phase, S.night]).toEqual(['play', 1]);
+    expect(S.players.some(p => p.ready)).toBe(false);
+  });
+
+  it('lets a guard take it back', () => {
+    const { sim, S } = room('a', 'b');
+    commandFloor(sim, S, 'a', { t: 'go' });
+    commandFloor(sim, S, 'a', { t: 'wait' });
+    expect(commandFloor(sim, S, 'b', { t: 'go' })).toBe(false);
+    expect(S.phase).toBe('lobby');
+    expect(commandFloor(sim, S, 'a', { t: 'go' })).toBe(true);
+  });
+
+  it('waits on whoever joins, and forgets that someone who left had been ready', () => {
+    const { sim, S } = room('a', 'b');
+    commandFloor(sim, S, 'a', { t: 'go' });
+    const was = sim.players.a;
+    assert(was, 'a is in the room');
+    leaveFloor(sim, S, 'a');
+    joinFloor(sim, S, 'a', was);
+    joinFloor(sim, S, 'c');
+    commandFloor(sim, S, 'b', { t: 'go' });
+    commandFloor(sim, S, 'c', { t: 'go' });
+    expect(S.phase).toBe('lobby');
+    expect(commandFloor(sim, S, 'a', { t: 'go' })).toBe(true);
+  });
+
+  it('starts the night when the one everyone was waiting on leaves', () => {
+    const { sim, S } = room('a', 'b');
+    commandFloor(sim, S, 'a', { t: 'go' });
+    expect(leaveFloor(sim, S, 'b')).toBe(true);
+    expect([S.phase, S.players.map(p => p.id)]).toEqual(['play', ['a']]);
+  });
+
+  it('does not start one when nobody is left, or during a night', () => {
+    const { sim, S } = room('a', 'b');
+    expect(leaveFloor(sim, S, 'a')).toBe(false);
+    expect(leaveFloor(sim, S, 'b')).toBe(false);
+    expect(S.phase).toBe('lobby');
+    const crew = room('a', 'b');
+    commandFloor(crew.sim, crew.S, 'a', { t: 'go' });
+    commandFloor(crew.sim, crew.S, 'b', { t: 'go' });
+    crew.S.t = 50;
+    commandFloor(crew.sim, crew.S, 'a', { t: 'go' });
+    expect(crew.S.players.some(p => p.ready)).toBe(false);
+    expect(leaveFloor(crew.sim, crew.S, 'b')).toBe(false);
+    expect(crew.S.t).toBe(50);
+  });
+
+  it('waits on everyone again for the next night after a win', () => {
+    const { sim, S } = room('a', 'b');
+    commandFloor(sim, S, 'a', { t: 'go' });
+    commandFloor(sim, S, 'b', { t: 'go' });
+    S.phase = 'win';
+    expect(commandFloor(sim, S, 'b', { t: 'go' })).toBe(false);
+    expect(commandFloor(sim, S, 'a', { t: 'go' })).toBe(true);
+    expect([S.phase, S.night]).toEqual(['play', 2]);
   });
 });
 

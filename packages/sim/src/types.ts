@@ -26,7 +26,7 @@ export type Doors = Record<DoorKey, boolean>;
 
 /* ---------- the state S ---------- */
 
-// 'lobby' until a guard starts night 1, then 'play'. A night ends in 'win', 'dead' or, after the last one, 'won'.
+// 'lobby' until every guard is ready for night 1, then 'play'. A night ends in 'win', 'dead' or, after the last one, 'won'.
 export type Phase = 'lobby' | 'play' | 'win' | 'dead' | 'won';
 
 // What a guard's hands are on: the generator's crank or the charging dock while they hold the use key, a breaker box,
@@ -37,6 +37,8 @@ export type GuardAct = '' | 'crank' | 'charge' | 'fix' | 'cams';
 export interface Joined {
   id: string; // made up by the guard's own page (newId in packages/game/src/net.ts)
   name: string;
+  // Between nights: pressed for the next one. The night starts once everyone in the room has (readyFloor in session.ts).
+  ready?: boolean;
 }
 // A guard on the floor. The same object sits in S.players and in Sim.players, so a change to one is a change to the
 // other.
@@ -285,9 +287,9 @@ export type Action =
 // change to the night (do), or one for a mascot (i, its MASC index). Like an action, it comes off the wire.
 export type DevDo = 'hour' | 'late' | 'win' | 'next' | 'final' | 'low' | 'out' | 'bat' | 'peel';
 export type DevCommand = { t: 'dev'; set: Partial<Dev> } | { t: 'dev'; do: DevDo } | { t: 'dev'; do: 'near' | 'home'; i: number };
-// Anything a guard's browser sends whoever runs the night (commandFloor): an action, 'go' to start the next night
-// from the card between nights, or a dev cheat.
-export type Command = Action | { t: 'go' } | DevCommand;
+// Anything a guard's browser sends whoever runs the night (commandFloor): an action, 'go' from the card between
+// nights to say they are ready for the next one, 'wait' to take that back, or a dev cheat.
+export type Command = Action | { t: 'go' } | { t: 'wait' } | DevCommand;
 
 // Why a room turned a socket away (worker/room.ts): an id or mode it will not use (1008, policy violation), nobody playing
 // under the code someone tried to join, a code taken when someone tried to start a room, or a page from an older build.

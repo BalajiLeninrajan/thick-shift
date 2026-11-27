@@ -110,13 +110,14 @@ export class Room extends DurableObject<RoomEnv> {
     this.away.delete(id);
   }
 
-  // Take a guard out of the night, keeping their record for when they come back.
-  out(id: string): void {
-    if (!this.night) return;
+  // Take a guard out of the night, keeping their record for when they come back. True if the rest were all ready and
+  // waiting on them, so the next night has started.
+  out(id: string): boolean {
+    if (!this.night) return false;
     const record = this.night.sim.players[id];
     if (record) this.away.set(id, record);
     this.lost.delete(id);
-    leaveFloor(this.night.sim, this.night.S, id);
+    return leaveFloor(this.night.sim, this.night.S, id);
   }
 
   fetch(req: Request): Response {
@@ -205,9 +206,13 @@ export class Room extends DurableObject<RoomEnv> {
     if (!this.night) return;
     // Mid-night they may only have lost their connection: give them a while to get back (lost). Between nights, out.
     if (this.night.S.phase === 'play' && this.night.sim.players[a.id]) this.lost.set(a.id, Date.now() + GRACE_MS);
-    else this.out(a.id);
+    else if (this.out(a.id)) {
+      this.away.clear();
+      this.notice();
+    }
     if (this.open().length) {
       this.changed();
+      if (this.night.S.phase === 'play') this.run();
       return;
     }
     // Nobody is left. Stop running the night, and keep it a while in case they lost their connection.

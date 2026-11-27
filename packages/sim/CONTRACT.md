@@ -133,7 +133,7 @@ the lobby has none of them. `NightState` is the state once `startFloorNight` has
 `players: Guard[]`. `startFloorNight` is an assertion function, so after the call the caller's `S` is a `NightState`.
 Inside a night the sim narrows `State` to `NightState`. `Player` is a guard as `joinFloor` adds them (`{ id, name }`)
 with the body's fields optional; `stepFloor` places one whose `x` is missing. `SimEvent` is a union keyed on `type`,
-with each event's `x` typed. The wire messages are `Command` (page to room: an `Action`, `{ t: 'go' }` or a
+with each event's `x` typed. The wire messages are `Command` (page to room: an `Action`, `{ t: 'go' }` or `{ t: 'wait' }` between nights, or a
 `DevCommand`), `StateMessage` (`{ t: 's', s }`, room to every page) and `CloseCode` (1008 a bad id or mode, 4404 no
 such room, 4409 code taken, 4426 a page from an older build). The codes by name, `PROTOCOL`, `TICK_MS` and `Mode` are in
 `packages/game/src/protocol.ts`.
