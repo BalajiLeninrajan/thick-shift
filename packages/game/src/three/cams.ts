@@ -136,20 +136,22 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
       <div class="ts-f-cams-head"><i class="ts-f-rec"></i><b></b><span></span></div>
       <div class="ts-f-cams-duct" role="status">Motion in the ducts</div>
       <div class="ts-f-cams-map"><svg viewBox="0 0 ${SIZE_X} ${SIZE_Z}" aria-hidden="true">${rooms}<circle cx="${DESK.x}" cy="${DESK.z}" r="0.9"/></svg>${buttons}</div>
-      <div class="ts-f-cams-foot"><span class="ts-f-cams-keys"><kbd class="ts-key">1–${CAMS.length}</kbd><kbd class="ts-key">Arrows</kbd> camera</span><button class="btn btn-ghost is-sm" data-cams="up"><kbd class="ts-key">E</kbd><span>Get up</span></button></div>
+      <div class="ts-f-cams-foot"><span class="ts-f-cams-keys"><kbd class="ts-key">1–${CAMS.length}</kbd><kbd class="ts-key">Arrows</kbd> camera</span><button class="btn btn-ghost is-sm" data-up><kbd class="ts-key">E</kbd><span>Get up</span></button></div>
     </div>`;
   root.append(panel);
   const label = query(panel, '.ts-f-cams-head b'),
     place = query(panel, '.ts-f-cams-head span'),
     dead = query(panel, '.ts-f-cams-dead'),
     btns = [...panel.querySelectorAll<HTMLElement>('.ts-f-cam')];
+  // Only the buttons: a tap on the plan between them does nothing. The HUD's root carries data-cams (hud.ts), so the
+  // Get up button has its own name, or closest() would find the root from the empty plan.
   panel.addEventListener('pointerdown', e => {
     if (!(e.target instanceof Element)) return;
-    const b = e.target.closest<HTMLElement>('[data-cam], [data-cams]');
+    const b = e.target.closest<HTMLElement>('[data-cam], [data-up]');
     if (!b) return;
     e.stopPropagation();
     e.preventDefault();
-    if (b.dataset.cams === 'up') player.stand();
+    if (b.dataset.up !== undefined) player.stand();
     else player.pickCam(Number(b.dataset.cam));
   });
 
