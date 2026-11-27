@@ -160,7 +160,7 @@ function create() {
     startle(e: EventOf<'startle'>): void {
       if (!isMe(e.x.id)) return;
       player.letGo();
-      player.stand();
+      player.stand('startle');
       hud.say(`${MASC[e.x.i].name} is on you. Run!`, 'hide', 3);
     },
     fumble(e: EventOf<'fumble'>): void {

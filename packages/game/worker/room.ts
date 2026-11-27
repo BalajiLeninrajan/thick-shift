@@ -25,9 +25,20 @@ export interface RoomEnv extends PostHogEnv {
 }
 
 export function toRoom(req: Request, env: RoomEnv): Promise<Response> | Response {
-  const code = new URL(req.url).pathname.match(ROOM)?.[1];
+  const path = new URL(req.url).pathname;
+  if (path === '/api/report' && req.method === 'POST') return logReport(req);
+  const code = path.match(ROOM)?.[1];
   if (!code || req.headers.get('Upgrade') !== 'websocket') return new Response('Not found', { status: 404 });
   return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(req);
+}
+
+// A report from a page (src/report.ts): an error, or something that should not have happened. Written to the Worker's
+// logs as it came, cut to REPORT_MAX characters, for reading in Workers Logs.
+const REPORT_MAX = 3000;
+async function logReport(req: Request): Promise<Response> {
+  const text = (await req.text().catch(() => '')).slice(0, REPORT_MAX);
+  console.warn('client report', text);
+  return new Response(null, { status: 204 });
 }
 
 const isMode = (m: string | null): m is Mode => m === 'make' || m === 'join' || m === 'either';

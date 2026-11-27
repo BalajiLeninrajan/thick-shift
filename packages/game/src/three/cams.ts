@@ -149,7 +149,7 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
     if (!b) return;
     e.stopPropagation();
     e.preventDefault();
-    if (b.dataset.cams === 'up') player.stand();
+    if (b.dataset.cams === 'up') player.stand('panel');
     else player.pickCam(Number(b.dataset.cam));
   });
 

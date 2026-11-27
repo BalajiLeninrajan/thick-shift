@@ -31,6 +31,7 @@ import * as THREE from 'three';
 import { unlockAudio } from '../audio';
 import { typing } from '../dom';
 import { send } from '../net';
+import { report } from '../report';
 import { currentState, FLAT_EYE, game, myPlayer } from '../state';
 import type { Me, Prefs, Target, Task } from '../types';
 import { faultName } from './task';
@@ -52,6 +53,7 @@ const PITCH_MAX = 1.45;
 const ARROW = { turn: 2.2, tilt: 1.4 },
   ARROW_RAMP = 0.35;
 const GAME_KEYS = /^(Key[WASDEFQCRG]|Arrow|Shift|Space)/;
+const QUICK_STAND_MS = 2000; // up from the desk this soon after sitting is reported (quickStand)
 // At the camera desk, a key's or a d-pad button's way on the plan, as (dx, dz): up is north, toward the Stage.
 const CAM_WAYS: Partial<Record<string, [number, number]>> = {
   ArrowUp: [0, -1],
@@ -156,7 +158,8 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     arrowHeld = 0; // keysLive: playing on the keyboard alone, so there is no pointer to lock
   // The camera last watched, to come back to, and whether the pointer was locked when the guard sat down.
   let lastCam = 0,
-    relock = false;
+    relock = false,
+    sitAt = 0; // performance.now() when they last sat at the desk
   function letGo(): void {
     if (me.task) {
       me.task = null;
@@ -236,17 +239,26 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
   // off and the phone down: both hands are on the desk.
   function sit(): void {
     me.cam = lastCam;
-    me.camAt = performance.now();
+    me.camAt = sitAt = performance.now();
     me.on = me.ph = false;
     me.sp = false;
     relock = mouseLocked;
     if (mouseLocked) document.exitPointerLock();
   }
-  // Up from the desk, taking the mouse back if it was locked before they sat down.
-  function stand(): void {
+  // Up from the desk, taking the mouse back if it was locked before they sat down. why: what got them up, for
+  // quickStand.
+  function stand(why = 'other'): void {
     if (me.cam < 0) return;
+    quickStand(why);
     me.cam = -1;
     if (relock && !me.touch && !mouseLocked) canvas.requestPointerLock?.()?.catch?.(() => {});
+  }
+  // Up again within QUICK_STAND_MS of sitting down is reported (report.ts), with what got them up and what was held:
+  // players in Discord see the desk give up at once, which nothing here does on purpose.
+  function quickStand(why: string): void {
+    const ms = Math.round(performance.now() - sitAt);
+    if (ms < QUICK_STAND_MS)
+      report('quick-stand', { why, ms, touch: me.touch, pad: me.pad, keys: [...keys], padUse: pad.use, gpUse: gp.use, locked: mouseLocked, relock });
   }
   // Camera i of CAMS, while at the desk. A change of picture brings a burst of static.
   function pickCam(i: number): void {
@@ -264,7 +276,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       way = CAM_WAYS[code];
     if (n !== undefined) pickCam(Number(n) - 1);
     else if (way) moveCam(...way);
-    else if (code === 'Escape' || code === 'KeyX') stand();
+    else if (code === 'Escape' || code === 'KeyX') stand(code);
     else return false;
     return true;
   }
@@ -417,7 +429,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       for (const [b, way] of DPAD) if (hit(b)) moveCam(...way);
       if (hit(GP.sprint)) stepCam(-1);
       if (hit(GP.watch)) stepCam(1);
-      if (hit(GP.phone)) stand();
+      if (hit(GP.phone)) stand('pad B');
       gp.use = down(GP.use);
     } else if (gpLive && !me.paused) {
       Object.assign(gp, { fwd: -axis(1), strafe: axis(0), sprint: down(GP.sprint), use: down(GP.use) });
@@ -527,7 +539,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     if (me.hold >= t.hold) {
       // The desk is this browser's alone. A full generator is a tap target that does nothing, so it sends nothing.
       if (t.what === 'cams') {
-        if (me.cam >= 0) stand();
+        if (me.cam >= 0) stand('use');
         else sit();
       } else if (t.what !== 'crank' && t.what !== 'charge') send({ t: 'use', what: t.what, i: t.i, k: t.k, id: t.id });
       me.hold = 0;
@@ -575,6 +587,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
     // Put the guard where the room says they are: the start of a night, or after joining.
     reset(mine: Player): void {
       letGo();
+      if (me.cam >= 0) quickStand('reset');
       Object.assign(me, {
         x: mine.x,
         z: mine.z,
@@ -618,6 +631,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
       // The screens between nights need the mouse back.
       if (S.phase !== 'play') {
         me.paused = false;
+        if (me.cam >= 0) quickStand('night over');
         me.cam = -1;
         letGo();
         if (mouseLocked) document.exitPointerLock();
@@ -633,6 +647,7 @@ export function createPlayer(camera: THREE.PerspectiveCamera, canvas: HTMLCanvas
           me.moving = 0;
           if (me.flat) {
             me.on = me.ph = false;
+            if (me.cam >= 0) quickStand('flat');
             me.cam = -1;
             letGo();
           }

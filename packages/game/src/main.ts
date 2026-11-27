@@ -4,6 +4,7 @@ import { dreadF } from '@thick-shift/sim';
 import type { State } from '@thick-shift/sim/types';
 import { ambience, win } from './audio';
 import { errorText } from './dom';
+import { reportErrors } from './report';
 import { CATCH_S, client, game, LINGER_S } from './state';
 import type { FloorModule } from './types';
 import { syncOverlay } from './ui';
@@ -75,6 +76,7 @@ function frame(): void {
 
 // Starts the frame loop. Called once, by each app's src/boot.ts.
 export function start(): void {
+  reportErrors();
   frame();
   // ?debug exposes state on window for poking at scenes from the console.
   // ?dev adds the dev menu.
