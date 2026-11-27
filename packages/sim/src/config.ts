@@ -7,8 +7,9 @@ export const DOORS: readonly DoorKey[] = ['L', 'V', 'R']; // the booth's three w
 // the seconds without sprinting before it starts to come back. The sim only reads whether a guard is sprinting
 // (Guard.sp), so each client spends the breath itself, and so do the balance harness's guards.
 export const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 };
-// How near a mascot has to be, in metres, to show on a guard's phone. Further off, only the booth's cameras show it.
-export const PHONE_NEAR = 8;
+// How near a mascot has to be, in metres, to show on a guard's phone: enough to see across a room from its doorway.
+// Further off, only the booth's cameras show it.
+export const PHONE_NEAR = 15;
 
 // A guard's name: what one who gave none is called, and the most characters the sim keeps of one. 32 is Discord's
 // limit for a display name, so a Discord name always fits whole.
