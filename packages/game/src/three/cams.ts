@@ -35,6 +35,7 @@ const STATIC_MS = 260; // how long a change of camera is snow
 const EXPOSURE = 7; // the camera's gain: far brighter than the eye in the dark, and noisier for it
 const AIM_Y = 0.9; // the height each camera points at
 const BEEP_MS = 1200; // the duct sensor's beep, this often while something is in there
+const FEED_GAP = 12; // CSS pixels between the picture and the panel's column, on touch
 const BUTTON_IN = 3.5; // metres from a camera toward what it looks at, where its button goes on the plan
 
 const FRAG = `
@@ -142,6 +143,7 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
   const label = query(panel, '.ts-f-cams-head b'),
     place = query(panel, '.ts-f-cams-head span'),
     dead = query(panel, '.ts-f-cams-dead'),
+    box = query(panel, '.ts-f-cams-box'),
     btns = [...panel.querySelectorAll<HTMLElement>('.ts-f-cam')];
   // Only the buttons: a tap on the plan between them does nothing. The HUD's root carries data-cams (hud.ts), so the
   // Get up button has its own name, or closest() would find the root from the empty plan.
@@ -183,9 +185,16 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
     drawn = 0,
     w = 0,
     h = 0;
-  // Fit the feed to the canvas's shape, FEED_H pixels tall.
-  function fit(canvas: HTMLCanvasElement): void {
-    const aspect = Math.max(1, canvas.clientWidth) / Math.max(1, canvas.clientHeight),
+  // How many CSS pixels across the picture is. On touch the panel is a column down the right (styles.css), and the
+  // picture stops a gap short of it; otherwise the panel sits over the picture's corner.
+  function feedWidth(canvas: HTMLCanvasElement): number {
+    if (root.dataset.touch !== 'true') return canvas.clientWidth;
+    const left = box.getBoundingClientRect().left - canvas.getBoundingClientRect().left;
+    return Math.max(1, Math.min(canvas.clientWidth, Math.round(left - FEED_GAP)));
+  }
+  // Fit the feed to the shape it is drawn in, fw by the canvas's height, FEED_H pixels tall.
+  function fit(fw0: number, canvas: HTMLCanvasElement): void {
+    const aspect = fw0 / Math.max(1, canvas.clientHeight),
       fw = Math.round(FEED_H * aspect);
     if (fw === w && FEED_H === h) return;
     w = fw;
@@ -251,7 +260,8 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
     },
     // Draw the frame: a new picture when one is due, then the picture through the tube.
     render(renderer: THREE.WebGLRenderer, canvas: HTMLCanvasElement, torch: THREE.SpotLight, now: number): void {
-      fit(canvas);
+      const across = feedWidth(canvas);
+      fit(across, canvas);
       renderer.info.reset();
       if (now - drawn >= FEED_MS && mat.uniforms.uDead.value < 1) {
         drawn = now;
@@ -260,7 +270,10 @@ export function createCams(scene: THREE.Scene, root: HTMLElement, player: Player
         renderer.render(scene, camera);
       }
       renderer.setRenderTarget(null);
+      // The whole canvas is cleared, so what the picture leaves is black behind the panel.
+      renderer.setViewport(0, 0, across, canvas.clientHeight);
       renderer.render(screen, flat);
+      renderer.setViewport(0, 0, canvas.clientWidth, canvas.clientHeight);
     },
   };
 }
