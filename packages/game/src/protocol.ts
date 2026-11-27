@@ -4,7 +4,7 @@ import type { CloseCode } from '@thick-shift/sim/types';
 
 export const TICK_MS = 100; // a night's step, in a room or solo
 // A page from a build that speaks another protocol is told to reload.
-export const PROTOCOL = 3;
+export const PROTOCOL = 4;
 // Why a room turns a socket away.
 export const CLOSE = { BAD: 1008, NO_ROOM: 4404, CODE_TAKEN: 4409, OUTDATED: 4426 } satisfies Record<string, CloseCode>;
 

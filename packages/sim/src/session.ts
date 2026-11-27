@@ -1,6 +1,6 @@
 // What whoever runs a night does with the guards' browsers: let them in and out of the room (joinFloor, leaveFloor)
-// and act on what they send (commandFloor): an action for actFloor, 'go' for the next night, or a dev cheat. Every
-// message is someone else's JSON, so like actFloor this checks every field it reads.
+// and act on what they send (commandFloor): an action for actFloor, 'go' or 'wait' for the next night, or a dev cheat.
+// Every message is someone else's JSON, so like actFloor this checks every field it reads.
 
 import { isPlaced } from './check.ts';
 import { DEFAULT_NAME, FINAL_NIGHT } from './config.ts';
@@ -12,31 +12,51 @@ import type { Command, Dev, DevCommand, DevDo, Player, State } from './types.ts'
 export const DEV_OFF: Dev = { god: false, power: false, freeze: false, wake: false, speed: 1, rot: -1, dread: -1 };
 
 // A guard comes into the room. One coming back keeps their record, and with it their place on the floor: was, or the
-// one S still has. Anyone else gets placed by the next step (stepFloor).
+// one S still has. Anyone else gets placed by the next step (stepFloor). Whoever comes in has yet to say they are
+// ready, even one who had before they left.
 export function joinFloor(sim: Sim, S: State, id: string, was?: Player): void {
   if (!Object.hasOwn(sim.players, id)) {
     const p = was ?? S.players.find(q => q.id === id) ?? { id, name: DEFAULT_NAME };
     // A record kept by a build that gave no start at a breaker box has no fixAt: now, as adoptFloor gives it.
     if (isPlaced(p)) p.fixAt ??= S.t ?? 0;
+    delete p.ready;
     sim.players[id] = p;
   }
   S.players = Object.values(sim.players);
 }
 
-export function leaveFloor(sim: Sim, S: State, id: string): void {
+// A guard leaves the room. Between nights, the rest may all have been waiting on them: then the next night starts,
+// and this returns true.
+export function leaveFloor(sim: Sim, S: State, id: string): boolean {
   delete sim.players[id];
   S.players = Object.values(sim.players);
+  return allReady(sim) && nextFloor(sim, S);
 }
 
-// The next night, from the card between nights: night 1 from the lobby, the next one after a win, the same one again
-// after everyone went flat, and night 1 of a new run after the last. True if it started one.
-function goFloor(sim: Sim, S: State): boolean {
+const allReady = (sim: Sim): boolean => {
+  const all = Object.values(sim.players);
+  return all.length > 0 && all.every(p => p.ready);
+};
+
+// The next night, once everyone is ready: night 1 from the lobby, the next one after a win, the same one again after
+// everyone went flat, and night 1 of a new run after the last. True if it started one.
+function nextFloor(sim: Sim, S: State): boolean {
   if (S.phase === 'play') return false;
+  for (const p of Object.values(sim.players)) delete p.ready;
   if (S.phase === 'lobby') startFloorNight(sim, S, 1);
   else if (S.phase === 'win') startFloorNight(sim, S, S.night + 1);
   else if (S.phase === 'dead') startFloorNight(sim, S, S.night);
   else restartFloor(sim, S);
   return true;
+}
+
+// pid pressed for the next night (go) or took it back (wait). Only between nights. True if that started one.
+function readyFloor(sim: Sim, S: State, pid: string, ready: boolean): boolean {
+  const p = sim.players[pid];
+  if (S.phase === 'play' || !p) return false;
+  if (ready) p.ready = true;
+  else delete p.ready;
+  return allReady(sim) && nextFloor(sim, S);
 }
 
 /* ---------- the dev menu ---------- */
@@ -117,11 +137,11 @@ function devFloor(sim: Sim, S: State, pid: string, d: DevCommand): boolean {
 /* ---------- a guard's message ---------- */
 
 // Anything pid's browser sent. Someone not in the room is ignored, and so is a message that is not one of these.
-// True if it started a night: 'go' from a card between nights, or a dev skip to another night.
+// True if it started a night: the last guard's 'go' from a card between nights, or a dev skip to another night.
 export function commandFloor(sim: Sim, S: State, pid: string, c: unknown): boolean {
   if (typeof c !== 'object' || c === null || !('t' in c) || !Object.hasOwn(sim.players, pid)) return false;
   const cmd = c as Command;
-  if (cmd.t === 'go') return goFloor(sim, S);
+  if (cmd.t === 'go' || cmd.t === 'wait') return readyFloor(sim, S, pid, cmd.t === 'go');
   if (cmd.t === 'dev') return devFloor(sim, S, pid, cmd);
   actFloor(sim, S, pid, cmd);
   return false;

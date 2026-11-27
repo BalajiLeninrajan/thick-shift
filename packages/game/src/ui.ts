@@ -8,7 +8,7 @@ import type { State, Tally } from '@thick-shift/sim/types';
 import { unlockAudio } from './audio';
 import { byId } from './dom';
 import { host, join, send } from './net';
-import { client, game, platform } from './state';
+import { client, game, myPlayer, platform } from './state';
 import type { OverlayScreen } from './types';
 
 const q = new URLSearchParams(location.search);
@@ -19,8 +19,21 @@ export const card = (body: string, footer = '', cls = ''): string =>
 // What net.ts has to say about the connection, on the cards and, during a night, over the game (syncOverlay).
 const netBanner = (): string => (game.netNote ? `<div class="banner cn-tone-warning">${esc(game.netNote)}</div>` : '');
 
-// Anyone in the room can start the next night. Whoever runs it acts on the first press (goFloor).
-const goButton = (label: string): string => `<button class="btn btn-primary" id="go">${label}</button>`;
+// The next night starts once everyone in the room has pressed for it (readyFloor in packages/sim/src/session.ts).
+// Alone, the one press starts it, so the button says so. In a crew it says ready, and once pressed it takes that back.
+function goButton(S: State, alone: string, crew: string): string {
+  if (S.players.length < 2) return `<button class="btn btn-primary" id="go">${alone}</button>`;
+  return myPlayer(S)?.ready ? '<button class="btn btn-secondary" id="wait">Not ready</button>' : `<button class="btn btn-primary" id="go">${crew}</button>`;
+}
+// The mark on a ready guard's chip in the lobby.
+const CHECK =
+  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg>';
+// Who a crew is still waiting on, for the cards between nights.
+function waiting(S: State): string {
+  if (S.players.length < 2) return '';
+  const names = S.players.filter(p => !p.ready).map(p => (p.id === game.myId ? 'you' : esc(p.name)));
+  return `<p class="cn-meta cn-m-0">The night starts when everyone is ready. Waiting on ${names.join(', ')}.</p>`;
+}
 
 // The name a guard plays under, as the sim will keep it: Guard for none, and no longer than NAME_MAX.
 export const guardName = (name: string): string => (name || DEFAULT_NAME).slice(0, NAME_MAX);
@@ -104,14 +117,17 @@ function nightScreen(S: State): OverlayScreen {
     who = names.map(esc).join(', ') || esc(game.myName);
   // The catch has the screen until client.holdUntil (see main.ts).
   const scaring = performance.now() < client.holdUntil;
-  const key = [S.phase, S.night, names.join(','), game.netNote, scaring].join('|');
+  const ready = S.players.map(p => (p.ready ? 1 : 0)).join('');
+  const key = [S.phase, S.night, names.join(','), ready, game.netNote, scaring].join('|');
   const wire = (): void => {
-    const go = document.getElementById('go');
+    const go = document.getElementById('go'),
+      wait = document.getElementById('wait');
     if (go)
       go.onclick = () => {
         unlockAudio();
         send({ t: 'go' });
       };
+    if (wait) wait.onclick = () => send({ t: 'wait' });
   };
   if (S.phase === 'lobby') {
     const link = `${location.origin}${location.pathname}?room=${S.code}`;
@@ -131,10 +147,13 @@ function nightScreen(S: State): OverlayScreen {
       html: card(
         `
         ${where}
-        <div class="cn-cluster">${names.map(n => `<span class="chip">${esc(n)}</span>`).join('')}</div>
+        <div class="cn-cluster">${S.players
+          .map(p => (p.ready ? `<span class="chip cn-text-green">${CHECK}${esc(p.name)}, ready</span>` : `<span class="chip">${esc(p.name)}</span>`))
+          .join('')}</div>
+        ${waiting(S)}
         <ul class="cn-meta cn-m-0 ts-rules">${RULES.map(r => `<li>${r}</li>`).join('')}</ul>
         ${netBanner()}`,
-        goButton('Start night 1')
+        goButton(S, 'Start night 1', 'Ready for night 1')
       ),
     };
   }
@@ -150,8 +169,8 @@ function nightScreen(S: State): OverlayScreen {
       key,
       wire,
       html: card(
-        `<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(tally)}${netBanner()}`,
-        goButton(`Start night ${S.night + 1}`)
+        `<h1 class="ts-logo">6 AM</h1><p class="lede cn-m-0">Night ${S.night} of ${FINAL_NIGHT} survived</p><p class="cn-meta cn-m-0">${note} Guards: ${who}</p>${floorStats(tally)}${waiting(S)}${netBanner()}`,
+        goButton(S, `Start night ${S.night + 1}`, `Ready for night ${S.night + 1}`)
       ),
     };
   }
@@ -166,8 +185,9 @@ function nightScreen(S: State): OverlayScreen {
       <p class="cn-meta cn-m-0">The sun is up and the mascots are back on their stage. Guards: ${who}</p>
       ${floorStats(defined(S.total, "the run's tally"), true)}
       <p class="cn-meta cn-m-0">${S.deaths ? `The whole crew went down ${S.deaths === 1 ? 'once' : `${S.deaths} times`} along the way.` : 'The whole crew never went down at once.'}</p>
+      ${waiting(S)}
       ${netBanner()}`,
-        goButton('Start over from night 1')
+        goButton(S, 'Start over from night 1', 'Ready to start over')
       ),
     };
   if (S.phase === 'dead' && !scaring)
@@ -175,8 +195,8 @@ function nightScreen(S: State): OverlayScreen {
       key,
       wire,
       html: card(
-        `<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(S.killer === -1 ? 'Something' : MASC[S.killer].name)} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(defined(S.tally, "the night's tally"))}${netBanner()}`,
-        goButton(`Retry night ${S.night}`),
+        `<h1 class="ts-logo ts-logo-bad">Flattened</h1><p class="lede cn-m-0">Everyone is on the floor. ${esc(S.killer === -1 ? 'Something' : MASC[S.killer].name)} got the last of you.</p><p class="cn-meta cn-m-0">Night ${S.night}, ${clockF(S)}.</p>${floorStats(defined(S.tally, "the night's tally"))}${waiting(S)}${netBanner()}`,
+        goButton(S, `Retry night ${S.night}`, `Ready to retry night ${S.night}`),
         'ts-card-slow'
       ),
     };
