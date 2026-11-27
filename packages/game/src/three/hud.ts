@@ -139,6 +139,13 @@ const CONTROLS: Record<'keys' | 'touch' | 'pad', ControlGroup[]> = {
       ],
     ],
     [
+      'At the camera desk',
+      [
+        ['Change camera', ['1–0', 'A D', 'Click']],
+        ['Get up', ['E', 'Esc']],
+      ],
+    ],
+    [
       'When you are flat',
       [
         ['Call out', ['Q']],
@@ -167,6 +174,13 @@ const CONTROLS: Record<'keys' | 'touch' | 'pad', ControlGroup[]> = {
       ],
     ],
     ['At a breaker box', [['Choose and act', ['Tap the parts']]]],
+    [
+      'At the camera desk',
+      [
+        ['Change camera', ['Tap a number']],
+        ['Get up', ['Get up']],
+      ],
+    ],
   ],
   pad: [
     [
@@ -195,6 +209,13 @@ const CONTROLS: Record<'keys' | 'touch' | 'pad', ControlGroup[]> = {
         ['Choose', ['Left stick', 'D-pad']],
         ['Act', ['A']],
         ['Let go', ['B']],
+      ],
+    ],
+    [
+      'At the camera desk',
+      [
+        ['Change camera', ['D-pad', 'LB RB']],
+        ['Get up', ['A', 'B']],
       ],
     ],
     [
@@ -655,6 +676,7 @@ export function createHud(root: HTMLElement, player: PlayerHandle) {
       if (root.hidden) return;
       data(root, 'flat', me.flat);
       data(root, 'hid', me.hid >= 0 && !me.flat);
+      data(root, 'cams', me.cam >= 0); // at the desk: the feed and its buttons (cams.ts) take the middle and the bottom
 
       set(time, clockF(S));
       set(night, `Night ${S.night}`);

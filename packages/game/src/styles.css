@@ -148,6 +148,29 @@ html:has(#c3:not([hidden])) { scrollbar-gutter: auto; }
 .ts-f-task-help .ts-key { margin: 0 1px; }
 .ts-fhud[data-touch="true"] .ts-f-task-help, .ts-fhud[data-touch="true"] .ts-f-task .ts-key { display: none; }
 
+/* At the camera desk (three/cams.ts): the feed fills the frame, the camera's name and a plan of the building with a
+   button on each camera sit at the bottom right, and what is for walking about goes away. */
+.ts-fhud[data-cams="true"] :is(.ts-f-vignette, .ts-f-compass, .ts-f-dot, .ts-f-prompt, .ts-f-torch, .ts-f-start) { display: none; }
+.ts-f-cams { position: absolute; inset: 0; z-index: 3; pointer-events: none; font-family: var(--mono); text-shadow: none; }
+.ts-f-cams-dead { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 6px 14px; border-radius: 6px; background: var(--ts-plate); color: var(--red); font-size: 22px; letter-spacing: .2em; text-transform: uppercase; animation: ts-blink 1.2s steps(2, jump-none) infinite; }
+.ts-f-cams-box { position: absolute; right: var(--ts-pad); bottom: var(--ts-pad); display: grid; gap: 8px; width: min(300px, 42cqw); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--surface-1); background: color-mix(in srgb, var(--neu-ink) 82%, transparent); pointer-events: auto; }
+.ts-f-cams-head { display: flex; align-items: baseline; gap: 8px; }
+.ts-f-cams-head b { color: var(--text); font-size: 15px; letter-spacing: .06em; }
+.ts-f-cams-head span { overflow: hidden; color: var(--subtext-0); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.ts-f-rec { flex: 0 0 auto; align-self: center; width: 9px; height: 9px; border-radius: 50%; background: var(--red); animation: ts-blink 1.4s steps(2, jump-none) infinite; }
+.ts-f-cams-map { position: relative; aspect-ratio: 42 / 44; }
+.ts-f-cams-map svg { display: block; width: 100%; height: 100%; fill: color-mix(in srgb, var(--green) 10%, transparent); stroke: color-mix(in srgb, var(--green) 55%, transparent); stroke-width: .25; }
+.ts-f-cams-map circle { fill: var(--text); stroke: none; }
+.ts-f-cam { position: absolute; display: grid; place-items: center; width: 24px; height: 24px; margin: -12px 0 0 -12px; padding: 0; border: 1px solid var(--overlay-1); border-radius: 5px; background: var(--surface-0); color: var(--text); font: 700 12px/1 var(--mono); cursor: pointer; }
+.ts-f-cam:hover { border-color: var(--green); }
+.ts-f-cam.is-on { border-color: var(--green); background: var(--green); color: var(--crust); }
+.ts-f-cams-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--subtext-0); font-family: var(--sans); font-size: 12px; font-weight: 500; }
+.ts-f-cams-keys .ts-key { margin-right: 3px; }
+.ts-f-cams-foot .btn { gap: 6px; white-space: nowrap; }
+.ts-fhud[data-touch="true"] :is(.ts-f-cams-keys, .ts-f-cams .ts-key) { display: none; }
+@media (max-height: 500px) { .ts-f-cams-box { width: min(230px, 36cqw); padding: 8px; gap: 6px; } .ts-f-cam { width: 20px; height: 20px; margin: -10px 0 0 -10px; font-size: 11px; } }
+@media (prefers-reduced-motion: reduce) { .ts-f-rec, .ts-f-cams-dead { animation: none; } }
+
 .ts-tk-breaker { display: flex; gap: 12px; }
 .ts-tk-switch { all: unset; cursor: pointer; display: grid; justify-items: center; gap: 6px; width: 52px; padding: 8px 0; border-radius: 8px; background: var(--surface-0); border: 2px solid transparent; }
 .ts-tk-switch i { position: relative; width: 22px; height: clamp(40px, 14cqh, 56px); border-radius: 4px; background: var(--crust); }

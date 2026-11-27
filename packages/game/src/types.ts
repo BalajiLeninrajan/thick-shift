@@ -43,7 +43,8 @@ export interface Prefs {
 }
 
 // What a guard's use key would act on (player.ts findTarget): the field names follow the 'use' action it sends.
-// what: also 'crank' and 'charge', which are held (hold -1) and so set Me.act instead of sending a 'use'.
+// what: also 'crank' and 'charge', which are held (hold -1) and so set Me.act instead of sending a 'use', and 'cams',
+// the camera desk, which only this browser knows about.
 // at: where it is, for distance and facing. hold: seconds to hold the use key, 0 for a tap, -1 for as long as it is
 // held. Each kind carries the one handle it needs: i, a box, battery spot or locker; k, a door; id, a toy (number)
 // or a flat guard (string). The others read as undefined, so the 'use' action can copy all three.
@@ -52,7 +53,7 @@ export type Target = { at: Point; label: string; hold: number } & (
   | { what: 'door'; k: DoorKey; i?: never; id?: never }
   | { what: 'toy'; id: number; i?: never; k?: never }
   | { what: 'peel'; id: string; i?: never; k?: never }
-  | { what: 'crank' | 'charge' | 'carton'; i?: never; k?: never; id?: never }
+  | { what: 'crank' | 'charge' | 'carton' | 'cams'; i?: never; k?: never; id?: never }
 );
 
 // This guard as their own browser has them (player.me), ahead of what the room sends back. yaw 0 faces south (+z).
@@ -84,6 +85,8 @@ export interface Me {
   dry: number; // of the last try without the battery for one,
   empty: number; // and of the last try with empty hands
   hid: number; // the locker (HIDES index) this guard is in, as the room has it, or -1
+  cam: number; // the camera (CAMS index) this guard is watching at the desk, or -1
+  camAt: number; // performance.now() when they last sat down or changed camera, for the static
 }
 
 /* ---------- the frame (three/app.ts and what it puts together) ---------- */

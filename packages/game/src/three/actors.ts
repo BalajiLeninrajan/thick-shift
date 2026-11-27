@@ -108,14 +108,15 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
       else if (e.type === 'spot') mascots[e.x.i].spotted();
       else if (e.type === 'check' || e.type === 'found') mascots[e.x.i].bang(); // the yank on the locker door
     },
-    // me, torch: player.ts's guard and its light. Call after player.update, which has put the camera where the guard is.
-    sync(S: State, dt: number, me: Me, torch: THREE.SpotLight): void {
+    // me, torch: player.ts's guard and its light. eye: what the frame is drawn from, the guard's camera or the security
+    // camera they are watching (cams.ts). Call after player.update, which has put the camera where the guard is.
+    sync(S: State, dt: number, me: Me, torch: THREE.SpotLight, eye: THREE.PerspectiveCamera = camera): void {
       nightClock.see(S.t, performance.now() / 1000);
-      camera.updateMatrixWorld();
-      view.frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-      view.x = camera.position.x;
-      view.y = camera.position.y;
-      view.z = camera.position.z;
+      eye.updateMatrixWorld();
+      view.frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(eye.projectionMatrix, eye.matrixWorldInverse));
+      view.x = eye.position.x;
+      view.y = eye.position.y;
+      view.z = eye.position.z;
       view.id = game.myId;
       view.flat = me.flat;
       view.watch = me.watch;

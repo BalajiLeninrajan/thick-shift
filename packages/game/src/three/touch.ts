@@ -163,7 +163,7 @@ export function createTouch(root: HTMLElement, player: PlayerHandle) {
   return {
     // Once a frame: hide the controls when they do nothing, and show what the buttons would do.
     sync(): void {
-      const show = me.touch && !me.flat && !me.paused;
+      const show = me.touch && !me.flat && !me.paused && me.cam < 0; // at the desk, the camera panel has its own buttons
       if (layer.hidden === show) {
         layer.hidden = !show;
         release();

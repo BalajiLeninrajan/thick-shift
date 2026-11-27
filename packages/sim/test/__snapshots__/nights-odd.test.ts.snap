@@ -4,14 +4,14 @@ exports[`odd nights > empty building x2 n1, seed 1 1`] = `
 {
   "burnt": 0,
   "events": "bat 5, calm 5, fault 13, fix 12, hour 6, stir 6, win 1",
-  "eventsDigest": "75496c8837cd1805",
+  "eventsDigest": "6f7ed5f2bff9160c",
   "failures": [],
   "fixed": 12,
   "flats": 0,
   "outcome": "win",
   "peels": 0,
-  "power": "63.128",
-  "stateDigest": "efb46868c5452203",
+  "power": "63.214",
+  "stateDigest": "2343bf81ddbc32ac",
   "t": "420.000",
   "ticks": 4200,
 }
@@ -38,16 +38,16 @@ exports[`odd nights > x4 camp the charger n3, seed 1 1`] = `
 {
   "burnt": 0,
   "events": "call 4, fault 2, flat 4, roar 1, scare 1, spot 5, stir 1",
-  "eventsDigest": "8c351e2549a26a4c",
+  "eventsDigest": "458a798f45b23cc6",
   "failures": [],
   "fixed": 0,
   "flats": 4,
   "outcome": "dead",
   "peels": 0,
-  "power": "51.679",
-  "stateDigest": "9d8d3fb9874b4a5e",
-  "t": "53.700",
-  "ticks": 537,
+  "power": "52.030",
+  "stateDigest": "892b267ddbc951ef",
+  "t": "53.400",
+  "ticks": 534,
 }
 `;
 
@@ -70,34 +70,34 @@ exports[`odd nights > x4 sit in the ducts n1, seed 3 1`] = `
 
 exports[`odd nights > x4 turtle, toys at the doors n1, seed 2 1`] = `
 {
-  "burnt": 11,
-  "events": "arrive 4, bang 12, burn 11, call 5, calm 2, door 3, fault 12, flat 4, hour 2, out 1, scare 1, spot 7, stir 3",
-  "eventsDigest": "9304151a29ad8b1a",
+  "burnt": 12,
+  "events": "arrive 4, bang 12, burn 12, call 3, calm 2, door 3, fault 12, flat 4, hour 3, out 1, roar 1, scare 1, spot 6, stir 3",
+  "eventsDigest": "5e415f9b862f0739",
   "failures": [],
   "fixed": 0,
   "flats": 4,
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "9795f35afc14c0ec",
-  "t": "203.700",
-  "ticks": 2037,
+  "stateDigest": "980f0f3206c85afc",
+  "t": "220.000",
+  "ticks": 2200,
 }
 `;
 
 exports[`odd nights > x4 turtle: doors shut, nobody moves n3, seed 1 1`] = `
 {
-  "burnt": 8,
-  "events": "arrive 4, bang 16, burn 8, call 3, calm 2, door 3, fault 12, flat 4, hour 2, out 1, scare 1, spot 7, stir 3",
-  "eventsDigest": "475a8aea1df60d1e",
+  "burnt": 9,
+  "events": "arrive 4, bang 16, burn 9, call 3, calm 2, door 3, fault 12, flat 4, hour 2, out 1, scare 1, spot 8, stir 3",
+  "eventsDigest": "32924ad24fc5324f",
   "failures": [],
   "fixed": 0,
   "flats": 4,
   "outcome": "dead",
   "peels": 0,
   "power": "0.000",
-  "stateDigest": "bf7dc3098c6bc791",
-  "t": "189.800",
-  "ticks": 1898,
+  "stateDigest": "25f439ca240065e6",
+  "t": "193.900",
+  "ticks": 1939,
 }
 `;

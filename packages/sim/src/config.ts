@@ -7,6 +7,8 @@ export const DOORS: readonly DoorKey[] = ['L', 'V', 'R']; // the booth's three w
 // the seconds without sprinting before it starts to come back. The sim only reads whether a guard is sprinting
 // (Guard.sp), so each client spends the breath itself, and so do the balance harness's guards.
 export const STAMINA = { drain: 1 / 4.5, gain: 1 / 7, rest: 1 };
+// How near a mascot has to be, in metres, to show on a guard's phone. Further off, only the booth's cameras show it.
+export const PHONE_NEAR = 8;
 
 // A guard's name: what one who gave none is called, and the most characters the sim keeps of one. 32 is Discord's
 // limit for a display name, so a Discord name always fits whole.
@@ -16,7 +18,7 @@ export const DEFAULT_NAME = 'Guard',
 // The cast's model names, one per MascotKind.k.
 export type MascotKey = 'hippo' | 'walrus' | 'toad' | 'rhino';
 // One of the cast. k names the model files (packages/game/public/models/<k>_*.glb) and the tuning in
-// packages/game/src/three/actors/styles.ts; col colours its blip on the booth's wall map and its stand-in until the model loads.
+// packages/game/src/three/actors/styles.ts; col colours its stand-in until the model loads.
 export interface MascotKind {
   k: MascotKey;
   name: string;

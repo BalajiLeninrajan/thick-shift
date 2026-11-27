@@ -2,8 +2,8 @@
 // packages/sim/test play nights through this too.
 //
 // The guards only know what a person could: what is in front of them and lit,
-// what is close enough to hear, the HUD, the wall map while they stand in the
-// booth, and what a flat teammate shouts. They walk with the same route() and
+// what is close enough to hear, the HUD, the booth's cameras while they stand at
+// its desk, and what a flat teammate shouts. They walk with the same route() and
 // slide() the game uses, at the game's speeds, and react late.
 import {
   actFloor,
@@ -46,7 +46,7 @@ const sim = newSim({ rng: () => random(), now: 0 });
 
 /* ---------- the shapes ---------- */
 
-type Sense = 'see' | 'hear' | 'map';
+type Sense = 'see' | 'hear' | 'cams';
 // What a guard remembers of a mascot: where it was and what it was doing at t, since when they have known of it
 // without a break, and how they knew.
 interface Memory extends Point {
@@ -145,7 +145,7 @@ interface SkillBase {
   react: number;
   fov: number;
   torch: 'always' | 'thrifty';
-  map: boolean;
+  cams: boolean;
   plans: boolean;
   doors: boolean;
   cranks: boolean;
@@ -227,6 +227,9 @@ const nearest = <T extends Point>(p: Point, list: readonly T[]) => nearestBy(p, 
 const pick = <T>(list: readonly T[]): T => defined(list[(random() * list.length) | 0], 'a pick from an empty list');
 const MOVING: MascotState[] = ['roam', 'search', 'hunt', 'charge'];
 const BOOTH_MID = { x: 21, z: 40.5 };
+// In front of the camera desk, and how long a guard there watches each camera before flipping to the next.
+const DESK_STAND = { x: M.DESK.x + Math.sin(M.DESK.face) * 0.9, z: M.DESK.z + Math.cos(M.DESK.face) * 0.9 },
+  CAM_DWELL = 1.5;
 // A guard's guess at whether a resting mascot wakes this night. Rougher than the sim's rule (WAKE in sim.ts), on
 // purpose: Squish sleeps through a solo night 1, and Stompy through any night 1.
 const mayWake = (S: NightState, i: MascotIndex) => (i === 3 ? S.night > 1 : i !== 2 || S.night + S.players.length > 2);
@@ -278,9 +281,10 @@ const perceivable = (S: NightState, p: Point, m: Point & { st: MascotState }) =>
 };
 
 function perceive(S: NightState, bot: Bot): void {
-  const map = bot.skill.map && lightsF(S) && inBooth(bot);
+  // At the desk with the power on: what the camera they are on shows. They flip to the next one every CAM_DWELL seconds.
+  const cam = bot.skill.cams && lightsF(S) && dist(bot, DESK_STAND) < 1 ? M.CAMS[Math.floor(S.t / CAM_DWELL) % M.CAMS.length] : undefined;
   for (const m of S.m) {
-    const how = sense(S, bot, m) || (map && m.st !== 'rest' ? 'map' : null);
+    const how = sense(S, bot, m) || (cam && m.st !== 'rest' && M.camSees(cam, m, M.MASCOT_R, S.doors) ? 'cams' : null);
     if (!how) continue;
     const old = bot.mem[m.i];
     bot.mem[m.i] = { i: m.i, x: m.x, z: m.z, st: m.st, rot: m.rot, lit: m.lit, t: S.t, since: old && S.t - old.t < 1.5 ? old.since : S.t, how };
@@ -288,7 +292,7 @@ function perceive(S: NightState, bot: Bot): void {
 }
 // The mascots this guard knows about and has had time to react to.
 const known = (S: NightState, bot: Bot, age = 2.5) =>
-  bot.mem.filter((k): k is Memory => !!k && S.t - k.t < age && k.st !== 'rest' && (S.t - k.since >= bot.skill.react || k.how === 'map'));
+  bot.mem.filter((k): k is Memory => !!k && S.t - k.t < age && k.st !== 'rest' && (S.t - k.since >= bot.skill.react || k.how === 'cams'));
 
 /* ---------- a guard's body ---------- */
 
@@ -497,7 +501,7 @@ function walk(S: NightState, bot: Bot, goal: Point, sprint?: boolean, face?: num
   const step = Math.min(dist(bot, next), (bot.sp ? F.SPRINT : F.WALK) * DT);
   // Nobody walks into one they can see: no step that ends nearer to it than two metres.
   const to = { x: bot.x + Math.sin(dir) * step, z: bot.z + Math.cos(dir) * step };
-  if (known(S, bot, 1).some(h => h.how !== 'map' && dist(to, h) < 2 && dist(to, h) < dist(bot, h))) {
+  if (known(S, bot, 1).some(h => h.how !== 'cams' && dist(to, h) < 2 && dist(to, h) < dist(bot, h))) {
     bot.state.retreat = S.t + 2;
     return null;
   }
@@ -597,7 +601,7 @@ const competent: Skill = {
   react: 0.5,
   fov: 1.5,
   torch: 'thrifty',
-  map: true,
+  cams: true,
   plans: true,
   doors: true,
   cranks: true,
@@ -616,7 +620,7 @@ const SKILL = {
     react: 0.9,
     fov: 0.9,
     torch: 'always',
-    map: false,
+    cams: false,
     plans: false,
     doors: false,
     cranks: false,
@@ -814,7 +818,7 @@ function defend(S: NightState, bot: Bot, objective: Objective): boolean {
       ? bot.mem.filter((k): k is Memory => !!k && k.st === 'rest' && S.t - k.t < 30 && dist(bot, k) < 10 && mayWake(S, k.i))
       : [];
   const hs = known(S, bot)
-    .filter(h => (COMING.includes(h.st) && dist(bot, h) < sk.alert) || ((MOVING.includes(h.st) || h.st === 'stun') && h.how !== 'map' && dist(bot, h) < 6))
+    .filter(h => (COMING.includes(h.st) && dist(bot, h) < sk.alert) || ((MOVING.includes(h.st) || h.st === 'stun') && h.how !== 'cams' && dist(bot, h) < 6))
     .concat(waking)
     .sort((a, b) => dist(bot, a) - dist(bot, b));
   const [h] = hs;
@@ -968,7 +972,9 @@ function objectiveOf(S: NightState, bot: Bot, team: Team): Objective {
   if (!sk.plans && pol.stays !== true && !(bot.bat < 0.05 && lightsF(S)) && !st.topUp) return st.drift && st.drift.until > S.t ? { goal: st.drift.to } : {};
   st.topUp = !sk.plans && bot.bat < 0.6; // a careless guard charges only once the torch has died, and not for long
   if (bot.bat < 0.95 && lightsF(S)) return { use: CHARGE, home: true };
-  return { goal: BOOTH_MID, home: true };
+  // A guard who uses the cameras waits at the desk, watching them, unless a teammate is already there.
+  const watcher = team.bots.find(b => b !== bot && !b.flat && dist(b, DESK_STAND) < 1.5);
+  return { goal: sk.cams && lightsF(S) && !watcher ? DESK_STAND : BOOTH_MID, home: true };
 }
 
 const honest = (skill: keyof typeof SKILL, opts: PolicyOptions = {}): Policy => ({
@@ -1047,7 +1053,7 @@ const BONK = { min: TOY.armed + M.MASCOT_R + TOY.hit + 1.2, max: TOY.armed + M.M
 function bonk(S: NightState, bot: Bot, h: Memory, floor: number): boolean {
   const me = guardOf(bot);
   if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < floor || S.t < (bot.state.lureAt || 0) || !fresh(S, bot, h)) return false;
-  if (h.how === 'map' || h.st === 'stun' || dist(me, h) < BONK.min || dist(me, h) > TOY.range - 2 || !M.sees(me.x, me.z, h.x, h.z, S.doors)) return false;
+  if (h.how === 'cams' || h.st === 'stun' || dist(me, h) < BONK.min || dist(me, h) > TOY.range - 2 || !M.sees(me.x, me.z, h.x, h.z, S.doors)) return false;
   const yaw = ang(me, h);
   // Nothing may stop it short of the mascot.
   if (dist(me, landing(S, me.x, me.z, yaw, TOY.range)) < dist(me, h) - 0.5) return false;
@@ -1064,7 +1070,7 @@ function lure(S: NightState, bot: Bot, to: Point): void {
     st = bot.state;
   if (!bot.skill.toy || !me.toy || me.bat - TOY.cost < bot.skill.spare || S.t < (st.lureAt || 0)) return;
   const listening = known(S, bot, 1.5).filter(
-    k => k.how !== 'map' && (k.st === 'roam' || k.st === 'search' || (k.st === 'hunt' && lightsF(S))) && dist(bot, k) < 14 && fresh(S, bot, k)
+    k => k.how !== 'cams' && (k.st === 'roam' || k.st === 'search' || (k.st === 'hunt' && lightsF(S))) && dist(bot, k) < 14 && fresh(S, bot, k)
   );
   const h = nearest(bot, listening);
   if (!h) return;
@@ -1257,7 +1263,7 @@ const DEGENERATE = {
     skill: SKILL.competent,
     think(S, bot) {
       const w = bot.want,
-        seen = known(S, bot).filter(k => k.how !== 'map'),
+        seen = known(S, bot).filter(k => k.how !== 'cams'),
         h = nearest(bot, seen);
       w.use = CRANK;
       if (h && dist(bot, h) < F.BEAM_RANGE) {
