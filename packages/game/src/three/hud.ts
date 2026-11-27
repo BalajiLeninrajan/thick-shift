@@ -141,7 +141,7 @@ const CONTROLS: Record<'keys' | 'touch' | 'pad', ControlGroup[]> = {
     [
       'At the camera desk',
       [
-        ['Change camera', [`1–${CAMS.length}`, 'A D', 'Click']],
+        ['Change camera', [`1–${CAMS.length}`, 'Arrows', 'Click']],
         ['Get up', ['E', 'Esc']],
       ],
     ],

@@ -7,7 +7,7 @@
 import { lightsF } from '@thick-shift/sim';
 import { isPlaced } from '@thick-shift/sim/check';
 import type { MascotKind } from '@thick-shift/sim/config';
-import { MASC } from '@thick-shift/sim/config';
+import { BIGGS, MASC } from '@thick-shift/sim/config';
 import { angDiff, dist, EYE, glimpses, MASCOT_R, walkable } from '@thick-shift/sim/map';
 import type { MascotIndex, MascotState, Mascot as SimMascot, State } from '@thick-shift/sim/types';
 import * as THREE from 'three';
@@ -27,6 +27,10 @@ const bump = (u: number, up: number, down: number): number => smooth(u / up) * s
 // Where a foot is through the walk cycle, from -1 (as far ahead as it lands) to 1 (as far behind as it lifts): the
 // first half on the ground going back at a steady rate, which is ground speed, the second half swinging forward.
 const footAt = (q: number): number => (q < 0.5 ? q * 4 - 1 : Math.cos(Math.PI * (q * 2 - 1)));
+// Big Biggs caught on a security camera, before his last stage, standing about: now and then he turns to it and
+// waves. chance: the odds each time he comes on screen, and again every `every` seconds he stays there. time: how
+// long a wave lasts. still: the most he may be moving, in m/s, and still stop for it.
+const CAM_WAVE = { chance: 0.35, every: 9, time: 2.8, still: 0.3 };
 
 // How far it is from (x, z) to a wall or shut door straight ahead, to the nearest ROOM_STEP and short of it, or
 // Infinity if there is none within max. Furniture does not count: what reaches over it is above it.
@@ -182,6 +186,9 @@ export class Mascot {
   kSpot = 0;
   // The catch: where it stood and which way it turned to the guard, and how far it is held to each (0 to 1).
   hold = { x: 0, z: 0, yaw: 0, w: 0, v: 0, turn: 0 };
+  // Waving at a security camera (CAM_WAVE): seconds left of it, its weight easing in and out, whether this spell on
+  // screen has had its roll, and when the next roll is due.
+  camWave = { left: 0, w: 0, rolled: false, next: 0 };
   scareOn = false;
   scareW = 0;
   scareBite = 0;
@@ -296,11 +303,28 @@ export class Mascot {
     this.scareBite = 0;
     this.slump = 0;
     this.knock.d = 0;
+    this.camWave.left = this.camWave.w = 0;
     Object.assign(this.ch, ZERO);
     Object.assign(this.cv, ZERO);
   }
 
   /* ---------- the frame ---------- */
+
+  // onCam: this frame is a security camera's picture and he is in it. Rolls for a wave (CAM_WAVE) as he comes on
+  // screen and every so often while he stays, and eases camWave.w toward whether he is waving. Moving off, a beam or
+  // a hunt ends it.
+  waveAtCam(onCam: boolean, st: MascotState, lit: boolean, stage: Stage, dt: number): void {
+    const w = this.camWave,
+      calm = this.i === BIGGS && stage < 2 && !lit && (st === 'rest' || st === 'roam' || st === 'search') && this.track.speed < CAM_WAVE.still;
+    if (!onCam) w.rolled = false;
+    else if (calm && (!w.rolled || this.t >= w.next)) {
+      w.rolled = true;
+      w.next = this.t + CAM_WAVE.every;
+      if (w.left <= 0 && Math.random() < CAM_WAVE.chance) w.left = CAM_WAVE.time;
+    }
+    w.left = onCam && calm ? w.left - dt : 0;
+    w.w += ((w.left > 0 ? 1 : 0) - w.w) * Math.min(1, dt * 4);
+  }
 
   // view: { x, y, z } of the camera, id of the guard watching, flat (they are on the floor).
   sync(m: SimMascot, S: State, dt: number, view: View): void {
@@ -327,7 +351,8 @@ export class Mascot {
     const sph = this.onScreen;
     sph.center.set(tr.x, this.cur.height / 2, tr.z);
     sph.radius = this.cur.height * 0.6 + 0.6;
-    this.stage(m.rot, !this.seen || !view.frustum.intersectsSphere(sph));
+    const inFrame = view.frustum.intersectsSphere(sph);
+    this.stage(m.rot, !this.seen || !inFrame);
     const fit = this.cur,
       rig = fit.rig,
       style = fit.style,
@@ -383,6 +408,8 @@ export class Mascot {
       hold.w = sw + (d + tmp) * e;
     }
     this.scareW += ((this.scareOn ? 1 : 0) - this.scareW) * Math.min(1, dt * 12);
+    this.waveAtCam(view.cam && this.seen && inFrame, st, lit, fit.stage, dt);
+    const cw = this.camWave.w;
 
     // Clocks. A beam stops a stage 0 costume dead: mid-wave, if it was waving.
     const frozen = lit && style.stage === 0;
@@ -417,7 +444,8 @@ export class Mascot {
     }
     const x = tr.x + (hold.x - tr.x) * hold.w + k.x * k.d,
       z = tr.z + (hold.z - tr.z) * hold.w + k.z * k.d,
-      yaw = tr.yaw + angDiff(hold.yaw, tr.yaw) * hold.turn;
+      held = tr.yaw + angDiff(hold.yaw, tr.yaw) * hold.turn,
+      yaw = held + angDiff(Math.atan2(view.x - tr.x, view.z - tr.z), held) * cw; // turned to the camera he waves at
     this.group.position.set(x, 0, z);
     this.group.rotation.y = yaw;
     this.group.visible = this.seen;
@@ -566,7 +594,15 @@ export class Mascot {
           rig.forearm_R.rx -= 0.5 * e;
         } else rig.head.rz += 0.28 * bump(clamp(u / 0.8, 0, 1), 0.1, 0.1) * (r > 0.7 ? 1 : -1); // a tilt, held
       }
-    } else if (style.stage === 1 && st !== 'rest') {
+    }
+    if (cw > 0.001) {
+      // To the camera: the right arm right up, the hand going side to side.
+      rig.arm_R.rx -= 2.7 * cw;
+      rig.arm_R.rz -= 0.45 * cw;
+      rig.forearm_R.rx -= 0.35 * cw;
+      rig.forearm_R.rz += Math.sin(this.t * 9) * 0.5 * cw;
+    }
+    if (style.stage === 1 && st !== 'rest') {
       // The jaw works on nothing, in bursts.
       const jb = Math.floor(this.gt * 0.7 + this.i);
       if (hash(jb * 3.1) > 0.45) rig.jaw.rx += style.jaw * 0.5 * Math.max(0, Math.sin(this.gt * 12));
@@ -577,7 +613,7 @@ export class Mascot {
     let tx = view.x,
       ty = view.y,
       tz = view.z,
-      best = view.flat && !this.scareOn ? 1e9 : this.dist;
+      best = cw > 0.5 ? -1 : view.flat && !this.scareOn ? 1e9 : this.dist; // waving, he looks only at the camera
     for (const q of S.players) {
       if (!isPlaced(q) || q.flat || q.id === view.id) continue;
       const d = Math.hypot(q.x - x, q.z - z);
@@ -610,7 +646,7 @@ export class Mascot {
       this.offP = away ? (hash(lb + 7) * 2 - 1) * 0.3 : 0;
       if (style.stage === 1 && hash(lb * 1.3) > 0.8) this.side = -this.side; // the angle it holds its head at flips
     }
-    const tk = ch.track,
+    const tk = Math.max(ch.track, cw),
       free = (1 - tk) * alive;
     const wantY = clamp(
       (this.aimY + this.offY) * tk + ch.sweep * Math.sin(this.gt * 1.15) * 0.85 + free * Math.sin(this.gt * 0.31 + this.i) * 0.3 + ch.headY * this.side,

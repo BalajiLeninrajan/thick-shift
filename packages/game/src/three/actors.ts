@@ -33,6 +33,7 @@ const nearest = (a: Guard, b: Guard): number => a.dist - b.dist;
 
 // What the actors are drawn for, set once a frame in sync(). x, y, z: the camera. id: the guard watching. flat: they
 // are on the floor. watch: the guard a flat guard is watching through. third: they watch from behind (prefs.third).
+// cam: the picture is a security camera's (cams.ts), not a guard's eyes.
 // frustum: what this screen shows, so a mascot only changes model off it.
 export interface View {
   x: number;
@@ -42,6 +43,7 @@ export interface View {
   flat: boolean;
   watch: string | null;
   third: boolean;
+  cam: boolean;
   frustum: THREE.Frustum;
 }
 
@@ -51,7 +53,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
     scare = createScare(camera, renderer.domElement),
     hands = createHands(camera),
     plush = createPlush(scene);
-  const view: View = { x: 0, y: 0, z: 0, id: '', flat: false, watch: null, third: false, frustum: new THREE.Frustum() },
+  const view: View = { x: 0, y: 0, z: 0, id: '', flat: false, watch: null, third: false, cam: false, frustum: new THREE.Frustum() },
     viewProj = new THREE.Matrix4();
   let lights: THREE.SpotLight[] | null = null; // made when the first other guard turns up, so a guard alone pays for none
   const lit: Guard[] = [],
@@ -121,6 +123,7 @@ export function createActors(scene: THREE.Scene, camera: THREE.PerspectiveCamera
       view.flat = me.flat;
       view.watch = me.watch;
       view.third = prefs.third;
+      view.cam = eye !== camera;
       for (const m of S.m) mascots[m.i].sync(m, S, dt, view);
       for (const g of list) g.here = false;
       for (const p of S.players) {

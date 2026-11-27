@@ -206,27 +206,55 @@ export const TOY_BOX: Fixture = { room: 9, x: 25.6, z: 43.45, face: Math.PI };
 export const WALL_MAP: Fixture = { room: 9, x: 18.5, z: 36.55, face: 0 };
 // The front edge of the booth's desk, under its monitors. A guard stands here to watch the cameras.
 export const DESK: Fixture = { room: 9, x: 20.35, z: 37.7, face: 0 };
-// A security camera, high in a corner of its room and aimed at look. name: the label on its feed.
+// A security camera, high in a corner of its room and aimed at look. name: the label on its feed. pan: a camera in an
+// L-shaped hall cannot take in both arms at once, so it turns up to this many radians either way of look to follow a
+// mascot (cams.ts), and sweeps between the arms while there is none.
 export interface Cam extends Point {
   room: number;
   name: string;
   y: number;
   look: Point;
+  pan?: number;
 }
-// Numbered for the keys that pick them. Where the mascots stand, the middle of the building, the Snack Bar's way into
-// the ducts, and the last stretch of hall outside each side door. The Arcade, the Kitchen, the long halls and the
-// ducts have none: a motion sensor in the ducts (cams.ts) stands in for one there.
+// Numbered for the keys that pick them, in rows as on the plan. Each room's camera is in a corner and looks along the
+// line halfway between its two walls, so its picture (CAM_HALF either way) takes in the whole room. Each hall's is at
+// the elbow and pans. The ducts have none: a motion sensor (cams.ts) stands in for one there.
 export const CAMS: Cam[] = [
-  { room: 0, name: 'Stage', x: 26.6, z: 10.6, y: 4.8, look: { x: 16, z: 3 } },
-  { room: 1, name: 'Backstage', x: 41.6, z: 10.6, y: 3.45, look: { x: 32, z: 3 } },
-  { room: 3, name: 'Main Hall', x: 26.6, z: 11.9, y: 4, look: { x: 15, z: 22 } },
-  { room: 6, name: 'Snack Bar', x: 30.6, z: 25.9, y: 3.25, look: { x: 17, z: 31 } },
-  { room: 5, name: 'West Corner', x: 2.4, z: 42.1, y: 2.85, look: { x: 14.5, z: 40.5 } },
-  { room: 7, name: 'East Corner', x: 39.6, z: 42.1, y: 2.85, look: { x: 27.5, z: 40.5 } },
+  { room: 0, name: 'Stage', x: 26.6, z: 0.4, y: 3.2, look: { x: 23, z: 4 } }, // on the stage, under the valance
+  { room: 1, name: 'Backstage', x: 41.6, z: 10.6, y: 3.45, look: { x: 37.6, z: 6.6 } },
+  { room: 2, name: 'Arcade', x: 11.1, z: 11.9, y: 3.45, look: { x: 7.1, z: 15.9 } },
+  { room: 3, name: 'Main Hall', x: 26.6, z: 11.9, y: 4, look: { x: 21.7, z: 16.8 } },
+  { room: 4, name: 'Kitchen', x: 41.6, z: 11.9, y: 3.25, look: { x: 37.9, z: 15.6 } },
+  { room: 5, name: 'West Hall', x: 2.4, z: 42.1, y: 2.85, look: { x: 5.4, z: 39.1 }, pan: 0.65 },
+  { room: 6, name: 'Snack Bar', x: 30.6, z: 25.9, y: 3.25, look: { x: 26.9, z: 29.6 } },
+  { room: 7, name: 'East Hall', x: 39.6, z: 42.1, y: 2.85, look: { x: 36.6, z: 39.1 }, pan: 0.65 },
 ];
-// What a camera's picture takes in: half its width as an angle off where it looks, and how far into the dark it shows.
-export const CAM_HALF = 0.8,
+// What a camera's picture takes in: half its width as an angle off where it looks (a little over the 45 degrees a
+// corner needs), and how far into the dark it shows.
+export const CAM_HALF = 0.82,
   CAM_RANGE = 22;
+// The camera an arrow key moves to from camera i: the nearest whose room lies that way (dx, dz on the plan, z down
+// the screen) on the plan, within 60 degrees of it, a step to the side counting double. i when there is none.
+export function camToward(i: number, dx: number, dz: number): number {
+  const at = CAMS[i];
+  if (!at) return i;
+  const from = roomCentre(at.room);
+  let best = i,
+    cost = Infinity;
+  for (const [j, c] of CAMS.entries()) {
+    const to = roomCentre(c.room),
+      ax = to.x - from.x,
+      az = to.z - from.z,
+      along = ax * dx + az * dz,
+      side = Math.abs(ax * dz - az * dx);
+    if (j === i || along <= 0 || side > along * Math.sqrt(3)) continue;
+    if (along + 2 * side < cost) {
+      cost = along + 2 * side;
+      best = j;
+    }
+  }
+  return best;
+}
 // The button for each booth door, on the wall inside the booth beside it.
 export const PANELS: Record<DoorKey, Point & { face: number }> = {
   L: { x: 15.05, z: 38.6, face: Math.PI / 2 },
@@ -396,13 +424,13 @@ export function glimpses(ax: number, az: number, bx: number, bz: number, r: numb
     }
   return false;
 }
-// Is any of a body of radius r standing at p in camera c's picture? Within its width and range, and glimpsed past
-// the walls and shut doors. The game draws the real picture; this is the same question for the balance harness.
+// Is any of a body of radius r standing at p in camera c's picture? Within its width (and as far as it pans) and
+// range, and glimpsed past the walls and shut doors. The game draws the real picture; this is the same question for the balance harness.
 export function camSees(c: Cam, p: Point, r: number, doors?: Doors | null): boolean {
   const d = dist(c, p);
   if (d > CAM_RANGE) return false;
   const off = Math.abs(angDiff(Math.atan2(p.x - c.x, p.z - c.z), Math.atan2(c.look.x - c.x, c.look.z - c.z)));
-  return off - Math.atan2(r, d) < CAM_HALF && glimpses(c.x, c.z, p.x, p.z, r, doors);
+  return off - Math.atan2(r, d) < CAM_HALF + (c.pan ?? 0) && glimpses(c.x, c.z, p.x, p.z, r, doors);
 }
 
 // Where a body of radius r gets nearest to (x, z) with nothing but furniture between: the place a mascot walks to
