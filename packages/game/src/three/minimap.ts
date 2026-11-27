@@ -17,7 +17,10 @@ import { canvas } from './world/tex';
 
 const MAP_W = 288,
   MAP_H = 224; // canvas pixels: the 4:3-ish shape of the phone's glass
-const NEAR = 11; // pixels per metre close up: 26 metres across
+const TOP = 26; // the status line's height in pixels
+// Pixels per metre close up: as many as fit the PHONE_NEAR ring between the status line and the bottom, with the
+// guard in the middle. About 46 metres across.
+const NEAR = (MAP_H - TOP - 8) / (2 * PHONE_NEAR);
 const EVERY = 125; // milliseconds between redraws
 const INK = {
   bg: '#071108',
@@ -148,7 +151,7 @@ export function createMinimap() {
       next = now + EVERY;
       c.fillStyle = INK.bg;
       c.fillRect(0, 0, MAP_W, MAP_H);
-      const top = 26; // the status line
+      const top = TOP;
       c.save();
       if (zoom) {
         const k = Math.min(MAP_W / (SIZE_X + 1), (MAP_H - top - 4) / (SIZE_Z + 1)),
@@ -161,9 +164,10 @@ export function createMinimap() {
         // On the plan yaw 0 (south) is down the screen.
         arrow(ox + me.x * k, oy + me.z * k, Math.PI - me.yaw);
       } else {
-        // Heading up: turn the plan so that the way the guard faces is up the screen, with them a little below the middle.
+        // Heading up: turn the plan so that the way the guard faces is up the screen, with them in the middle, where
+        // the ring fits whole.
         const cx = MAP_W / 2,
-          cy = top + (MAP_H - top) * 0.62;
+          cy = top + (MAP_H - top) / 2;
         c.beginPath();
         c.rect(0, top, MAP_W, MAP_H - top);
         c.clip();
